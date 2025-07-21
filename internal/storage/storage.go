@@ -145,11 +145,15 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 	conn := s.db.Conn()
 
 	// Start transaction for bulk operation
+	fmt.Printf("  Starting transaction for %d nodes\n", len(nodes))
+	start := time.Now()
 	tx, err := conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
+	txStartTime := time.Since(start)
+	fmt.Printf("  Transaction start time: %v\n", txStartTime)
 
 	// Build bulk insert with UPSERT for conflict handling
 	insertSQL := `
@@ -183,11 +187,22 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 
 		// Split into chunks to avoid query size limits  
 		if (i+1)%1000 == 0 || i == len(nodes)-1 {
+			chunkSize := len(valuePlaceholders)
+			fmt.Printf("    Executing SQL with %d nodes in chunk\n", chunkSize)
+			
+			start := time.Now()
 			fullSQL := insertSQL + strings.Join(valuePlaceholders, ",") +
 				` ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
 				  DO NOTHING`
 			
+			sqlBuildTime := time.Since(start)
+			fmt.Printf("    SQL build time: %v\n", sqlBuildTime)
+			
+			start = time.Now()
 			_, err := tx.Exec(fullSQL, args...)
+			execTime := time.Since(start)
+			fmt.Printf("    SQL exec time: %v\n", execTime)
+			
 			if err != nil {
 				return fmt.Errorf("failed to bulk insert nodes: %w", err)
 			}
@@ -198,7 +213,11 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 		}
 	}
 
-	return tx.Commit()
+	start = time.Now()
+	err = tx.Commit()
+	commitTime := time.Since(start)
+	fmt.Printf("  Transaction commit time: %v\n", commitTime)
+	return err
 }
 
 // markOriginalAsConflicted marks the original entry (conflict_sequence=0) as having conflict
