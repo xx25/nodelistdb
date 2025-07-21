@@ -1,0 +1,1500 @@
+;A Friday, October 3, 1986 -- Day number 276 : 20179
+;A
+;A Copyright (c) 1986, International FidoNet Association.  All rights reserved.
+;A This document is the collective property of the operators of the nodes
+;A listed herin.  Unlimited duplication and or distribution for noncommercial
+;A purposes is hereby authorized, but any commercial use including, but not
+;A limited to direct sale, or distribution charges beyond reasonable cost
+;A recovery, is strictly prohibited.
+;A
+;A  -- Latest Software Versions:
+;A
+;A              Fido                    11w
+;S              EDITNL                  3.3
+;S              LISTGEN                 05.25.86
+;S              XLATLIST/ROUTEGEN       2.50
+;S              TESTLIST                1.3
+;S              ECHOMAIL                1.35
+;A
+;S Utility authors: Please help me keep this list as current as possible.
+;S It is not the intent to list all Fido utilities here, only those which
+;S verge on necessary.
+;S
+;S NEW LISTGEN STATUS -- UNKNOWN!  We have been unable to reach John Warren
+;S in several weeks now.  You may wish to investigate converting to
+;S XLATLIST/ROUTGEN.
+;S
+;S An Echomail conference has been established for IFNA business.
+;S Contact one of the following individuals if you need help finding
+;S the best place to link in:
+;S
+;S Region 10 - Butch Walker  Region 11 - Don Walker
+;S Region 12 - (Hawaii)      Region 13 - Gee Wong
+;S Region 14 - Alex Hartley  Region 15 - David Dodell
+;S Region 16 - Bob Hartman   Region 17 - Randy Bush
+;S Region 18 - Wes Cowley    Region 19 - Jon Sabol
+;S
+;S The IFNA officers want your help and suggestions in establishing
+;S IFNA goals.
+;S
+;S Thanks to Bob Hartman (132/101) and Steve Jordon (102/1301) for
+;S agreeing to CoChair the IFNA Bylaws Rules Committee. They will
+;S report back through FidoNews and/or the IFNA Conference when
+;S the draft Bylaws are prepared. The purpose of doing this in
+;S a small volunteer Committee is so we can be productive and
+;S *NOT* to exclude anyone. Each Region has one representative
+;S on the Committee.
+;S
+;S The current limit Fido is 1200 nodes in the nodelist.bbs. This includes
+;S HOST lines, HUB lines, and everything else. This weeks nodelist.nnn
+;S is being produced with DOWN and HOLD nodes removed.  (They are preserved
+;S in the master files on record at 1/0.)  This will buy us some time for TJ
+;S to get done with version 12. In the meantime we are requesting that
+;S Coordinators hold off adding additional nodes until V12 is released.
+;S
+;S Each line of this comments section and the section at the
+;S end of this nodelist have a comments flag in front which
+;S controls which file those comments are output to.The format of
+;S the comments flag are A= All lists, S= Sysops comments, U= User
+;S comments, F= or ;= Fidolist comments. At times these will be
+;S combined as SU for sysop and user comments.
+;S
+;S Send all updates and corrections to this list to nnn/0,
+;S where nnn is your network or region number.
+;S
+;U      GROUPING                             RANGE OF NUMBERS
+;U International Coordinator Region           001
+;U European Coordinator Region                002
+;U (Reserved)                                 003 - 009
+;U Geographical Regions                       010 - 099
+;U Networks                                   100 - 999
+;U Private Networks/Regions                   1000+
+;S
+;S The International FidoNet Nodelist is published every
+;S Friday at Fido 1/0 in St Louis. The Nodelist is then
+;S made available through the Regional Coordinators who
+;S poll 1/0 for copies over the weekend.
+;S
+;S Your International FidoNet Administrators are:
+;S Fido 100/76 (1/0 & 1/107) - Ben Baker &
+;S Fido 100/22 (1/2)         - Ken Kaplan
+;S
+;S The Europe FidoNet Administrator is:
+;S Fido 500/1  (2/0)   - Henk Wevers
+;S Europe should send their update files to Fido 2/0.
+;S
+;S Considering the time and expense to keep FidoNet operating
+;S as well as the many hours spent voluntarily maintaining the
+;S international nodelist and providing support to so many of
+;S the Fido SYSOP's all over the world as well as our local users
+;S we are now asking for voluntary contributions to support the
+;S efforts of your International FidoNet Administrators. Please help
+;S to keep FidoNet growing smooth. We are interested in doing
+;S more to help everyone, but we can not continue to handle
+;S the fantastic growth without your financial support. Please let
+;S us know if you would like us to mail an invoice or a receipt.
+;S Please send whatever you can to:
+;S
+;S                International FidoNet Association
+;S                PO Box 41143
+;S                St. Louis, Missouri 63141
+;S                USA
+;S
+;
+Region,1,Int'l_Tech_Coord,So_Roxana_IL,Ben_Baker,1-618-251-2169,2400,XP:
+,1,FidoNews,Clifton_NJ,Thom_Henderson,1-201-472-8065,2400,MO:,XP:
+,2,Int'l_FNet_Assn,St_Louis_MO,Ken_Kaplan,1-314-576-2743,2400,XP:
+,10,IFNA_Legal,Colorado_Spgs_CO,George_Wing,1-303-591-7415,2400,XP:
+,11,IFNA_Finance,Wilmington_DE,Van_Olmstead,1-302-655-6342,2400,WK:8p-8a,WE:,XP:
+,98,Fido_BUG's_WEST,Phoenix_AZ,David_Dodell,1-602-235-9653,2400,MO:,XP:
+,99,Fido_BUG's_EAST,Clifton_NJ,Marv_Shelton,1-201-284-3916,1200,WK:5p-7a,WE:
+,100,IBM_HELP,E_Brunswick_NJ,Gee_Wong,1-201-249-1898,2400,XP:
+,101,DEC_RB_HELP,Bolingbrook_IL,Rob_Elliott,1-312-759-5402,2400,
+,102,SANYO_HELP,Emporia_KS,EJ_McKernan,1-316-343-8028,2400,
+,103,Netware_HELP,Okla_City_OK,Kurt_Vanderwater,1-405-947-7294,1200,
+,104,Multilink_HELP,Cincinnati_OH,Allen_Miller,1-513-579-2587,2400,
+,105,DoubleDOS_HELP,Stoney_Brook_NY,David_Melnik,1-516-246-3689,2400,
+,106,PC_Jr_HELP,Nashville_TN,Bruce_Fuqua,1-615-226-6628,2400,
+,107,Routing_HELP,So_Roxana_IL,Ben_Baker,1-618-251-2169,2400,XP:
+,108,Modem_HELP_EAST,Milford_CT,Jim_Ryan,1-203-878-6355,2400,
+,109,Tandy_HELP,Seattle_WA,Neal_Curtin,1-206-527-5618,1200,
+,110,Modem_HELP_WEST,Newport_Beach_CA,Juan_Jimenez,1-714-675-7106,2400,
+Down,111,SEAdog_HELP,Wilmington_DE,Bob_Klahn,1-302-764-7522,2400,XP:
+,112,EchoMAIL_HELP,Dallas_TX,Jon_Sabol,1-214-380-9063,2400,
+;
+Region,10,Calif_Nevada,CA_NV,Bob_Robesky,1-209-454-8229,2400,WK:5p-8a,WE:,XP:
+,26,Sleeping_Dogs,Fresno_CA,Bob_Robesky,1-209-454-8229,2400,WK:5p-8a,WE:,XP:
+,31,GENESIS_BBs,Visalia_CA,Ray_Means,1-209-732-7204,1200,
+,43,Public_Housing,Fresno_CA,Robert_Friesen,1-209-441-7652,2400,WK:5p-8a,WE:
+,63,CYSA,Santa_Rosa_CA,Herbert_Strandberg,1-707-545-1124,1200,WK:5p-8a,WE:
+,425,RSVP_BBS,Fremont_CA,Jim_Thomas,1-415-659-9169,1200,
+,616,Surf_Board,Half_Moon_Bay_CA,Trippy_Wilson,1-415-726-9659,1200,
+;
+Host,102,SOCALNET,Los_Angeles_CA,Richard_Martz,1-213-874-9484,2400,XP:
+,101,Rainbow_Data,Culver_City_CA,Don_Brauns,1-213-204-2996,2400,
+,106,Third_World,Los_Angeles_CA,Chuma_Agbodike,1-213-733-7059,2400,
+,116,PrgrmrXchange,Monterey_Park_CA,Peter_Chow,1-818-281-7586,2400,
+,112,W_Hllywd_BBS,W_Hollywood_CA,Richard,1-213-874-9484,2400,XP:
+,591,Downlink_Fido,W_Covina_CA,Leroy_Jackson,1-818-330-1341,1200,
+,109,Rainbow_Brite,Hawthorne_CA,Bruce_Headley,1-213-644-1963,2400,
+,107,CompuMart,Santa_Monica_CA,Andy_Takahashi,1-213-829-3623,2400,DA:8p-8a
+,113,Rainbow_West,Los_Angeles_CA,Jay_Rosenberg,1-213-305-8303,2400,MO:
+Down,451,The_Meadows,Inglewood_CA,Robert_Johnson,1-213-337-0206,1200,
+Pvt,741,Hunters,Los_Angeles_CA,Ric,-Unpublished-,2400,RE:
+,110,Long_IslandRB,Los_Angeles_CA,George_Dahlco,1-213-370-4113,2400,
+,111,Beach_City_RB,Redondo_Beach_CA,Dan_Tanna,1-213-376-9567,2400,
+,104,King_James_II,Torrance_CA,Glenn_Bowes,1-213-618-8454,2400,DA:10p-4p
+,102,The_32nd_Fido,Artesia_CA,George_Gilbert,1-213-402-6217,1200,
+,115,Machinedo,San_Pedro_CA,Barry_Dobyns,1-213-548-3546,2400,
+,601,1000Oaks_Fido,Thousand_Oaks_CA,Gary_Vedvik,1-805-499-8378,2400,
+,602,Com-Trics,Simi_CA,Gregg_Cassity,1-805-522-4211,2400,
+,603,CompuLink,Westlake_Village_CA,Eric_Daymo,1-805-494-3350,2400,
+,604,Atlantis,Newbury_Park_CA,Eric_Horne,1-805-498-8320,1200,DA:18:00-06:00
+,701,OberonSystems,Ventura_CA,Scott_Johnson,1-805-643-0982,2400,
+,901,The_DawgHouse,Van_Nuys_CA,Bill_Bogartz,1-818-782-6366,2400,
+,108,Sanyos_Friend,Los_Angeles_CA,Sean-Michael_Connor,1-213-207-3295,2400,
+,905,Vanguard,Mission_Hills_CA,Dennis_Sullivan,1-818-896-8602,2400,
+,902,Light_Artists,N_Hollywood_CA,Gerald_Lehtola,1-818-985-0541,2400,XP:
+,801,Hovercraft,Altadena_CA,Jeff_Skaletsky,1-818-354-7659,1200,
+,802,CAD_n_MOUSE,LaCresenta_CA,Steve_Wilson,1-818-249-5120,2400,
+,1301,Surf_BBS,Lompoc_CA,Steve_Jordan,1-805-735-8643,2400,
+;
+Host,103,Orange_Co_CA,Garden_Grove_CA,Mike_Hamilton,1-714-537-7355,2400,
+Hub,200,OCEANSIDE,Oceanside_CA,Mike_Elkins,1-619-722-8724,2400,
+,201,Mikes_C-Board,Oceanside_CA,Mike_Elkins,1-619-722-8724,2400,
+Down,202,ByteLightning,Vista_CA,Dennis_Yourchisin,1-619-940-0844,1200,
+,203,Alpo_Net,Escondido_CA,Mark_Petersen,1-619-741-3412,2400,
+,204,EDI_Hotline,Oceanside_CA,Jeff_Smith,1-619-471-0684,2400,
+,205,Goat_Net_West,La_Costa_CA,James_Hayden,1-619-438-5256,2400,
+Hub,300,SAN_DIEGO,San_Diego_CA,Rick_Eliopoulos,1-619-488-2116,2400,DA:7a-7p,RE:
+,301,SD_RainbowLUG,San_Diego_CA,Rick_Eliopoulos,1-619-488-2116,2400,DA:7a-7p,RE:
+Hub,400,RIALTO,Rialto_CA,Jim_Gifford,1-714-874-0695,1200,
+,401,HamRadioWest,Riverside_CA,John_Warren,1-714-681-0731,2400,
+,402,Rialto_BBS,Rialto_CA,Jim_Gifford,1-714-874-0695,1200,
+,403,Stallion_Data,Ontario_CA,Don_Cavallo,1-714-983-8587,2400,
+Hub,500,ORANGE,Garden_Grove_CA,Mike_Hamilton,1-714-537-7355,2400,
+,501,King_James_RB,Garden_Grove_CA,Mike_Hamilton,1-714-537-7355,2400,RE:
+,503,ASC_US_Group,Costa_Mesa_CA,Richard_Hart,1-714-642-4408,2400,
+,504,MST_FIDO,Tustin_CA,David_Garrett,1-714-669-1194,1200,
+,505,Music_Term_#1,Santa_Ana_CA,Michael_David,1-714-545-5768,1200,
+,507,Philosophers_Log_II,Anaheim_CA,Jim_Bacon,1-714-535-1258,1200,
+Pvt,506,FIDO_Fred's,Santa_Ana_CA,Craig_Armstrong,-Unpublished-,2400,
+,508,Medic,Huntington_Bch_CA,Phil_St_Erne_MD,1-714-964-0454,2400,
+,510,Toshiba_T-Net,Tustin_CA,Bob_Stillwell,1-714-581-7600,2400,
+,512,Music_Term_#2,Orange_CA,Marc_Gohres,1-714-524-9326,1200,
+Pvt,513,MDCSC-RCC,Irvine_CA,John_Warren,-Unpublished-,1200,DA:8a-4p,RE:
+,514,AnaHUG_Fido,Anaheim_CA,John_Secor,1-714-774-7860,2400,
+,515,Philosophers_Log,Fullerton_CA,Jim_Bacon,1-714-992-0876,1200,WK:6p-7a
+,517,Port_A_Fido,Orange_CA,Bill_Heaton,1-714-633-2481,2400,
+,521,F.O.G.,Garden_Grove_CA,Jim_Ward,1-714-638-2298,2400,
+,522,Laguna_Xroads,Laguna_Beach_CA,Jay_Christy,1-714-494-5272,2400,
+,523,PICO_FIDO,Tustin_CA,Bob_Stillwell,1-714-772-8295,1200,WE:8p-6a
+,524,Beckman_Instrmnts,Fullerton_CA,Mike_Kearney,1-714-773-8818,1200,
+,528,Irvine_Software,Irvine_CA,Rick_Ray,1-714-551-0565,1200,
+,529,Believers_Hotline,Santa_Ana_CA,Allen_Jensen,1-714-647-0746,1200,
+Down,530,Trixxx,Santa_Ana_CA,Randy_Snell,1-714-550-0319,1200,
+,602,House_Atreides,Rowland_Heights_CA,George_Clayton,1-818-965-7220,2400,
+Pvt,701,The_Ranch_Fido,Trabuco_Canyon_CA,Don_Cock,-Unpublished-,1200,
+Pvt,702,The_Litter_Box,Santa_Ana_CA,Tom_McGivern,-Unpublished-,2400,
+;
+Host,119,ChicoNet,Chico_CA,Doug_Boone,1-916-893-9019,1200,
+,1,Bit_Stream,Chico_CA,David_Taylor,1-916-891-1628,1200,6p-8a,
+,5,Lazarus,Chico_CA,Doug_Boone,1-916-893-9019,1200,
+,13,LINKS.BBS,Chico_CA,Tom_Baughman,1-916-343-4422,1200,
+,42,Sentinal,Chico_CA,Johnson_&_Whooley,1-916-895-4447,1200,7p-7a,
+Down,447,ComputersPlus,Chico_CA,Loren_Alldrin,1-916-345-1722,2400,
+;
+Host,125,SF_Bay_Net,San_Francisco_CA,Tim_Pozar,1-415-788-3907,1200,
+Down,1,Fido's_Board,San_Francisco_CA,Tom_Jennings,1-415-864-1418,2400,
+,2,MacQueue,San_Francisco_CA,Leo_LaPorte,1-415-661-7374,2400,
+Down,3,The_Factory,Pacifica_CA,Ev_Cheney,1-415-355-6047,2400,
+,4,VOR_BBS,Daly_City_CA,Vern_Buerg,1-415-994-2944,2400,
+,5,The_Board,San_Mateo_CA,Michael_Sellaroli,1-415-375-0716,1200,
+,6,WatchDog,San_Francisco_CA,Hoover_Chan,1-415-561-1744,1200,WK:6p-8a,WE:
+,7,Survival_Communication_Forum,Santa_Rosa_CA,Don_Kulha,1-707-545-0746,1200,
+,8,Thrasher_Magazine_BBS,San_Francisco,Chauf_Fer,1-415-822-5630,1200,WK:5p-9a,WE:
+,9,RECOVERY,San_Francisco_CA,Bob_Kovach,1-415-621-5206,1200,
+,10,Fog_City_Fido,San_Francisco_CA,Bill_Essex,1-415-863-9697,1200,
+,12,Super_Board,Santa_Rosa_CA,Mike_Farrell,1-707-546-4938,1200,
+,14,Cold_Moon_With_Single_Star,San_Francisco,Joseph_Puig,1-415-668-6101,1200,
+,21,MacQueue_II,San_Francisco_CA,Leo_LaPorte,1-415-753-3002,2400,
+Pvt,88,The_Labry_Apt's,Bellona,Mrs._Richards,-Unpublished-,2400,
+Down,371,ModiFido,San_Francisco_CA,Ezra_Shapiro,1-415-821-3410,1200,
+,406,KLOK-FM_BBS,San_Francisco_CA,Tim_Pozar,1-415-788-3907,1200,WK:8p-8a,WE:
+,433,Skateboard,San_Francisco_CA,Bruce_Ong,1-415-776-7228,1200,
+,448,Bernal_Bears_Board,San_Francisco_CA,Bernal_Bear,1-415-648-3014,1200,
+,612,*SuperResume*,San_Francisco_CA,Lee_Johnson,1-415-546-0119,1200,
+,625,BAVUG,Foster_City_CA,Franz_Hirner,1-415-574-7914,2400,
+,626,HARNCO*OAK,Oakland_CA,Franz_Hirner,1-415-635-4747,1200,WK:6p-6a,We:
+,666,The_Bear's_Den,San_Francisco_CA,Bernal_Bear,1-415-550-2445,1200,
+,999,SF_DECUS_Fido,Moscone_Center_SF_CA,DECUS_PC_SIG,1-415-972-8225,1200,
+,1001,NPS_WR,San_Francisco_CA,Jonathan_Lewis,1-415-556-1064,2400,MO:
+;
+Host,143,Silicon_Valley,San_Jose_CA,Robert_E_Spivack,1-408-247-3296,1200,
+,3,Spiv's_Fido,San_Jose_CA,Robert_E_Spivack,1-408-247-3296,1200,
+,4,CompuCruise,San_Jose_CA,Greg_Harris,1-408-986-1285,1200,
+,5,Collinwood,San_Jose_CA,Dan_Lehtola,1-408-249-6670,2400,DA:11p-7a,XP:
+,9,C_Ware_Tech,Sunnyvale_CA,Ken_Fuiks,1-408-720-8197,1200,DA:2p-10a
+Pvt,11,PC-TIE,San_Jose_CA,Mark_Hinkle,-Unpublished-,2400,
+,12,Wyrld_Wyrm_BBS,San_Jose_CA,Robert_Plamondon,1-408-263-8134,1200,
+,14,Potpourri,Milpitas_CA,Robert_Field,1-408-263-9497,1200,
+,20,Mindset_BBS,Sunnyvale_CA,Andrew_Soderberg,1-408-737-3362,1200,
+,22,P-CAD's_Board,San_Jose_CA,Bruce_Fihe,1-408-279-4908,2400,RE:
+,23,The_Flying_Fido,Milpitas_CA,Bill_Dunn,1-408-946-3183,1200,
+,24,NUG_Board,San_Jose_CA,Charlene_Rose,1-408-993-2209,1200,
+,26,Commsoft_BBS,Mountain_View_CA,Ken_Whitaker,1-415-967-6730,2400,
+,27,Looneybin,San_Jose_CA,Todd_Looney,1-408-293-7894,1200,
+,28,No_Name_Yet_BBS,Sunnyvale_CA,Ron_Hudson,1-408-734-8632,1200,
+,29,Palo_Alto_Writer,Palo_Alto_CA,Paul_Pease,1-415-322-6451,1200,
+;
+Host,156,PacketRadioNet,Palmdale_CA,Dan_Taylor,1-805-947-4357,2400,RE:,XP:
+Pvt,1,WB6FIU,Palmdale_CA,Dan_Taylor,-Unpublished-,2400,RE:,XP:
+Pvt,2,PRNet_Hub,El_Segundo_CA,Dan_Taylor,-Unpublished-,2400,MO:,RE:,XP:
+Pvt,3,WA6JPR,Santa_Barbara_CA,Wally_Linstruth,-Unpublished-,1200,MO:,RE:,XP:
+Pvt,5,NK6K,Redondo_Beach_CA,Harold_Price,-Unpublished-,1200,MO:,RE:,XP:
+Pvt,6,Switch_Pak_#6,Palos_Verdes_CA,Clint_Lew,-Unpublished-,1200,MO:,RE:
+Pvt,7,WA6EIK,Riverside_CA,Duane_Park,-Unpublished-,1200,MO:,RE:
+,8,HIP_Shack,Colorado_Spgs_CO,Bdale_Garbee,1-303-593-0766,1200,XP:
+;
+Host,161,SF_EAST_BAY\VALLEY,Concord_CA,Butch_Walker,1-415-672-2504,2400,
+,1,TBLUG1_FIDO,Concord_CA,Butch_Walker,1-415-672-2504,2400,
+,2,TBLUG2_FIDO,Concord_CA,Butch_Walker,1-415-672-2505,2400,
+Pvt,3,Solano_Blue,Fairfield_CA,Robin_Goodwin,-Unpublished-,1200,
+Pvt,77,Harv's_Hideout,San_Francisco_CA,Harvey_Nehgila,-Unpublished-,1200,DA:12am-8am
+Pvt,1103,The_Garden,San_Francisco_CA,Linda_E,-Unpublished-,2400,
+Hub,50,Echo_Hub,Concord_CA,Butch_Walker,1-415-672-3104,2400,XP:MO5pm-7am
+,4,TBLUG3_FIDO,Concord_CA,Butch_Walker,1-415-672-3104,2400,XP:MO5pm-7am
+Pvt,26,&_Stray_Cats,Reedley_CA,Red_Ryder,-Unpublished-,2400,XP:MO
+Hub,100,Sacramento_Hub,Sacramento_CA,Jim_Ewald,1-916-441-5654,2400,
+,8,River_City_Fido,Sacramento_CA,Jim_Ewald,1-916-441-5654,2400,
+,9,Info_Dispatcher,Sacramento_CA,Kwok_Lam,1-916-682-5970,1200,
+,10,Dynasty_BBS,Elk_Grove_CA,Henry_Hoover,1-916-685-8690,2400,
+,34,Couch_Potato,Fair_Oaks_CA,John_Lamb,1-916-962-1952,2400,MO:10pm-6am
+,955,Dynasoft_Fido,Davis_CA,David_Larson,1-916-753-8788,1200,
+Hub,200,Stockton_Hub,Manteca_CA,Andre_Coltrin,1-209-832-1002,2400,
+,613,Rainbo_Works,Manteca_CA,Andre_Coltrin,1-209-832-1002,2400,
+,31,Bullseye_BBS,Stockton_CA,Bob_Loeber,1-209-474-3436,1200,
+Hub,300,City_Hub,San_Francisco_CA,Mike_Kelleher,1-415-647-8528,2400,XP
+,521,Satore_Center,San_Francisco_CA,Mike_Kelleher,1-415-647-8528,2400,XP
+,594,Dog_Lab,Belmont_CA,Bruce_Oblander,1-415-594-0781,2400,XP
+,321,Well_Tempered_BBS,San_Francisco_CA,Mark_Budig,1-415-239-4979,1200,
+Hub,400,East_Bay_Hub,Berkeley_CA,Josh_Gordon,1-415-548-0163,2400,XP
+,93,ThelemaNet,Berkeley_CA,Josh_Gordon,1-415-548-0163,2400,XP
+Pvt,459,WelchNet,Berkeley_CA,Mark_Welch,-Unpublished-,1200,
+Hub,500,West_Contra_Costa,Pinole_CA,Garry_Lapides,1-415-758-1650,2400,
+,509,Enterprize,Pinole_CA,Garry_Lapides,1-415-758-1650,2400,
+,5,T-1000,Rodeo_CA,Ron_Cunningham,1-415-799-5719,2400,
+Down,777,The_Bug's_Net_HP,Richmond_CA,John_Buginas,1-415-236-1823,2400,XP
+;
+Host,166,S_Cal_Beach_Net,Balboa_CA,Juan_Jimenez,1-714-675-7106,2400,XP:
+,1,DataFlex_Fido,Balboa_CA,Juan_Jimenez,1-714-675-7106,2400,XP:
+,2,Smorgasboard,Costa_Mesa_CA,Mike_Rickey,1-714-957-0142,2400,
+,3,Conserve_Energy,Costa_Mesa_CA,Rick_Ellis,1-714-645-7747,2400,
+Pvt,4,Kevins_Fido,Anaheim_CA,Kevin_Klop,-Unpublished-,2400,
+,5,Horton_Net,Santa_Ana_CA,Larry_Munson,1-714-751-5948,2400,
+,6,COMPUTRENDS,Irvine_CA,Richard_Clark,1-714-856-1029,1200,
+;
+Region,11,Central,IL_IN_KY_MI_OH_WI,Bill_Allbritten,1-502-762-3140,1200,XP:
+,102,LawBoard_Fido,Champaign_IL,Fred_Grosser,1-217-352-6118,2400,WK:6p-7a,WE:
+,103,CourseWare,Champaign_IL,Tom_Scaefges,1-217-359-6165,1200,DA:6p-6a
+,105,NAPCC,Urbana_IL,Thomas_Dirks,1-217-244-1188,1200,RE:
+,169,AAFT_Fidonet,Champaign_IL,Edward_Otto,1-217-333-2842,1200,DA:6p-6a  6pF-6aM,
+,200,Starship_Trooper,Lafayette_IN,Steve_Gerber,1-317-423-2281,1200,
+,201,Access,South_Bend_IN,Marlin_Sheffield,1-219-277-7278,2400,
+,202,Forum_Five,Mishawaka_IN,Greg_Crouch,1-219-255-2627,1200,
+,301,Fido-Racer,Murray_KY,Bill_Allbritten,1-502-762-3140,1200,XP:
+,302,CKCS_TIES,Lexington_KY,Robert_Bowles,1-606-252-3568,1200,
+,601,Old_Frog,Rhinelander_WI,Ryugen_Fisher,1-715-362-3895,2400,XP:
+,700,Adam_IBM_Net,Toronto_ON,Bill_Freads,1-416-588-2841,2400,XP:
+,701,Dogstar_BBS,Sault_St_Marie_ON,Mario_Dulisse,1-705-942-8370,2400,
+;
+Host,108,CINCINNATI_Area,Cincinnati_OH,Allen_Miller,1-513-579-2587,2400,
+,10,Allen's_Board,Cincinnati_OH,Allen_Miller,1-513-579-2587,2400,
+,20,MAC-Cincinnati,Cincinnati_OH,Dave_Schleper,1-606-341-4747,2400,
+,25,EDS/CPC_Norwood,Cincinnati_OH,John_Marlowe,1-513-841-5029,2400,RE:
+,45,Fido's_Doghouse,Cincinnati_OH,Doug_Goens,1-513-931-0110,2400,RE:
+,55,ODOT_District7,Sidney_OH,John_Desond,1-513-492-0272,1200,WK:5p-7a,WE:
+,62,PC-Techniques,Cincinnati_OH,Tim_Sullivan,1-513-745-0037,2400,WK:6p-6a,WE:
+,64,FIDO_Northwest,Cincinnati_OH,Jesse_Armontrout,1-513-662-5884,2400,RE:,XP:
+,65,Night_Owl,Cincinnati_OH,Jeffery_Durham,1-513-931-4409,2400,WK:10p-8a,WE:
+,66,Beedie's_Board,Cincinnati_OH,Brian_Beatty,1-513-771-3425,1200,WK:7p-4p,WE:7p-4p
+,68,RESULTS_Fido,Cincinnati_OH,Chris_Irwin,1-513-531-4654,2400,
+,70,T.I.Y./CDB.R,Cincinnati_OH,Ballard_Shackleford,1-513-825-4478,1200,RE:
+,75,Mikal's_Hairnet,Cincinnati_OH,Steve_Sullivan,1-513-231-3984,2400,WK:10p-10a,WE:,XP:
+,82,MARS,Cincinnati_OH,Dan_Borntrager,1-513-772-6215,1200,
+,84,R+R,Dayton_OH,Tom_Harnish,1-513-443-2222,1200,WK:6p-8a,WE:
+,86,PME-FIDO,Cincinnati_OH,Gary_Smith,1-513-777-1234,2400,RE:
+Pvt,999,AFC,Cincinnati_OH,Allen_Miller,-Unpublished-,2400,RE:
+;
+Host,111,CanadaRemote,Toronto_ONT,Jud_Newell,1-416-231-8078,2400,
+,327,CanadaRemote4,Toronto_ONT,Jud_Newell,1-416-231-0538,2400,RE:
+,328,CanadaRemote6,Toronto_ONT,Jud_Newell,1-416-231-1262,2400,RE:
+,381,CanadaRemote9,Toronto_ONT,Jud_Newell,1-416-231-8078,2400,RE:
+,601,CanadaRemote10,Toronto_ONT,Jud_Newell,1-416-231-0406,2400,RE:
+,613,CanadaRemote13,Toronto_ONT,Jud_Newell,1-416-231-1105,2400,RE
+;
+Host,115,Chicagoland,Bolingbrook_IL,Rob_Elliott,1-312-759-5402,2400,
+,100,Illini_Data_RB,Bolingbrook_IL,Rob_Elliott,1-312-759-5402,2400,
+,108,Samson,Rolling_Meadows_IL,Larry_Miglore,1-312-991-8304,2400,WK:5p-8a
+,123,Chicago_DECUS,Schaumburg_IL,Chuck_Garrett,1-312-490-9206,1200,
+,212,Beaker's_Beacon,Chicago_IL,John_Bekas,1-312-589-2827,2400,
+Down,222,ACOA,Chicago_IL,Roger_Strauss,1-312-675-8881,2400,
+Pvt,333,Solar_Wind,Homewood_IL,Rick_Moore,-Unpublished-,2400,MO:
+,396,AIS/Chicago,Chicago_IL,Sidney_Bratkovich,1-312-338-8827,1200,WK:8p-8a
+Down,419,Wildcat,Evanston_IL,Bill_Bliss,1-312-491-3892,2400,WK:5p-9a
+,500,Sit_UBU_Sit,Lombard_IL,Rob_Elliott,1-312-960-5928,2400,
+,729,Spectrum_MACnet,Northbrook_IL,Steve_Levinthal,1-312-729-8768,2400,
+,969,Great_Lakes,Great_Lakes_IL,Lew_Prather,1-312-689-8869,1200,DA:11p-4p
+;
+Host,120,Michigan_Net,Ferndale_MI,Mike_Bader,1-313-545-1931,2400,
+,4,InaNet,Ann_Arbor_Mi,David_Simmons,1-313-665-4472,2400,
+,5,UtiCom,Utica_MI,James_Held,1-313-739-1193,2400,RE:
+,10,Trading_Post,Detroit_MI,Kirk_Revitzer,1-313-882-7104,2400,RE:
+,11,Support_Board,Taylor_MI,Peter_Tavener,1-313-946-4821,1200,
+,12,Peanut_Gallery,Troy_MI,Brian_Mintz,1-313-585-3893,2400,RE:
+,13,Tony's_Corner,Warren_MI,Tony-Bauman,1-313-754-1131,2400,
+,14,Genesis_II,Taylor_MI,Robert_Numerick,1-313-291-2520,1200,
+,17,P-1_Fido,Ferndale_MI,Mike_Bader,1-313-545-1931,2400,XP:
+,20,Walksoft,Troy_MI,Don_Walker,1-313-435-9905,2400,RE:7PM-8AM,WE
+,22,George's_Fido,Brighton_MI,George_Moses,1-313-227-1573,1200,
+,24,Fido_Detroit,Detroit_MI,Jim_Brooker,1-313-567-4834,2400,XP:
+,25,NetMeg,Ann_Arbor_MI,Meg_Geddes,1-313-994-3865,2400,
+,26,PogoNet,Ypsilanti_MI,John_Remmers,1-313-484-3752,1200,12-6AM,WE
+,27,Blase,Grand_Rapids_MI,Bill_DeBlase,1-616-784-4179,2400,
+,28,Little_Blue,Grand_Rapids_MI,Dave_Mcintyre,1-616-243-2645,1200,
+,29,Rich's_Roost,Sterling_Hgts_MI,Richard_Harper,1-313-939-6584,1200,
+,30,The_Library,Keego_Harbor_MI,Steve_Mosser,1-313-681-6600,1200,8pm-9:30am
+,31,FD_BBS,Ann_Arbor_MI,Jack_Henry,1-313-761-5343,2400,
+Pvt,32,Fido_Det_II,Detroit_MI,Jim_Brooker,-Unpublished-,2400,MO:
+,33,The_Wall,Livonia_MI,Floyd_Shinn,1-313-525-1009,1200,
+,34,Intransigent,Nuncia_MI,Rob_Kittredge,1-616-846-3059,1200,RE:
+Pvt,35,EDS_OIS_CPC,Warren_MI,Michael_Beemer,-Unpublished-,1200,
+,36,Black_Hole,Troy_MI,Randy_Goebel,1-313-879-7387,2400,RE:
+,37,Sinanju,Detroit_MI,Michael_Grumboski,1-313-497-0946,1200,7pm-7am,XP
+,38,WalkSoft_II,Troy_MI,Don_Walker,1-313-435-7818,2400,
+,39,The_General,Westland_MI,Mike_Fulton,1-313-728-2863,1200,
+,40,Remote_Access,Milford_MI,Johnathan_Lodden,1-313-685-7947,2400,
+;
+Host,121,Madison_Area,Madison_WI,John_Galvin,1-608-258-9723,1200,
+,1,1st_Circle,Madison_WI,John_Galvin,1-608-258-9723,1200,
+Pvt,2,Mersenne,Madison_WI,Jim_Lattis,-Unpublished-,1200,
+Down,90,MidNet,UW_Madison_WI,Mike_Mansfield,1-608-233-8449,1200,
+;
+Host,126,Columbus_Area,Columbus_OH,Scott_Sharkey,1-614-761-1179,2400,RE:
+,1,Guardian,Dublin_OH,Scott_Sharkey,1-614-761-1179,2400,RE:
+,2,Colossus,Columbus_OH,Craig_Wright,1-614-885-9829,1200,RE:
+,100,ODOT,Columbus_OH,Terry_Dawson,1-614-466-1136,1200,RE:
+,110,Ohio_U,Athens_OH,Brian_Shapiro,1-614-593-1019,1200,RE:,WE:,WK:5p-7a
+Pvt,120,Black_Bag_BBS,Columbus_OH,Ed_Del_Grosso,-Unpublished-,1200,WK:10p-10a
+Pvt,150,OCLC,Dublin_OH,Brian_Staples,-Unpublished-,1200,RE:,WE:,WK:7p-7a
+;
+Host,127,BloomNet,Bloomington_IN,R.G._Stubbings,1-812-336-0600,2400,
+,10,Cogito,Bloomington_IN,R.G._Stubbings,1-812-333-9476,2400,MO:
+,40,Hal's_Ranch,Smithville_IN,Harold_Schneider,1-812-824-7887,2400,WK:10pm-6am
+Down,50,Carl's_Board,Tallahassee_FL,Carl_Stubbings,-Unpublished-,1200,RE:
+,60,CRC_Board,Bloomington_IN,R.G._Stubbings,1-812-336-0600,2400,
+,70,Amber's_Fido,PrairieGrove_AR,Hilda_Stubbings,1-501-846-3884,2400,MO:
+,80,REDI_Fido,Bloomington_IN,Alice_Eads,1-812-335-1463,2400,WK:5pm-8am,WE:
+,90,IREDI_Fido,Indianapolis_IN,Roger_Stough,1-317-274-3251,1200,WK:5p-8a,WE:
+Pvt,501,Kingsley,Bloomington_IN,Kingsley_Haynes,-Unpublished-,1200,WK:10p-7a
+,504,Chris's_Board,Indianapolis_IN,Bill_Rall,1-317-862-3908,2400,WK:10p-7a
+;
+Host,139,Eastern_WI,Neenah_WI,Bruce_Casner,1-414-722-3909,2400,DA:7p-6a,WE:
+,110,The_Sky's_The_Limit,West_Bend_WI,Marc_Hanlan,1-414-334-1989,2400,
+Down,300,Point_Fido,Stevens_Point_WI,Roger_Bullis,-Unpublished-,1200,MO:
+Pvt,400,SECO_Milwaukee,Milwaukee_WI,John_Erato,-Unpublished-,1200,MO:
+,450,CUSSnet_Milwaukee,Milwaukee_WI,Wallace_Gingerich,1-414-963-4515,2400,
+,600,Omni_Net_1,Neenah_WI,Bruce_Casner,1-414-722-3909,2400,DA:7p-6a,WE:
+Pvt,610,Miller_Electric,Appleton_WI,Bruce_Casner,-Unpublished-,1200,MO:
+,910,Soaring_SIG,Elkhart_IN,Brian_Shoemaker,1-219-264-6429,1200,
+,950,SECO,Wilmette_IL,Jim_Heider,1-312-256-8119,1200,DA:12p-6a
+Pvt,955,SECO_Cleveland,Cleveland_OH,Kevin_Maguire,-Unpublished-,1200,MO:
+;
+Host,148,Great_White_North,Toronto_ON,Rob_Benner_&_Mark_Windrim,1-416-622-8254,2400,XP:
+,1,Eaton's_Sherway,Toronto_ON,Mark_Windrim,1-416-622-3785,2400,
+,2,Eaton's_Toronto,Toronto_ON,Dann_Porter,1-416-343-2325,1200,
+,3,Eaton's_Scarborough,Toronto_ON,David_Barrett,1-416-296-0074,1200,
+,13,TCSN,Toronto_ON,Mark_Windrim,1-416-744-2352,1200,
+Hub,100,ETOBICOKE_HUB,Toronto_ON,Rob_Benner,1-416-622-8254,2400,XP:
+,102,The_ASCII_Exchange,Toronto_ON,Rob_Benner,1-416-622-8254,2400,XP:
+,104,Parallax_Communications,Toronto_ON,Ray_Sauriol,1-416-466-7607,1200,MO:
+,106,PN_Junction,Toronto_ON,Jim_Nikolich,1-416-465-2331,2400,
+,108,Boards_Galore,Toronto_ON,Steve_Webster,1-416-598-1934,1200,
+,110,Markham_Test,Markham_ON,Scott_Magnan,1-416-471-5187,2400,
+,112,The_Mining_Connexion,Toronto_ON,Milton_Lamb,1-416-884-5556,1200,
+,114,The_COM_Connection,Toronto_ON,Ron_Provost,1-416-694-0942,1200,
+,116,PC_Pub,Toronto_ON,Andrew_Jones,1-416-487-2889,2400,
+Hub,150,MISSISSAUGA_HUB,Mississauga_ON,Mark_Windrim,1-416-896-1265,2400,XP:
+,152,DiSC,Mississauga_ON,Mark_Windrim,1-416-896-1265,2400,XP:
+,156,Uptown,Toronto_ON,Jack_Cox,1-416-223-3067,2400,
+,160,AQ_Board,Cobourg_ON,Don_Turnbull,1-416-372-2427,2400,
+,162,N.S.S.B.,Toronto_ON,Sean_Wenzel,1-416-691-6464,1200,
+,164,WindsorDownld,Windsor_ON,Paul_Halyung,1-519-258-8639,2400,DA:5p-5a
+,166,My_Nightmare,Wheatley_ON,Ray_Moore,1-519-825-4124,1200,
+,170,Wit's_End,Guelph_ON,Bruce_McPherson,1-519-763-1143,1200,
+Hub,200,OAKVILLE_HUB,Oakville_ON,Matt._Mackinnon,1-416-844-1792,1200,MAIL-ONLY
+,202,Matt's_Moouse,Oakville_ON,Matt._Mackinnon,1-416-844-1792,1200,MO:
+,204,Dog_Days,Burlington_ON,Myles_Edmonds,1-416-639-7209,2400,DA:12am-6pm,WE:12am-12pm
+,206,Halton_Fido,Campbellville_ON,Trevor_McPherson,1-416-854-0148,2400,
+,208,Clipper_Harbour,Puslinch_ON,Dave_Bruce,1-519-822-7097,1200,MO:
+;
+Host,149,Louisville_Net,Louisville_KY,James_Thompson,1-502-896-2399,2400,
+,10,ScratchingPost,Louisville_KY,James_Thompson,1-502-896-2399,2400,
+,20,On-Line_Exchan,Louisville_KY,Mike_Weixler,1-502-426-8381,2400,
+,30,Free_Pub_Libra,Louisville_KY,Tim_Hellner,1-502-584-4162,1200,DA:430p-7a
+,40,JABBS,Louisville_KY,Alan_Bunch,1-502-583-0176,2400,DA:430p-7a
+;
+Host,154,Milwaukee_Metro,Milwaukee_WI,Ted_Polczynski,1-414-282-4181,1200,
+,5,GENERIC_CrossRoads,Milwaukee_WI,Ted_Polczynski,1-414-282-4181,1200,
+,100,T_U_B_B_S,Milwaukee_WI,Bob_Schmidt,1-414-321-5404,1200,
+,128,Comm-Link,Brookfield_WI,Scott_Garnik,1-414-784-2096,2400,
+Pvt,170,CONTROLERS,Milwaukee_WI,Rick_Young,-Unpublished-,1200,
+,600,Tele_Post_RB,Milwaukee_WI,John_Spiegel,1-414-964-4046,2400,
+,710,Super_80,Milwaukee_WI,George_Kalt,1-414-327-5334,2400,
+,777,Large_DEC,Milwaukee_WI,Mark_Buda,1-414-354-5941,1200,
+Hold,8000,Chanl_3,Mequon_WI,Bill_Ganley,1-414-242-8000,2400,
+;
+Host,157,Northeast_Ohio,Rocky_River_OH,Phil_Ardussi,1-216-331-4241,2400,
+,500,PMS_-_Akron,Akron_OH,Robert_Nebiker,1-216-867-7463,2400,
+Pvt,501,Health_Care,Cleveland_OH,Richard_Truex,-Unpublished-,1200,
+,502,NEOH_PC_Club,Rocky_River_OH,Phil_Ardussi,1-216-331-4241,2400,
+,503,TTS_Comp_Clinc,Cleveland_OH,John_Holcepl,1-216-582-3151,1200,
+,504,PE_FIDO,Parma_OH,Dale_Lovell,1-216-661-7117,1200,
+Pvt,686,McNet,Akron_OH,Paul_Esterle,-Unpublished-,1200,WK:4:30p-9:30,WE:
+,697,Chips,Akron_OH,Paul_Esterle,1-216-929-8483,1200,
+;
+Host,159,Lansing_Capital_Net,Haslett_MI,Rick_Murray,1-517-351-5637,2400,
+,100,RJs_Bit_Bucket,Haslett_MI,Rick_Murray,1-517-351-5637,2400,
+,200,SSSINet,Lansing_MI,Don_Damon,1-517-393-1982,1200,
+Pvt,300,TROUT,East_Lansing_MI,David_Horowitz,-Unpublished-,1200,
+,777,(G)ents,Lansing_MI,Graham_Newlove,1-517-482-4765,1200,WK:6p-8a;WE:
+;
+Host,163,Ottawa_Net,Ottawa_ON,Ron_Werthman,1-613-726-9427,2400,
+,1,SPERRY_BBS,Ottawa_ON,Ron_Werthman,1-613-726-9427,2400,
+,2,Twilight_Zone,Ottawa_ON,Al_Hacker,1-613-225-9074,1200,
+,3,Compucentre,Ottawa_ON,Steve_Tibbett,1-613-230-7154,1200,
+,4,Source_Code_Central,Ottawa_ON,Damir_Bersinic,1-613-722-2016,1200,
+,5,DATA/SFnet,Ottawa_ON,Farrell_McGovern,1-613-726-1100,1200,TU-FRI:8p-8a,SA-TU:5p-8a,
+,6,BoscoNet,Nepean_ON,Andy_Lusher,1-613-232-4650,1200,
+,7,Electric_Blue,Ottawa_ON,Harry_&_Kathy,1-613-737-7994,1200,
+,8,The_Missing_Link,Ottawa_ON,Brian_Campbell,1-613-225-4523,1200,
+,9,BARF,Ottawa_ON,Russ_Pastuch,1-613-825-0786,1200,
+,10,Night_Flight,Ottawa_ON,Glen_McReady,1-613-836-7667,1200,
+,11,Exceltronixs,Ottawa_ON,Doug_Morency,1-613-230-4594,1200,
+,12,Ottawa_Rideau,Ottawa_ON,Andy_Lamorre,1-613-234-5488,1200,
+;
+Host,167,Canada_Net_East,PQ_PEI_NS_NB_NF,Tom_Kashuba,1-514-989-9450,2400,
+,1,PComm_1,Montreal_PQ,Tom_Kashuba,1-514-989-9450,2400,
+Pvt,2,PComm_2,Montreal_PQ,Tom_Kashuba,-Unpublished-,2400,
+Pvt,3,PComm_3,Montreal_PQ,Tom_Kashuba,-Unpublished-,2400,
+,101,Ozzie's_Fido,Roxboro_PQ,Rene_Champagne,1-514-684-4922,2400,
+,111,MIDICOM,Montreal_PQ,Michel_Poirier,1-514-744-7354,1200,
+;
+Host,168,Ont._AgriCmptr_Net,Chatham_Ont,Geert_Kiers,1-519-352-1703,2400,DA:7p-8a
+,1,BarnYard_Fido,Chatham_Ont,Geert_Kiers,1-519-352-1703,2400,DA:7p-8a
+Pvt,2,Gord's_Board,Ridgetown_Ont,Gordon_Claridge,-Unpublished-,1200,MO:
+Pvt,3,Arnoldville_AgriNet,Dresden_Ont,Lloyd_Arnold,-Unpublished-,1200,MO:
+;
+Region,12,Pacific,Honolulu_HI,Ron_Skates,1-808-942-2508,2400,
+,1,Bob_Overlock,Honolulu_HI,Bob_Overlock,1-808-941-5827,2400,
+,3,Hyperbaric,Honolulu_Hi,Bob_Overlock,1-808-545-1110,1200,RE:
+,4,Mega_Kauai,Kauai_HI,Gene_Clayton,1-808-245-2080,1200,
+,14,Mega_Kauai2,Kauai_HI,Gene_Clayton,1-808-337-9280,2400,DA:6p-7a
+;
+Host,113,Honolulu_Net,Honolulu_Hi,Leonard_Mednick,1-808-533-0190,2400,
+,2,Small_Biz_Help_Net,Honolulu_Hi,Leonard_Mednick,1-808-533-0190,2400,
+,6,Uncle_Sams_FIDO,Honolulu_HI,Paul_Fukuhara,1-808-546-3719,2400,
+,7,HPCUA,Honolulu_HI,Bill_Arrington,1-808-422-8406,2400,
+,8,Computer-Stn,Honolulu_HI,Ron_Skates,1-808-942-2508,2400,
+,10,The_Computer_Connection,Honolulu_HI,Bernard_Poissen,1-808-422-2304,1200,7p-3p
+,15,Mid_Pacific_Air,Honolulu_HI,Paul_Lawler,1-808-834-8280,1200,
+;
+Host,131,Indonesian_Net,Jakarta_INDONESIA,Jim_Filgo,62-21-79-3286,2400,24hr,ccitt,bell
+,391,Computeria,Jakarta_DKI_Jaya,Yan_Icc,62-21-71-7406,2400,CCITT/BELL
+Pvt,392,nJazz_SB,Jessika,JakSel_DKI_JAYA,-Unpublished-,2400,night,CCITT/BELL
+,393,Computerbit2,JakSel_Sel_DKI_JAYA,Elisabeth,62-21-73-7132,1200,24hrs,CCITT/BELL
+,423,Intrada_BBS,JakSel_DKI_JAYA,Rivaldo_Rustam,62-21-73-1431,1200,24hrs,CCITT/BELL
+,445,Jakarta_Computer_Society,Jakarta_DKI_JAYA,Jim_Filgo,62-21-79-3286,2400,24hrs,CCITT/BELL
+,446,AG_NET,Bogor_DKI_JAYA,Bill_Collier,62-0251-22-465,2400,night,CCITT/BELL
+,450,Midnite_Station,Jakarta_Utara,Jeffrey_Sukardi,62-021-63-7301,1200,night,CCITT/BELL
+;
+Host,155,AUSNET,SYDNEY_AUSTRALIA,Brian_Gatenby,61-2-959-3712,2400,!
+,201,Fido_Australia,Sydney_NSW_AUSTRALIA,Brian_Gatenby,61-2-959-3712,2400,!
+Pvt,202,The_Studio,Nth_Sydney_NSW_AUSTRALIA,Lorraine_Gatenby,-Unpublished-,2400,DA:7p-8a,MO:
+,203,Scitec_Olympic,Lane_Cove_NSW_AUSTRALIA,Richard_Morgan,61-2-427-1212,2400,!
+,211,Mountain_View,Springwood_NSW_AUSTRALIA,Jon_Biddell,61-47-51-2093,2400,!
+,212,The_Omega-Line,Mt_Colah_NSW_AUSTRALIA,Geoff_Arthur,61-2-457-8281,1200,
+,213,Sentry,Lane_Cove_NSW_AUSTRALIA,Trev_Roydhouse,61-2-428-4687,1200,
+,214,Realtors,Bondi_NSW_AUSTRALIA,Gary_Stern,61-2-387-5335,1200,!:BELL
+,215,Tachyonics,St_Leonards_NSW_AUSTRALIA,Richard_Lenz,61-2-438-2682,1200,!DA:10p-6a,
+,216,Renegade,Graystanes_NSW_AUSTRALIA,Sam_Sarkis,61-2-631-2715,2400,
+,217,Frontier_Systems,Manly_NSW_AUSTRALIA,Bryan_Wilde,61-2-977-0323,1200,
+,229,Canberra_PCUG,Canberra_NSW_AUSTRALIA,Alan_Salmon,61-62-58-9967,2400,
+,301,The_NATIONAL,Melbourne_VIC_AUSTRALIA,John_Blackett-Smith,61-3-819-5582,2400,!
+,302,Real_Connection,Burwood_VIC_AUSTRALIA,C_Miller__A_Moore,61-3-288-0331,300,
+Pvt,303,Midnite_Frog,Brighton_VIC_AUSTRALIA,Scott_Enwright,-Unpublished-,2400,
+,305,SAM'S_Board,Carnegie_VIC_AUSTRALIA,Alan_Haslar,61-3-563-1117,1200,
+,306,Down_Under_BBS,Richmond_VIC_AUSTRALIA,Greg_Hudson,61-3-429-5819,2400,
+,310,Decus_Australia,Melbourne_VIC_AUSTRALIA,Jay_Ondracek,61-3-639-133,2400,
+;
+Host,162,Singapore_Net,SINGAPORE,Lam_Siew_Hong,65-285-4136,1200,
+,1,Singapore_Link,SINGAPORE,Lam_Siew_Hong,65-285-4136,1200,
+;
+Host,164,Cathay_Con,HONG_KONG,Dexter_Bell,852-5-893-7856,1200,
+Hold,1,SEAnet_2,Hong_Kong_I,Dexter_Bell,852-5-724495,1200,
+Hold,2,Allan's_Board,Hong_Kong_K,Allan_Miller,852-3-799-4617,1200,
+Pvt,3,Hanafi's_Haunt,Hong_Kong_I,Waleed_Hanafi,-Unpublished-,1200,
+Pvt,4,Day's_Den,Hong_Kong_I,Rick_Day,-Unpublished-,1200,
+Pvt,5,Bell's_Barn,Hong_Kong_I,Dexter_bell,-Unpublished-,1200,
+Pvt,6,PRL'_System,Hong_Kong_I,Chris_Smith,-Unpublished-,1200,
+,7,SEAnet_1,Hong_Kong_I,Dexter_Bell,852-5-893-7856,1200,
+;
+Region,13,Mid_Atlantic,DE_DC_MD_NJ_NY_PA_VA_WV,Thom_Henderson,1-201-472-8065,2400,XP:
+,403,CompInnovation,Tinton_Falls_NJ,Howard_Dean,1-201-542-5059,2400,
+,128,UN*X/C_Labyrinth,Albany_NY,Marden_Marshall,1-518-899-4465,1200,
+,15,The_Med_Tech_Fido,Buffalo_NY,Bill_Hliwa,1-716-897-0504,2400,WK:4p-10a,WE:
+,17,The_Public_Domain,Buffalo_NY,Jack_Rousseau,1-716-627-5645,1200,
+,16,Finger_Lakes_Fido,Honeoye_Falls_NY,Bob_Nims,1-716-624-4034,2400,XP:
+,14,Salt_City_Fido,Liverpool_NY,Mark_Manning,1-315-451-7790,2400,
+,13,Fido's_Forum,Colonial_Hgts_VA,Ron_Peterson,1-804-541-0145,2400,
+;
+Host,107,NY_MetroNet,Woodbury_NY,Don_Daniels,1-516-682-8525,2400,WK:5p-8a,WE:,XP:
+Hub,100,NEW_YORK_CITY_HUB,New_York_NY,Thomas_Holaday,1-212-269-4879,2400,XP:
+,18,NYU_Med_Center,New_York_NY,Jim_Mihalcik_MD,1-212-889-7022,2400,XP:
+,31,Rainbow_Corner,Spring_Valley_NY,Ted_Needleman,1-914-425-2613,2400,
+,35,PHALSE_Fido,Scarsdale_NY,Dave_OShea,1-914-472-6522,2400,XP:
+,37,HumanTech_CUSSNET,New_York_NY,Gerry_Hoffman,1-212-532-2278,1200,
+,101,MainFrame_Connect,New_York_NY,Don_Sanderson,1-212-627-2673,1200,
+,102,BillBoard,New_York_NY,Bill_Bertholf,1-212-333-3285,2400,
+,103,APL_PI,New_York_NY,Chris_Lincoln,1-212-753-0888,2400,
+,104,Eastern_Queens,Queens_NY,Rich_Mazzara,1-718-343-2185,1200,MF:8p-8a
+,105,NY_Transfer,Staten_Island_NY,Bob_Richards,1-718-442-1056,2400,11p-6p
+,110,Emergency_Medic,New_York_NY,Glenn_Carlson,1-718-238-8120,1200,
+,132,NoVaSys,New_York_NY,John_Cottrell,1-212-304-8553,1200,XP:
+,134,AMuse,New_York_NY,Thomas_Holaday,1-212-269-4879,2400,XP:
+Hub,200,LONG_ISLAND_HUB,Woodbury_NY,Don_Daniels,1-516-682-8525,2400,WK:5p-8a,WE:,XP:
+,207,Grummans-Fido,Bethpage_NY,Tom_Pantazi,1-516-575-5838,1200,
+,210,D2-FIDO,Woodbury_NY,Don_Daniels,1-516-682-8525,2400,WK:5p-8a,WE:,XP:
+,211,Daniels-FIDO,Melville_NY,Don_Daniels,1-516-367-9626,2400,XP:
+,222,Gateway_NRA,Brooklyn_NY,Richard_Clark,1-718-338-3501,1200,WK:6p-8a,WE:
+,233,MicroLab_BBS,Stony_Brook_NY,David_Melnik,1-516-246-3689,2400,
+Pvt,234,Future_Watch_Webb,Smithtown_NY,Neil_Hancock,-Unpublished-,1200,
+,240,AU_Soc_Svc_Ctr,Garden_City_NY,Gunther_Geiss,1-516-228-7498,2400,
+,269,Utopian_Quest_LI,Bellmore_NY,Mitch_Kessler,1-516-842-1712,1200,11p-9a
+Down,293,BaphoNet,Brooklyn_NY,Tony_Iannotti,1-718-499-9277,1200,
+Down,36,GEOMAKER_BBS,Wilton_CT,Mark_Grand,1-203-762-7211,1200,7p-7a
+Hub,300,NJ/PA_HUB,Piscataway_NJ,Gee_Wong,1-201-885-7404,1200,MO:,XP:21:00-07:00(ESDT)
+,7,SEAboard,Clifton_NJ,Kilgore_Trout,1-201-472-8065,2400,DA:24hrs,XP:
+,8,SEAdog_Leader,Clifton_NJ,Thom_Henderson,1-201-472-8065,2400,DA:24hrs,XP:
+,9,SEA_Marketing,Clifton_NJ,Irene_Henderson,1-201-472-8065,2400,XP:,RE:,MO:
+,16,Wizards_Tower,Teterboro_NJ,Karl_Schinke,1-201-288-9076,1200,DA:24hrs,XP:17:00-07:00(ESDT)
+,27,The_Wizard's_BBS,Springfield_NJ,Rick_Siegel,1-201-379-2185,2400,DA:24hrs,XP:
+,29,Spider's_Web,Flemington_NJ,Rich_Karas,1-201-782-7640,1200,DA:24hrs
+,310,Cloudbase,Morris_Plains_NJ,Bill_Aubin,1-201-292-1365,2400,DA:24hrs
+,311,The_Xtra_BBS,Clifton_NJ,Marv_Shelton,1-201-284-3916,1200,WK:16:00-06:00(EST),WE:24hrs
+,312,Dance_Studio,E_Brunswick_NJ,Gee_Wong,1-201-249-1898,2400,DA:24hrs
+,313,Cork_Board,Ridgefield_NJ,Steven_Linhart,1-201-943-2226,1200,DA:24hrs
+,316,Metatek_Fido,Toms_River_NJ,Thomas_Kenny,1-201-286-2567,1200,DA:22:00-18:00(ESDT),XP:
+,317,Dumps_R_Us,Piscataway_NJ,Gee_Wong,1-201-885-7404,1200,MO:,XP:21:00-07:00(ESDT)
+Down,318,Ginger_Bread,Freehold_NJ,Alex_Naddaff,1-201-780-3249,1200,DA:24hrs
+,319,The_Micro_Room,Roselle_NJ,Marv_Shelton,1-201-245-6614,2400,XP:24hrs
+,320,RisQue_II,Newark_NJ,Chuck_Dortson,1-201-923-9792,1200,DA:24hrs
+,322,REACT_System_1,Mountain_View_NJ,Peter_J_Keller,1-201-628-7287,2400,DA:24hrs
+,323,Arco_Info_Board,Clifton_NJ,Al_Arango,1-201-772-2819,1200,DA:24hrs
+,324,TMMNET,Parsippany_NJ,Tom_Marshall,1-201-326-9870,2400,DA:24hrs
+,399,Crestwood,East_Amwell_NJ,Bob_Clair,1-201-885-7404,1200,MO:21:00-07:00(ESDT)
+,17,DEC-House,Cherry_Hill_NJ,Brian_Sietz,1-609-866-9481,2400,DA:23:00-16:30(ESDT)
+Down,412,The_Morning_Zoo,Cherry_Hill_NJ,Bruce_Kramer,1-609-424-5823,1200,
+,414,Pinelands_BBS,Cherry_Hill_NJ,Bob_Pritchett,1-609-354-9259,1200,
+,24,QUG_BBS,Philadelphia_PA,Mort_Lightman,1-215-743-1799,2400,DA:24hrs
+,25,Softshop,Ocean_City_NJ,Brad_Karp,1-215-663-1487,2400,DA:24hrs
+,601,Stone_Wall,Boyertown_PA,Peter_Weilnau,1-215-367-6558,2400,
+,602,Rydal_Board,Rydal_PA,Randy_Manaka,1-215-884-6122,2400,DA:24hrs,XP:
+,603,The_Foxes_Den,Hatfield_PA,Warren_Fox,1-215-721-0363,1200,DA:24hrs
+,604,Enterprise,Norristown_PA,Mark_W_Billig_Jr,1-215-631-9777,1200,DA:24hrs,XP:
+Down,606,Pats_All_American,Springfield_PA,Patrick_Byrne,1-215-544-5882,1200,DA:24hrs
+,607,ECTA's_Life,Hatfield_PA,Warren_Fox,1-215-443-0997,1200,DA:24hrs
+Hub,700,WESTERN_NEW_YORK,Honeoye_Falls_NY,Bob_Nims,1-716-624-4034,2400,XP:
+,701,The_IBM_Temple,Buffalo_NY,Jin_Tan,1-716-838-2664,2400,
+,703,I-Tech1,Buffalo_NY,Stewart_Alpert,1-716-874-6509,1200,6p-7a
+,704,Modem_Madness_BBS,Rochester_NY,David_Johnson,1-716-889-2016,2400,
+Down,706,ACE_Base,Williamsville_NY,David_Park,1-716-874-6509,1200,
+,708,Infancy_Research,Rochester_NY,Sheldon_Wagner,1-716-244-7418,1200,8p-8a
+,716,Finger_Lakes_FIDO,Honeoye_Falls_NY,Bob_Nims,1-716-624-4034,2400,XP:
+,723,Hitch_Hikers_Guide,Williamson_NY,Fritz_Howard,1-315-589-7361,1200,
+Down,726,SPECTRA-II,Rochester_NY,Doug_Toombs,1-716-248-2743,1200,
+Hub,800,UPSTATE_NEW_YORK,Albany_NY,Ken_Storm,1-518-235-1179,1200,
+,705,Southern_Tier_FIDO,Binghamton_NY,Tony_Miller,1-607-772-8024,1200,WK:11p-3:30p,WE:11p-10a
+,801,Spindle_City_FIDO,Albany_NY,Ken_Storm,1-518-235-1179,1200,
+,810,Fly_by_Night,East_Greenbush_NY,Dave_Bauer,1-518-477-8260,2400,11:00p-7pm
+;
+Host,109,Wash_DC_Metro,Falls_Church_VA,Kurt_Reisler,1-703-698-8230,2400,
+,2,Baltimore...ONLINE!,Baltimore_MD,John_Madill,1-301-484-2831,2400,
+,74,The_Bears_Den,Falls_Church_VA,Kurt_Reisler,1-703-671-0598,2400,
+,115,Arquimedes,Falls_Church_VA,Sam_Hargadine,1-703-698-8230,2400,
+Down,122,MDS,Falls_Church_VA,Sam_Hargadine,1-703-893-4715,2400,WK:6p-9a,WE:
+,483,Wash-A-RUG,Fairfax_VA,Kurt_Reisler,1-703-359-6549,1200,
+,603,NET-EXCHANGE,Reston_VA,D_Purks/C_Cummings,1-703-689-3561,2400,WK:5pm-8am,WE:
+,604,ShanErin,Alexandria_VA,David_Page,1-703-941-8291,1200,XP
+,605,PARAGON,Middle_River_MD,J_Liebsch/A_Griffin,1-301-574-7913,2400,
+,606,The_BlowTorch,Washington_DC,Alexander_Wall,1-202-686-9398,1200,
+Pvt,609,SiemensNet,Landover_MD,Walt_Mills,-Unpublished-,2400,WK:5:30p-8a,WE:
+,610,YAFIP,Potomac_MD,Michael_Klein,1-301-279-6774,1200,
+,611,The_Main_Frame,Chevy_Chase_MD,Andrew_Bilski,1-301-654-3157,2400,
+,612,The_Flying_PC_AT,Vienna_VA,Jim_Kay,1-703-556-0253,2400,
+,613,G&R_BBS,Baltimore_MD,Steve_Fox,1-301-825-0422,1200,
+,614,A&A_Microtech,Baltimore_MD,Tas_Papadopoulos,1-301-825-0536,2400,
+,615,IBM_WasteLand,Germantown_MD,Chris_Magyar,1-301-428-3418,1200,
+,618,PRESBY_FIDO,Baltimore_MD,Jack_Sharp,1-301-433-2014,1200,WK:4:30p-8:30a,WE:
+,619,Battleship_PA,Germantown_MD,Cliff_Kendall,1-301-428-3145,1200,
+Pvt,620,WCG_BBS,Washington_DC,Douglas_Marder,-Unpublished-,1200,WK:5pm-9am,WE:
+,621,TheLoadingDock,Gaithersburg_MD,Steven_Ranger,1-301-921-9650,2400,
+,622,The_Tomb,Vienna_VA,Bill/Peter_Thomas,1-703-938-5876,1200,WK:10:30p-2:30p,WE:
+,623,The_Corner_Stone,Silver_Spring_MD,Joseph_Collins,1-301-384-2587,2400,XP
+,624,Heart_of_Gold,Columbia_MD,Doug_Lindsey,1-301-531-3917,300,
+,625,DEC-CATT-HOUSE,Blue_Ridge_Summit_Pa,Bob_Catt,1-717-794-5268,2400,
+,626,NOVA_WEG,Burke_VA,William/Eunhee_Hunter,1-703-425-0695,1200,
+,627,Double_Nut_Board,Simpsonville_MD,David_Elliott_Jr.,1-301-997-7204,2400,
+,628,Reindeer_Shed,Reisterstown_MD,Robert_Rudolph,1-301-833-8933,2400,0730-1500,2330-0600
+,629,Norfolk_Fido,Norfolk_VA,Ben_"DUFF"_Smith,1-804-423-6604,1200,
+,630,The_Eagles_Aerie,Chevy_Chase_MD,Bud_Garrison,1-301-652-6832,1200,
+,631,The_Random_Factor,Potomac_MD,Chris_Rowley,1-301-340-0246,1200,
+,634,INSIGHT,Washington_DC,Brian_Hughes,1-202-543-2146,1200,
+,635,Rick's_Fido,Washington_DC,Rick_Ward,1-202-833-1889,1200,WK:7pm-5:30am,WE:
+,636,The_Pub,Washington_DC,Tobias_Eigen,1-202-244-8146,1200,
+Pvt,637,DAI_Hqs,Washington_DC,Frank_Welsh,-Unpublished-,2400,RE
+,638,SYS_Exchange,Fairfax_VA,Bill_Andrus,1-703-323-7654,1200,
+,639,The_RENEX_BBS,Woodbridge_VA,Ray_Gwinn,1-703-494-8331,2400,
+,640,Logical_Tech,Columbia_MD,Brian_Walsh,1-301-964-8088,1200,
+,641,The_Telephony_Board,Baltimore_MD,Jim_Towers,1-301-285-5171,1200,
+Pvt,642,Amber,Reston_VA,Dave_Stone,-Unpublished-,1200,MO
+,643,NOAA/FIDO,Rockville_MD,Rich_Kissel,1-301-770-0069,1200,
+,644,The_FIDO_Solution,Owings_Mills_MD,Gregory_Thomson,1-301-363-7617,1200,Mid-6:30pm
+,645,Rainbow_News,Fairfax_VA,Caroline_Mack/Tom_Tugman,1-703-280-2878,2400,
+;
+Host,129,Pitt-Net,Pittsburgh_PA,Jim_Lynn,1-412-257-2375,2400,
+,11,TACO_Sanyo_Fido,Trafford_PA,Paul_Kelly,1-412-856-1428,2400,
+,12,Pitt-Pup,Pittsburgh_PA,Jim_Lynn,1-412-563-3779,1200,
+,13,MYCROFTXXX,Pittsburgh_PA,Jim_McHale,1-412-271-2764,2400,
+,15,DEC-USER,Pleasant_Hills_PA,John_Vukovic,1-412-469-2468,1200,
+,16,KCA_PC-Guru,Pittsburgh_PA,Ray_Kennelly,1-412-561-7145,2400,WK:6p-9a,WE:24hrs,RE:
+,17,NEVER_BOARD,Pittsburgh_PA,Larry_DiGioia,1-412-733-4842,2400,
+,21,Hard_Hat_Board,Monessen_PA,Paul_Kelly,1-412-856-1428,2400,MO:
+,23,Zaphod's_Computers,Indiana_PA,Jon_Marshall,1-412-349-0557,2400,
+,26,SoundingBoard,Pittsburgh_PA,Stu_Turk,1-412-681-9464,2400,
+,28,CHINA_BLUE,Pittsburgh_PA,John_Penberthy,1-412-366-3378,1200,
+,29,THE_PITTSBURGH_LINK,Pittsburgh_PA,Gregg_Zegarelli,1-412-243-5465,2400,
+,30,Le_Chateau_Grand,Bridgeville_PA,Roger_Agrawala,1-412-221-1623,1200,DA:9p-7a,SA:9p-10a
+,31,The_Second_Opinion,Pittsburgh_PA,Bob_Rakov,1-412-826-0822,2400,
+,384,PITT-BULL,Pittsburgh_PA,Jim_Lynn,1-412-257-2375,2400,
+Hub,100,AMRG-ASRC_Hub,Pittsburgh_PA,Tom_Wardle,1-412-247-4488,1200,RE:
+,101,AMRG_#101,Pittsburgh_PA,Tom_Wardle,1-412-247-4488,1200,RE:
+;
+Host,150,First_State,Wilmington_DE,Bob_Klahn,1-302-764-7522,2400,XP:
+,1,MicroSolutions,Wilmington_DE,Bob_Klahn,1-302-764-7522,2400,XP:
+,2,Stockware,Wilmington_DE,Van_Olmstead,1-302-655-6342,2400,WK:8p-8a,WE:,XP:
+,110,dWolf,Wilmington_DE,Lee_Wolf,1-302-478-8703,1200,
+,111,Beagles_Nest,Newark_DE,Joel_Garrett,1-302-731-7842,2400,WK:10p-5p,WE:
+,112,GoldenRetriever,Newark_DE,Jim_Goldschneider,1-302-737-2294,2400,
+,113,Basset_Board,Wilmington_DE,Garry_Cantwell,1-302-656-8003,2400,
+,120,Hubbin's_Board,Hockessin_DE,Van_Olmstead,1-302-239-3969,2400,
+,130,Starfleet_Command,Elsmere_DE,Randall_Kobetich,1-302-654-2900,2400,
+Pvt,140,Century_Board,Wilmington_DE,Pete_Rosendahl,-Unpublished-,1200,WK:5p-8a
+,150,The_Fountainhead,Wilmington_DE,Scott_Johnston,1-302-479-0413,1200,WK:6p-8a,WE:
+,190,Chemist's_Comport,Wilmington_DE,Larry_McGee,1-302-479-0302,2400,DA:11p-6p
+,200,Scholar's_Workbench,Newark_DE,Ed_Ferrara,1-302-451-8045,1200,XP:
+Pvt,250,Phred_Soft,Newark_DE,Ed_Ferrara,-Unpublished-,1200,DA:12p-8a
+,900,K-9_&_Company,Newark_DE,Mike_Jacobs,1-302-738-1170,1200,
+Pvt,1000,TurboPointer,Wilmington_DE,Bob_Klahn,-Unpublished-,2400,WK:5p-8a
+Hub,600,Philadelphia_HUB,Rydal_PA,Randy_Manaka,1-215-884-6122,2400,DA:,XP:
+,601,Stone_Wall,Boyertown_PA,Peter_Weilnau,1-215-367-6558,2400,
+,602,Rydal_Board,Rydal_PA,Randy_Manaka,1-215-884-6122,2400,DA:,XP:
+,603,The_Foxes_Den,Hatfield_PA,Warren_Fox,1-215-721-0363,1200,DA:
+,604,Enterprise,Norristown_PA,Mark_Billig,1-215-631-9777,1200,DA:,XP:
+,605,QUG_BBS,Philadelphia_PA,Mort_Lightman,1-215-743-1799,2400,DA:
+Pvt,1100,ELLIOT,Hatfield_PA,Warren_Fox,-Unpublished-,1200,DA:
+;
+Region,14,Mid_West,IA_KS_MN_MO_NB_ND_SD,John_Pritchard,1-507-289-8452,2400,
+,61,RAMS,Rochester_MN,John_Pritchard,1-507-289-8452,2400,
+,234,Val_Com_BBS,Rochester_MN,Jay_Weimer,1-507-282-9879,2400,
+,341,Terraboard,Minneapolis_MN,David_Dyer-Bennet,1-612-721-8967,2400,
+,386,Bit_Bucket,Emporia_KS,E_J_McKernan,1-316-343-8028,2400,
+,415,TheGameBoard,Minneapolis_MN,David_Messer,1-612-822-1968,2400,
+Down,437,C_Net,Hutchinson_KS,Mike_Ferguson,1-316-662-6938,2400,Mail_Only:
+Down,438,Toto_Too,Topeka_KS,Rick_Boatright,1-913-232-3450,1200,WK:5p-8a,WE:
+Down,600,MINNE_FIDO,St_Paul_MN,Steve_Martineau,1-612-646-7428,2400,
+Down,602,KCM_FIDO,Blue_Springs_MO,Gary_Wood,1-816-229-1841,1200,
+,603,MCE_Ltd_KCMO,Kansas_City_MO,Phil_King,1-816-452-0005,1200,
+,606,QA_Forum,Minneapolis_MN,Wayne_Stenson,1-612-542-5322,1200,WK:6p-6a,WE:
+,607,C_Station,Minneapolis_MN,Steve_Ripley,1-612-332-1857,2400,
+,608,Wichita_Biz_Bd,Wichita_KS,Ken_Rucker,1-316-522-4850,2400,
+,609,Night_Flight,Wichita_KS,Mark_Stappenbeck,1-316-721-0581,2400,
+,610,Omaha_Fido,Omaha_NE,Jim_Singer,1-402-348-7603,1200,WK:6p-6a
+,612,PC_Concepts,Minneapolis_MN,David_Hazelton,1-612-572-0894,2400,
+,614,Wind_Dragon_Inn,Bellevue_NE,Henry_Neufeld,1-402-291-8053,2400,
+Down,617,City_Hunter,St_Paul_MN,Akihiko_Okada,1-612-644-6302,2400,WK:6p-10a,WE:
+Down,619,PIL_Software,Columbia_MO,Tom_Smith,1-314-449-9401,2400,
+,620,Fantasy_Gamers,Topeka_KS,Chris_Winterscheid,1-913-232-6504,1200,
+,621,The_Castle,Derby_KS,David_Stalsworth,1-316-788-6462,2400,
+Down,622,W_Omaha_Collossus,Omaha_NE,Jeff_Huston,1-402-397-9740,2400,
+,623,MidWest_Info_Exch,Wichita_KS,James_Whorton,1-316-943-5135,1200,WK:6p-7a
+,624,Sarpy_Fido,Sarpy_County_NE,Jim_Singer,1-402-896-1652,2400,WK:7p-8a
+Down,625,Troppus_BBS,Minneapolis_MN,Darren_Leno,1-612-339-2789,2400,
+,999,FIDO_Lawcat,Minneapolis_MN,Paula_Giese,1-612-872-2352,2400,
+;
+Host,100,St_Louis_Area,St_Louis_MO,Ken_Kaplan,1-314-576-4067,2400,
+,76,Baker's_Acre,So_Roxana_IL,Ben_Baker,1-618-251-2169,2400,XP:
+,482,Dirty_Ole_Man,Wood_River_IL,Ervin_Cole,1-618-254-2763,2400,XP:
+,513,Sky_King_II,East_Alton_IL,Rich_Brown,1-618-258-1567,1200,
+,504,Crystal_Palace,Cape_Girardeau_MO,Mike_Bryeans,1-314-335-4902,1200,
+,506,Executive_Computer,Fenton_MO,Conway_Christensen,1-314-343-2013,2400,
+,4,SLUG-IBM,St_Louis_MO,Curtis_Spires,1-314-772-0488,1200,
+,10,MDC_RCC,St_Louis_MO,Terry_Mueller,1-314-232-6881,2400,
+Pvt,11,MDC_IBM-SIG,St_Louis_MO,Terry_Mueller,-Unpublished-,1200,WK:6p-8a,WE:24hr
+,16,Mikes_Board,St_Louis_MO,Mike_Mellinger,1-314-726-3448,2400,
+,22,PCLUG,St_Louis_MO,Ken_Kaplan,1-314-576-2743,2400,XP:
+,51,DECUS_Central,St_Louis_MO,Ken_Kaplan,1-314-576-4067,2400,
+,64,CBM_Experimental,St_Louis_MO,Tony_Ott,1-314-867-1092,2400,MO:
+,73,SB1,St_Louis_MO,Stan_Bahl,1-314-527-6202,1200,XP:
+Hold,110,Big_Black_Poodle,St_Louis_MO,Terry_Mueller,-Unpublished-,2400,MO:
+,240,Dead_Letter_Queue,St_Louis_MO,Bill_Beers,1-314-867-7013,1200,MO:
+,255,AMCross_Central,St_Louis_MO,Tim_Rand,1-314-658-5866,2400,WK:5p-8a,WE:24hr
+,500,Alex'_Fido,St_Louis_MO,Alex_Hartley,1-314-771-9099,1200,XP:
+,505,C64_Software_Only,St_Louis_MO,Keith_Hall,1-314-233-7379,1200,RE:,WK:6p-6a,WE:
+,507,Sky_King,St_Louis_MO,Tom_King,1-314-436-5477,1200,
+Pvt,508,Forsythe_BBS,St_Louis_MO,Mike_Baranowski,-Unpublished-,2400,MO:
+,509,Top_of_the_Hill,St_Louis_MO,Brian_Kessel,1-314-997-1605,1200,
+,510,Rits_Board,St_Louis_MO,Mark_Peters,1-314-426-7144,2400,
+Down,511,C-Land_Tech_Help,St_Louis_MO,Gino_DiNatale,1-314-278-3359,1200,DA:9a-1p
+,512,StL_HUG_BBS,St_Louis_MO,Rich_Dobyns,1-314-291-1854,2400,
+,523,WeirdBase,St_Louis_MO,Brad_Hicks,1-314-389-9973,1200,
+,999,WUFN_BBS,St_Louis_MO,Bill_Butterfield,1-314-889-4696,2400,
+;
+Region,15,Mountain,AZ_CO_NM_UT_WY,Tony_Loosle,1-801-752-2757,2400,
+,1001,Sanyo_BUGS,Albuquerque_NM,Jami_Morgan,1-505-822-8268,1200,DA:10p-10a
+,1002,UofA_CAG,Tucson_AZ,Robert_MacArthur,1-602-621-2097,1200,WK:10a-8a,WE:
+,1003,Bug_Board,Tucson_AZ,Bob_Smith,1-602-621-2955,1200,DA:10a-8a
+,1004,Tuscon_Mts,Tuscon_AZ,Bob_Smith,1-602-743-0875,1200,DA:8p-7a
+,1005,LOGAN_Logon,Logan_UT,Tony_Loosle,1-801-752-2757,2400,
+,1006,Teachers_Pet,Las_Cruces_NM,Bo_Barry,1-505-646-5194,2400,
+,1007,Computer_Farm,Colorado_Spgs_CO,Paul_Hill,1-303-632-0669,1200,
+,1008,At_Your_Service,Orem_UT,Harry_Mahoney,1-801-227-4371,2400,
+,15,EtCetera,Provo_UT,Sam_Mecham,1-801-374-1350,1200,
+,16,OPTOTECH,Colorado_Spgs_CO,Richard_Green,1-303-570-7973,1200,
+;
+Host,104,Denver_Area,Denver_CO,Oscar_Barlow,1-303-973-9338,2400,XP:
+,56,Denver's_Fido,Littleton_CO,Oscar_Barlow,1-303-973-9338,2400,XP:,RE:,24hrs
+,77,Boulder_Fido,Boulder_CO,Kent_Leonard,1-303-497-6968,2400,24hrs
+Down,372,CPM_SIG-INC,Broomfield_CO,Al_Lundquist,1-303-465-1313,1200,24hrs
+,606,Fiddler's_Fido,Evergreen_CO,Mark_Indictor,1-303-674-1859,2400,24hrs
+,607,FIDO_NBS,Boulder_CO,Cathy_Nicoletti,1-303-497-3934,1200,24hrs
+Pvt,608,NPS_Oprns_Eng,Lakewood_CO,Lee_Castellion,-Unpublished-,2400,XP:,Private
+,108,MICROLINK_B,Littleton_CO,Girard_Westerberg,1-303-972-4181,1200,24hrs
+,610,DIVE-LINK,Northglen_CO,Rod_Lamping,1-303-252-9235,2400,XP:,RE:,24hrs
+,611,George_Net,Denver_CO,Phillip_Hein,1-303-322-4779,1200,24hrs
+,612,ESCO_Serv_Inc,Aurora_CO,Jim_Sparks,1-303-363-6409,2400,WK:3pm-6am,WE:24
+,444,TI_Link,Boulder_CO,Ron_Kuseski,1-303-499-1022,1200,24hrs
+,614,Mile_Hi_CUSS,Denver_CO,Walter_LaMendola,1-303-698-9924,1200,XP:,24hrs
+,615,King's_Bench,Denver_CO,Ralph_Allison,1-303-377-6725,2400,RE:,24hrs
+,904,PCjr_NET,Englewood_CO,Phil_Kaiser,1-303-789-4610,2400,XP:,RE:,24hrs
+,17,Musicians_Den,Denver_CO,Andy_Velasquez,1-303-321-6857,1200,RE:,WK:7pm-9am,WE:24hrs
+,18,Eusebiea_Fido,Federal_Heights_CO,Jim_Quiesner,1-303-430-8376,2400,XP:,RE:,24hrs
+,19,GC_FIDO,Littleton_CO,Steve_Raymond,1-303-795-1215,1200,24hrs
+,20,Day's_End,Denver_CO,Chris_Day,1-303-650-5636,2400,24hrs
+,21,MILE_HIGH_NET,Aurora_CO,Dave_Miller,1-303-671-7308,1200,24hrs
+,22,mbkSYS!,Boulder_CO,M._B._Komor,1-303-443-9155,1200,24hrs
+,23,TBBS_Net,Aurora_CO,Phil_Becker,1-303-690-0881,2400,XP:,MO:
+;
+Host,114,Phoenix_Area,Peoria_AZ,John_Kerr,1-602-242-5230,2400,
+,1,Phoenix_Net,Peoria_AZ,John_Kerr,1-602-242-5230,2400,24Hrs,RE:,XP:
+,3,Rainbow_BBS,Phoenix_AZ,Jim_Kashner,1-602-952-8520,1200,24Hrs,RE:
+,446,Xtra_#1,Glendale_AZ,Joe_Kennedy,1-602-979-6352,2400,24Hrs
+Pvt,5,St_Joes_Remote,Scottsdale_AZ,David_Dodell,-Unpublished-,2400,
+,6,Sport`s_Board,Phoenix_AZ,Mike_West,1-602-866-8324,1200,24Hrs
+,8,C_&_PLAY,Glendale_AZ,Edmond_Hisamoto,1-602-245-9475,2400,24Hrs
+,9,C_&_PLAY_2,Glendale_AZ,Edmond_Hisamoto,1-602-846-1406,1200,24Hrs
+,13,Corwin's_Keep,Tempe_AZ,Paul_Coppinger,1-602-894-1470,2400,24Hrs,RE:,XP:
+,14,EYE_NET,Scottsdale_AZ,DR_Leo_Bores,1-602-941-3747,1200,RE:,Wk:6PM-8AM,WE:24Hrs
+,15,ST_JOES_HOSPITAL,Phoenix_AZ,David_Dodell,1-602-235-9653,2400,24Hrs,XP:
+,17,Answering_Mach,Phoenix_AZ,Bob_Donaldson,1-602-242-3158,1200,24Hrs
+,18,Astronomer_BBS,Paradise_Valley_AZ,Don_Epand,1-602-483-9408,1200,6pm-6am
+,20,CONSTRUCTION_NET_1,Phoenix_AZ,Marv_Carson,1-602-258-8347,2400,24Hrs,XP:
+,21,CONSTRUCTION_NET_2,Tempe_AZ,Marv_Carson,1-602-965-3648,2400,5pm-5am
+,22,Fido_Connection,Scottsdale_AZ,Brendan_Winn,1-602-994-3218,1200,24Hrs
+;
+Host,128,Southern_Colorado,Colorado_Spgs_CO,Richard_Evers,1-303-531-6668,2400,
+,11,CS_BBS_Service_I,Colorado_Spgs_CO,Richard_Evers,1-303-531-6668,2400,
+,12,CS_BBS_Service_II,Colorado_Spgs_CO,Richard_Evers,1-303-531-6667,1200,
+,13,COSUG,Colorado_Spgs_CO,Jim_Cannell,1-303-635-5468,2400,
+,14,RamNet,Colorado_Spgs_CO,Q_McHenry,1-303-598-7667,1200,
+,15,Solid_S/W,Colorado_Spgs_CO,Joe_Rock,1-303-591-4273,2400,
+,16,Colorado's_Fire_Net,Colorado_Spgs_CO,C._Sanders/W._Wood,1-303-591-7415,2400,XP:
+,17,Last_Chance_Fido,Colorado_Spgs_CO,Jim_MacGregor,1-303-633-4711,2400,
+;
+Host,144,Fort_Collins_Net,Fort_Collins_CO,Leroy_Casterline,1-303-491-5946,1200,
+Down,1,LETTAS_Fido,Fort_Collins_CO,Greg_Sartz,1-303-493-1316,1200,
+,2,Fido/CSU,Fort_Collins_CO,Leroy_Casterline,1-303-491-5946,1200,
+,3,INFO_MOUNTAIN,Estes_Park_CO,Lee_Lasson,1-303-586-8197,1200,
+;
+Region,16,New_England,CT_ME_MA_NH_RI_VT,Kevin_Porter,1-617-481-7147,2400,
+,209,Fernwood,North_Haven_CT,Emmitt_Dove,1-203-234-9567,2400,MO:
+,216,Willi_Board,Willimantic_CT,Milo_Tsukroff,1-203-456-1933,2400,
+,605,Mac_Fido,Topsham_ME,Henry_Trujillo,1-207-725-8456,1200,
+,645,Eric's_Fido,New_Britain_CT,Eric_Nilsson,1-203-224-7231,1200,
+;
+Host,101,MassNet,Gardner_MA,David_Rene,1-617-632-1861,2400,XP:
+,14,WayStar,Marlboro_MA,Kevin_Porter,1-617-481-7147,2400,
+,27,Daves_Fido,Gardner_MA,David_Rene,1-617-632-1861,2400,XP:
+,73,Eagle-1,Ashland_MA,Dave_Hornbaker,1-617-881-6495,1200,
+Pvt,345,Alligator_Boar,Gainsville_FL,Sharon_King,-Unpublished-,2400,
+Pvt,385,EAGLE-2,Ashland_MA,Dave_Hornbaker,-Unpublished-,1200,
+,105,CAPECOD_Fido,Orleans_Ma,Rives_Mc_Ginley,1-617-255-9465,2400,
+,117,Andover_cnode,Andover_MA,Layne_DuBose,1-617-470-2548,2400,
+,120,Cullinet_Software,Westwood_MA,Nat_Poe,1-617-769-6761,1200,
+,121,Info_Jr,Waltham_MA,John_Debay,1-617-893-5772,2400,
+,122,BCSnet_Host,Boston_MA,Doug_Chamberlin,1-617-237-3750,2400,
+,124,The_Boston_L5,Maynard_MA,William_Caefer,1-617-897-5610,1200,
+,125,Davy_Jones_Locker,West_Millbury_MA,Richard_Kenadek,1-617-865-3290,2400,
+,129,Twilight_Datalink,Plymouth_MA,Peter_Flynn,1-617-746-4463,2400,
+,133,Mike's_Fido,Ayer_MA,Michael_Gray,1-617-772-5478,1200,WK:9p-7a
+,310,Daves_Annex,Westminister_MA,Dave_Rene,1-617-874-4325,1200,WK:2p-7m,WE
+,318,PC_Week,Boston_MA,Garry_Ray,1-617-536-1917,2400,
+,366,Westboro_Fido,Westboro_MA,Chester_Humphrey,1-617-366-5784,2400,
+,367,RBG-ENG_HOOTNE,Littleton_MA,Bruce_Gibson,1-617-486-2285,1200,
+,433,IBM_Tech_Fido,Pepperell_MA,Steve_Ahola,1-617-433-8452,2400,
+,777,Mind_Link,Worcester_MA,Dan_Dixon,1-617-853-7420,1200,
+Hub,109,PVPCUG_1,Amherst_MA,Mort_Sternheim,1-413-256-1037,2400,
+,110,Physics_Forum,Amherst_MA,Mort_Sternheim,1-413-545-1959,1200,
+,131,Mountain_Top_Fido,Windsor_MA,Don_Hall,1-413-684-2886,2400,
+,132,Jones'_Nose,Lenox_MA,Harry_Lee,1-413-637-0879,2400,
+,134,INFOnet_1,Amherst_MA,Waseem_Farshori,1-413-545-4717,1200,
+,135,Farm_net,Amherst_MA,Kent_Fleming,1-413-665-4227,1200,
+Hub,106,NewWorld_Magic1,Swampscott_MA,Hal_Duprie,1-617-595-5626,2400,xp:
+,45,Midnite_DEC,Brighton_MA,David_Strickler,1-617-787-3033,2400,
+,103,D.R.A.G_Net,Cambridge_MA,David_Mann,1-617-491-6010,2400,
+,107,NewWorld_Magic2,Swampscott_MA,Hal_Duprie,1-617-595-5627,2400,XP:
+,108,The_Lost_Fido,Newton_MA,Dan_Mahoney,1-617-244-1903,1200,
+,111,TRUK_BBS,Marblehead_MA,Mark_Bornstein,1-617-631-3304,2400,
+,115,Fred's_Fido,Weymouth_MA,Fred_Donahue,1-617-331-8624,1200,WK:6p-2m,WE:
+,119,Project_Crossbow,Somerville_MA,David_Kaufman,1-617-623-3244,2400,
+,123,Fido_Country_Club,N_Quincy_MA,Nevin_Markwart,1-617-479-2462,1200,
+,126,Solution_Systems_BBS,Boston_MA,David_Nanian,1-617-659-1479,1200,
+,130,Wizards_Tower,Brookline_MA,Tony_Rousmaniere,1-617-738-1968,1200,
+,136,INFOnet_2,Waltham_MA,Pat_Vittum,1-617-891-0650,1200,
+,138,Bionic_Dog,West_Newton_MA,David_Lescohier,1-617-964-8069,300,
+,139,Salem's_Fido,Salem_MA,Ed_Davis,1-617-745-4892,1200,
+,202,BLUE_Line,Winchester_MA,Bill_MacNeill,1-617-721-1688,1200,
+,301,BeyondWar/IPPNW_BBS,Brookline_MA,Andrew_Kanter,1-617-731-1575,1200,
+,302,IPPNW_Connection,Cambridge_MA,Andrew_Kanter,1-617-566-0847,1200,
+,625,The_Doctor,Framingham_MA,Herbie_Cohen,1-617-879-3714,1200,WK:10p-6a,WE:10p-12p
+;
+Host,132,NH-Net,Nashua_NH,Bob_Hartman,1-603-888-8179,2400,XP:
+,101,UN*X_GateWay,Nashua_NH,Bob_Hartman,1-603-888-8179,2400,XP:
+,102,Pal's_Board,Nashua_NH,Phil_Lamoreaux,1-603-891-1721,1200,XP:
+,104,Downeast_Roots_Fido,Rye_Beach_NH,David_James,1-603-964-7912,1200,
+,107,M'Cycle_Bytes,Amherst_NH,Robert_Nilsen,1-603-889-3366,2400,
+Pvt,108,FasFax_Fido,Nashua_NH,David_Gale,-Unpublished-,1200,RE:
+,109,Electronic_Orphanage,Nashua_NH,Bruce_Gowan,1-603-882-9312,1200,
+,110,Peterborough_Connection,Peterborough_NH,Tom_Westheimer,1-603-924-7724,1200,
+,111,On_Line_New_Hampshire,Chichester_NH,Douglas_Hall,1-603-798-4028,1200,
+,225,SeaCoast_Fido,Kittery_ME,Bill_Thomas,1-207-439-9367,2400,
+,388,Revap_Data,Keene_NH,Chris_Von_Schilling,1-603-357-2090,2400,
+,615,Wizards_Castle,Windham_NH,Paul_Gilberti,1-603-883-1596,2400,
+,620,Spaghetti_heaven,Pelham_NH,Victor_Coppola,1-603-635-7771,2400,DA:10p-7a
+;
+Host,141,ConnCentral,Cheshire_CT,Chuck_Venter,1-203-271-1002,2400,RE:
+,600,Cheshire_Fido,Cheshire_CT,Chuck_Venter,1-203-271-1002,2400,RE:
+Hub,200,Bridgeport_Relay,New_Haven_CT,Ed_Rauh,1-203-782-9787,2400,RE:
+Pvt,9,Silver_Screen,Woodbridge_CT,Jim_Ryan,-Unpublished-,1200,MO:XP:
+,215,BCP_Technologi,New_Haven_CT,Ed_Rauh,1-203-782-9787,2400,RE:
+,220,Bill's_Fido,New_Haven_Ct,Bill_Asarisi,1-203-776-9663,1200,
+,320,Rainbow_Surprise,Orange_CT,David_Hecht,1-203-795-0339,1200,RE:
+,350,B.O.M.C.,Orange_CT,Ellen_Snyder,1-203-795-6837,2400,
+Hub,300,Hamden_Relay,Hamden_CT,Bob_Morris,1-203-934-9852,2400,XP:
+,212,Mission_Ctl_II,Milford_CT,Sal_Guido,1-203-878-6355,2400,
+,269,RisQue_BBS,Bridgeport_CT,Rick_S.,1-203-333-0493,1200,
+,280,Dave's_Fido,Bridgeport_CT,Dave_Beaudoin,1-203-366-1234,1200,
+,328,Megabyte_Gen_Hosp,Orange_CT,Maynard_Marquis,1-203-795-3182,1200,WE:10pm-10am
+,333,ASCII_Neighborhood,Hamden_CT,Bob_Morris,1-203-934-9852,2400,XP:
+,335,After_6,Shelton_CT,Phil_Palumbo,1-203-926-6352,1200,RE:,wk:6pm-7am
+,375,LIL_FROG,Trumbull_CT,Terry_Wodek,1-203-268-3111,2400,XP:
+Pvt,485,Milford_Electric,Milford_CT,Sal_Guido,-Unpublished-,2400,
+,491,Naugy_Net,Naugatuck_CT,Vince_Perriello,1-203-729-7569,2400,XP:
+Hub,700,Waterbury_Relay,Waterbury_CT,Jim_Warren,1-203-754-9290,2400,
+,710,Data_Cove,Waterbury_CT,Jim_Warren,1-203-754-9290,2400,XP:
+,730,Ganymede,Waterbury_CT,Joel_Robb,1-203-274-1395,1200,
+Hub,800,Meriden_Relay,Wallingford_CT,Bill_Lyman,1-203-284-8070,2400,XP:
+,42,MetChem,New_Haven_Ct,Jon_Bauer,1-203-284-7419,2400,
+,560,Boot_Camp_Fido,Southington_CT,Ralph_Solli,1-203-628-6091,1200,RE;
+,810,Compusoft_I,Wallingford_CT,Bill_Lyman,1-203-284-8070,2400,XP:
+,820,Compusoft_II,Meriden_CT,Mike_Martell,1-203-238-0462,1200,
+Pvt,850,PCForum_Mail,Meriden_CT,J_Seaman,-Unpublished-,2400,MO:XP:
+;
+Host,142,Hartford_Area,Windsor_CT,David_Kaplan,1-203-683-5466,1200,RE:
+,42,The_Computer_Underground,Middletown_CT,Brian_Gray,1-203-344-9295,2400,
+,73,Info-Link,Marlborough_CT,Joe_Turner,1-203-295-8384,2400,
+,208,Bruce's_Fido,W_Hartford_CT,Bruce_Lomasky,1-203-236-3761,2400,
+,214,Bill's_Fido,Newington_CT,Bill_Unghire,1-203-667-0076,2400,
+,222,SPACER'S_NODE!,Hartford_CT,Tim_Carter,1-203-278-8562,1200,WK:6p-7a,WE:
+,314,Multimate,E_Hartford_CT,Howard_Eglowstein,1-203-289-4906,2400,RE:
+,387,AEtna_Fido,Windsor_CT,David_Kaplan,1-203-683-5466,1200,RE:
+,388,IDMS_Users_Assoc,Hartford_CT,Mike_Berstene,1-203-273-1655,1200,RE:,WK:430p-6a,WE:
+;
+Region,17,North_West,AK_ID_MT_OR_WA_BC_ALB_SSK,Rob_Barker,1-206-581-7003,2400,
+,1,The_Castle,Corvallis_OR,Lee_Damon,1-503-754-5465,2400,DA:9p-9a,SU:
+,37,CareerInfoSys,Eugene_OR,Kent_Loobey,1-503-686-3826,2400,DA:5:15p-7:45a,WE:
+,38,65'North,Fairbanks_AK,Peter_Stern,1-907-452-1460,2400,
+,39,MacSystem/NW,Vernonia_OR,Doug_Foreman,1-503-429-3310,2400,
+;
+Host,105,VanPort_Area,Portland_OR,James_Deibele,1-503-281-8322,2400,RE:
+,1,PDX_PC_Club,Portland_OR,James_Deibele,1-503-281-8322,2400,RE:
+Pvt,4,PD_Review,Portland_OR,James_Deibele,-Unpublished-,2400,MO:
+,5,DT_SoftwareEtc,Portland_OR,James_Deibele,1-503-241-2501,1200,DA:9PM-9AM,WK:6PM-10AM
+,7,ComputerLand,Portland_OR,Jim_Willing,1-503-620-0225,1200,
+,10,Oswego_Fido,Portland_OR,Bill_Jones,1-503-636-1212,2400,RE:
+,11,Crosstar_II,Vancouver_WA,Dan_Gallagher,1-206-574-4773,2400,
+,13,PVHUG/BECAFido,Portland_OR,Doug_Lewis,1-503-760-6411,1200,WK:11PM-5PM,WK:
+,15,PC_Connection,Portland_OR,Troy_Meyers,1-503-659-7362,2400,
+,16,Shotgun_Fido,Portland_OR,Jim_Montgomery,1-503-760-4521,1200,
+,20,ABBS,Portland_OR,Marc_Feldesman,1-503-229-3081,1200,DA:5PM-8AM,WK,RE:
+,361,WSO's_Roost,Portland_OR,Don_Flinn,1-503-281-0952,2400,DA:7AM-11PM,RE:
+;
+Host,122,SW_Oregon_Area,Coos_Bay_OR,Randy_Bush,1-503-269-5202,2400,XP:
+,4,PSG_Vancouver,Vancouver_BC,Ted_Powell,1-604-228-9706,1200,
+,6,PSG_Coos_Bay,Coos_Bay_OR,Randy_Bush,1-503-269-5202,2400,XP:
+;
+Host,134,Alberta_Net,Lethbridge_Alberta,Grant_Fengstad,1-403-320-0382,2400,XP:
+,1,Calgary_Fido,Calgary_Alberta,Lloyd_Miller,1-403-282-1703,2400,
+,3,HUSKY's_Board,Fort_McMurray_Alberta,Don_Thompson,1-403-743-4900,2400,
+,6,The_L.A._Connection,Lethbridge_Alberta,Grant_Fengstad,1-403-320-0382,2400,XP:
+,7,TC-Link,Calgary_Alberta,Terry_Cioni,1-403-295-2541,2400,XP:
+,8,Lynx,Calgary_Alberta,Geoffrey_Meredith,1-403-244-0166,2400,
+,9,Computer_Shop,Calgary_Alberta,Austin_Hook,1-403-243-2272,1200,RE:
+,10,HPS_BBS,Calgary_Alberta,Hans_Hoogstraat,1-403-239-0153,2400,
+,11,PCalgary,Calgary_Alberta,Gerald_Moffat,1-403-285-8387,1200,
+Hub,100,Calgary_Hub,Calgary_Alberta,Terry_Cioni,1-403-295-2541,2400,
+,101,Nemesis_Fido_RB,Faust_Alberta,Benoit_Guay,1-403-355-3881,2400,
+,102,Lethbridge_Online,Lethbridge_Alberta,Bill_Ripley,1-403-328-8024,1200,
+,103,NotQuiteFulDec,Ft_McMurray_Alberta,Don_Thompson,1-403-791-1486,2400,
+,104,Friar_Tucks_Fido,Sherwood_Park_Alberta,Sydney_Ruffo,1-403-464-3802,2400,
+;
+Host,138,PAC_NORWEST,Washington,Neal_Curtin,1-206-527-5618,2400,
+,3,PROBUS_INTRNTL,Puyallup_WA,Steve_Butler,1-206-848-9232,2400,WK:11p-6p,WE:
+,4,PTC_Net,Mt_Vernon_WA,Arlen_Fletcher,1-206-757-5233,2400,WK:5p-7a,WE:
+,14,BECS_TandyFido,Seattle_WA,Neal_Curtin,1-206-527-5618,2400,
+,17,NCRL_Library,Wenatchee_WA,Howard_Purcell,1-509-663-5232,2400,
+,24,Fox's_Den,Seattle_WA,Karen_Andrews,1-206-525-1357,1200,DA:8p-8a:XP
+,26,Clean_Sweep_Fido,Bothal_Wa,Tom_Chambers,1-206-481-9752,1200,10p-6a,Mail_Only
+Down,27,PullmanAreaBBS,Pullman_WA,Jeff_Batdorf,1-509-334-1744,1200,DA:1a-2a,RE:
+,29,Trouble_Shooter,Tacoma_WA,John_Johansen,1-206-922-0106,2400,
+,32,Glacier_Peak_Rainbow,Bellevue_WA,Gary_Stebbins,1-206-644-8431,2400,WK:12m-5p,WE:Varies
+,34,ArcticNet,Steilacoom_WA,Rob_Barker,1-206-581-7003,2400,
+,35,US_HDS_Human_Service,Seattle_WA,Steve_Ice,1-206-442-8127,2400,12p-6a,WE:
+,37,Mac's_Revenge,Tacoma_WA,Mark_Gregory,1-206-272-6343,1200,WK:6p-7a,WE:
+,38,Silver_Fido,Silverdale_WA,Bob_Renfro,1-206-692-3905,1200,WK:5p-8a,WE:
+,39,Computer_Coach,Tacoma_WA,Tracy_Graves,1-206-565-1476,1200,Mail_Only
+,40,Datawest,Victoria_B_C_,Ken_Yerex,1-604-478-2234,1200,
+,41,Midwife's_Bag,Grapeview_WA,Ralph_&_Ione_Sims,1-206-275-4146,1200,10p-8aDa
+,241,Fox's_Den_Remote,Seattle_WA,Karl_Andrews,1-206-344-3747,1200,6p-7a,MO,WE:XP:
+;
+Host,140,Sask_Net,Regina_Sask,Ken_Ganshirt,1-306-347-4493,2400,DA:6P-7A,WE:
+,18,SaskTel-1,Regina_Sask,Ken_Ganshirt,1-306-543-1949,2400,RE:Mail-Only
+,19,SaskTel-2,Regina_Sask,Ken_Ganshirt,1-306-347-4420,2400,RE:Mail-Only
+,20,REGINA_FIDO,Regina_Sask,Ken_Ganshirt,1-306-347-4493,2400,DA:6P-7A,WE:
+,22,Benden_Weyr,Saskatoon_Sask,Ken_Read,1-306-384-2844,1200,RE:
+,24,ESTEVAN_FIDO,Estevan_Sask,Bob_Swift,1-306-634-9935,2400,
+,25,The_Pirates_Cove,Saskatoon_Sask,Hans_Lotzkat,1-306-931-9249,1200,RE:
+,26,The_North_Village,Saskatoon_Sask,James_West,1-306-665-6633,1200,DA:6P-8A,WE:
+;
+Host,152,Eugene_Net,Eugene_Or,Mike_Harrington,1-503-683-4350,2400,
+,1,Blue_Telegraph,Eugene_OR,Mike_Harrington,1-503-683-4350,2400,
+,2,Buffer_Board,Springfield_OR,George_Butts,1-503-747-7636,2400,
+,3,ORTLAND,Springfield_OR,Paul_Ortman,1-503-726-1815,2400,
+,7,Palantir_BBS,Eugene_OR,Keith_Ullman,1-503-461-0239,1200,
+,9,Blazer_BBS,Eugene_OR,Bill_Ruddick,1-503-484-4741,2400,
+;
+Host,153,BCNet,Vancouver_BC,Andy_Harper,1-604-589-5441,2400,
+,101,Datanet,Delta_BC,Andy_Harper,1-604-589-5441,2400,
+,102,Dial_a_File,Vancouver_BC,Steve_Fairbairn,1-604-736-5311,2400,
+,106,KEA_Board,Vancouver_BC,Doug_McFadyen,1-604-732-1019,2400,WK:6p-10a,WE:
+;
+Region,18,South_East,AL_FL_GA_MS_NC_SC_TN,Jerry_Nuckols,1-601-545-1225,2400,
+,2,Bits_&_Bytes,Nashville_TN,Bruce_Fuqua,1-615-876-8517,2400,
+,4,The_Exchange,Jacksonville_NC,David_Ellison,1-919-346-5755,1200,
+,5,The_Dog_Pound,Fort_Walton_Beach_FL,David_Payne,1-904-581-0045,1200,DA:7a-5p,7p-3a
+,6,Sanyo_Club,Altamonte_Spgs_FL,Joe_Lewis,1-305-831-1679,1200,
+,7,Charleston_Fido,Charleston_SC,Ed_Ridpath,1-803-763-4920,1200,
+,9,Teacher's_Pet_Fido,Charlotte_NC,Bo_Barry,1-704-547-4185,1200,DA:5p-9a,
+,10,Garden_City_Fido,Augusta_GA,John_Tobin,1-404-722-0614,1200,
+,11,Lightning_Rod,Hattiesburg_MS,Jerry_Nuckols,1-601-545-1225,2400,
+Hold,12,The_Rat's_Nest,Columbia_SC,Paul_Beverly,1-803-788-6797,1200,
+,13,TABS_FIDO,Vicksburg_MS,Don_Bach,1-601-634-2365,2400,
+,14,RSBBS,Crestview_FL,Roger_Smith,1-904-682-3232,2400,
+,15,Dr._Fido,Tequesta_FL,Ron_Innerfield,1-305-744-7862,2400,
+,16,The_Last_Resort,Chattanooga_TN,Bill_Crawford,1-615-892-7773,2400,
+,18,The_Light_BBS,Silver_Springs_FL,Jim_Lewis,1-904-625-2737,1200,
+,19,Bear's_Licorice_Disk,Maxwell_AFB_AL,David_Hicks,1-205-265-5096,2400,
+;
+Host,112,Fla's_First_Coast,Jacksonville_FL,Pete_Cascio,1-904-721-3804,2400,
+,1,Casa_Mi_Amiga,Jacksonville_FL,Mitch_Kelly,1-904-733-4515,1200,
+,2,The_Treehouse,Jacksonville_FL,Ervin_Miller,1-904-783-4777,1200,RE:
+,3,The_Twilight_Zone,Neptune_Beach_FL,Brian_Bream,1-904-241-7872,1200,
+,4,The_Bus_Depot,Mandarin_FL,Felix_Pendas,1-904-262-6761,1200,
+,5,Mac's_Madness,Jacksonville_FL,Stan_McLeod,1-904-768-3854,1200,
+,6,The_Audit_Trail,Mandarin_FL,Bill_Denham,1-904-262-1633,1200,
+,7,Realm_of_Magic_Mirrors,Jax_Beach_FL,Lee_Bell,1-904-223-1029,1200,
+,8,Alpha-Omega,Jacksonville_FL,David_Hess,1-904-388-6009,1200,
+,344,The_Dog_House,Jacksonville_FL,Pete_Cascio,1-904-721-3804,2400,
+;
+Host,116,NashvilleArea,Nashville_TN,Rick_Steele,1-615-885-2198,2400,
+,400,Sys/Net,Nashville_TN,Rick_Steele,1-615-885-2198,2400,
+,2,Clarksville_Fido,Clarksville_TN,Dawayne_Adams,1-615-645-1630,1200,
+,3,Springfield_Fido,Springfield_TN,Tony_Howell,1-615-384-1260,1200,
+;
+Host,118,Alabama_Area,Huntsville_AL,Mike_Williams,1-205-883-8367,2400,
+Pvt,365,TVC,Huntsville_AL,Tim_Meyers,-Unpublished-,2400,
+,442,TCS,Huntsville_AL,Tim_Meyers,1-205-830-2334,1200,
+Pvt,602,Lazer_Soft,Huntsville_AL,Mike_Williams,-Unpublished-,1200,MO:
+,603,Telcomm_Bbs,Huntsville_AL,Mike_Perdue,1-205-883-8367,2400,
+,604,CompuNet,Huntsville_Al,Jon_Allen,1-205-534-8246,1200,
+;
+Host,123,MemphisNET,Memphis_TN,Jerry_Hindle,1-901-353-4563,2400,
+,1,S.C.&_S._BBS,Memphis_TN,Bill_Stewart,1-901-761-5018,1200,
+,3,The_Connection,Memphis_TN,Dave_Summers,1-901-363-0460,1200,RE:
+Pvt,5,Aubreys_Fido,Memphis_TN,Aubrey_Canerdy,-Unpublished-,1200,
+,6,Spacestation_Earth,Memphis_TN,Jerry_Hindle,1-901-353-4563,2400,
+Pvt,7,Think_Tank,Memphis_TN,Bill_Paul,-Unpublished-,1200,
+,8,VALLEY-Fido,Memphis_TN,Juli_Valley,1-901-362-9553,1200,
+;
+Host,133,ATLGATE,Atlanta_GA,Ken_Shackelford,1-404-928-1876,2400,
+,1,ATL/FIDO1,Woodstock_GA,Ken_Shackelford,1-404-928-1876,2400,XP:
+,2,Fido_South,Atlanta_GA,Lane_Fowler,1-404-995-0182,1200,
+Pvt,3,Misty_Mountain,Woodstock_GA,Ken_Shackelford,-Unpublished-,1200,MO:
+Down,4,Ga_Tech_Fido,Atlanta_GA,Richard_Dervan,1-404-676-9264,2400,WK:11p-6:30a,WE:10p-10a
+,6,AutoCAD_BBS,Atlanta_GA,Steve_Fox,1-404-872-8421,1200,
+,7,CMC_BBS,Carollton_GA,Randall_Hanson,1-404-834-9097,1200,
+,10,Ham_Board_One,Duluth_GA,John_Dashner,1-404-476-7970,2400,
+Pvt,12,G-P_Fido_BBS,Atlanta_GA,John_Miller,-Unpublished-,2400,MO:
+Down,16,Mountain_Park,Mountain_Park_GA,Warren_Tucker,-Unpublished-,2400,MO:
+Pvt,100,Info-Net,Atlanta_GA,Ken_Shackelford,-Unpublished-,2400,MO:
+;
+Host,135,S-FLorida_Net,Miami_FL,Christopher_Baker,1-305-596-8611,1200,RE:,XP:
+,2,Miami_Dade_Fido,Miami_FL,Richard_White,1-305-347-2790,2400,WK:6p-7a,WE:,RE:
+,3,Genesis_BBS,North_Miami_FL,Blake_Eiseman,1-305-895-2998,1200,RE:
+,4,RAM-SOFT_Fido,Miami_FL,David_Gilbert,1-305-226-3310,1200,RE:,XP:
+,5,Miami_PC_Network,North_Miami_Beach_FL,Michael_Shalom,1-305-935-4964,2400,
+,6,DOS_Center_Fido,Boca_Raton_FL,Michael_Krasnove,1-305-391-8504,1200,WK:630p-930a,WE:RE:
+,7,Miami's_First_Fido,Miami_FL,Al__de_la_Torre,1-305-554-4602,2400,RE:,XP:
+,8,CompuSci_Fido,Miami_Shores_FL,Kevin_Khelawan,1-305-758-4821,1200,RE:
+Pvt,9,EPICS,Hialeah_FL,F._A._Schurtz_Jr.,-Unpublished-,1200,RE:,MO:
+,10,AMS_Fido,Miami_FL,Peter_Adenauer,1-305-621-0103,1200,WK:530p-830aWE:RE:
+,11,INVESTECH,Ft__Lauderdale_FL,John_Griffing,1-305-771-0117,1200,WK:6p-8a,WE:RE:
+,14,Metro-Fire_Fido,Miami_FL,Christopher_Baker,1-305-596-8611,1200,RE:,XP:
+Pvt,99,UNIX_Experiment,Miami_FL,Joe_Block,-Unpublished-,1200,RE:
+Pvt,114,Fire_Puppy,South_Miami_FL,Christopher_Baker,-Unpublished-,1200,RE:,MO:
+;
+Host,137,Fla_Suncoast_Net,Venice_FL,Jim_French,1-813-497-1684,2400,RE:
+,10,Sarasota_High_Online,Sarasota_FL,Jim_Johari,1-813-953-3033,1200,RE:
+,11,ABC_Electronics,Sarasota_FL,Jeff_Rigby/Scott_Quarmby,1-813-924-4590,1200,RE:
+,19,Ark_Tangent,Tampa_FL,Wes_Cowley,1-813-932-6939,2400,DA:6pm-10am,XP:
+,20,TSB_Fido,Venice_FL,Jim_French,1-813-497-1684,2400,RE:
+,30,Suncoast_On-line_Systems,Venice_FL,Dave_Bebermeyer,1-813-497-1827,2400,RE:
+Pvt,90,Ark_Too,Tampa_FL,Pat_Steelman,-Unpublished-,1200,MO:
+;
+Host,145,Space_Coast,Titusville_FL,Steve_LaPha,1-305-268-0216,1200,DA:9p-9a
+Pvt,2,NASA/MD-PLN,KennedySpcCntr_FL,Al_Koller,-Unpublished-,1200,RE:
+,4,CompuTrac_Fido,Titusville_Fl,Steve_LaPha,1-305-268-0216,1200,DA:9p-9a
+,5,The_Lair,Altamonte_Spgs_FL,Robert_Hupf,1-305-830-8494,1200,WK:430p-8a,WE:
+;
+Host,151,Triad_NC_Net,Greensboro_NC,Ben_Mann,1-919-274-5760,2400,
+,2,Alert_Data,Greensboro_NC,Ben_Mann,1-919-274-5760,2400,
+,3,Wizard_Line,Greensboro_NC,David_Bodman,1-919-854-0261,1200,RE:1AM-6AM
+Down,4,Kaypro_UG,Greensboro_NC,Dan_Post,-Unpublished-,1200,
+Down,6,Lynchburg_Fido,Lynchburg_VA,Bob_Martin,1-804-846-1880,1200,
+,7,GEMS,Greensboro_NC,Fred_Smith,1-919-274-3305,1200,
+,10,Star_Chamber,Greensboro_NC,Marshall_Presnell,1-919-299-4668,1200,MO: DA:12AM-7AM
+,15,The_TeXnet_BBS,Chapel_Hill_NC,Tom_Morris,1-919-968-0657,1200,
+,20,MetroLink_Fido,Charlotte_NC,Richard_Epson,1-704-541-8626,1200,
+,301,The_BNC_Connector,Boone_NC,Bill_Schreiber,1-704-262-1861,2400,
+,401,Fido's_One_Dish,Graham_NC,Dave_Neathery,1-919-222-0801,2400,
+,501,Crystal_Coast_Fido,Swansboro_NC,Michael_Hill,1-919-326-3740,1200,
+,502,QX_Connect,Jacksonville_NC,Phil_Ferraro,1-919-455-1933,1200,DA:6PM-6AM,SA:
+;
+Host,158,N.C_CENTRAL,Raleigh_NC,Amnon_Nissan,1-919-851-8460,2400,
+,100,N.C_CENTRAL,Raleigh_NC,Amnon_Nissan,1-919-851-8460,2400,RE:
+,101,EQUAL_BBS,Raleigh_NC,Mike_Bowen,1-919-851-6806,1200,
+,104,Nibble_&_Byte,Chapel_Hill_NC,Ron_Bemis,1-919-942-9267,2400,
+,105,Pommy_Fido,Raleigh_NC,Bill_Balme,1-919-846-2154,2400,WK:11p-7a,WE:
+;
+Region,19,Texarkana,AR_LA_OK_TX,Mark_Grennan,1-405-728-2463,2400,XP:
+,329,Computer_Aide,Tulsa_OK,Mike_Johnson,1-918-493-2137,2400,XP:
+,198,Quik-Net,Crockett_TX,Mike_Brimberry,1-409-544-2257,1200,RE:
+,199,Electro-Net,Crockett_TX,Dustin_Brimberry,1-409-544-2120,2400,DA:10p-4pm
+,200,The_Bull's_Eye,Lubbock_TX,Bob_Martin,1-806-742-6832,2400,DA:9p-6am
+,201,Fido's_Domain,Shreveport_LA,Nevin_Nobles,1-318-869-1258,1200,DA:7pm-7am,SA:3pm-7amMon
+,203,Centex_Fido,Temple_TX,V_Subramanian,1-817-778-6305,2400,
+,205,BroadsidePCjr,Tulsa_OK,David_Wollman,1-918-496-2055,2400,
+,206,Cal-Trek,Texas_City_TX,Calvin_Jennings,1-409-948-2732,2400,
+,208,SARCO_LTD,Tulsa_OK,Jack_Coursey,1-918-663-5535,2400,DA:10pm-8am
+,437,C_NET,Plainview_TX,Mike_Ferguson,1-806-293-4925,2400,MO:
+,210,XroadsMedNet,Victoria_TX,Bill_Brendel,1-512-572-0715,1200,XP:DA:1900-0600,WK:24hrs
+,211,Comtech_FIDO,Tulsa_OK,Allen_Alfrey,1-918-749-4610,1200,MO:RE:
+,212,ENTRE_Fido,Tulsa_OK,Jack_Coursey,1-918-493-7183,1200,
+,213,MicroApplication,El_Paso_TX,Dick_Gladden,1-915-594-9738,1200,
+,214,DIG_El_Paso,El_Paso_TX,Sam_Thomas,1-915-592-5424,2400,
+,215,PC_Designs,Tulsa_OK,Allen_Alfrey,1-918-254-0354,1200,
+,216,Soft_Fido,Shreveport_LA,Daniel_Tobias,1-318-636-4402,1200,
+,217,SEAdog_Fido,Little_Rock_AR,Charles_Calwell,1-501-374-3533,2400,
+,218,PSO_Tech_Board,Tulsa_OK,Bert_Hunsicker,1-918-599-3001,2400,RE:5pm-8am
+,219,Command_Post_BBS,El_Paso_TX,Don_Shults,1-915-821-8835,1200,
+,220,Wash_'n_Ware,Baton_Rouge_LA,Joey_Robichaux,1-504-291-7353,2400,
+,221,PeaceKeeper,Shreveport_LA,Phillip_Campbell,1-318-459-1306,1200,
+;
+Host,106,Houston_Area,Houston_TX,Justin_Marquez,1-713-978-3554,2400,
+,60,Artichoke,Houston_TX,Justin_Marquez,1-713-978-3554,2400,
+,64,Graf_Spee,Houston_TX,Jay_Maynard,1-713-332-3486,1200,RE:,MO:
+,343,PC_Interconn,Houston_TX,David_Reinsel,1-713-955-8120,2400,XP:
+,352,DG_Haus,Houston_TX,Lynn_Lively,1-713-681-9629,1200,RE:
+,357,TMBBS,Houston_TX,Scott_Royall,1-713-497-5433,1200,RE:9:30-23:30p,Su-Th,WE:
+Pvt,500,Red_Baron,Houston_TX,Gunnar_Seaburg,-Unpublished-,1200,RE:
+,501,West_Oaks,Houston_TX,Charles_Cummings,1-713-485-7204,1200,WK:7p-7a,WE:
+,502,Sugar_Land_Fido,Houston_TX,Karl_Lehenbauer,1-713-933-2440,1200,
+,503,Over_The_Rainbow,Houston_TX,John_Lellis,1-713-493-7483,1200,RE:16:00-07:00,Su-Th,WE:
+Down,504,Bailey_Controls,Houston_TX,Wallace_Edwards,1-713-981-6152,1200,RE:16:00-08:00,Su-Th,WE:
+,777,TBL-COMM,Houston_TX,Jim_Baker,1-713-661-9040,2400,RE:
+Hub,99,Houston_Sub,Houston_TX,Gary_Sanborn,1-713-458-7410,2400,
+,101,Fidos_Partner,Houston_TX,Gary_Sanborn,1-713-458-7410,2400,
+,105,North_Ho_HUG,Houston_TX,Jim_Petty,1-713-583-1287,2400,
+,106,Black_Star,Houston_TX,Jim_Black,1-713-458-5406,1200,
+,107,The_Right_Place,Houston_TX,Dave_Graessle,1-713-933-1457,1200,
+,108,Stormy_Weather,Houston_TX,David_Monteiro,1-713-644-4345,1200,
+Hub,487,Zaisan_Net,Houston_TX,Jack_Cochran,1-713-337-1415,2400,RE:
+,1901,Cal_Trek,Galveston_TX,Calvin_Jennings,1-409-948-2732,2400,
+;
+Host,117,Brazos_County,Bryan_TX,Paul_Sittler,1-409-845-0510,2400,DA:12m-8a
+,1,My_Word_2,College_Stn_TX,Paul_Sittler,1-409-764-0056,2400,
+,2,Silent_Warrior,College_Stn_TX,Alan_Kurk,1-409-696-0982,1200,DA:10p-12a
+,100,The_PC_Connection,Bryan_TX,Chris_Cox,1-409-774-7227,2400,
+,101,Sherwood_Forest,Bryan_TX,Sid_Sherwood,1-409-775-2155,1200,DA:12m-5p
+,102,CS/B_Z100-Fido,College_Stn_TX,Chris_Lang,1-409-693-2235,2400,Su-Th:11p-6p,Fr-Sa:11p-9a
+,469,My_Word,College_Stn_TX,Paul_Sittler,1-409-845-0510,2400,DA:12m-8a
+,1261,Vet_Tch_Hos,College_Stn_TX,Ron_Robertson,1-409-845-9199,2400,DA:5p-8a
+,1262,Elite_Sft_Dev,Bryan_TX,Mike_Ringer,1-409-846-4367,1200,
+Pvt,1263,Anatomically_Correct,College_Stn_TX,Keith_Hall,-Unpublished-,2400,
+Pvt,1264,Tox_Net_1,College_Stn_TX,Tim_Phillips,-Unpublished-,1200,DA:5p-8a
+,1265,TAMU_Micro_Center,College_Stn_TX,John_Kane,1-409-845-0822,1200,
+Pvt,1266,Garbers_Grotto,College_Stn_TX,Ted_Garber,-Unpublished-,2400,DA:10p-8a
+,1267,TAMU_Micro_Supt,College_Stn_TX,Tony_Overfield,1-409-845-2690,2400,
+,1268,AVCS_Vet_Net_#1,College_Stn_TX,Craig_Carter,1-409-845-5555,2400,
+,1269,TVMDL_Diag_Net_#1,College_Stn_TX,Craig_Carter,1-409-845-0319,1200,DA:5p-8a
+,1270,Bare_Bones_Tox_Net,College_Stn_TX,Keith_Hall,1-409-845-9316,1200,DA:5p-8a
+Pvt,1300,Texas_Ag_Ext_1,College_Stn_TX,Briggs_Myrick,-Unpublished-,2400,
+Pvt,1301,Texas_BugNet_1,College_Stn_TX,John_Jackman,-Unpublished-,1200,
+,1302,Texas_Green_Machine,College_Stn_TX,Don_Wilkerson,1-409-845-7346,1200,
+Pvt,1400,Texas_Voc_Ins_Svc,College_Stn_TX,John_Carnes,-Unpublished-,1200,DA:5p-8a
+;
+Host,124,Dallas_Metroplex,Dallas_TX,Chuck_Lawson,1-214-422-4772,2400,XP:6:30a-3:
+Hub,100,Dallas_Inbound,Dallas_TX,Chuck_Lawson,1-214-422-4772,2400,XP:6:30a-3:30a
+,101,Schnee's_Friendly_FIDO,Plano_TX,John_Summers,1-214-578-1308,2400,XP:
+,102,Inside_Track_Edition,Plano_TX,Chuck_Lawson,1-214-422-4772,2400,XP:6:30a-3:3
+Pvt,103,Fido_USA,Plano_TX,John_Summers,-Unpublished-,2400,MO:
+Pvt,105,Night_City,Plano_TX,Chuck_Lawson,-Unpublished-,1200,MO:
+,106,Star's_End,Richardson_TX,Dan_Thompson,1-214-238-8745,2400,
+Pvt,108,The_P.O.L.E.,Dallas_TX,Nathan_Vance,-Unpublished-,2400,MO:
+,109,The_Diplomat,Carrollton_TX,Robert_Eskridge,1-214-242-9399,2400,
+,110,Flying_Dutchman,Grand_Prairie_TX,Randy_Van_de_Loo,1-214-642-3436,1200,
+,111,Pink_World_Fido,Dallas_TX,David_Finster,1-214-991-3381,2400,
+,112,EGA_Fido,Richardson_TX,Carl_Ayres,1-214-644-7018,1200,M-F:6:30p-8a,WE
+,113,Asylum,Lewisville_TX,Scott_Spears,1-817-430-1305,1200,
+Pvt,114,Shuttle_Diplomat,Carrollton_Tx,Robert_Eskridge,-Unpublished-,2400,MO:
+Hub,200,Dallas_Outbound,Dallas_TX,Jon_Sabol,1-214-380-9063,2400,XP:
+,201,DalTex_FIDOnet,Dallas_TX,Chris_Bradley,1-214-991-7934,1200,
+,3,Dodge_City,Garland_TX,Bernie_Lawrence,1-214-494-1940,1200,
+,10,Big_D_Fido,Dallas_TX,Dennis_Forcier,1-214-392-1121,2400,
+,204,Sunset_Bar_&_Grill_BBS,Plano_TX,Kenny_Posey,1-214-867-3025,2400,
+,205,Video_Bar_BBS,Dallas_TX,Wendell_Price,1-214-939-9114,2400,
+,206,Rising_Star,Richardson_TX,Jeff_Rush,1-214-231-1372,2400,XP:
+,207,ComputerCraft_SupportLink,Dallas_TX,David_Lovrien,1-817-263-5809,2400,
+,208,Arlington_FIDO,Arlington_TX,John_W_Richter,1-817-265-4859,1200,
+,209,Buck$Board,Dallas_TX,Hank_Burden,1-214-331-8813,2400,
+,210,SCA_Consulting_Inc,Dallas_TX,Jon_Sabol,1-214-380-9063,2400,XP:
+,212,Turbo_Fido,Dallas_TX,Rod_Cole,1-214-520-2826,2400,
+;
+Host,130,DFW_Gateway,Fort_Worth_TX,Bill_Cleaver,1-817-429-7300,2400,
+,1,The_Puddle,Fort_Worth_TX,Bill_Cleaver,1-817-429-7300,2400,
+,2,Nomads_Nook,Fort_Worth_TX,Jack_R_Smith,1-817-926-8922,2400,
+,3,The_AmERICan_B,Fort_Worth_TX,Eric_Ewanco,1-817-457-4737,2400,XP:,WK:
+,4,The_BBN,Fort_Worth_TX,George_Braswell,1-817-735-8006,2400,
+,5,CUSSNET_UTA,Arlington_TX,Dick_Schoech,1-817-273-3966,2400,
+,6,TRACK_][_DBS,Fort_Worth_TX,Richard_Bilyea,1-817-244-4151,2400,
+,7,ACROPOLIS,Fort_Worth_TX,Mitch_Hill,1-817-294-7588,1200,
+,8,The_Key,Fort_Worth_TX,Jeffrey_Locke,1-817-246-1279,2400,
+,9,Nightmare,Graham_TX,Paul_Witherspoon,1-817-549-2010,1200,
+,10,D_D_T_L,Fort_Worth_TX,Carrie_Brown,1-817-649-2857,1200,
+,12,The_Arc,Fort_Worth_TX,Jim_Beeler,1-817-465-2976,1200,
+;
+Host,136,CenTex_ProComm,Austin_TX,George_Lehtola,1-512-836-8588,2400,XP:
+,50,Crystal_Cavern_Fido,Austin_TX,Scott_Ashcraft,1-512-263-5805,2400,
+,200,Chai_Way_SEAdog,Round_Rock_TX,Thomas_Gentry,1-512-388-3464,2400,XP:
+,201,Thunderbird_SEAdog,Austin_TX,James_Johnston,1-512-448-3701,2400,XP:
+,202,Phoenix_WMute,Austin_TX,Chris_Judge,1-512-458-5628,1200,
+,203,Sphere_West_Fido,Austin_TX,Dwight_West,1-512-459-3864,1200,
+,204,Last_Resort_WMute,Round_Rock_TX,David_Powers,1-512-255-9983,1200,
+,205,Star's_End_WMute,Round_Rock_TX,Dan_Thompson,1-512-255-1030,2400,
+,206,Commer_Energy_WMute,Round_Rock_TX,Gene_Chesser,1-512-255-1618,2400,
+,207,Univ_Cntl_Fido,Austin_TX,Mike_Mayer,1-512-495-5120,1200,
+,300,Recording_Std._WMute,Austin_TX,Larry_Seyer,1-512-452-2040,2400,
+,601,Dog's_Breath_SEAdog,Austin_TX,George_Lehtola,1-512-836-8588,2400,XP:
+,999,Nightmare_Fido,Hutto_TX,Kevin_Stolle,1-512-846-6151,1200,
+Pvt,1985,Freeside_WMute,Round_Rock_TX,Jeff_Porter,-Unpublished-,2400,
+Pvt,1986,Dog's_Brth_#2_SEAdog,Austin_TX,George_Lehtola,-Unpublished-,2400,XP:
+Pvt,1987,Chai_Way_#2_SEAdog,Round_Rock_TX,Thomas_Gentry,-Unpublished-,2400,XP:
+Pvt,1988,Thndbird_#2_SEAdog,Austin_TX,James_Johnston,-Unpublished-,2400,XP:
+;
+Host,147,Okla_City_Area,Okla_City_OK,John_Knox,1-405-843-5002,1200,
+,1,The_SOURCEry_System,Okla_City_OK,David_Drexler,1-405-728-2463,2400,
+Pvt,2,Missing_Link_East,Okla_City_OK,Bob_Ripley,-Unpublished-,2400,
+,3,Fido_of_Moore,Moore_OK,Clarence_Wormley,1-405-794-9244,1200,
+,4,Legal_Beagle,Okla_City_OK,Vic_Hill,1-405-848-2828,1200,
+,5,Land_Ho,Okla_City_OK,Kurt_Vanderwater,1-405-947-7294,1200,WK:6p-8a,WE:
+,6,Midwest_MIDI,Okla_City_OK,John_Fordenbacher,1-405-733-3102,1200,
+,7,American_BBS,Okla_City_OK,John_Knox,1-405-843-5002,1200,
+,8,Missing_Link_West,Okla_City_OK,Denny_Meyers,1-405-354-1986,2400,
+,9,OKCCC,Okla_City_OK,Denny_Meyers,1-405-682-7559,1200,
+;
+Host,160,CC_Net,Corpus_Christi_TX,Mark_Boler,1-512-992-6441,2400,
+,101,DataBank_BBS,Corpus_Christi_TX,Mark_Boler,1-512-992-6441,2400,
+,102,DataBank_II,PortLand_TX,Charles_Murphy,1-512-643-2251,1200,
+,103,Data_Log,Corpus_Christi_TX,Phil_Hawkins,1-512-853-5835,1200,
+Pvt,111,PS_Node,Corpus_Christi_TX,Tom_Harper,-Unpublished-,1200,
+;
+Region,2,European_Fnet_Admin,Ede_Holland_Europe,Henk_Wevers,31-8380-37156,2400,!*
+;
+Region,20,Sweden,S,Mats_Knuts,46-40-54-9189,2400,!#CT1/2/3/4
+;
+Host,501,Sweden,Malmoe_Sweden,Mats_Knuts,46-40-54-9189,2400,!#CT1/2/3/4
+Pvt,4601,Day_Rainbow,Karlstad_Sweden,Conny_Jonsson,-Unpublished-,1200,#CT3
+,4602,Sun_City_Fido,Karlstad_Sweden,Lennart_Svensson,46-54-16-6988,300,!CT1/2
+,4603,ATL,Lidkoeping_Sweden,Carl_Nordin,46-510-2-0409,300,*CT1/2
+,4604,Yellow_PC,Stockholm_Sweden,Lennart_Eliasson,46-8-760-3312,300,CT1
+Pvt,4605,Bell_annex,Karlstad_Sweden,Lennart_Svensson,-Unpublished-,1200,!B1/2:RE
+,4606,PathFinder,Huskvarna_Sweden,Haakan_Bohman,46-36-13-0575,300,*CT1
+,4607,South_Swedish_Fido,Malmoe_Sweden,Mats_Knuts,46-40-54-9189,2400,!#CT1/2/3/4
+,4608,Fido_Candator,Karlstad_Sweden,Morgan_Holt,46-54-15-0529,2400,!#CT1/2/3/4
+,4609,Future_Hacker_Central,Stockholm_Sweden,Joaquim_Homrighausen,46-8-726-2550,300,*CT1
+,4610,The_Garfield_Base,Gothenburg_Sweden,Rune_Kennborn,46-31-26-6617,300,*CT1/2
+,4611,Discovery,Gothenburg_Sweden,Jimmy_Dahlqvist,46-31-47-7011,300,*CT1/2
+Pvt,4699,The_hole_in_the_wall,Malmoe_Sweden,Bjoern_Nilsson,-Unpublished-,2400,#CT1/3/4:RE
+;
+Region,21,Norway,NO,Helge_Vindenes,47-5-151610,1200,!#CT1/2/3
+;
+Host,502,Norway,Bergen_Norway,Helge_Vindenes,47-5-151610,2400,!#CT1/3/4
+,12,Costa_del_vindenes,Bergen_Norway,Helge_Vindenes,47-5-151610,2400,#CT1/3/4
+Pvt,15,Garstad_bbs,Oslo_Norway,Ola_Garstad,-Unpublished-,300,*CT1/2
+,16,SOTRainbow,Bergen_Norway,Gene_Scharmann,47-5-186806,300,*CT1
+,17,NETCOM_Fido,Bergen_Norway,Gene_Scharmann,47-5-327441,300,*CT1:WK1500-0700:WE0000-2400
+,19,Flateby_Dataklubb,Oslo_Norway,Michael_Jezard,47-2-928952,2400,#CT1/2/3/4
+Pvt,20,DAF_BBS,Oslo_Norway,Ola_Garstad,-Unpublished-,300,*CT1
+;
+Region,22,Finland,SF,Heikki_Suonsivu,358-0-4202223,1200,!CT3
+;
+Host,504,FFUA_Net,Espoo_Finland,Heikki_Suonsivu,358-0-4202223,2400,!#CT3/4
+,1,DOSbox_Fido,Espoo_Finland,H.Suonsivu/J.Blomqvist,358-0-4202223,2400,!#CT3/4
+,2,Pub_Fido,Espoo_Finland,J.Blomqvist/H.Suonsivu,358-0-4202385,2400,!CT3/4
+,3,ITT_DATA_Helsinki,Helsinki_Finland,Durk_Ellison,358-0-550970,2400,!B1:CT3/4:1700-0700
+Hold,5,The_Strontium_Dog,Helsinki_Finland,Yka_Rankka,358-0-7016596,1200,!#B1:CT3:1700-0700
+,6,Midnight_Express,Helsinki_Finland,Ilkka_Hulkko,358-0-314478,1200,!CT3:0200-1600
+,7,Missing_Link,Espoo_Finland,Heikki_Suonsivu,358-0-8031121,2400,!CT3/4
+,8,Radio_City_Fido,Helsinki_Finland,Teemu_Torma,358-0-6941123,2400,!CT3/4
+,9,Compis_Fido,Helsinki_Finland,Petri_Ojala,358-0-570815,1200,!#CT1/3
+,12,Vuobox,Helsinki_Finland,Mikko_Masalin,358-0-318716,2400,!CT1/3/4
+,13,Doping_Test_Fido,Helsinki_Finland,Mika_Virta,358-0-480731,1200,#CT1/3
+Down,14,DataBox_Fido,Helsinki_Finland,Heikki_Hanhimaki,358-0-497900,2400,#CT1/3/4:1700-0700
+,15,Systembox,Helsinki_Finland,Simo-Pekka_Lahtinen,358-0-6922236,2400,!CT3/4
+,17,Micro_Maniacs_III,Espoo_Finland,Ron_Dwight,358-0-467673,2400,CT3/4
+,19,Systembox_II,Helsinki_Finland,Mikko_Ketola,358-0-6927397,1200,
+Down,20,KREML,Kauniainen_Finland,Jouni_Malinen,358-0-5053942,2400,CT3/4
+,31,ITT_DATA_Helsinki,Helsinki_Finland,Durk_Ellison,358-0-5653168,300,*CT1:1700-0700
+,32,ITT_DATA_Tampere,Tampere_Finland,Durk_Ellison,358-31-130123,300,*CT1
+,69,Action_Track,Helsinki_Finland,Raimo_Tulonen,358-0-141569,2400,!CT3/4
+;
+Region,23,Denmark,DK,Mads_Westermann,45-1-316688,2400,!CT1/2/4
+,1,MPS-PC/UG_Fido,Copenhagen_Denmark,Mads_Westermann,45-1-316688,2400,!#CT1/3/4
+Down,21,KFH-Fido,Glostrup_Denmark,Kurt_Friis_Hansen,45-2-459909,1200,CT3:2300-0900
+,23,dataDane_Fido,Hedehusene_Denmark,Anders_Nielsen,45-2-992000,2400,#CT3/4
+;
+Region,24,Germany,DL,Michael_Juergens,49-451-493920,300,*
+,1,MJS_FIDO_BBS,Luebeck_Germany,Michael_Juergens,49-451-493920,300,*
+,2,T_BUS_FIDO,Munich_Germany,Rudolph_Stricker,49-89-293881,300,*
+;
+Region,25,United_Kingdom,GB,Frank_Thornley,44-483-573338,2400,!CT1/2/3/4
+;
+Host,503,Compulink-2,Guildford_UK,Frank_Thornley,44-483-573338,2400,!CT3/4
+,1,Compulink-1,Guildford_UK,Frank_Thornley,44-483-573337,300,*CT1/2
+,2,Compulink-2,Gulidford_UK,Frank_Thornley,44-483-57-3338,2400,!CT3/4
+,3,Jersey_Fido,St_Heleier_UK,Hugh_Ashborne,44-5-343-9389,1200,#CT1/3
+,5,TeePee_Link,Manchester_UK,Terry_Thompson,44-61-494-6938,1200,!#CT1/2/3
+,7,Dragon_Fido,Porthmadoc_UK,Faris_Raouf,44-7-66-4154,300,!#CT1/2/3/4
+,8,Advance_Fido,Hull_UK,Eric_Sparrow,44-4-822-8367,300,WE:
+,9,Dataflex,London_UK,Bob_Manekshaw,44-1-543-7020,300,*CT1/2
+,10,Bulletin_AT,Swansea_UK,D_J_Morgan,44-79-229-7845,300,*CT1/2
+,11,Poly_Fido,London_UK,Graham_Hobson,44-1-580-1690,2400,#CT1/2/3/4
+,12,PD_Libary,E__Grinstead_UK,Rod_Smith,44-34-231-5636,2400,#CT1/2/3/4
+,14,Mektronics,Manchester_UK,Brian_Benster,44-61-773-7739,300,*CT1/2
+,15,London_UGD,London_UK,Brian_Robinson,44-1-863-0198,300,*CT1/2/3/4
+,16,Twilight_Phone,London_UK,Peter_Clark,44-1-624-5338,300,!*CT1/
+,17,Log_upon_Tyne,Tyneside_UK,John_Bone,44-91-477-3339,300,*CT1/2
+,18,Avon_Fido,Weston_S_Mare,Lee_Evans,44-9-342-9570,300,*CT1/2
+,20,Leeds_Email,Leeds_UK,Sonny_Horsfall,44-53-260-0749,300,*CT1/2
+,21,Fido_Teeside,Cleveland_UK,Pete_Cheshire,44-64-260-5838,300,!*CT1/2
+,22,Access_Fido,Worcester_UK,Jon_Brooks,44-9-055-2536,2400,#CT1/2/3/4
+,23,Dublin_Fido,Dublin_IRL,Gerry_Clark,353-1-85-4179,300,CT1/2
+,25,Compulink_North,Liverpool_UK,Brian_Williams,44-51-220-3761,300,*CT1/2
+,27,The_Cats_Board,Maidenhead_UK,Mike_Corby,44-628-882-4852,300,!*CT1/2
+,29,Alan_Solomans_Board,Amersham_UK,Alan_Soloman,44-24-03-4946,300,*CT1/2
+,30,Gamlingay,Sandy_UK,Alan_Walker,44-76-75-0511,2400,!#CT1/2/3/4
+,31,Hendon_Fido,London_UK,Steve_Froeschke,44-1-200-7577,300,*CT1/2
+Pvt,32,The_Other_One,Guildford_UK,Terry_Thompson,-Unpublished-,2400,#CT3/4XP:
+,33,Fido_UK1,Newbury_UK,Rod_Smallwood,44-734-713909,300,!*CT1/2XP:
+;
+Region,28,Holland,NL,Henk_Wevers,31-8380-37156,2400,!*
+,3,ACS_Zoelen,Zoelen_Holland,Hans_Kuyt,31-3448-1234,2400,!CT3/4:22:00-09-00
+,4,Fido_PHCC,Apeldoorn_Holland,Ignaat_Simons,31-55-421284,300,*CT1
+,5,MAC_GG,Bussum_Holland,Bob_Vetter,31-2159-31261,300,*CT1:22:00-10:00
+,6,T.I.C.,Den_Haag,Frans_Hagelaars,31-70-898822,300,CT1
+;
+Host,500,HCC_net,Ede_Holland,Henk_Wevers,31-8380-37156,2400,!*
+,1,Fido_Nl1,Ede_Holland,Henk_Wevers,31-8380-37156,2400,!*
+,10,HCC_DB,Utrecht_Holland,Jan.A._van_Garderen,31-30-935137,300,*CT1/2:RE
+,11,HCC_Amsterdam_1,Amsterdam_Holland,Olf_van_Reijen,31-20-154154,300,*CT1/2
+,12,HCC_Rozenburg_1,Rozenburg_Holland,Loek_Janssen,31-1819-18168,300,*CT1/2
+,13,HCC_Amersfoort_1,Amersfoort_Holland,John_Glazer,31-33-755444,300,*CT1/2
+,14,HCC_Eindhoven_1,Eindhoven_Holland,Hans_van_Melis,31-40-481792,300,*CT1/2
+,15,HCC_Leiden_1,Leiden_Holland,Gerard_Versteeg,31-71-125125,300,*CT1/2
+,16,HCC_Sittard_1,Sittard_Holland,Leo_Reijnen,31-4755-2041,300,*CT1/2
+,17,HCC_Arnhem_1,Arnhem_Holland,Jeanette_Kooij,31-85-233377,300,*CT1/2
+,18,HCC_Kampen_1,Kampen_Holland,Robert_v.d._Broek,31-5202-24380,300,*CT1/2
+,19,HCC_Groningen_1,Groningen_Holland,Frans_Hartijzer,31-50-145145,300,*CT1/2
+,20,HCC_Hoorn_1,Hoorn_Holland,Frank_Bieri,31-2290-34046,300,*CT1/2
+,21,HCC_Almelo_1,Almelo_Holland,Jan_Verscharen,31-5490-62542,300,*CT1/2
+,22,HCC_Middelburg_1,Middelburg_Holland,Jaap_Delvoye,31-1180-34336,300,*CT1/2
+,23,HCC_Venlo_1,Venlo_Holland,Norbert_Teeuwen,31-77-822522,300,*CT1
+,24,HCC_Zoetermeer_1,Zoetermeer_Holland,Reinier_de_Groot,31-79-510425,1200,*CT1/3
+,100,HCC_CP/Mgg,Hengelo_Holland,Bert_Koopman,31-74-423860,300,*CT1/2
+,101,HCC_IBM-PCgg,Hoogkarspel_Holland,Han_Halewijn,31-2286-1421,300,*CT1/2
+,102,HCC_MSXgg,Diemen_Holland,Maciek_Kollo,31-20-982502,300,*CT1
+,200,Fido_Ben,Woerden_Holland,Ben_Eliazer,31-3480-21407,300,*CT1/2
+,201,Fido_Peter,Alkmaar_Holland,Peter_van_Diepen,31-72-126783,300,*CT1
+,202,NOS_Hobbyscoop,Hilversum_Holland,Luc_Bijleveld,31-35-45395,300,*CT1/2
+,203,Fido_Gerard,Wanssum_Holland,Gerard_Snoek,31-4784-2301,300,*CT1/2
+;
+Region,30,Switzerland,CH,Clement_Studer,41-37-616024,2400,!#CT1/2/3/4
+,1,S.I.S._Fido,Montagny,Clement_Studer,41-37-616024,2400,!#CT1/2/3/4
+,2,Teledec,Belfaux,Daniel_Rossier,41-37-452666,1200,CT1/3:07:00-20:00
+,3,SR-PC-Club,Zuerich,R._Baetschmann,41-1-2082550,300,CT1
+,4,Marcon,Ascona,Aurelio_Siebert,41-93-361409,300,CT1
+;
+Region,33,Italy,I,Giorgio_Rutigliano,39-971-35447,300,
+,1,FIDO_PZ,Potenza_Italy,Giorgio_Rutigliano,39-971-35447,300,CT1
+,3,FIDO_AL,Alessandria_Italy,Flavio_Bernardotti,39-131-355506,300,CT1
+,4,FIDO_PN,Pordenone_Italy,Adolfo_Melilli,39-434-32020,300,CT1
+,5,SOFT_SERVICE,Milano_Italy,Franco_Vandelli,39-2-228467,300,CT1
+,6,CIFT,Messina_Italy,Pietro_Princi,39-90-301093,300,CT1
+,7,TELEMAX,Palermo_Italy,Marcello_Mannino,39-91-560091,300,CT1
+;A
+;A The following nodes have been excommunicated!
+;A
+;A   132/103   SAI_Board
+;A
+;
+;S  Network/Region
+;S      Keywords               Meaning
+;S
+;S    Region -- begins the definition of a geographic region and
+;S               and defines its coordinator.
+;S     Host   -- begins the definition of a local network and
+;S               defines its Host.
+;S     Pvt    -- defines a private node with unlisted number
+;S     Hold   -- defines a node which is temporarily down. Mail
+;S               may be send to it and is held by its host or
+;S               coordinator.
+;S     Down   -- defines a node which is down. Mail may NOT be
+;S               sent to it.
+;S     Kenl   -- this places a node in the "dog pound" and
+;S               serves as a warning to a Fido about to be
+;S               excommunicated for any reason.
+;S     <null> -- defines a normal node entry.
+;S
+;A   FidoList Special Flags Field Codes
+;A
+;A      Code        Meaning
+;A
+;A       DA:        Daily      \
+;A       WK:        Week days   \
+;A       WE:        Week ends    \   Hours of operation
+;A       SU:        Sundays      /
+;A       SA:        Saturdays   /
+;A       MO:        Mail Only  /
+;A
+;A       RE:        Node exercises some access restrictions.
+;A       XP:        Node that supports the extended protocol
+;A                  which means it supports file request and
+;A                  update request.
+;A
+;A
+;A  -----------------------------
+;A  EUROPEAN PART OF THE NODELIST
+;A  -----------------------------
+;A
+;A  Due to the extreme difficult situation with european modem standards
+;A  please study the comment field of the nodelist before calling any
+;A  Fidonode in europe.
+;A
+;A  The flags field has the following meaning:
+;A
+;A  Positions 1-2 indication for mail
+;A
+;FS meaning:     !  Node runs USA mailslot
+;FS              *  Node runs European mailslot in CCITT 300 baud only
+;FS              #  Node runs European mailslot baudrate reflects max
+;FS
+;S  European sysops note :
+;S
+;S  In case a european node runs the USA mailslot and the european mailslot
+;S  in 300 baud CCITT only mode, the baudrate may not reflect the actual
+;S  situation during the european mailslot. If you mail on 300 baud there
+;S  is no problem, LISTGEN will take care of the baudrate. In case you run
+;S  at 1200 or 2400 baud we suggest you use the USA mailslot to mail to these
+;S  nodes. Change your routefiles accordingly. The situation will be cleared
+;S  as more and cheaper multistandard modems become available. The only
+;S  modem of this sort (WS3000) is a bit expensive at the moment (1200$)
+;S
+;A  Positions 3- indicate modem standards during non-mail hours and opening
+;A  times.
+;A
+;A  meaning:    CT1 : 300 baud CCITT                        (V21)
+;A              CT2 : 1200/75 split baudrate viewdata mode  (V23)
+;A              CT3 : 1200 baud full duplex bell compatible (V22)
+;A              CT4 : 2400 baud full duplex                 (V22bis)
+;A
+;A
+;S   The International nodelist is distributed to europe via
+;S   500/1 and made available through the Regional Coordinators
+;S   Who poll 500/1 for copies just after the weekend
+;S
+;S   The Fidonet newsletter follows the same route and is available
+;S   midweek.
+;S
+;S EUROPEAN MAILSLOT : 2:30 - 3:30 GMT
+;S USA MAILSLOT      : 9:00 -10:00 GMT
+;S
+;FU
+;FU   If you would like to make a donation to support the efforts
+;FU   of the National FidoNet Administrators please send whatever
+;FU   you can to:
+;FU
+;FU                International FidoNet Association
+;FU                PO Box 41143
+;FU                St. Louis, Missouri 63141
+;FU                USA
+
