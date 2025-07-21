@@ -120,7 +120,16 @@ func main() {
 		filesProcessed := 0
 
 		for i, filePath := range files {
-			fmt.Printf("[%d/%d] Processing: %s\n", i+1, len(files), filepath.Base(filePath))
+			// Calculate ETA
+			elapsed := time.Since(startTime)
+			var etaStr string
+			if i > 0 {
+				avgTimePerFile := elapsed / time.Duration(i)
+				remaining := time.Duration(len(files)-i) * avgTimePerFile
+				etaStr = fmt.Sprintf(" (ETA: %v)", remaining.Round(time.Second))
+			}
+			
+			fmt.Printf("[%d/%d] Processing: %s%s\n", i+1, len(files), filePath, etaStr)
 
 			// Parse file
 			nodes, err := nodelistParser.ParseFile(filePath)
