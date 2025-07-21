@@ -808,7 +808,14 @@ func (ap *AdvancedParser) ParseFile(filePath string) ([]database.Node, error) {
 
 	for scanner.Scan() {
 		lineNum++
-		line := strings.TrimSpace(scanner.Text())
+		rawLine := scanner.Text()
+		line := strings.TrimSpace(rawLine)
+
+		// Check for EOF markers (^Z, Ctrl+Z)
+		if strings.Contains(rawLine, "\x1a") || strings.Contains(rawLine, "\u001a") {
+			// Stop processing at EOF marker
+			break
+		}
 
 		// Skip empty lines  
 		if line == "" {
