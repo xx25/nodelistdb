@@ -133,7 +133,7 @@ func (s *Storage) Close() error {
 	return nil
 }
 
-// InsertNodes inserts a batch of nodes with smart conflict handling
+// InsertNodes inserts a batch of nodes using bulk insert for better performance
 func (s *Storage) InsertNodes(nodes []database.Node) error {
 	if len(nodes) == 0 {
 		return nil
@@ -144,7 +144,14 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 
 	conn := s.db.Conn()
 
-	// Prepare statement outside transaction to avoid transaction abort on conflicts
+	// Start transaction for bulk operation
+	tx, err := conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Build bulk insert with VALUES clause
 	insertSQL := `
 	INSERT INTO nodes (
 		zone, net, node, nodelist_date, day_number,
@@ -153,67 +160,43 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
 		raw_line, file_path, file_crc, first_seen, last_seen,
 		conflict_sequence, has_conflict
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	) VALUES `
 
-	stmt, err := conn.Prepare(insertSQL)
-	if err != nil {
-		return fmt.Errorf("failed to prepare insert statement: %w", err)
-	}
-	defer stmt.Close()
+	var valuePlaceholders []string
+	var args []interface{}
 
-	// No transaction needed since we handle conflicts individually
-	// and want to preserve successful inserts even if some conflict
+	for i, node := range nodes {
+		valuePlaceholders = append(valuePlaceholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		
+		args = append(args,
+			node.Zone, node.Net, node.Node, node.NodelistDate, node.DayNumber,
+			node.SystemName, node.Location, node.SysopName, node.Phone,
+			node.NodeType, node.Region, node.MaxSpeed,
+			node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
+			node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
+			formatStringArray(node.Flags), formatStringArray(node.ModemFlags),
+			formatStringArray(node.InternetProtocols), formatStringArray(node.InternetHostnames),
+			formatIntArray(node.InternetPorts), formatStringArray(node.InternetEmails),
+			node.RawLine, node.FilePath, node.FileCRC, node.FirstSeen, node.LastSeen,
+			0, false, // conflict_sequence=0, has_conflict=false for initial insert
+		)
 
-	for _, node := range nodes {
-		inserted := false
-		conflictSeq := 0
-		hasConflict := false
-
-		// Try to insert with increasing conflict_sequence until successful
-		for !inserted && conflictSeq < 10 { // Limit to 10 conflicts per node address
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-
-			_, err := stmt.ExecContext(ctx, 
-				node.Zone, node.Net, node.Node, node.NodelistDate, node.DayNumber,
-				node.SystemName, node.Location, node.SysopName, node.Phone,
-				node.NodeType, node.Region, node.MaxSpeed,
-				node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
-				node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
-				formatStringArray(node.Flags), formatStringArray(node.ModemFlags),
-				formatStringArray(node.InternetProtocols), formatStringArray(node.InternetHostnames),
-				formatIntArray(node.InternetPorts), formatStringArray(node.InternetEmails),
-				node.RawLine, node.FilePath, node.FileCRC, node.FirstSeen, node.LastSeen,
-				conflictSeq, hasConflict,
-			)
-
-			cancel()
-
+		// Split into chunks to avoid query size limits
+		if (i+1)%500 == 0 || i == len(nodes)-1 {
+			fullSQL := insertSQL + strings.Join(valuePlaceholders, ",")
+			
+			_, err := tx.Exec(fullSQL, args...)
 			if err != nil {
-				if strings.Contains(strings.ToLower(err.Error()), "duplicate key") {
-					// Conflict detected - try next sequence number
-					conflictSeq++
-					hasConflict = true
-					if conflictSeq == 1 {
-						// Mark the original entry as having conflict
-						s.markOriginalAsConflicted(conn, node.Zone, node.Net, node.Node, node.NodelistDate)
-					}
-					continue
-				} else {
-					return fmt.Errorf("failed to insert node %d:%d/%d from file %s (date: %s): %w", 
-						node.Zone, node.Net, node.Node, node.FilePath, node.NodelistDate.Format("2006-01-02"), err)
-				}
+				return fmt.Errorf("failed to bulk insert nodes: %w", err)
 			}
-
-			inserted = true
-		}
-
-		if !inserted {
-			return fmt.Errorf("too many conflicts for node %d:%d/%d from file %s (date: %s)", 
-				node.Zone, node.Net, node.Node, node.FilePath, node.NodelistDate.Format("2006-01-02"))
+			
+			// Reset for next chunk
+			valuePlaceholders = nil
+			args = nil
 		}
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 // markOriginalAsConflicted marks the original entry (conflict_sequence=0) as having conflict
