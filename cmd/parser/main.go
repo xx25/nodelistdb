@@ -143,6 +143,20 @@ func main() {
 				continue
 			}
 
+			// Check if file already processed (using first node's CRC as file CRC)
+			if len(nodes) > 0 {
+				isProcessed, err := storage.IsFileProcessed(filePath, nodes[0].FileCRC)
+				if err != nil {
+					fmt.Printf("  ERROR checking if file processed: %v\n", err)
+					continue
+				}
+				if isProcessed {
+					fmt.Println("  File already processed, skipping")
+					filesProcessed++
+					continue
+				}
+			}
+
 			// Process nodes in batches, but only from current file
 			for i := 0; i < len(nodes); i += *batchSize {
 				end := i + *batchSize

@@ -184,10 +184,7 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 		if (i+1)%500 == 0 || i == len(nodes)-1 {
 			fullSQL := insertSQL + strings.Join(valuePlaceholders, ",") +
 				` ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
-				  DO UPDATE SET 
-					conflict_sequence = EXCLUDED.conflict_sequence + 1,
-					has_conflict = true,
-					last_seen = EXCLUDED.last_seen`
+				  DO NOTHING`
 			
 			_, err := tx.Exec(fullSQL, args...)
 			if err != nil {
@@ -385,6 +382,26 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	}
 
 	return &stats, nil
+}
+
+// IsFileProcessed checks if a file has already been processed based on path and CRC
+func (s *Storage) IsFileProcessed(filePath string, fileCRC int) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+
+	var count int
+	err := conn.QueryRow(
+		"SELECT COUNT(*) FROM nodes WHERE file_path = ? AND file_crc = ?", 
+		filePath, fileCRC,
+	).Scan(&count)
+	
+	if err != nil {
+		return false, fmt.Errorf("failed to check if file is processed: %w", err)
+	}
+
+	return count > 0, nil
 }
 
 // Helper functions for array formatting (DuckDB array handling)
