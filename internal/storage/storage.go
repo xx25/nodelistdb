@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -180,8 +181,8 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 			0, false, // conflict_sequence=0, has_conflict=false for initial insert
 		)
 
-		// Split into chunks to avoid query size limits
-		if (i+1)%500 == 0 || i == len(nodes)-1 {
+		// Split into chunks to avoid query size limits  
+		if (i+1)%1000 == 0 || i == len(nodes)-1 {
 			fullSQL := insertSQL + strings.Join(valuePlaceholders, ",") +
 				` ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
 				  DO NOTHING`
@@ -409,18 +410,16 @@ func formatStringArray(arr []string) string {
 	if len(arr) == 0 {
 		return "[]"
 	}
-	return "['" + strings.Join(arr, "','") + "']"
+	result, _ := json.Marshal(arr)
+	return string(result)
 }
 
 func formatIntArray(arr []int) string {
 	if len(arr) == 0 {
 		return "[]"
 	}
-	strs := make([]string, len(arr))
-	for i, v := range arr {
-		strs[i] = fmt.Sprintf("%d", v)
-	}
-	return "[" + strings.Join(strs, ",") + "]"
+	result, _ := json.Marshal(arr)
+	return string(result)
 }
 
 func parseStringArray(s string) []string {
