@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -151,7 +150,7 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 	}
 	defer tx.Rollback()
 
-	// Build bulk insert with VALUES clause
+	// Build bulk insert with UPSERT for conflict handling
 	insertSQL := `
 	INSERT INTO nodes (
 		zone, net, node, nodelist_date, day_number,
@@ -183,7 +182,12 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 
 		// Split into chunks to avoid query size limits
 		if (i+1)%500 == 0 || i == len(nodes)-1 {
-			fullSQL := insertSQL + strings.Join(valuePlaceholders, ",")
+			fullSQL := insertSQL + strings.Join(valuePlaceholders, ",") +
+				` ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
+				  DO UPDATE SET 
+					conflict_sequence = EXCLUDED.conflict_sequence + 1,
+					has_conflict = true,
+					last_seen = EXCLUDED.last_seen`
 			
 			_, err := tx.Exec(fullSQL, args...)
 			if err != nil {
