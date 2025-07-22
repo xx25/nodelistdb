@@ -241,9 +241,8 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 
 // insertBatchWithProgress inserts a batch of nodes with detailed progress reporting
 func (p *Processor) insertBatchWithProgress(ctx context.Context, batch []database.Node, batchNum, totalInserted, totalNodes int) error {
-	progress := float64(totalInserted+len(batch)) / float64(totalNodes) * 100
 	if !p.quiet {
-		fmt.Printf("Inserting batch %d: %d nodes (%.1f%% of total nodes)...\n", batchNum, len(batch), progress)
+		fmt.Printf("Inserting batch %d: %d nodes...\n", batchNum, len(batch))
 	}
 	
 	start := time.Now()
