@@ -1,10 +1,12 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -34,8 +36,67 @@ func New(storage *storage.Storage) *Server {
 func (s *Server) loadTemplates() {
 	templates := []string{"index", "search", "node", "stats", "sysop_search", "node_history"}
 	
+	// Create function map for template functions
+	funcMap := template.FuncMap{
+		"div": func(a, b interface{}) float64 {
+			switch a := a.(type) {
+			case int:
+				switch b := b.(type) {
+				case int:
+					if b == 0 {
+						return 0
+					}
+					return float64(a) / float64(b)
+				default:
+					return 0
+				}
+			case float64:
+				switch b := b.(type) {
+				case float64:
+					if b == 0 {
+						return 0
+					}
+					return a / b
+				case int:
+					if b == 0 {
+						return 0
+					}
+					return a / float64(b)
+				default:
+					return 0
+				}
+			default:
+				return 0
+			}
+		},
+		"mul": func(a, b interface{}) float64 {
+			switch a := a.(type) {
+			case int:
+				switch b := b.(type) {
+				case int:
+					return float64(a * b)
+				case float64:
+					return float64(a) * b
+				default:
+					return 0
+				}
+			case float64:
+				switch b := b.(type) {
+				case float64:
+					return a * b
+				case int:
+					return a * float64(b)
+				default:
+					return 0
+				}
+			default:
+				return 0
+			}
+		},
+	}
+	
 	for _, tmpl := range templates {
-		s.templates[tmpl] = template.Must(template.New(tmpl).Parse(s.getTemplate(tmpl)))
+		s.templates[tmpl] = template.Must(template.New(tmpl).Funcs(funcMap).Parse(s.getTemplate(tmpl)))
 	}
 }
 
@@ -57,10 +118,22 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	
 	if r.Method == http.MethodPost {
 		// Handle search form submission
+		latestOnly := true
 		filter := database.NodeFilter{
-			Limit: 100,
+			Limit:      100,
+			LatestOnly: &latestOnly,
 		}
 		
+		// Parse full address first (takes precedence over individual fields)
+		if fullAddress := r.FormValue("full_address"); fullAddress != "" {
+			if zone, net, node, err := parseNodeAddress(fullAddress); err == nil {
+				filter.Zone = &zone
+				filter.Net = &net
+				filter.Node = &node
+			}
+		}
+		
+		// Individual fields override full address if provided
 		if zone := r.FormValue("zone"); zone != "" {
 			if z, parseErr := strconv.Atoi(zone); parseErr == nil {
 				filter.Zone = &z
@@ -295,6 +368,38 @@ func (s *Server) StaticHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// parseNodeAddress parses a FidoNet node address like "2:5001/100" or "1:234/56.7"
+func parseNodeAddress(address string) (zone, net, node int, err error) {
+	// Remove any whitespace
+	address = strings.TrimSpace(address)
+	
+	// Regular expression to match FidoNet address format: zone:net/node[.point]
+	// We only care about zone:net/node for this search
+	re := regexp.MustCompile(`^(\d+):(\d+)/(\d+)(?:\.(\d+))?$`)
+	matches := re.FindStringSubmatch(address)
+	
+	if len(matches) < 4 {
+		return 0, 0, 0, errors.New("invalid node address format")
+	}
+	
+	zone, err = strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	
+	net, err = strconv.Atoi(matches[2])
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	
+	node, err = strconv.Atoi(matches[3])
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	
+	return zone, net, node, nil
+}
+
 // Template definitions
 func (s *Server) getTemplate(name string) string {
 	switch name {
@@ -395,6 +500,14 @@ func (s *Server) getTemplate(name string) string {
         <div class="content">
             <div class="card">
                 <form method="post" class="search-form">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label for="full_address">Full Node Address:</label>
+                        <input type="text" id="full_address" name="full_address" placeholder="e.g. 2:5001/100 or 1:234/56.7" style="font-family: monospace;">
+                        <small style="color: var(--text-secondary); margin-top: 0.25rem; display: block;">
+                            💡 Enter complete address like "2:5001/100" or use individual fields below
+                        </small>
+                    </div>
+                    
                     <div class="form-group">
                         <label for="zone">Zone:</label>
                         <input type="number" id="zone" name="zone" placeholder="e.g. 1" min="1">
@@ -599,11 +712,11 @@ func (s *Server) getTemplate(name string) string {
                                         <td><strong>Zone {{$zone}}</strong></td>
                                         <td>{{$count}} nodes</td>
                                         <td style="color: var(--text-secondary);">
-                                            {{printf "%.1f%%" (div (mul (printf "%.0f" $count) 100.0) (printf "%.0f" $.Stats.TotalNodes))}}
+                                            {{printf "%.1f%%" (div (mul $count 100) $.Stats.TotalNodes)}}
                                         </td>
                                         <td>
                                             <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
-                                                <div style="background: var(--primary-color); height: 100%; width: {{printf "%.1f%%" (div (mul (printf "%.0f" $count) 100.0) (printf "%.0f" $.Stats.TotalNodes))}}; transition: width 0.3s ease;"></div>
+                                                <div style="background: var(--primary-color); height: 100%; width: {{printf "%.1f%%" (div (mul $count 100) $.Stats.TotalNodes)}}; transition: width 0.3s ease;"></div>
                                             </div>
                                         </td>
                                     </tr>
@@ -1323,6 +1436,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const firstInput = document.querySelector('input[type="number"], input[type="text"]');
     if (firstInput) {
         firstInput.focus();
+    }
+    
+    // Handle full address input
+    const fullAddressInput = document.getElementById('full_address');
+    const zoneInput = document.getElementById('zone');
+    const netInput = document.getElementById('net');
+    const nodeInput = document.getElementById('node');
+    
+    if (fullAddressInput) {
+        fullAddressInput.addEventListener('input', function() {
+            const address = this.value.trim();
+            // If full address is being typed, clear individual fields
+            if (address && zoneInput && netInput && nodeInput) {
+                zoneInput.value = '';
+                netInput.value = '';
+                nodeInput.value = '';
+            }
+        });
+    }
+    
+    // Clear full address when individual fields are used
+    if (zoneInput || netInput || nodeInput) {
+        [zoneInput, netInput, nodeInput].forEach(function(input) {
+            if (input) {
+                input.addEventListener('input', function() {
+                    if (this.value.trim() && fullAddressInput) {
+                        fullAddressInput.value = '';
+                    }
+                });
+            }
+        });
     }
     
     // Add form validation

@@ -71,6 +71,9 @@ type NodeFilter struct {
 	HasTelnet *bool `json:"has_telnet,omitempty"`
 	IsActive  *bool `json:"is_active,omitempty"`
 
+	// Result options  
+	LatestOnly *bool `json:"latest_only,omitempty"`
+
 	// Pagination
 	Limit  int `json:"limit,omitempty"`
 	Offset int `json:"offset,omitempty"`

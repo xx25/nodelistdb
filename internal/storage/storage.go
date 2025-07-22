@@ -225,13 +225,28 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 	conn := s.db.Conn()
 
 	// Build dynamic query based on filter
-	baseSQL := `
-	SELECT zone, net, node, nodelist_date, day_number,
-		   system_name, location, sysop_name, phone, node_type, region, max_speed,
-		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		   conflict_sequence, has_conflict
-	FROM nodes WHERE 1=1`
+	var baseSQL string
+	if filter.LatestOnly != nil && *filter.LatestOnly {
+		baseSQL = `
+		SELECT zone, net, node, nodelist_date, day_number,
+			   system_name, location, sysop_name, phone, node_type, region, max_speed,
+			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			   conflict_sequence, has_conflict
+		FROM (
+			SELECT *, 
+				   ROW_NUMBER() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
+			FROM nodes
+		) ranked WHERE rn = 1`
+	} else {
+		baseSQL = `
+		SELECT zone, net, node, nodelist_date, day_number,
+			   system_name, location, sysop_name, phone, node_type, region, max_speed,
+			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			   conflict_sequence, has_conflict
+		FROM nodes WHERE 1=1`
+	}
 
 	var conditions []string
 	var args []interface{}
