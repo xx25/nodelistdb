@@ -369,6 +369,68 @@ func (s *Storage) GetLatestStatsDate() (time.Time, error) {
 	return latestDate, nil
 }
 
+// GetAvailableDates retrieves all unique dates that have statistics, sorted in descending order
+func (s *Storage) GetAvailableDates() ([]time.Time, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+	query := "SELECT DISTINCT nodelist_date FROM nodes ORDER BY nodelist_date DESC"
+	
+	rows, err := conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get available dates: %w", err)
+	}
+	defer rows.Close()
+
+	var dates []time.Time
+	for rows.Next() {
+		var date time.Time
+		if err := rows.Scan(&date); err != nil {
+			return nil, fmt.Errorf("failed to scan date: %w", err)
+		}
+		dates = append(dates, date)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over dates: %w", err)
+	}
+
+	return dates, nil
+}
+
+// GetClosestAvailableDate finds the closest available date to the requested date
+func (s *Storage) GetClosestAvailableDate(requestedDate time.Time) (time.Time, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+	
+	// First try to find exact match
+	var exactDate time.Time
+	err := conn.QueryRow("SELECT nodelist_date FROM nodes WHERE nodelist_date = ? LIMIT 1", requestedDate).Scan(&exactDate)
+	if err == nil {
+		return exactDate, nil
+	}
+
+	// If no exact match, find the closest date using DuckDB date functions
+	query := `
+		SELECT nodelist_date, ABS(date_diff('day', ?::DATE, nodelist_date)) as diff
+		FROM (SELECT DISTINCT nodelist_date FROM nodes) 
+		ORDER BY diff ASC 
+		LIMIT 1
+	`
+	
+	var closestDate time.Time
+	var diff float64
+	err = conn.QueryRow(query, requestedDate).Scan(&closestDate, &diff)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to find closest available date: %w", err)
+	}
+
+	return closestDate, nil
+}
+
 // GetStats retrieves network statistics for a specific date
 func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	s.mu.RLock()
@@ -426,13 +488,24 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	// Get largest regions (top 10)
 	stats.LargestRegions = []database.RegionInfo{}
 	rows, err = conn.Query(`
-		SELECT zone, region, COUNT(*) as count 
-		FROM nodes 
-		WHERE nodelist_date = ? AND region > 0 AND node_type = 'Node'
-		GROUP BY zone, region 
-		ORDER BY count DESC 
+		WITH RegionCounts AS (
+			SELECT n.zone, n.region, COUNT(*) as count
+			FROM nodes n
+			WHERE n.nodelist_date = ? AND n.region > 0 AND n.node_type = 'Node'
+			GROUP BY n.zone, n.region
+		)
+		SELECT rc.zone, rc.region, rc.count,
+		       (SELECT system_name FROM nodes 
+		        WHERE nodelist_date = ? 
+		        AND zone = rc.zone 
+		        AND net = rc.region 
+		        AND node = 0 
+		        AND node_type = 'Region'
+		        LIMIT 1) as region_name
+		FROM RegionCounts rc
+		ORDER BY rc.count DESC 
 		LIMIT 10
-	`, date)
+	`, date, date)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get largest regions: %w", err)
 	}
@@ -440,8 +513,12 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 
 	for rows.Next() {
 		var region database.RegionInfo
-		if err := rows.Scan(&region.Zone, &region.Region, &region.NodeCount); err != nil {
+		var regionName sql.NullString
+		if err := rows.Scan(&region.Zone, &region.Region, &region.NodeCount, &regionName); err != nil {
 			return nil, fmt.Errorf("failed to scan region info: %w", err)
+		}
+		if regionName.Valid {
+			region.Name = regionName.String
 		}
 		stats.LargestRegions = append(stats.LargestRegions, region)
 	}
@@ -450,17 +527,23 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	stats.LargestNets = []database.NetInfo{}
 	rows, err = conn.Query(`
 		WITH NetCounts AS (
-			SELECT zone, net, COUNT(*) as count,
-				   MAX(CASE WHEN node_type = 'Host' THEN system_name ELSE NULL END) as host_name
-			FROM nodes 
-			WHERE nodelist_date = ? AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
-			GROUP BY zone, net
+			SELECT n.zone, n.net, COUNT(*) as count
+			FROM nodes n
+			WHERE n.nodelist_date = ? AND n.node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
+			GROUP BY n.zone, n.net
 		)
-		SELECT zone, net, count, host_name
-		FROM NetCounts
-		ORDER BY count DESC 
+		SELECT nc.zone, nc.net, nc.count,
+		       (SELECT system_name FROM nodes 
+		        WHERE nodelist_date = ? 
+		        AND zone = nc.zone 
+		        AND net = nc.net 
+		        AND node = 0 
+		        AND node_type = 'Host'
+		        LIMIT 1) as host_name
+		FROM NetCounts nc
+		ORDER BY nc.count DESC 
 		LIMIT 10
-	`, date)
+	`, date, date)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get largest nets: %w", err)
 	}

@@ -510,6 +510,12 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/stats", s.StatsHandler)
 	mux.HandleFunc("/api/nodes/search/sysop", s.SearchNodesBySysopHandler)
 	
+	// Analytics API routes
+	mux.HandleFunc("/api/analytics/v34", s.V34AnalyticsAPIHandler)
+	mux.HandleFunc("/api/analytics/binkp", s.BinkpAnalyticsAPIHandler)
+	mux.HandleFunc("/api/analytics/sysops", s.SysopNamesAPIHandler)
+	mux.HandleFunc("/api/analytics/trends", s.ProtocolTrendAPIHandler)
+	
 	// Node lookup with path parameters
 	mux.HandleFunc("/api/nodes/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -532,6 +538,90 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 			s.SearchNodesHandler(w, r)
 		}
 	})
+}
+
+// Analytics API handlers
+
+// V34AnalyticsAPIHandler handles V.34 modem analysis API requests
+func (s *Server) V34AnalyticsAPIHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	report, err := s.storage.GetV34ModemReport()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to generate V.34 analysis: %v", err), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
+}
+
+// BinkpAnalyticsAPIHandler handles Binkp protocol analysis API requests
+func (s *Server) BinkpAnalyticsAPIHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	report, err := s.storage.GetBinkpReport()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to generate Binkp analysis: %v", err), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
+}
+
+// SysopNamesAPIHandler handles sysop name analysis API requests
+func (s *Server) SysopNamesAPIHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	// Get year parameter, default to current year
+	yearStr := r.URL.Query().Get("year")
+	year := time.Now().Year()
+	if yearStr != "" {
+		if parsedYear, err := strconv.Atoi(yearStr); err == nil && parsedYear > 1980 && parsedYear <= time.Now().Year() {
+			year = parsedYear
+		}
+	}
+	
+	report, err := s.storage.GetSysopNameReportByYear(year)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to generate sysop name analysis: %v", err), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
+}
+
+// ProtocolTrendAPIHandler handles protocol adoption trend analysis API requests  
+func (s *Server) ProtocolTrendAPIHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	protocol := r.URL.Query().Get("protocol")
+	if protocol == "" {
+		protocol = "V34" // Default
+	}
+	
+	report, err := s.storage.GetProtocolAdoptionTrend(protocol)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to generate protocol trend analysis: %v", err), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
 }
 
 // CORS middleware
