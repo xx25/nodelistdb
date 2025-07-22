@@ -145,21 +145,11 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 	conn := s.db.Conn()
 
 	// Start transaction for bulk operation
-	fmt.Printf("  Starting transaction for %d nodes\n", len(nodes))
-	start := time.Now()
 	tx, err := conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	txStartTime := time.Since(start)
-	fmt.Printf("  Transaction start time: %v\n", txStartTime)
-
-	// Enable DuckDB profiling to see internal bottlenecks
-	_, err = tx.Exec("PRAGMA enable_profiling")
-	if err != nil {
-		fmt.Printf("  Warning: Could not enable profiling: %v\n", err)
-	}
 
 	// Build bulk insert with UPSERT for conflict handling
 	insertSQL := `
@@ -193,47 +183,13 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 
 		// Split into chunks to avoid query size limits  
 		if (i+1)%1000 == 0 || i == len(nodes)-1 {
-			chunkSize := len(valuePlaceholders)
-			fmt.Printf("    Executing SQL with %d nodes in chunk\n", chunkSize)
-			
-			start := time.Now()
 			fullSQL := insertSQL + strings.Join(valuePlaceholders, ",") +
 				` ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
 				  DO NOTHING`
 			
-			sqlBuildTime := time.Since(start)
-			fmt.Printf("    SQL build time: %v\n", sqlBuildTime)
-			
-			start = time.Now()
 			_, err := tx.Exec(fullSQL, args...)
-			execTime := time.Since(start)
-			fmt.Printf("    SQL exec time: %v\n", execTime)
-			
 			if err != nil {
 				return fmt.Errorf("failed to bulk insert nodes: %w", err)
-			}
-			
-			// Check database stats to understand performance
-			if execTime > 5*time.Second {
-				fmt.Printf("    === Slow INSERT detected, checking system info ===\n")
-				
-				// Check database size
-				var dbSizeBytes int64
-				err = tx.QueryRow("SELECT SUM(total_blocks * block_size) FROM pragma_database_size()").Scan(&dbSizeBytes)
-				if err == nil {
-					fmt.Printf("    Database size: %.2f MB\n", float64(dbSizeBytes)/(1024*1024))
-				}
-				
-				// Check table row count
-				var rowCount int
-				err = tx.QueryRow("SELECT COUNT(*) FROM nodes").Scan(&rowCount)
-				if err == nil {
-					fmt.Printf("    Total rows in nodes table: %d\n", rowCount)
-				}
-				
-				// Check if it's array processing causing slowdown by looking at SQL length
-				fmt.Printf("    SQL statement length: %d characters\n", len(fullSQL))
-				fmt.Printf("    Arguments count: %d\n", len(args))
 			}
 			
 			// Reset for next chunk
@@ -242,26 +198,7 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 		}
 	}
 
-	start = time.Now()
-	err = tx.Commit()
-	commitTime := time.Since(start)
-	fmt.Printf("  Transaction commit time: %v\n", commitTime)
-	
-	// Get DuckDB profiling output to see internal bottlenecks
-	profileRows, profileErr := conn.Query("PRAGMA profiling_output")
-	if profileErr == nil {
-		fmt.Printf("  === DuckDB Profiling Output ===\n")
-		for profileRows.Next() {
-			var profileLine string
-			if err := profileRows.Scan(&profileLine); err == nil {
-				fmt.Printf("  %s\n", profileLine)
-			}
-		}
-		profileRows.Close()
-		fmt.Printf("  === End Profiling Output ===\n")
-	}
-	
-	return err
+	return tx.Commit()
 }
 
 // markOriginalAsConflicted marks the original entry (conflict_sequence=0) as having conflict
