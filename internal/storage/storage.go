@@ -213,18 +213,27 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 				return fmt.Errorf("failed to bulk insert nodes: %w", err)
 			}
 			
-			// Get profiling for this specific INSERT
-			profileRows, profileErr := tx.Query("PRAGMA profiling_output")
-			if profileErr == nil {
-				fmt.Printf("    === INSERT Profiling ===\n")
-				for profileRows.Next() {
-					var profileLine string
-					if err := profileRows.Scan(&profileLine); err == nil {
-						fmt.Printf("    %s\n", profileLine)
-					}
+			// Check database stats to understand performance
+			if execTime > 5*time.Second {
+				fmt.Printf("    === Slow INSERT detected, checking system info ===\n")
+				
+				// Check database size
+				var dbSizeBytes int64
+				err = tx.QueryRow("SELECT SUM(total_blocks * block_size) FROM pragma_database_size()").Scan(&dbSizeBytes)
+				if err == nil {
+					fmt.Printf("    Database size: %.2f MB\n", float64(dbSizeBytes)/(1024*1024))
 				}
-				profileRows.Close()
-				fmt.Printf("    === End INSERT Profiling ===\n")
+				
+				// Check table row count
+				var rowCount int
+				err = tx.QueryRow("SELECT COUNT(*) FROM nodes").Scan(&rowCount)
+				if err == nil {
+					fmt.Printf("    Total rows in nodes table: %d\n", rowCount)
+				}
+				
+				// Check if it's array processing causing slowdown by looking at SQL length
+				fmt.Printf("    SQL statement length: %d characters\n", len(fullSQL))
+				fmt.Printf("    Arguments count: %d\n", len(args))
 			}
 			
 			// Reset for next chunk
