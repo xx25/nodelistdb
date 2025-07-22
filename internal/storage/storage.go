@@ -155,6 +155,12 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 	txStartTime := time.Since(start)
 	fmt.Printf("  Transaction start time: %v\n", txStartTime)
 
+	// Enable DuckDB profiling to see internal bottlenecks
+	_, err = tx.Exec("PRAGMA enable_profiling")
+	if err != nil {
+		fmt.Printf("  Warning: Could not enable profiling: %v\n", err)
+	}
+
 	// Build bulk insert with UPSERT for conflict handling
 	insertSQL := `
 	INSERT INTO nodes (
@@ -217,6 +223,21 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 	err = tx.Commit()
 	commitTime := time.Since(start)
 	fmt.Printf("  Transaction commit time: %v\n", commitTime)
+	
+	// Get DuckDB profiling output to see internal bottlenecks
+	profileRows, profileErr := conn.Query("PRAGMA profiling_output")
+	if profileErr == nil {
+		fmt.Printf("  === DuckDB Profiling Output ===\n")
+		for profileRows.Next() {
+			var profileLine string
+			if err := profileRows.Scan(&profileLine); err == nil {
+				fmt.Printf("  %s\n", profileLine)
+			}
+		}
+		profileRows.Close()
+		fmt.Printf("  === End Profiling Output ===\n")
+	}
+	
 	return err
 }
 
