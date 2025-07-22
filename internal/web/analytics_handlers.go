@@ -28,11 +28,15 @@ func (s *Server) V34AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	report, err := s.storage.GetV34ModemReport()
 	if err != nil {
 		data := struct {
-			Title string
-			Error string
+			Title     string
+			Error     string
+			Report    *database.V34ModemReport
+			QueryTime time.Duration
 		}{
-			Title: "V.34 Modem Analysis",
-			Error: fmt.Sprintf("Failed to generate V.34 analysis: %v", err),
+			Title:     "V.34 Modem Analysis",
+			Error:     fmt.Sprintf("Failed to generate V.34 analysis: %v", err),
+			Report:    nil,
+			QueryTime: time.Since(startTime),
 		}
 		s.templates["v34_analytics"].Execute(w, data)
 		return
@@ -42,10 +46,12 @@ func (s *Server) V34AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 		Title     string
 		Report    *database.V34ModemReport
 		QueryTime time.Duration
+		Error     string
 	}{
 		Title:     "V.34 Modem Analysis",
 		Report:    report,
 		QueryTime: time.Since(startTime),
+		Error:     "", // No error when successful
 	}
 	
 	s.templates["v34_analytics"].Execute(w, data)

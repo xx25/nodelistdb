@@ -36,6 +36,9 @@ func (s *Server) loadTemplates() {
 		"add": func(a, b int) int {
 			return a + b
 		},
+		"sub": func(a, b int) int {
+			return a - b
+		},
 		"float64": func(i interface{}) float64 {
 			switch v := i.(type) {
 			case int:
@@ -1316,41 +1319,37 @@ curl "{{.BaseURL}}/api/search/sysops?sysop_name=Ward%20Dossche&limit=50"</code><
         </nav>
         
         <div class="content">
-            {{if .NoData}}
+            {{if .Error}}
                 <div class="card">
                     <div class="alert alert-error">
-                        <strong>📊 No Data Available</strong><br>
-                        No nodelist data has been imported yet, or no nodes with V.34 modems found.
+                        <strong>❌ Error</strong><br>
+                        {{.Error}}
                     </div>
-                    <p style="margin-top: 1rem; color: var(--text-secondary);">
-                        To populate analytics, please import nodelist files using the parser tool:<br>
-                        <code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem;">./bin/parser -path /path/to/nodelists -db ./nodelist.duckdb</code>
-                    </p>
                 </div>
-            {{else}}
+            {{else if .Report}}
                 <!-- Summary Card -->
                 <div class="card">
                     <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📞 V.34 Modem Analysis Summary</h2>
                     
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <h3>{{.TotalV34Nodes}}</h3>
+                            <h3>{{.Report.TotalV34Nodes}}</h3>
                             <p>Total V.34 Nodes</p>
                         </div>
                         
                         <div class="stat-card">
-                            <h3>{{printf "%.1f%%" .V34Percentage}}</h3>
-                            <p>V.34 Adoption Rate</p>
+                            <h3>{{.Report.FirstAppearance.Format "2006-01-02"}}</h3>
+                            <p>First Appeared</p>
                         </div>
                         
                         <div class="stat-card">
-                            <h3>{{.ZoneCount}}</h3>
-                            <p>Zones with V.34</p>
+                            <h3>{{.Report.FirstNode.Zone}}:{{.Report.FirstNode.Net}}/{{.Report.FirstNode.Node}}</h3>
+                            <p>First V.34 Node</p>
                         </div>
                         
                         <div class="stat-card">
-                            <h3>{{.NetworkCount}}</h3>
-                            <p>Networks with V.34</p>
+                            <h3>{{len .Report.AdoptionByYear}}</h3>
+                            <p>Years of Data</p>
                         </div>
                     </div>
                     
@@ -1359,35 +1358,61 @@ curl "{{.BaseURL}}/api/search/sysops?sysop_name=Ward%20Dossche&limit=50"</code><
                     </div>
                 </div>
                 
-                <!-- Zone Distribution -->
-                {{if .ZoneDistribution}}
+                <!-- First V.34 Node Details -->
+                <div class="card">
+                    <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🥇 First V.34 Node</h3>
+                    
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Address</th>
+                                    <th>System Name</th>
+                                    <th>Sysop</th>
+                                    <th>Location</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>{{.Report.FirstNode.Zone}}:{{.Report.FirstNode.Net}}/{{.Report.FirstNode.Node}}</strong></td>
+                                    <td>{{.Report.FirstNode.SystemName}}</td>
+                                    <td>{{.Report.FirstNode.SysopName}}</td>
+                                    <td>{{.Report.FirstNode.Location}}</td>
+                                    <td>{{.Report.FirstAppearance.Format "2006-01-02"}}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Adoption by Year -->
+                {{if .Report.AdoptionByYear}}
                     <div class="card">
-                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🌍 V.34 Distribution by Zone</h3>
+                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">📈 V.34 Adoption by Year</h3>
                         
                         <div class="table-container">
                             <table class="data-table">
                                 <thead>
                                     <tr>
-                                        <th>Zone</th>
-                                        <th>Description</th>
+                                        <th>Year</th>
                                         <th>V.34 Nodes</th>
-                                        <th>Total Nodes</th>
-                                        <th>Adoption Rate</th>
-                                        <th>Representation</th>
+                                        <th>Growth</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {{range .ZoneDistribution}}
+                                    {{range $i, $year := .Report.AdoptionByYear}}
                                     <tr>
-                                        <td><strong>Zone {{.Zone}}</strong></td>
-                                        <td style="color: var(--text-secondary);">{{getZoneDescription .Zone}}</td>
-                                        <td>{{.V34Count}} nodes</td>
-                                        <td>{{.TotalCount}} nodes</td>
-                                        <td><strong>{{printf "%.1f%%" .AdoptionRate}}</strong></td>
+                                        <td><strong>{{$year.Year}}</strong></td>
+                                        <td>{{$year.Count}} nodes</td>
                                         <td>
-                                            <div class="progress-bar">
-                                                <div style="width: {{printf "%.1f%%" .AdoptionRate}}; background: var(--success-color);"></div>
-                                            </div>
+                                            {{if gt $i 0}}
+                                                {{$prev := index $.Report.AdoptionByYear (sub $i 1)}}
+                                                {{$growth := sub $year.Count $prev.Count}}
+                                                {{if gt $growth 0}}+{{$growth}}{{else}}{{$growth}}{{end}}
+                                            {{else}}
+                                                Initial
+                                            {{end}}
                                         </td>
                                     </tr>
                                     {{end}}
@@ -1397,37 +1422,14 @@ curl "{{.BaseURL}}/api/search/sysops?sysop_name=Ward%20Dossche&limit=50"</code><
                     </div>
                 {{end}}
                 
-                <!-- Top Networks -->
-                {{if .TopNetworks}}
-                    <div class="card">
-                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🏆 Networks with Most V.34 Nodes</h3>
-                        
-                        <div class="table-container">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Network</th>
-                                        <th>Network Name</th>
-                                        <th>V.34 Nodes</th>
-                                        <th>Total Nodes</th>
-                                        <th>Adoption Rate</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {{range .TopNetworks}}
-                                    <tr>
-                                        <td><strong><a href="/analytics/network/?zone={{.Zone}}&net={{.Net}}">{{.Zone}}:{{.Net}}</a></strong></td>
-                                        <td style="color: var(--text-secondary);">{{if .Name}}{{.Name}}{{else}}<em>Unknown</em>{{end}}</td>
-                                        <td>{{.V34Count}} nodes</td>
-                                        <td>{{.TotalCount}} nodes</td>
-                                        <td><strong>{{printf "%.1f%%" .AdoptionRate}}</strong></td>
-                                    </tr>
-                                    {{end}}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                {{end}}
+                <!-- Query Performance -->
+                <div class="card">
+                    <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">⚡ Query Performance</h3>
+                    <p style="color: var(--text-secondary);">
+                        Analysis completed in <strong>{{.QueryTime}}</strong> • 
+                        Processed <strong>{{.Report.TotalV34Nodes}}</strong> V.34 node records
+                    </p>
+                </div>
                 
                 <div class="alert alert-success">
                     <strong>💡 Historical Context:</strong> V.34 modems (33.6k) were the fastest analog dialup technology available before the transition to digital technologies like ISDN and early broadband. High V.34 adoption often indicated technologically advanced BBSs and networks.
