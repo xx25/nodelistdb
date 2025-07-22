@@ -355,6 +355,20 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 	return nodes, nil
 }
 
+// GetLatestStatsDate retrieves the most recent date that has statistics
+func (s *Storage) GetLatestStatsDate() (time.Time, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+	var latestDate time.Time
+	err := conn.QueryRow("SELECT MAX(nodelist_date) FROM nodes").Scan(&latestDate)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get latest stats date: %w", err)
+	}
+	return latestDate, nil
+}
+
 // GetStats retrieves network statistics for a specific date
 func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	s.mu.RLock()
