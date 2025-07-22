@@ -475,8 +475,11 @@ func (s *Server) SearchNodesBySysopHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	// Convert spaces to underscores as that's how data is stored in nodelist database
+	searchName := strings.ReplaceAll(sysopName, " ", "_")
+	
 	// Search nodes
-	nodes, err := s.storage.SearchNodesBySysop(sysopName, limit)
+	nodes, err := s.storage.SearchNodesBySysop(searchName, limit)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
 		return

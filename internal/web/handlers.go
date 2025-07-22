@@ -222,7 +222,9 @@ func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		sysopName = r.FormValue("sysop_name")
 		if sysopName != "" {
-			nodes, err = s.storage.SearchNodesBySysop(sysopName, 50)
+			// Convert spaces to underscores as that's how data is stored in nodelist database
+			searchName := strings.ReplaceAll(sysopName, " ", "_")
+			nodes, err = s.storage.SearchNodesBySysop(searchName, 50)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -764,7 +766,10 @@ func (s *Server) getTemplate(name string) string {
             <form method="post">
                 <div class="form-group">
                     <label for="sysop_name">Sysop Name:</label>
-                    <input type="text" id="sysop_name" name="sysop_name" value="{{.SysopName}}" placeholder="e.g. John Doe" required>
+                    <input type="text" id="sysop_name" name="sysop_name" value="{{.SysopName}}" placeholder="e.g. John Doe or John_Doe" required>
+                    <small style="color: var(--text-secondary); margin-top: 0.25rem; display: block;">
+                        💡 You can use either spaces or underscores - both "John Doe" and "John_Doe" will work
+                    </small>
                 </div>
                 
                 <button type="submit">Search</button>
