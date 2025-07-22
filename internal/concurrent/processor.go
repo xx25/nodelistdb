@@ -174,6 +174,9 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 	
 	successfulJobs := 0
 	startTime := time.Now()
+	var insertionStartTime time.Time
+	var avgInsertionTime time.Duration
+	var insertionCount int
 	
 	if !p.quiet {
 		fmt.Printf("\n=== DATABASE INSERTION PHASE ===\n")
@@ -198,19 +201,56 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 			elapsed := time.Since(startTime)
 			progress := float64(successfulJobs) / float64(expectedResults-totalErrors) * 100
 			if progress > 0 && !p.quiet {
-				estimatedTotal := elapsed * time.Duration(float64(expectedResults-totalErrors)/float64(successfulJobs))
-				remaining := estimatedTotal - elapsed
-				fmt.Printf("Collection progress: %d/%d jobs (%.1f%%) - %d nodes collected - ETA: %v\n", 
-					successfulJobs, expectedResults-totalErrors, progress, totalNodes, remaining.Round(time.Second))
+				// Calculate ETA based on both collection and insertion rates
+				var eta string
+				if insertionCount > 0 && avgInsertionTime > 0 {
+					// Estimate remaining nodes and batches
+					nodesPerJob := float64(totalNodes) / float64(successfulJobs)
+					remainingJobs := expectedResults - totalErrors - successfulJobs
+					estimatedRemainingNodes := int(nodesPerJob * float64(remainingJobs))
+					totalExpectedNodes := totalNodes + estimatedRemainingNodes
+					remainingNodesToInsert := totalExpectedNodes - totalInserted
+					estimatedBatchesRemaining := (remainingNodesToInsert + p.batchSize - 1) / p.batchSize
+					
+					// Calculate ETA based on average insertion time
+					estimatedRemainingTime := time.Duration(estimatedBatchesRemaining) * avgInsertionTime
+					eta = estimatedRemainingTime.Round(time.Second).String()
+				} else {
+					// Fallback to collection-based ETA
+					estimatedTotal := elapsed * time.Duration(float64(expectedResults-totalErrors)/float64(successfulJobs))
+					remaining := estimatedTotal - elapsed
+					eta = remaining.Round(time.Second).String()
+				}
+				
+				fmt.Printf("Collection progress: %d/%d jobs (%.1f%%) - %d nodes collected, %d inserted - ETA: %v\n", 
+					successfulJobs, expectedResults-totalErrors, progress, totalNodes, totalInserted, eta)
 			}
 		}
 		
 		// Insert batch when it reaches batch size or this is the last successful result
 		if len(batch) >= p.batchSize || (successfulJobs == expectedResults-totalErrors && len(batch) > 0) {
 			batchCount++
+			
+			// Track first insertion time
+			if insertionCount == 0 {
+				insertionStartTime = time.Now()
+			}
+			
+			insertStart := time.Now()
 			if err := p.insertBatchWithProgress(ctx, batch, batchCount, totalInserted, totalNodes); err != nil {
 				return fmt.Errorf("failed to insert batch: %w", err)
 			}
+			insertDuration := time.Since(insertStart)
+			
+			// Update average insertion time
+			insertionCount++
+			if insertionCount == 1 {
+				avgInsertionTime = insertDuration
+			} else {
+				// Running average
+				avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
+			}
+			
 			totalInserted += len(batch)
 			batch = nil // Reset batch
 		}
@@ -219,9 +259,21 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 	// Insert any remaining batch
 	if len(batch) > 0 {
 		batchCount++
+		
+		insertStart := time.Now()
 		if err := p.insertBatchWithProgress(ctx, batch, batchCount, totalInserted, totalNodes); err != nil {
 			return fmt.Errorf("failed to insert final batch: %w", err)
 		}
+		insertDuration := time.Since(insertStart)
+		
+		// Update average insertion time for final batch
+		insertionCount++
+		if insertionCount == 1 {
+			avgInsertionTime = insertDuration
+		} else {
+			avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
+		}
+		
 		totalInserted += len(batch)
 	}
 	
