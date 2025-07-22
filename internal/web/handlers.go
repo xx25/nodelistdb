@@ -320,28 +320,40 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Determine if node is currently active by checking if last history entry is from the most recent nodelist
+	var currentlyActive bool
+	if len(history) > 0 {
+		// Get the most recent nodelist date efficiently
+		maxDate, err := s.storage.GetMaxNodelistDate()
+		if err == nil {
+			currentlyActive = history[len(history)-1].NodelistDate.Equal(maxDate)
+		}
+	}
+	
 	data := struct {
-		Title     string
-		Address   string
-		Zone      int
-		Net       int
-		Node      int
-		History   []database.Node
-		Changes   []database.NodeChange
-		FirstDate time.Time
-		LastDate  time.Time
-		Filter    storage.ChangeFilter
+		Title           string
+		Address         string
+		Zone            int
+		Net             int
+		Node            int
+		History         []database.Node
+		Changes         []database.NodeChange
+		FirstDate       time.Time
+		LastDate        time.Time
+		CurrentlyActive bool
+		Filter          storage.ChangeFilter
 	}{
-		Title:     "Node History",
-		Address:   fmt.Sprintf("%d:%d/%d", zone, net, node),
-		Zone:      zone,
-		Net:       net,
-		Node:      node,
-		History:   history,
-		Changes:   changes,
-		FirstDate: firstDate,
-		LastDate:  lastDate,
-		Filter:    filter,
+		Title:           "Node History",
+		Address:         fmt.Sprintf("%d:%d/%d", zone, net, node),
+		Zone:            zone,
+		Net:             net,
+		Node:            node,
+		History:         history,
+		Changes:         changes,
+		FirstDate:       firstDate,
+		LastDate:        lastDate,
+		CurrentlyActive: currentlyActive,
+		Filter:          filter,
 	}
 	
 	s.templates["node_history"].Execute(w, data)
@@ -892,7 +904,7 @@ func (s *Server) getTemplate(name string) string {
         <div class="content">
             <h2>Node Information</h2>
             <p><strong>Address:</strong> {{.Address}}</p>
-            <p><strong>Active Period:</strong> {{.FirstDate.Format "2006-01-02"}} - {{.LastDate.Format "2006-01-02"}}</p>
+            <p><strong>Active Period:</strong> {{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}</p>
             <p><strong>Total Entries:</strong> {{len .History}}</p>
             <p><strong>Changes:</strong> {{len .Changes}}</p>
             

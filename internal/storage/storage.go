@@ -687,6 +687,22 @@ func (s *Storage) GetNodeDateRange(zone, net, node int) (firstDate, lastDate tim
 	return firstDate, lastDate, nil
 }
 
+// GetMaxNodelistDate returns the most recent nodelist date in the database
+func (s *Storage) GetMaxNodelistDate() (time.Time, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+
+	var maxDate time.Time
+	err := conn.QueryRow("SELECT MAX(nodelist_date) FROM nodes").Scan(&maxDate)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get max nodelist date: %w", err)
+	}
+
+	return maxDate, nil
+}
+
 // NodeSummary represents a summary of a node for search results
 type NodeSummary struct {
 	Zone         int       `json:"zone"`
