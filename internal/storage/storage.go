@@ -213,6 +213,20 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 				return fmt.Errorf("failed to bulk insert nodes: %w", err)
 			}
 			
+			// Get profiling for this specific INSERT
+			profileRows, profileErr := tx.Query("PRAGMA profiling_output")
+			if profileErr == nil {
+				fmt.Printf("    === INSERT Profiling ===\n")
+				for profileRows.Next() {
+					var profileLine string
+					if err := profileRows.Scan(&profileLine); err == nil {
+						fmt.Printf("    %s\n", profileLine)
+					}
+				}
+				profileRows.Close()
+				fmt.Printf("    === End INSERT Profiling ===\n")
+			}
+			
 			// Reset for next chunk
 			valuePlaceholders = nil
 			args = nil
