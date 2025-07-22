@@ -133,7 +133,7 @@ func (s *Storage) Close() error {
 	return nil
 }
 
-// InsertNodes inserts a batch of nodes using bulk insert for better performance
+// InsertNodes inserts a batch of nodes using optimized prepared statements
 func (s *Storage) InsertNodes(nodes []database.Node) error {
 	if len(nodes) == 0 {
 		return nil
@@ -144,57 +144,73 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 
 	conn := s.db.Conn()
 
-	// Start transaction for bulk operation
+	// Start transaction
 	tx, err := conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Build bulk insert with UPSERT for conflict handling
-	insertSQL := `
-	INSERT INTO nodes (
-		zone, net, node, nodelist_date, day_number,
-		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		raw_line, file_path, file_crc, first_seen, last_seen,
-		conflict_sequence, has_conflict
-	) VALUES `
-
-	var valuePlaceholders []string
-	var args []interface{}
-
-	for i, node := range nodes {
-		valuePlaceholders = append(valuePlaceholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+	// For DuckDB v1.1.3, use direct SQL execution with native array syntax
+	// This is more efficient than building huge parameter lists
+	
+	// Process in smaller chunks to optimize memory usage
+	chunkSize := 100
+	for i := 0; i < len(nodes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+		chunk := nodes[i:end]
 		
-		args = append(args,
-			node.Zone, node.Net, node.Node, node.NodelistDate, node.DayNumber,
-			node.SystemName, node.Location, node.SysopName, node.Phone,
-			node.NodeType, node.Region, node.MaxSpeed,
-			node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
-			node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
-			formatStringArray(node.Flags), formatStringArray(node.ModemFlags),
-			formatStringArray(node.InternetProtocols), formatStringArray(node.InternetHostnames),
-			formatIntArray(node.InternetPorts), formatStringArray(node.InternetEmails),
-			node.RawLine, node.FilePath, node.FileCRC, node.FirstSeen, node.LastSeen,
-			0, false, // conflict_sequence=0, has_conflict=false for initial insert
-		)
-
-		// Split into chunks to avoid query size limits  
-		if (i+1)%1000 == 0 || i == len(nodes)-1 {
-			fullSQL := insertSQL + strings.Join(valuePlaceholders, ",") +
-				` ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
-				  DO NOTHING`
-			
-			_, err := tx.Exec(fullSQL, args...)
-			if err != nil {
-				return fmt.Errorf("failed to bulk insert nodes: %w", err)
-			}
-			
-			// Reset for next chunk
-			valuePlaceholders = nil
-			args = nil
+		// Build VALUES clause with DuckDB native syntax
+		var values []string
+		for _, node := range chunk {
+			value := fmt.Sprintf(
+				"(%d,%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%s,'%s',%t,%t,%t,%t,%t,%t,%t,%t,%s,%s,%s,%s,%s,%s,'%s','%s',%d,'%s','%s',%d,%t)",
+				node.Zone, node.Net, node.Node,
+				node.NodelistDate.Format("2006-01-02"), node.DayNumber,
+				escapeSingleQuotes(node.SystemName),
+				escapeSingleQuotes(node.Location),
+				escapeSingleQuotes(node.SysopName),
+				escapeSingleQuotes(node.Phone),
+				node.NodeType,
+				formatNullableInt(node.Region),
+				node.MaxSpeed,
+				node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
+				node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
+				formatArrayDuckDB(node.Flags),
+				formatArrayDuckDB(node.ModemFlags),
+				formatArrayDuckDB(node.InternetProtocols),
+				formatArrayDuckDB(node.InternetHostnames),
+				formatIntArrayDuckDB(node.InternetPorts),
+				formatArrayDuckDB(node.InternetEmails),
+				escapeSingleQuotes(node.RawLine),
+				node.FilePath, node.FileCRC,
+				node.FirstSeen.Format("2006-01-02 15:04:05"),
+				node.LastSeen.Format("2006-01-02 15:04:05"),
+				0, false,
+			)
+			values = append(values, value)
+		}
+		
+		// Execute chunk insert
+		insertSQL := fmt.Sprintf(`
+			INSERT INTO nodes (
+				zone, net, node, nodelist_date, day_number,
+				system_name, location, sysop_name, phone, node_type, region, max_speed,
+				is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+				flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+				raw_line, file_path, file_crc, first_seen, last_seen,
+				conflict_sequence, has_conflict
+			) VALUES %s
+			ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
+			DO NOTHING
+		`, strings.Join(values, ","))
+		
+		_, err := tx.Exec(insertSQL)
+		if err != nil {
+			return fmt.Errorf("failed to insert chunk: %w", err)
 		}
 	}
 
@@ -269,6 +285,10 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 		conditions = append(conditions, "is_cm = ?")
 		args = append(args, *filter.IsCM)
 	}
+	if filter.HasBinkp != nil {
+		conditions = append(conditions, "has_binkp = ?")
+		args = append(args, *filter.HasBinkp)
+	}
 
 	// Build final query
 	if len(conditions) > 0 {
@@ -294,7 +314,8 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 	var nodes []database.Node
 	for rows.Next() {
 		var node database.Node
-		var flagsStr, modemFlagsStr, protocolsStr, hostsStr, portsStr, emailsStr string
+		var flags, modemFlags, protocols, hosts, emails interface{}
+		var ports interface{}
 
 		err := rows.Scan(
 			&node.Zone, &node.Net, &node.Node, &node.NodelistDate, &node.DayNumber,
@@ -302,7 +323,7 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 			&node.NodeType, &node.Region, &node.MaxSpeed,
 			&node.IsCM, &node.IsMO, &node.HasBinkp, &node.HasTelnet,
 			&node.IsDown, &node.IsHold, &node.IsPvt, &node.IsActive,
-			&flagsStr, &modemFlagsStr, &protocolsStr, &hostsStr, &portsStr, &emailsStr,
+			&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
 			&node.RawLine, &node.FilePath, &node.FileCRC, &node.FirstSeen, &node.LastSeen,
 			&node.ConflictSequence, &node.HasConflict,
 		)
@@ -310,13 +331,13 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 			return nil, fmt.Errorf("failed to scan node: %w", err)
 		}
 
-		// Parse arrays from DuckDB format
-		node.Flags = parseStringArray(flagsStr)
-		node.ModemFlags = parseStringArray(modemFlagsStr)
-		node.InternetProtocols = parseStringArray(protocolsStr)
-		node.InternetHostnames = parseStringArray(hostsStr)
-		node.InternetPorts = parseIntArray(portsStr)
-		node.InternetEmails = parseStringArray(emailsStr)
+		// Parse arrays from DuckDB native format
+		node.Flags = parseInterfaceToStringArray(flags)
+		node.ModemFlags = parseInterfaceToStringArray(modemFlags)
+		node.InternetProtocols = parseInterfaceToStringArray(protocols)
+		node.InternetHostnames = parseInterfaceToStringArray(hosts)
+		node.InternetPorts = parseInterfaceToIntArray(ports)
+		node.InternetEmails = parseInterfaceToStringArray(emails)
 
 		nodes = append(nodes, node)
 	}
@@ -422,6 +443,42 @@ func formatIntArray(arr []int) string {
 	return string(result)
 }
 
+// Helper functions for DuckDB native array syntax (optimized)
+func formatArrayDuckDB(arr []string) string {
+	if len(arr) == 0 {
+		return "ARRAY[]::TEXT[]"
+	}
+	
+	escaped := make([]string, len(arr))
+	for i, s := range arr {
+		escaped[i] = "'" + escapeSingleQuotes(s) + "'"
+	}
+	return fmt.Sprintf("ARRAY[%s]", strings.Join(escaped, ","))
+}
+
+func formatIntArrayDuckDB(arr []int) string {
+	if len(arr) == 0 {
+		return "ARRAY[]::INTEGER[]"
+	}
+	
+	strs := make([]string, len(arr))
+	for i, n := range arr {
+		strs[i] = fmt.Sprintf("%d", n)
+	}
+	return fmt.Sprintf("ARRAY[%s]", strings.Join(strs, ","))
+}
+
+func formatNullableInt(val *int) string {
+	if val == nil {
+		return "NULL"
+	}
+	return fmt.Sprintf("%d", *val)
+}
+
+func escapeSingleQuotes(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
 func parseStringArray(s string) []string {
 	if s == "[]" || s == "" {
 		return []string{}
@@ -452,4 +509,57 @@ func parseIntArray(s string) []int {
 		}
 	}
 	return result
+}
+
+// parseInterfaceToStringArray converts DuckDB array results to []string
+func parseInterfaceToStringArray(v interface{}) []string {
+	if v == nil {
+		return []string{}
+	}
+	
+	switch arr := v.(type) {
+	case []interface{}:
+		result := make([]string, 0, len(arr))
+		for _, item := range arr {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	case string:
+		// Fallback for old format
+		return parseStringArray(arr)
+	default:
+		return []string{}
+	}
+}
+
+// parseInterfaceToIntArray converts DuckDB array results to []int
+func parseInterfaceToIntArray(v interface{}) []int {
+	if v == nil {
+		return []int{}
+	}
+	
+	switch arr := v.(type) {
+	case []interface{}:
+		result := make([]int, 0, len(arr))
+		for _, item := range arr {
+			switch val := item.(type) {
+			case int:
+				result = append(result, val)
+			case int32:
+				result = append(result, int(val))
+			case int64:
+				result = append(result, int(val))
+			case float64:
+				result = append(result, int(val))
+			}
+		}
+		return result
+	case string:
+		// Fallback for old format
+		return parseIntArray(arr)
+	default:
+		return []int{}
+	}
 }
