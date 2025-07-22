@@ -423,6 +423,61 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 		stats.ZoneDistribution[zone] = count
 	}
 
+	// Get largest regions (top 10)
+	stats.LargestRegions = []database.RegionInfo{}
+	rows, err = conn.Query(`
+		SELECT zone, region, COUNT(*) as count 
+		FROM nodes 
+		WHERE nodelist_date = ? AND region > 0 AND node_type = 'Node'
+		GROUP BY zone, region 
+		ORDER BY count DESC 
+		LIMIT 10
+	`, date)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get largest regions: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var region database.RegionInfo
+		if err := rows.Scan(&region.Zone, &region.Region, &region.NodeCount); err != nil {
+			return nil, fmt.Errorf("failed to scan region info: %w", err)
+		}
+		stats.LargestRegions = append(stats.LargestRegions, region)
+	}
+
+	// Get largest nets (top 10 per zone, then take overall top 10)
+	stats.LargestNets = []database.NetInfo{}
+	rows, err = conn.Query(`
+		WITH NetCounts AS (
+			SELECT zone, net, COUNT(*) as count,
+				   MAX(CASE WHEN node_type = 'Host' THEN system_name ELSE NULL END) as host_name
+			FROM nodes 
+			WHERE nodelist_date = ? AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
+			GROUP BY zone, net
+		)
+		SELECT zone, net, count, host_name
+		FROM NetCounts
+		ORDER BY count DESC 
+		LIMIT 10
+	`, date)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get largest nets: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var net database.NetInfo
+		var hostName sql.NullString
+		if err := rows.Scan(&net.Zone, &net.Net, &net.NodeCount, &hostName); err != nil {
+			return nil, fmt.Errorf("failed to scan net info: %w", err)
+		}
+		if hostName.Valid {
+			net.Name = hostName.String
+		}
+		stats.LargestNets = append(stats.LargestNets, net)
+	}
+
 	return &stats, nil
 }
 

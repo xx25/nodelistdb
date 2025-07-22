@@ -80,6 +80,22 @@ type NodeFilter struct {
 }
 
 // NetworkStats represents aggregated network statistics
+// RegionInfo holds information about a region
+type RegionInfo struct {
+	Zone      int    `json:"zone"`
+	Region    int    `json:"region"`
+	NodeCount int    `json:"node_count"`
+	Name      string `json:"name,omitempty"`
+}
+
+// NetInfo holds information about a net
+type NetInfo struct {
+	Zone      int    `json:"zone"`
+	Net       int    `json:"net"`
+	NodeCount int    `json:"node_count"`
+	Name      string `json:"name,omitempty"`
+}
+
 type NetworkStats struct {
 	Date             time.Time `json:"date"`
 	TotalNodes       int       `json:"total_nodes"`
@@ -93,6 +109,8 @@ type NetworkStats struct {
 	HoldNodes        int       `json:"hold_nodes"`
 	InternetNodes    int       `json:"internet_nodes"`
 	ZoneDistribution map[int]int `json:"zone_distribution"`
+	LargestRegions   []RegionInfo `json:"largest_regions"`
+	LargestNets      []NetInfo    `json:"largest_nets"`
 }
 
 // ProcessingResult represents the result of processing a nodelist file

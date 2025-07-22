@@ -805,6 +805,72 @@ func (s *Server) getTemplate(name string) string {
                     </div>
                 {{end}}
                 
+                {{if .Stats.LargestRegions}}
+                    <div class="card">
+                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🏛️ Largest Regions</h3>
+                        
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Region</th>
+                                        <th>Zone</th>
+                                        <th>Node Count</th>
+                                        <th>Representation</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{range .Stats.LargestRegions}}
+                                    <tr>
+                                        <td><strong>Region {{.Region}}</strong></td>
+                                        <td>Zone {{.Zone}}</td>
+                                        <td>{{.NodeCount}} nodes</td>
+                                        <td>
+                                            <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
+                                                <div style="background: var(--primary-color); height: 100%; width: {{printf "%.1f%%" (div (mul .NodeCount 100) $.Stats.TotalNodes)}}; transition: width 0.3s ease;"></div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {{end}}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                {{end}}
+                
+                {{if .Stats.LargestNets}}
+                    <div class="card">
+                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🌐 Largest Networks</h3>
+                        
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Network</th>
+                                        <th>Host System</th>
+                                        <th>Node Count</th>
+                                        <th>Representation</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{range .Stats.LargestNets}}
+                                    <tr>
+                                        <td><strong>{{.Zone}}:{{.Net}}</strong></td>
+                                        <td>{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
+                                        <td>{{.NodeCount}} nodes</td>
+                                        <td>
+                                            <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
+                                                <div style="background: var(--success-color); height: 100%; width: {{printf "%.1f%%" (div (mul .NodeCount 100) $.Stats.TotalNodes)}}; transition: width 0.3s ease;"></div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {{end}}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                {{end}}
+                
                 <div class="alert alert-success">
                     <strong>💡 Did you know?</strong> This data represents the current state of the FidoNet network. Use the historical node search to explore how individual nodes have changed over time!
                 </div>
