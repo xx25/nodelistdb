@@ -34,16 +34,18 @@ type Processor struct {
 	numWorkers int
 	batchSize  int
 	verbose    bool
+	quiet      bool
 }
 
 // New creates a new concurrent processor
-func New(storage *storage.Storage, parser *parser.AdvancedParser, numWorkers int, batchSize int, verbose bool) *Processor {
+func New(storage *storage.Storage, parser *parser.AdvancedParser, numWorkers int, batchSize int, verbose bool, quiet bool) *Processor {
 	return &Processor{
 		storage:    storage,
 		parser:     parser,
 		numWorkers: numWorkers,
 		batchSize:  batchSize,
 		verbose:    verbose,
+		quiet:      quiet,
 	}
 }
 
@@ -94,6 +96,9 @@ func (p *Processor) worker(ctx context.Context, workerID int, jobs <-chan Job, r
 		fmt.Printf("Worker %d started\n", workerID)
 	}
 
+	// Create a dedicated parser instance for this worker to avoid shared state issues
+	workerParser := parser.NewAdvanced(p.verbose)
+
 	for {
 		select {
 		case job, ok := <-jobs:
@@ -104,8 +109,8 @@ func (p *Processor) worker(ctx context.Context, workerID int, jobs <-chan Job, r
 				return
 			}
 			
-			// Process the job
-			result := p.processJob(ctx, job)
+			// Process the job with the worker's dedicated parser
+			result := p.processJobWithParser(ctx, job, workerParser)
 			
 			select {
 			case results <- result:
@@ -119,14 +124,16 @@ func (p *Processor) worker(ctx context.Context, workerID int, jobs <-chan Job, r
 	}
 }
 
-// processJob processes a single job
-func (p *Processor) processJob(ctx context.Context, job Job) Result {
+// processJobWithParser processes a single job using the provided parser instance
+func (p *Processor) processJobWithParser(ctx context.Context, job Job, workerParser *parser.AdvancedParser) Result {
 	start := time.Now()
 	
-	fmt.Printf("[Job %d] Processing: %s\n", job.JobID, job.FilePath)
+	if !p.quiet {
+		fmt.Printf("[Job %d] Processing: %s\n", job.JobID, job.FilePath)
+	}
 
-	// Parse the file
-	nodes, err := p.parser.ParseFile(job.FilePath)
+	// Parse the file with the worker's dedicated parser
+	nodes, err := workerParser.ParseFile(job.FilePath)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -141,8 +148,10 @@ func (p *Processor) processJob(ctx context.Context, job Job) Result {
 	}
 
 	if len(nodes) == 0 {
-		fmt.Printf("[Job %d] No nodes found in file\n", job.JobID)
-	} else {
+		if !p.quiet {
+			fmt.Printf("[Job %d] No nodes found in file\n", job.JobID)
+		}
+	} else if !p.quiet {
 		fmt.Printf("[Job %d] ✓ Parsed %d nodes\n", job.JobID, len(nodes))
 	}
 
@@ -160,8 +169,16 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 	var totalNodes int
 	var totalErrors int
 	var batch []database.Node
+	var totalInserted int
+	var batchCount int
 	
 	successfulJobs := 0
+	startTime := time.Now()
+	
+	if !p.quiet {
+		fmt.Printf("\n=== DATABASE INSERTION PHASE ===\n")
+		fmt.Printf("Collecting results from %d jobs and performing batch inserts...\n", expectedResults)
+	}
 	
 	for result := range results {
 		if result.Error != nil {
@@ -176,24 +193,44 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 		// Add nodes to batch
 		batch = append(batch, result.Nodes...)
 		
+		// Progress update every 10 jobs
+		if successfulJobs%10 == 0 || successfulJobs == expectedResults-totalErrors {
+			elapsed := time.Since(startTime)
+			progress := float64(successfulJobs) / float64(expectedResults-totalErrors) * 100
+			if progress > 0 && !p.quiet {
+				estimatedTotal := elapsed * time.Duration(float64(expectedResults-totalErrors)/float64(successfulJobs))
+				remaining := estimatedTotal - elapsed
+				fmt.Printf("Collection progress: %d/%d jobs (%.1f%%) - %d nodes collected - ETA: %v\n", 
+					successfulJobs, expectedResults-totalErrors, progress, totalNodes, remaining.Round(time.Second))
+			}
+		}
+		
 		// Insert batch when it reaches batch size or this is the last successful result
 		if len(batch) >= p.batchSize || (successfulJobs == expectedResults-totalErrors && len(batch) > 0) {
-			if err := p.insertBatch(ctx, batch); err != nil {
+			batchCount++
+			if err := p.insertBatchWithProgress(ctx, batch, batchCount, totalInserted, totalNodes); err != nil {
 				return fmt.Errorf("failed to insert batch: %w", err)
 			}
+			totalInserted += len(batch)
 			batch = nil // Reset batch
 		}
 	}
 	
 	// Insert any remaining batch
 	if len(batch) > 0 {
-		if err := p.insertBatch(ctx, batch); err != nil {
+		batchCount++
+		if err := p.insertBatchWithProgress(ctx, batch, batchCount, totalInserted, totalNodes); err != nil {
 			return fmt.Errorf("failed to insert final batch: %w", err)
 		}
+		totalInserted += len(batch)
 	}
 	
-	fmt.Printf("Concurrent processing complete: %d jobs processed, %d nodes imported, %d errors\n", 
-		successfulJobs, totalNodes, totalErrors)
+	if !p.quiet {
+		fmt.Printf("\n✓ Database insertion complete: %d batches, %d nodes inserted in %v\n", 
+			batchCount, totalInserted, time.Since(startTime).Round(time.Second))
+		fmt.Printf("Concurrent processing complete: %d jobs processed, %d nodes imported, %d errors\n", 
+			successfulJobs, totalNodes, totalErrors)
+	}
 	
 	if totalErrors > 0 {
 		return fmt.Errorf("%d jobs failed during processing", totalErrors)
@@ -202,7 +239,31 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 	return nil
 }
 
-// insertBatch inserts a batch of nodes
+// insertBatchWithProgress inserts a batch of nodes with detailed progress reporting
+func (p *Processor) insertBatchWithProgress(ctx context.Context, batch []database.Node, batchNum, totalInserted, totalNodes int) error {
+	progress := float64(totalInserted+len(batch)) / float64(totalNodes) * 100
+	if !p.quiet {
+		fmt.Printf("Inserting batch %d: %d nodes (%.1f%% of total nodes)...\n", batchNum, len(batch), progress)
+	}
+	
+	start := time.Now()
+	err := p.storage.InsertNodes(batch)
+	duration := time.Since(start)
+	
+	if err != nil {
+		fmt.Printf("✗ Batch %d failed: %v\n", batchNum, err)
+		return err
+	}
+	
+	if !p.quiet {
+		rate := float64(len(batch)) / duration.Seconds()
+		fmt.Printf("✓ Batch %d inserted in %v (%.0f nodes/sec)\n", batchNum, duration.Round(time.Millisecond), rate)
+	}
+	
+	return nil
+}
+
+// insertBatch inserts a batch of nodes (legacy method for backward compatibility)
 func (p *Processor) insertBatch(ctx context.Context, batch []database.Node) error {
 	if p.verbose {
 		fmt.Printf("Inserting batch of %d nodes...\n", len(batch))

@@ -606,7 +606,6 @@ func (ap *AdvancedParser) parseAdvancedLine(line string, nodelistDate time.Time,
 	isActive := !isDown && !isHold
 
 	// Create node with all enhanced data
-	now := time.Now()
 	dbNode := database.Node{
 		Zone:         zone,
 		Net:          net,
@@ -634,11 +633,6 @@ func (ap *AdvancedParser) parseAdvancedLine(line string, nodelistDate time.Time,
 		InternetHostnames: internetHostnames,
 		InternetPorts:     internetPorts,
 		InternetEmails:    internetEmails,
-		RawLine:      line,
-		FilePath:     filePath,
-		FileCRC:      int(fileCRC), // Use actual CRC from header
-		FirstSeen:    now,
-		LastSeen:     now,
 		ConflictSequence: 0,    // Default to 0 (original entry)
 		HasConflict:      false, // Default to false
 	}
@@ -784,8 +778,23 @@ func (ap *AdvancedParser) parseDateFromComment(comment string) (time.Time, int, 
 	return time.Time{}, 0, fmt.Errorf("no date pattern found")
 }
 
+// ParseResult contains the results of parsing a nodelist file
+type ParseResult struct {
+	Nodes   []database.Node
+	FileCRC uint16
+}
+
 // ParseFile parses a single nodelist file and returns the nodes
 func (ap *AdvancedParser) ParseFile(filePath string) ([]database.Node, error) {
+	result, err := ap.ParseFileWithCRC(filePath)
+	if err != nil {
+		return nil, err
+	}
+	return result.Nodes, nil
+}
+
+// ParseFileWithCRC parses a single nodelist file and returns nodes with file CRC
+func (ap *AdvancedParser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	if ap.verbose {
 		fmt.Printf("Parsing file: %s\n", filepath.Base(filePath))
 	}
@@ -805,6 +814,13 @@ func (ap *AdvancedParser) ParseFile(filePath string) ([]database.Node, error) {
 	var fileCRC uint16
 	var firstNodeLine string
 	headerParsed := false
+	
+	// Track duplicates within this file
+	nodeTracker := make(map[string][]int) // key: "zone:net/node", value: slice of indices in nodes array
+	duplicateStats := struct {
+		totalDuplicates int
+		conflictGroups  int
+	}{}
 
 	for scanner.Scan() {
 		lineNum++
@@ -872,6 +888,42 @@ func (ap *AdvancedParser) ParseFile(filePath string) ([]database.Node, error) {
 		}
 
 		if node != nil {
+			// Check for duplicates within this file
+			nodeKey := fmt.Sprintf("%d:%d/%d", node.Zone, node.Net, node.Node)
+			
+			if existingIndices, exists := nodeTracker[nodeKey]; exists {
+				// This is a duplicate - handle conflict tracking
+				if ap.verbose {
+					fmt.Printf("  DUPLICATE DETECTED: Node %s appears multiple times in %s (line %d)\n", 
+						nodeKey, filePath, lineNum)
+					fmt.Printf("    Previous occurrences at indices: %v\n", existingIndices)
+					fmt.Printf("    System Name: '%s', Location: '%s'\n", node.SystemName, node.Location)
+				}
+				
+				// Set conflict sequence for this duplicate
+				node.ConflictSequence = len(existingIndices)
+				node.HasConflict = true
+				
+				// Mark all previous occurrences as having conflicts
+				for _, idx := range existingIndices {
+					nodes[idx].HasConflict = true
+				}
+				
+				duplicateStats.totalDuplicates++
+				if len(existingIndices) == 1 {
+					// First duplicate for this node
+					duplicateStats.conflictGroups++
+				}
+				
+				// Track this occurrence
+				nodeTracker[nodeKey] = append(existingIndices, len(nodes))
+			} else {
+				// First occurrence of this node
+				node.ConflictSequence = 0
+				node.HasConflict = false
+				nodeTracker[nodeKey] = []int{len(nodes)}
+			}
+			
 			nodes = append(nodes, *node)
 		}
 	}
@@ -884,9 +936,21 @@ func (ap *AdvancedParser) ParseFile(filePath string) ([]database.Node, error) {
 		fmt.Printf("Parsed %d nodes from %s (Format: %v)\n", len(nodes), filepath.Base(filePath), ap.DetectedFormat)
 		fmt.Printf("  File: %s\n", filePath)
 		fmt.Printf("  Date: %s (Day %d)\n", nodelistDate.Format("2006-01-02"), dayNumber)
+		
+		if duplicateStats.totalDuplicates > 0 {
+			fmt.Printf("  DUPLICATE ANALYSIS:\n")
+			fmt.Printf("    - %d total duplicate entries found\n", duplicateStats.totalDuplicates)
+			fmt.Printf("    - %d nodes have conflicts (appear multiple times)\n", duplicateStats.conflictGroups)
+			fmt.Printf("    - This indicates %d human errors in the original nodelist creation\n", duplicateStats.conflictGroups)
+		} else {
+			fmt.Printf("  ✓ No duplicate node addresses found in this file\n")
+		}
 	}
 
-	return nodes, nil
+	return &ParseResult{
+		Nodes:   nodes,
+		FileCRC: fileCRC,
+	}, nil
 }
 
 // ParseNodelistFile is a convenience function to parse a nodelist file using the advanced parser

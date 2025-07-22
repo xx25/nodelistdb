@@ -292,7 +292,6 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 	isActive := !isDown && !isHold
 
 	// Create node
-	now := time.Now()
 	dbNode := database.Node{
 		Zone:         zone,
 		Net:          net,
@@ -320,11 +319,6 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 		InternetHostnames: internetHostnames,
 		InternetPorts:     internetPorts,
 		InternetEmails:    internetEmails,
-		RawLine:      line,
-		FilePath:     filePath,
-		FileCRC:      p.calculateCRC(line),
-		FirstSeen:    now,
-		LastSeen:     now,
 	}
 
 	return &dbNode, nil

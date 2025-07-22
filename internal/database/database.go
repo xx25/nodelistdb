@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 
 	_ "github.com/marcboeker/go-duckdb"
@@ -55,16 +56,10 @@ func (db *DB) Conn() *sql.DB {
 	return db.conn
 }
 
-// Migrate creates the database schema
-func (db *DB) Migrate() error {
+// CreateSchema creates the database schema
+func (db *DB) CreateSchema() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-
-	// Drop existing table for clean migration
-	dropSQL := `DROP TABLE IF EXISTS nodes`
-	if _, err := db.conn.Exec(dropSQL); err != nil {
-		return fmt.Errorf("failed to drop existing table: %w", err)
-	}
 
 	// Create nodes table optimized for DuckDB
 	createSQL := `
@@ -100,13 +95,6 @@ func (db *DB) Migrate() error {
 		internet_ports INTEGER[] DEFAULT [],
 		internet_emails TEXT[] DEFAULT [],
 		
-		-- Metadata
-		raw_line TEXT NOT NULL,
-		file_path TEXT NOT NULL,
-		file_crc INTEGER NOT NULL,
-		first_seen TIMESTAMP NOT NULL,
-		last_seen TIMESTAMP NOT NULL,
-		
 		-- Conflict tracking
 		conflict_sequence INTEGER DEFAULT 0,  -- 0 = original, 1+ = conflict duplicates
 		has_conflict BOOLEAN DEFAULT FALSE,   -- Flag for easy querying of conflicts
@@ -115,21 +103,27 @@ func (db *DB) Migrate() error {
 	)`
 
 	if _, err := db.conn.Exec(createSQL); err != nil {
-		return fmt.Errorf("failed to create nodes table: %w", err)
+		// If table already exists, that's fine
+		if !strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("failed to create nodes table: %w", err)
+		}
 	}
 
 	// Create optimized indexes for DuckDB
 	indexes := []string{
-		"CREATE INDEX idx_nodes_date ON nodes(nodelist_date)",
-		"CREATE INDEX idx_nodes_location ON nodes(zone, net)",
-		"CREATE INDEX idx_nodes_system ON nodes(system_name)",
-		"CREATE INDEX idx_nodes_type ON nodes(node_type)",
-		"CREATE INDEX idx_nodes_flags ON nodes(is_cm, is_mo, has_binkp, has_telnet)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_date ON nodes(nodelist_date)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_location ON nodes(zone, net)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_system ON nodes(system_name)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_flags ON nodes(is_cm, is_mo, has_binkp, has_telnet)",
 	}
 
 	for _, indexSQL := range indexes {
 		if _, err := db.conn.Exec(indexSQL); err != nil {
-			return fmt.Errorf("failed to create index: %w", err)
+			// Ignore index already exists errors
+			if !strings.Contains(err.Error(), "already exists") {
+				return fmt.Errorf("failed to create index: %w", err)
+			}
 		}
 	}
 

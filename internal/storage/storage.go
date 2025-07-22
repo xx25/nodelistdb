@@ -47,9 +47,8 @@ func (s *Storage) prepareStatements() error {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		raw_line, file_path, file_crc, first_seen, last_seen,
 		conflict_sequence, has_conflict
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var err error
 	s.insertStmt, err = conn.Prepare(insertSQL)
@@ -62,8 +61,7 @@ func (s *Storage) prepareStatements() error {
 	SELECT zone, net, node, nodelist_date, day_number,
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		   raw_line, file_path, file_crc, first_seen, last_seen
+		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails
 	FROM nodes
 	WHERE 1=1`
 
@@ -167,7 +165,7 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 		var values []string
 		for _, node := range chunk {
 			value := fmt.Sprintf(
-				"(%d,%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%s,'%s',%t,%t,%t,%t,%t,%t,%t,%t,%s,%s,%s,%s,%s,%s,'%s','%s',%d,'%s','%s',%d,%t)",
+				"(%d,%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%s,'%s',%t,%t,%t,%t,%t,%t,%t,%t,%s,%s,%s,%s,%s,%s,%d,%t)",
 				node.Zone, node.Net, node.Node,
 				node.NodelistDate.Format("2006-01-02"), node.DayNumber,
 				escapeSingleQuotes(node.SystemName),
@@ -185,11 +183,7 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 				formatArrayDuckDB(node.InternetHostnames),
 				formatIntArrayDuckDB(node.InternetPorts),
 				formatArrayDuckDB(node.InternetEmails),
-				escapeSingleQuotes(node.RawLine),
-				node.FilePath, node.FileCRC,
-				node.FirstSeen.Format("2006-01-02 15:04:05"),
-				node.LastSeen.Format("2006-01-02 15:04:05"),
-				0, false,
+				node.ConflictSequence, node.HasConflict,
 			)
 			values = append(values, value)
 		}
@@ -201,7 +195,6 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 				system_name, location, sysop_name, phone, node_type, region, max_speed,
 				is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 				flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-				raw_line, file_path, file_crc, first_seen, last_seen,
 				conflict_sequence, has_conflict
 			) VALUES %s
 			ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
@@ -237,7 +230,6 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		   raw_line, file_path, file_crc, first_seen, last_seen,
 		   conflict_sequence, has_conflict
 	FROM nodes WHERE 1=1`
 
@@ -324,7 +316,6 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 			&node.IsCM, &node.IsMO, &node.HasBinkp, &node.HasTelnet,
 			&node.IsDown, &node.IsHold, &node.IsPvt, &node.IsActive,
 			&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
-			&node.RawLine, &node.FilePath, &node.FileCRC, &node.FirstSeen, &node.LastSeen,
 			&node.ConflictSequence, &node.HasConflict,
 		)
 		if err != nil {
@@ -406,8 +397,8 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	return &stats, nil
 }
 
-// IsFileProcessed checks if a file has already been processed based on path and CRC
-func (s *Storage) IsFileProcessed(filePath string, fileCRC int) (bool, error) {
+// IsNodelistProcessed checks if a nodelist has already been processed based on date
+func (s *Storage) IsNodelistProcessed(nodelistDate time.Time) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -415,14 +406,45 @@ func (s *Storage) IsFileProcessed(filePath string, fileCRC int) (bool, error) {
 
 	var count int
 	err := conn.QueryRow(
-		"SELECT COUNT(*) FROM nodes WHERE file_path = ? AND file_crc = ?", 
-		filePath, fileCRC,
+		"SELECT COUNT(*) FROM nodes WHERE nodelist_date = ? LIMIT 1", 
+		nodelistDate,
 	).Scan(&count)
 	
 	if err != nil {
-		return false, fmt.Errorf("failed to check if file is processed: %w", err)
+		return false, fmt.Errorf("failed to check if nodelist is processed: %w", err)
 	}
 
+	return count > 0, nil
+}
+
+// FindConflictingNode checks if a node already exists for the same date
+func (s *Storage) FindConflictingNode(zone, net, node int, date time.Time) (bool, error) {
+	// Note: Don't use mutex here as this may be called within a transaction
+	conn := s.db.Conn()
+
+	// Use a separate transaction with READ COMMITTED isolation to see committed data
+	tx, err := conn.Begin()
+	if err != nil {
+		return false, fmt.Errorf("failed to begin transaction for conflict check: %w", err)
+	}
+	defer tx.Rollback()
+
+	var count int
+	queryErr := tx.QueryRow(
+		`SELECT COUNT(*) FROM nodes 
+		 WHERE zone = ? AND net = ? AND node = ? AND nodelist_date = ? 
+		 LIMIT 1`, 
+		zone, net, node, date,
+	).Scan(&count)
+	
+	if queryErr != nil {
+		if queryErr == sql.ErrNoRows {
+			return false, nil // No conflict found in committed data
+		}
+		return false, fmt.Errorf("failed to find conflicting node: %w", queryErr)
+	}
+
+	tx.Commit()
 	return count > 0, nil
 }
 

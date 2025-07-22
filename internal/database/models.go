@@ -42,13 +42,6 @@ type Node struct {
 	InternetPorts     []int    `json:"internet_ports"`
 	InternetEmails    []string `json:"internet_emails"`
 
-	// File metadata
-	RawLine   string    `json:"raw_line"`
-	FilePath  string    `json:"file_path"`
-	FileCRC   int       `json:"file_crc"`
-	FirstSeen time.Time `json:"first_seen"`
-	LastSeen  time.Time `json:"last_seen"`
-	
 	// Conflict tracking
 	ConflictSequence int  `json:"conflict_sequence"`
 	HasConflict      bool `json:"has_conflict"`
@@ -101,9 +94,10 @@ type NetworkStats struct {
 
 // ProcessingResult represents the result of processing a nodelist file
 type ProcessingResult struct {
-	FilePath     string        `json:"file_path"`
-	NodesFound   int          `json:"nodes_found"`
-	NodesInserted int         `json:"nodes_inserted"`
+	NodelistDate  time.Time     `json:"nodelist_date"`
+	DayNumber     int           `json:"day_number"`
+	NodesFound    int           `json:"nodes_found"`
+	NodesInserted int           `json:"nodes_inserted"`
 	ProcessingTime time.Duration `json:"processing_time"`
-	Error        error        `json:"error,omitempty"`
+	Error         error         `json:"error,omitempty"`
 }

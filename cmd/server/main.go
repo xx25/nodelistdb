@@ -43,9 +43,9 @@ func main() {
 		fmt.Printf("DuckDB version: %s\n", version)
 	}
 
-	// Run migrations
-	if err := db.Migrate(); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+	// Create schema
+	if err := db.CreateSchema(); err != nil {
+		log.Fatalf("Failed to create schema: %v", err)
 	}
 
 	log.Println("Database initialized successfully")
