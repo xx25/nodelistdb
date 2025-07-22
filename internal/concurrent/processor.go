@@ -262,23 +262,3 @@ func (p *Processor) insertBatchWithProgress(ctx context.Context, batch []databas
 	return nil
 }
 
-// insertBatch inserts a batch of nodes (legacy method for backward compatibility)
-func (p *Processor) insertBatch(ctx context.Context, batch []database.Node) error {
-	if p.verbose {
-		fmt.Printf("Inserting batch of %d nodes...\n", len(batch))
-	}
-	
-	start := time.Now()
-	err := p.storage.InsertNodes(batch)
-	duration := time.Since(start)
-	
-	if err != nil {
-		return err
-	}
-	
-	if p.verbose {
-		fmt.Printf("✓ Batch inserted in %v\n", duration)
-	}
-	
-	return nil
-}

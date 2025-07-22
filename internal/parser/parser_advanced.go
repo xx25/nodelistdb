@@ -351,33 +351,6 @@ func (ap *AdvancedParser) parseFlagValue(flag string) (string, string) {
 	return strings.TrimSpace(flag), ""
 }
 
-// parseInternetFlag parses complex internet flags
-func (ap *AdvancedParser) parseInternetFlag(flagName, flagValue string) interface{} {
-	switch flagName {
-	case "IBN", "ITN", "IFC", "IFT":
-		// Format: hostname[:port]
-		if strings.Contains(flagValue, ":") {
-			parts := strings.Split(flagValue, ":")
-			if len(parts) >= 2 {
-				return map[string]interface{}{
-					"host": parts[0],
-					"port": parts[1],
-				}
-			}
-		}
-		return map[string]interface{}{
-			"host": flagValue,
-		}
-	case "IEM":
-		// Email address
-		return flagValue
-	case "IP":
-		// IP address
-		return flagValue
-	default:
-		return flagValue
-	}
-}
 
 // updateContext updates parsing context based on node type
 func (ap *AdvancedParser) updateContext(nodeType string, nodeNum int) {

@@ -417,15 +417,3 @@ func (p *Parser) hasProtocol(protocols []string, protocol string) bool {
 	return false
 }
 
-// calculateCRC calculates a simple CRC for the line (placeholder)
-func (p *Parser) calculateCRC(line string) int {
-	// Simple hash for now - in production use proper CRC
-	hash := 0
-	for _, c := range line {
-		hash = hash*31 + int(c)
-	}
-	if hash < 0 {
-		hash = -hash
-	}
-	return hash % 65536
-}
