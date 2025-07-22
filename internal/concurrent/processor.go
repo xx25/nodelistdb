@@ -174,7 +174,6 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 	
 	successfulJobs := 0
 	startTime := time.Now()
-	var insertionStartTime time.Time
 	var avgInsertionTime time.Duration
 	var insertionCount int
 	
@@ -230,11 +229,6 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 		// Insert batch when it reaches batch size or this is the last successful result
 		if len(batch) >= p.batchSize || (successfulJobs == expectedResults-totalErrors && len(batch) > 0) {
 			batchCount++
-			
-			// Track first insertion time
-			if insertionCount == 0 {
-				insertionStartTime = time.Now()
-			}
 			
 			insertStart := time.Now()
 			if err := p.insertBatchWithProgress(ctx, batch, batchCount, totalInserted, totalNodes); err != nil {

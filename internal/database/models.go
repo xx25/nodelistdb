@@ -101,3 +101,13 @@ type ProcessingResult struct {
 	ProcessingTime time.Duration `json:"processing_time"`
 	Error         error         `json:"error,omitempty"`
 }
+
+// NodeChange represents a change in node data between two dates
+type NodeChange struct {
+	Date        time.Time         `json:"date"`
+	DayNumber   int               `json:"day_number"`
+	ChangeType  string            `json:"change_type"` // "added", "removed", "modified"
+	Changes     map[string]string `json:"changes"`     // field -> "old value -> new value"
+	OldNode     *Node             `json:"old_node,omitempty"`
+	NewNode     *Node             `json:"new_node,omitempty"`
+}

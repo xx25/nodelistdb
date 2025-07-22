@@ -246,17 +246,278 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(stats)
 }
 
+// GetNodeHistoryHandler returns the complete history of a node
+// GET /api/nodes/{zone}/{net}/{node}/history
+func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse path parameters
+	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/nodes/"), "/")
+	if len(pathParts) < 3 {
+		http.Error(w, "Invalid path format", http.StatusBadRequest)
+		return
+	}
+
+	zone, err := strconv.Atoi(pathParts[0])
+	if err != nil {
+		http.Error(w, "Invalid zone number", http.StatusBadRequest)
+		return
+	}
+
+	net, err := strconv.Atoi(pathParts[1])
+	if err != nil {
+		http.Error(w, "Invalid net number", http.StatusBadRequest)
+		return
+	}
+
+	node, err := strconv.Atoi(pathParts[2])
+	if err != nil {
+		http.Error(w, "Invalid node number", http.StatusBadRequest)
+		return
+	}
+
+	// Get node history
+	history, err := s.storage.GetNodeHistory(zone, net, node)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get node history: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if len(history) == 0 {
+		http.Error(w, "Node not found", http.StatusNotFound)
+		return
+	}
+
+	// Get date range
+	firstDate, lastDate, _ := s.storage.GetNodeDateRange(zone, net, node)
+
+	response := map[string]interface{}{
+		"address":    fmt.Sprintf("%d:%d/%d", zone, net, node),
+		"history":    history,
+		"count":      len(history),
+		"first_date": firstDate,
+		"last_date":  lastDate,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetNodeChangesHandler returns detected changes for a node
+// GET /api/nodes/{zone}/{net}/{node}/changes?noflags=1&nophone=1
+func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse path parameters
+	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/nodes/"), "/")
+	if len(pathParts) < 3 {
+		http.Error(w, "Invalid path format", http.StatusBadRequest)
+		return
+	}
+
+	zone, err := strconv.Atoi(pathParts[0])
+	if err != nil {
+		http.Error(w, "Invalid zone number", http.StatusBadRequest)
+		return
+	}
+
+	net, err := strconv.Atoi(pathParts[1])
+	if err != nil {
+		http.Error(w, "Invalid net number", http.StatusBadRequest)
+		return
+	}
+
+	node, err := strconv.Atoi(pathParts[2])
+	if err != nil {
+		http.Error(w, "Invalid node number", http.StatusBadRequest)
+		return
+	}
+
+	// Parse filter options
+	query := r.URL.Query()
+	filter := storage.ChangeFilter{
+		IgnoreFlags:    query.Get("noflags") == "1",
+		IgnorePhone:    query.Get("nophone") == "1",
+		IgnoreSpeed:    query.Get("nospeed") == "1",
+		IgnoreStatus:   query.Get("nostatus") == "1",
+		IgnoreLocation: query.Get("nolocation") == "1",
+		IgnoreName:     query.Get("noname") == "1",
+		IgnoreSysop:    query.Get("nosysop") == "1",
+	}
+
+	// Get node changes
+	changes, err := s.storage.GetNodeChanges(zone, net, node, filter)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get node changes: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"address": fmt.Sprintf("%d:%d/%d", zone, net, node),
+		"changes": changes,
+		"count":   len(changes),
+		"filter":  filter,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetNodeTimelineHandler returns timeline data for visualization
+// GET /api/nodes/{zone}/{net}/{node}/timeline
+func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse path parameters
+	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/nodes/"), "/")
+	if len(pathParts) < 3 {
+		http.Error(w, "Invalid path format", http.StatusBadRequest)
+		return
+	}
+
+	zone, err := strconv.Atoi(pathParts[0])
+	if err != nil {
+		http.Error(w, "Invalid zone number", http.StatusBadRequest)
+		return
+	}
+
+	net, err := strconv.Atoi(pathParts[1])
+	if err != nil {
+		http.Error(w, "Invalid net number", http.StatusBadRequest)
+		return
+	}
+
+	node, err := strconv.Atoi(pathParts[2])
+	if err != nil {
+		http.Error(w, "Invalid node number", http.StatusBadRequest)
+		return
+	}
+
+	// Get node history
+	history, err := s.storage.GetNodeHistory(zone, net, node)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get node history: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if len(history) == 0 {
+		http.Error(w, "Node not found", http.StatusNotFound)
+		return
+	}
+
+	// Build timeline data
+	var timeline []map[string]interface{}
+	for i, node := range history {
+		event := map[string]interface{}{
+			"date":       node.NodelistDate,
+			"day_number": node.DayNumber,
+			"type":       "active",
+			"data":       node,
+		}
+		
+		// Check for gaps to detect removal periods
+		if i < len(history)-1 {
+			nextNode := history[i+1]
+			if !node.NodelistDate.AddDate(0, 0, 14).After(nextNode.NodelistDate) {
+				// Gap detected - node was removed
+				timeline = append(timeline, event)
+				timeline = append(timeline, map[string]interface{}{
+					"date":       node.NodelistDate.AddDate(0, 0, 7),
+					"day_number": node.DayNumber + 7,
+					"type":       "removed",
+					"duration":   nextNode.NodelistDate.Sub(node.NodelistDate),
+				})
+				continue
+			}
+		}
+		timeline = append(timeline, event)
+	}
+
+	response := map[string]interface{}{
+		"address":  fmt.Sprintf("%d:%d/%d", zone, net, node),
+		"timeline": timeline,
+		"count":    len(timeline),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// SearchNodesBySysopHandler searches for nodes by sysop name
+// GET /api/nodes/search/sysop?name=John+Doe&limit=50
+func (s *Server) SearchNodesBySysopHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get sysop name from query
+	sysopName := r.URL.Query().Get("name")
+	if sysopName == "" {
+		http.Error(w, "Missing 'name' parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Get limit
+	limit := 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 200 {
+			limit = l
+		}
+	}
+
+	// Search nodes
+	nodes, err := s.storage.SearchNodesBySysop(sysopName, limit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"sysop_name": sysopName,
+		"nodes":      nodes,
+		"count":      len(nodes),
+		"limit":      limit,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // SetupRoutes sets up HTTP routes for the API server
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	// API routes
 	mux.HandleFunc("/api/health", s.HealthHandler)
 	mux.HandleFunc("/api/nodes", s.SearchNodesHandler)
 	mux.HandleFunc("/api/stats", s.StatsHandler)
+	mux.HandleFunc("/api/nodes/search/sysop", s.SearchNodesBySysopHandler)
 	
 	// Node lookup with path parameters
 	mux.HandleFunc("/api/nodes/", func(w http.ResponseWriter, r *http.Request) {
-		// Handle both search and specific node lookup
-		if strings.Count(r.URL.Path, "/") >= 5 { // /api/nodes/{zone}/{net}/{node}
+		path := r.URL.Path
+		pathParts := strings.Split(strings.TrimPrefix(path, "/api/nodes/"), "/")
+		
+		// Route to appropriate handler based on path structure
+		if len(pathParts) >= 4 && pathParts[3] == "history" {
+			// /api/nodes/{zone}/{net}/{node}/history
+			s.GetNodeHistoryHandler(w, r)
+		} else if len(pathParts) >= 4 && pathParts[3] == "changes" {
+			// /api/nodes/{zone}/{net}/{node}/changes
+			s.GetNodeChangesHandler(w, r)
+		} else if len(pathParts) >= 4 && pathParts[3] == "timeline" {
+			// /api/nodes/{zone}/{net}/{node}/timeline
+			s.GetNodeTimelineHandler(w, r)
+		} else if strings.Count(path, "/") >= 5 {
+			// /api/nodes/{zone}/{net}/{node}
 			s.GetNodeHandler(w, r)
 		} else {
 			s.SearchNodesHandler(w, r)

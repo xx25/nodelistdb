@@ -585,3 +585,335 @@ func parseInterfaceToIntArray(v interface{}) []int {
 		return []int{}
 	}
 }
+
+// GetNodeHistory retrieves all historical entries for a specific node
+func (s *Storage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+
+	// Query all entries for this node, ordered by date
+	query := `
+	SELECT zone, net, node, nodelist_date, day_number,
+		   system_name, location, sysop_name, phone, node_type, region, max_speed,
+		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		   conflict_sequence, has_conflict
+	FROM nodes
+	WHERE zone = ? AND net = ? AND node = ?
+	ORDER BY nodelist_date ASC, conflict_sequence ASC`
+
+	rows, err := conn.Query(query, zone, net, node)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query node history: %w", err)
+	}
+	defer rows.Close()
+
+	var nodes []database.Node
+	for rows.Next() {
+		var n database.Node
+		var flags, modemFlags, protocols, hosts, emails interface{}
+		var ports interface{}
+
+		err := rows.Scan(
+			&n.Zone, &n.Net, &n.Node, &n.NodelistDate, &n.DayNumber,
+			&n.SystemName, &n.Location, &n.SysopName, &n.Phone,
+			&n.NodeType, &n.Region, &n.MaxSpeed,
+			&n.IsCM, &n.IsMO, &n.HasBinkp, &n.HasTelnet,
+			&n.IsDown, &n.IsHold, &n.IsPvt, &n.IsActive,
+			&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
+			&n.ConflictSequence, &n.HasConflict,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan node history: %w", err)
+		}
+
+		// Parse arrays from DuckDB native format
+		n.Flags = parseInterfaceToStringArray(flags)
+		n.ModemFlags = parseInterfaceToStringArray(modemFlags)
+		n.InternetProtocols = parseInterfaceToStringArray(protocols)
+		n.InternetHostnames = parseInterfaceToStringArray(hosts)
+		n.InternetPorts = parseInterfaceToIntArray(ports)
+		n.InternetEmails = parseInterfaceToStringArray(emails)
+
+		nodes = append(nodes, n)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return nodes, nil
+}
+
+// GetNodeDateRange returns the first and last date when a node was active
+func (s *Storage) GetNodeDateRange(zone, net, node int) (firstDate, lastDate time.Time, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+
+	query := `
+	SELECT MIN(nodelist_date) as first_date, MAX(nodelist_date) as last_date
+	FROM nodes
+	WHERE zone = ? AND net = ? AND node = ?`
+
+	row := conn.QueryRow(query, zone, net, node)
+	
+	err = row.Scan(&firstDate, &lastDate)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return time.Time{}, time.Time{}, fmt.Errorf("node %d:%d/%d not found", zone, net, node)
+		}
+		return time.Time{}, time.Time{}, fmt.Errorf("failed to get node date range: %w", err)
+	}
+
+	return firstDate, lastDate, nil
+}
+
+// NodeSummary represents a summary of a node for search results
+type NodeSummary struct {
+	Zone         int       `json:"zone"`
+	Net          int       `json:"net"`
+	Node         int       `json:"node"`
+	SystemName   string    `json:"system_name"`
+	Location     string    `json:"location"`
+	SysopName    string    `json:"sysop_name"`
+	FirstDate    time.Time `json:"first_date"`
+	LastDate     time.Time `json:"last_date"`
+	CurrentlyActive bool   `json:"currently_active"`
+}
+
+// SearchNodesBySysop finds all nodes associated with a sysop name
+func (s *Storage) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+
+	// Use ILIKE for case-insensitive search
+	query := `
+	WITH node_ranges AS (
+		SELECT 
+			zone, net, node,
+			MIN(nodelist_date) as first_date,
+			MAX(nodelist_date) as last_date,
+			FIRST(system_name ORDER BY nodelist_date DESC) as system_name,
+			FIRST(location ORDER BY nodelist_date DESC) as location,
+			FIRST(sysop_name ORDER BY nodelist_date DESC) as sysop_name
+		FROM nodes
+		WHERE sysop_name ILIKE '%' || ? || '%'
+		GROUP BY zone, net, node
+	)
+	SELECT 
+		nr.zone, nr.net, nr.node, nr.system_name, nr.location, nr.sysop_name,
+		nr.first_date, nr.last_date,
+		CASE WHEN EXISTS (
+			SELECT 1 FROM nodes n 
+			WHERE n.zone = nr.zone AND n.net = nr.net AND n.node = nr.node 
+			AND n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
+		) THEN true ELSE false END as currently_active
+	FROM node_ranges nr
+	ORDER BY nr.first_date DESC
+	LIMIT ?`
+
+	rows, err := conn.Query(query, sysopName, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search nodes by sysop: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeSummary
+	for rows.Next() {
+		var ns NodeSummary
+		err := rows.Scan(
+			&ns.Zone, &ns.Net, &ns.Node,
+			&ns.SystemName, &ns.Location, &ns.SysopName,
+			&ns.FirstDate, &ns.LastDate, &ns.CurrentlyActive,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan node summary: %w", err)
+		}
+		results = append(results, ns)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return results, nil
+}
+
+// GetNodeChanges analyzes the history of a node and returns detected changes
+func (s *Storage) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error) {
+	// Get all historical entries
+	history, err := s.GetNodeHistory(zone, net, node)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(history) == 0 {
+		return nil, nil
+	}
+
+	var changes []database.NodeChange
+	
+	// Add the first appearance
+	changes = append(changes, database.NodeChange{
+		Date:       history[0].NodelistDate,
+		DayNumber:  history[0].DayNumber,
+		ChangeType: "added",
+		Changes:    make(map[string]string),
+		NewNode:    &history[0],
+	})
+
+	// Track changes between consecutive entries
+	for i := 1; i < len(history); i++ {
+		prev := &history[i-1]
+		curr := &history[i]
+
+		// Skip if same date but different conflict sequence
+		if prev.NodelistDate.Equal(curr.NodelistDate) {
+			continue
+		}
+
+		// Check if node was removed (gap in dates)
+		if !isConsecutiveNodelist(prev.NodelistDate, curr.NodelistDate, s) {
+			// Node was removed and then re-added
+			changes = append(changes, database.NodeChange{
+				Date:       getNextNodelistDate(prev.NodelistDate, s),
+				DayNumber:  getNextDayNumber(prev.DayNumber, s),
+				ChangeType: "removed",
+				Changes:    make(map[string]string),
+				OldNode:    prev,
+			})
+			
+			changes = append(changes, database.NodeChange{
+				Date:       curr.NodelistDate,
+				DayNumber:  curr.DayNumber,
+				ChangeType: "added",
+				Changes:    make(map[string]string),
+				NewNode:    curr,
+			})
+			continue
+		}
+
+		// Detect field changes
+		fieldChanges := make(map[string]string)
+
+		if !filter.IgnoreStatus && prev.NodeType != curr.NodeType {
+			fieldChanges["status"] = fmt.Sprintf("%s → %s", prev.NodeType, curr.NodeType)
+		}
+		if !filter.IgnoreName && prev.SystemName != curr.SystemName {
+			fieldChanges["name"] = fmt.Sprintf("%s → %s", prev.SystemName, curr.SystemName)
+		}
+		if !filter.IgnoreLocation && prev.Location != curr.Location {
+			fieldChanges["location"] = fmt.Sprintf("%s → %s", prev.Location, curr.Location)
+		}
+		if !filter.IgnoreSysop && prev.SysopName != curr.SysopName {
+			fieldChanges["sysop"] = fmt.Sprintf("%s → %s", prev.SysopName, curr.SysopName)
+		}
+		if !filter.IgnorePhone && prev.Phone != curr.Phone {
+			fieldChanges["phone"] = fmt.Sprintf("%s → %s", prev.Phone, curr.Phone)
+		}
+		if !filter.IgnoreSpeed && prev.MaxSpeed != curr.MaxSpeed {
+			fieldChanges["speed"] = fmt.Sprintf("%s → %s", prev.MaxSpeed, curr.MaxSpeed)
+		}
+		if !filter.IgnoreFlags && !equalStringSlices(prev.Flags, curr.Flags) {
+			fieldChanges["flags"] = fmt.Sprintf("%v → %v", prev.Flags, curr.Flags)
+		}
+
+		if len(fieldChanges) > 0 {
+			changes = append(changes, database.NodeChange{
+				Date:       curr.NodelistDate,
+				DayNumber:  curr.DayNumber,
+				ChangeType: "modified",
+				Changes:    fieldChanges,
+				OldNode:    prev,
+				NewNode:    curr,
+			})
+		}
+	}
+
+	// Check if node is currently removed
+	lastNode := &history[len(history)-1]
+	if !isCurrentlyActive(lastNode, s) {
+		changes = append(changes, database.NodeChange{
+			Date:       getNextNodelistDate(lastNode.NodelistDate, s),
+			DayNumber:  getNextDayNumber(lastNode.DayNumber, s),
+			ChangeType: "removed",
+			Changes:    make(map[string]string),
+			OldNode:    lastNode,
+		})
+	}
+
+	return changes, nil
+}
+
+// ChangeFilter allows filtering out specific types of changes
+type ChangeFilter struct {
+	IgnoreFlags    bool
+	IgnorePhone    bool
+	IgnoreSpeed    bool
+	IgnoreStatus   bool
+	IgnoreLocation bool
+	IgnoreName     bool
+	IgnoreSysop    bool
+}
+
+// Helper functions
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func isConsecutiveNodelist(date1, date2 time.Time, s *Storage) bool {
+	// Check if there's a nodelist between these two dates
+	conn := s.db.Conn()
+	var count int
+	err := conn.QueryRow(
+		"SELECT COUNT(DISTINCT nodelist_date) FROM nodes WHERE nodelist_date > ? AND nodelist_date < ?",
+		date1, date2,
+	).Scan(&count)
+	
+	return err == nil && count == 0
+}
+
+func getNextNodelistDate(afterDate time.Time, s *Storage) time.Time {
+	conn := s.db.Conn()
+	var nextDate time.Time
+	err := conn.QueryRow(
+		"SELECT MIN(nodelist_date) FROM nodes WHERE nodelist_date > ?",
+		afterDate,
+	).Scan(&nextDate)
+	
+	if err != nil {
+		return afterDate.AddDate(0, 0, 7) // Assume weekly
+	}
+	return nextDate
+}
+
+func getNextDayNumber(afterDay int, s *Storage) int {
+	// Simple increment, could be improved with actual lookup
+	return afterDay + 7
+}
+
+func isCurrentlyActive(node *database.Node, s *Storage) bool {
+	conn := s.db.Conn()
+	var maxDate time.Time
+	err := conn.QueryRow("SELECT MAX(nodelist_date) FROM nodes").Scan(&maxDate)
+	
+	if err != nil {
+		return false
+	}
+	
+	return node.NodelistDate.Equal(maxDate)
+}
