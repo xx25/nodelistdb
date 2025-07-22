@@ -838,6 +838,36 @@ func (s *Storage) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]da
 		if !filter.IgnoreFlags && !equalStringSlices(prev.Flags, curr.Flags) {
 			fieldChanges["flags"] = fmt.Sprintf("%v → %v", prev.Flags, curr.Flags)
 		}
+		
+		// Internet connectivity changes
+		if !filter.IgnoreConnectivity {
+			if prev.HasBinkp != curr.HasBinkp {
+				fieldChanges["binkp"] = fmt.Sprintf("%t → %t", prev.HasBinkp, curr.HasBinkp)
+			}
+			if prev.HasTelnet != curr.HasTelnet {
+				fieldChanges["telnet"] = fmt.Sprintf("%t → %t", prev.HasTelnet, curr.HasTelnet)
+			}
+		}
+		
+		if !filter.IgnoreModemFlags && !equalStringSlices(prev.ModemFlags, curr.ModemFlags) {
+			fieldChanges["modem_flags"] = fmt.Sprintf("%v → %v", prev.ModemFlags, curr.ModemFlags)
+		}
+		
+		if !filter.IgnoreInternetProtocols && !equalStringSlices(prev.InternetProtocols, curr.InternetProtocols) {
+			fieldChanges["internet_protocols"] = fmt.Sprintf("%v → %v", prev.InternetProtocols, curr.InternetProtocols)
+		}
+		
+		if !filter.IgnoreInternetHostnames && !equalStringSlices(prev.InternetHostnames, curr.InternetHostnames) {
+			fieldChanges["internet_hostnames"] = fmt.Sprintf("%v → %v", prev.InternetHostnames, curr.InternetHostnames)
+		}
+		
+		if !filter.IgnoreInternetPorts && !equalIntSlices(prev.InternetPorts, curr.InternetPorts) {
+			fieldChanges["internet_ports"] = fmt.Sprintf("%v → %v", prev.InternetPorts, curr.InternetPorts)
+		}
+		
+		if !filter.IgnoreInternetEmails && !equalStringSlices(prev.InternetEmails, curr.InternetEmails) {
+			fieldChanges["internet_emails"] = fmt.Sprintf("%v → %v", prev.InternetEmails, curr.InternetEmails)
+		}
 
 		if len(fieldChanges) > 0 {
 			changes = append(changes, database.NodeChange{
@@ -868,17 +898,35 @@ func (s *Storage) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]da
 
 // ChangeFilter allows filtering out specific types of changes
 type ChangeFilter struct {
-	IgnoreFlags    bool
-	IgnorePhone    bool
-	IgnoreSpeed    bool
-	IgnoreStatus   bool
-	IgnoreLocation bool
-	IgnoreName     bool
-	IgnoreSysop    bool
+	IgnoreFlags              bool
+	IgnorePhone              bool
+	IgnoreSpeed              bool
+	IgnoreStatus             bool
+	IgnoreLocation           bool
+	IgnoreName               bool
+	IgnoreSysop              bool
+	IgnoreConnectivity       bool // Binkp, Telnet capabilities
+	IgnoreInternetProtocols  bool
+	IgnoreInternetHostnames  bool
+	IgnoreInternetPorts      bool
+	IgnoreInternetEmails     bool
+	IgnoreModemFlags         bool
 }
 
 // Helper functions
 func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func equalIntSlices(a, b []int) bool {
 	if len(a) != len(b) {
 		return false
 	}

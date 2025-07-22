@@ -54,7 +54,7 @@ func NewAdvanced(verbose bool) *AdvancedParser {
 	return &AdvancedParser{
 		Parser: New(verbose),
 		Context: Context{
-			CurrentZone: 1,
+			CurrentZone: 1, // Will be updated based on year in ParseFile
 			CurrentNet:  1,
 		},
 		LegacyFlagMap: map[string]string{
@@ -770,6 +770,17 @@ func (ap *AdvancedParser) ParseFile(filePath string) ([]database.Node, error) {
 func (ap *AdvancedParser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	if ap.verbose {
 		fmt.Printf("Parsing file: %s\n", filepath.Base(filePath))
+	}
+
+	// Extract year from path to determine default zone
+	year := ap.extractYearFromPath(filePath)
+	if year >= 1987 {
+		// For 1987+ nodelists, default to zone 2 if no explicit zone is found
+		ap.Context.CurrentZone = 2
+		ap.Context.CurrentNet = 2
+		if ap.verbose {
+			fmt.Printf("  Year %d detected: defaulting to Zone 2 for nodelists without explicit zone declaration\n", year)
+		}
 	}
 
 	// Read file

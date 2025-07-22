@@ -342,13 +342,19 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse filter options
 	query := r.URL.Query()
 	filter := storage.ChangeFilter{
-		IgnoreFlags:    query.Get("noflags") == "1",
-		IgnorePhone:    query.Get("nophone") == "1",
-		IgnoreSpeed:    query.Get("nospeed") == "1",
-		IgnoreStatus:   query.Get("nostatus") == "1",
-		IgnoreLocation: query.Get("nolocation") == "1",
-		IgnoreName:     query.Get("noname") == "1",
-		IgnoreSysop:    query.Get("nosysop") == "1",
+		IgnoreFlags:              query.Get("noflags") == "1",
+		IgnorePhone:              query.Get("nophone") == "1",
+		IgnoreSpeed:              query.Get("nospeed") == "1",
+		IgnoreStatus:             query.Get("nostatus") == "1",
+		IgnoreLocation:           query.Get("nolocation") == "1",
+		IgnoreName:               query.Get("noname") == "1",
+		IgnoreSysop:              query.Get("nosysop") == "1",
+		IgnoreConnectivity:       query.Get("noconnectivity") == "1",
+		IgnoreInternetProtocols:  query.Get("nointernetprotocols") == "1",
+		IgnoreInternetHostnames:  query.Get("nointernethostnames") == "1",
+		IgnoreInternetPorts:      query.Get("nointernetports") == "1",
+		IgnoreInternetEmails:     query.Get("nointernetemails") == "1",
+		IgnoreModemFlags:         query.Get("nomodemflags") == "1",
 	}
 
 	// Get node changes

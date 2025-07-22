@@ -26,7 +26,7 @@ type Parser struct {
 func New(verbose bool) *Parser {
 	return &Parser{
 		verbose:     verbose,
-		currentZone: 1, // Default zone
+		currentZone: 1, // Default zone (will be updated based on year in ParseFile)
 		currentNet:  1, // Default net
 	}
 }

@@ -298,13 +298,19 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse filter options from query parameters
 	query := r.URL.Query()
 	filter := storage.ChangeFilter{
-		IgnoreFlags:    query.Get("noflags") == "1",
-		IgnorePhone:    query.Get("nophone") == "1",
-		IgnoreSpeed:    query.Get("nospeed") == "1",
-		IgnoreStatus:   query.Get("nostatus") == "1",
-		IgnoreLocation: query.Get("nolocation") == "1",
-		IgnoreName:     query.Get("noname") == "1",
-		IgnoreSysop:    query.Get("nosysop") == "1",
+		IgnoreFlags:              query.Get("noflags") == "1",
+		IgnorePhone:              query.Get("nophone") == "1",
+		IgnoreSpeed:              query.Get("nospeed") == "1",
+		IgnoreStatus:             query.Get("nostatus") == "1",
+		IgnoreLocation:           query.Get("nolocation") == "1",
+		IgnoreName:               query.Get("noname") == "1",
+		IgnoreSysop:              query.Get("nosysop") == "1",
+		IgnoreConnectivity:       query.Get("noconnectivity") == "1",
+		IgnoreInternetProtocols:  query.Get("nointernetprotocols") == "1",
+		IgnoreInternetHostnames:  query.Get("nointernethostnames") == "1",
+		IgnoreInternetPorts:      query.Get("nointernetports") == "1",
+		IgnoreInternetEmails:     query.Get("nointernetemails") == "1",
+		IgnoreModemFlags:         query.Get("nomodemflags") == "1",
 	}
 	
 	// Get changes
@@ -512,7 +518,15 @@ func (s *Server) getTemplate(name string) string {
                     
                     <div class="form-group">
                         <label for="zone">Zone:</label>
-                        <input type="number" id="zone" name="zone" placeholder="e.g. 1" min="1">
+                        <select id="zone" name="zone">
+                            <option value="">All Zones</option>
+                            <option value="1">Zone 1 - United States and Canada</option>
+                            <option value="2">Zone 2 - Europe, Former Soviet Union, and Israel</option>
+                            <option value="3">Zone 3 - Australasia (includes former Zone 6 nodes)</option>
+                            <option value="4">Zone 4 - Latin America (except Puerto Rico)</option>
+                            <option value="5">Zone 5 - Africa</option>
+                            <option value="6">Zone 6 - Asia (removed July 2007, nodes moved to Zone 3)</option>
+                        </select>
                     </div>
                     
                     <div class="form-group">
@@ -747,69 +761,114 @@ func (s *Server) getTemplate(name string) string {
 
 	case "sysop_search":
 		return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
-        <h1>{{.Title}}</h1>
+        <header>
+            <h1>{{.Title}}</h1>
+            <p class="subtitle">Find all nodes operated by a specific sysop</p>
+        </header>
+        
         <nav>
-            <a href="/">Home</a> | 
-            <a href="/search">Search Nodes</a> | 
-            <a href="/search/sysop">Search by Sysop</a> | 
-            <a href="/stats">Statistics</a>
+            <div class="nav-container">
+                <a href="/">🏠 Home</a>
+                <a href="/search">🔍 Search Nodes</a>
+                <a href="/search/sysop" class="active">👤 Search Sysops</a>
+                <a href="/stats">📊 Statistics</a>
+            </div>
         </nav>
         
         <div class="content">
-            <form method="post">
-                <div class="form-group">
-                    <label for="sysop_name">Sysop Name:</label>
-                    <input type="text" id="sysop_name" name="sysop_name" value="{{.SysopName}}" placeholder="e.g. John Doe or John_Doe" required>
-                    <small style="color: var(--text-secondary); margin-top: 0.25rem; display: block;">
-                        💡 You can use either spaces or underscores - both "John Doe" and "John_Doe" will work
-                    </small>
-                </div>
+            <div class="card">
+                <form method="post" class="search-form">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label for="sysop_name">Sysop Name:</label>
+                        <input type="text" id="sysop_name" name="sysop_name" value="{{.SysopName}}" placeholder="e.g. John Doe or John_Doe" required>
+                        <small style="color: var(--text-secondary); margin-top: 0.25rem; display: block;">
+                            💡 You can use either spaces or underscores - both "John Doe" and "John_Doe" will work
+                        </small>
+                    </div>
+                    
+                    <div class="form-group" style="align-self: end;">
+                        <button type="submit" class="btn">👤 Search Sysops</button>
+                    </div>
+                </form>
                 
-                <button type="submit">Search</button>
-            </form>
+                <div style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: var(--radius); font-size: 0.9rem; color: var(--text-secondary);">
+                    💡 <strong>Tip:</strong> Search will find all nodes that have ever been operated by this sysop, including historical records.
+                </div>
+            </div>
             
             {{if .Error}}
-                <div class="error">Error: {{.Error}}</div>
+                <div class="alert alert-error">
+                    <strong>Error:</strong> {{.Error}}
+                </div>
             {{end}}
             
             {{if .Nodes}}
-                <h2>Results ({{.Count}} nodes found)</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Address</th>
-                            <th>System Name</th>
-                            <th>Location</th>
-                            <th>Sysop</th>
-                            <th>Active Period</th>
-                            <th>Currently Active</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range .Nodes}}
-                        <tr>
-                            <td><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></td>
-                            <td>{{.SystemName}}</td>
-                            <td>{{.Location}}</td>
-                            <td>{{.SysopName}}</td>
-                            <td>{{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}</td>
-                            <td>{{if .CurrentlyActive}}Yes{{else}}No{{end}}</td>
-                            <td><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">View History</a></td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
+                <div class="card">
+                    <h2 style="color: var(--text-primary); margin-bottom: 1rem;">
+                        Search Results 
+                        <span class="badge badge-info" style="font-size: 0.8rem; margin-left: 0.5rem;">
+                            {{.Count}} nodes found
+                        </span>
+                    </h2>
+                    
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Address</th>
+                                    <th>System Name</th>
+                                    <th>Location</th>
+                                    <th>Sysop</th>
+                                    <th>Active Period</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range .Nodes}}
+                                <tr>
+                                    <td>
+                                        <strong>
+                                            <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a>
+                                        </strong>
+                                    </td>
+                                    <td>{{if .SystemName}}{{.SystemName}}{{else}}<em>-</em>{{end}}</td>
+                                    <td>{{if .Location}}{{.Location}}{{else}}<em>-</em>{{end}}</td>
+                                    <td>{{if .SysopName}}{{.SysopName}}{{else}}<em>-</em>{{end}}</td>
+                                    <td style="font-size: 0.9rem; color: var(--text-secondary);">
+                                        {{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}
+                                    </td>
+                                    <td>
+                                        {{if .CurrentlyActive}}
+                                            <span class="badge badge-success">Active</span>
+                                        {{else}}
+                                            <span class="badge badge-warning">Inactive</span>
+                                        {{end}}
+                                    </td>
+                                    <td>
+                                        <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                                            📈 History
+                                        </a>
+                                    </td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             {{end}}
         </div>
     </div>
+    <script src="/static/app.js"></script>
 </body>
 </html>`
 
@@ -847,6 +906,12 @@ func (s *Server) getTemplate(name string) string {
                     <label><input type="checkbox" name="nolocation" value="1" {{if .Filter.IgnoreLocation}}checked{{end}}> Ignore location changes</label>
                     <label><input type="checkbox" name="noname" value="1" {{if .Filter.IgnoreName}}checked{{end}}> Ignore name changes</label>
                     <label><input type="checkbox" name="nosysop" value="1" {{if .Filter.IgnoreSysop}}checked{{end}}> Ignore sysop changes</label>
+                    <label><input type="checkbox" name="noconnectivity" value="1" {{if .Filter.IgnoreConnectivity}}checked{{end}}> Ignore connectivity changes (Binkp/Telnet)</label>
+                    <label><input type="checkbox" name="nomodemflags" value="1" {{if .Filter.IgnoreModemFlags}}checked{{end}}> Ignore modem flag changes</label>
+                    <label><input type="checkbox" name="nointernetprotocols" value="1" {{if .Filter.IgnoreInternetProtocols}}checked{{end}}> Ignore internet protocol changes</label>
+                    <label><input type="checkbox" name="nointernethostnames" value="1" {{if .Filter.IgnoreInternetHostnames}}checked{{end}}> Ignore internet hostname changes</label>
+                    <label><input type="checkbox" name="nointernetports" value="1" {{if .Filter.IgnoreInternetPorts}}checked{{end}}> Ignore internet port changes</label>
+                    <label><input type="checkbox" name="nointernetemails" value="1" {{if .Filter.IgnoreInternetEmails}}checked{{end}}> Ignore internet email changes</label>
                 </div>
                 <button type="submit">Apply Filters</button>
             </form>
@@ -864,18 +929,136 @@ func (s *Server) getTemplate(name string) string {
                         {{if eq .ChangeType "added"}}
                             <h4>✅ Node added to nodelist</h4>
                             {{if .NewNode}}
-                            <p><strong>{{.NewNode.SystemName}}</strong> - {{.NewNode.Location}} ({{.NewNode.SysopName}})</p>
+                            <div class="node-info">
+                                <div class="info-item">
+                                    <strong>System Name</strong>
+                                    {{if .NewNode.SystemName}}{{.NewNode.SystemName}}{{else}}<em>-</em>{{end}}
+                                </div>
+                                <div class="info-item">
+                                    <strong>Location</strong>
+                                    {{if .NewNode.Location}}{{.NewNode.Location}}{{else}}<em>-</em>{{end}}
+                                </div>
+                                <div class="info-item">
+                                    <strong>Sysop</strong>
+                                    {{if .NewNode.SysopName}}{{.NewNode.SysopName}}{{else}}<em>-</em>{{end}}
+                                </div>
+                                <div class="info-item">
+                                    <strong>Phone</strong>
+                                    {{if .NewNode.Phone}}{{.NewNode.Phone}}{{else}}<em>-</em>{{end}}
+                                </div>
+                                <div class="info-item">
+                                    <strong>Node Type</strong>
+                                    {{if eq .NewNode.NodeType "Zone"}}<span class="badge badge-error">Zone</span>
+                                    {{else if eq .NewNode.NodeType "Region"}}<span class="badge badge-warning">Region</span>
+                                    {{else if eq .NewNode.NodeType "Host"}}<span class="badge badge-info">Host</span>
+                                    {{else if eq .NewNode.NodeType "Hub"}}<span class="badge badge-success">Hub</span>
+                                    {{else if eq .NewNode.NodeType "Pvt"}}<span class="badge badge-warning">Pvt</span>
+                                    {{else if eq .NewNode.NodeType "Down"}}<span class="badge badge-error">Down</span>
+                                    {{else if eq .NewNode.NodeType "Hold"}}<span class="badge badge-warning">Hold</span>
+                                    {{else}}{{.NewNode.NodeType}}{{end}}
+                                </div>
+                                <div class="info-item">
+                                    <strong>Max Speed</strong>
+                                    {{if .NewNode.MaxSpeed}}{{.NewNode.MaxSpeed}}{{else}}<em>-</em>{{end}}
+                                </div>
+                                {{if .NewNode.Region}}
+                                <div class="info-item">
+                                    <strong>Region</strong>
+                                    {{.NewNode.Region}}
+                                </div>
+                                {{end}}
+                                <div class="info-item">
+                                    <strong>Capabilities</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{if .NewNode.IsCM}}<span class="badge badge-success">CM</span>{{end}}
+                                        {{if .NewNode.IsMO}}<span class="badge badge-success">MO</span>{{end}}
+                                        {{if .NewNode.HasBinkp}}<span class="badge badge-info">Binkp</span>{{end}}
+                                        {{if .NewNode.HasTelnet}}<span class="badge badge-info">Telnet</span>{{end}}
+                                        {{if .NewNode.IsDown}}<span class="badge badge-error">Down</span>{{end}}
+                                        {{if .NewNode.IsHold}}<span class="badge badge-warning">Hold</span>{{end}}
+                                        {{if .NewNode.IsPvt}}<span class="badge badge-warning">Private</span>{{end}}
+                                        {{if not (or .NewNode.IsCM .NewNode.IsMO .NewNode.HasBinkp .NewNode.HasTelnet .NewNode.IsDown .NewNode.IsHold .NewNode.IsPvt)}}<em>None specified</em>{{end}}
+                                    </div>
+                                </div>
+                                {{if .NewNode.Flags}}
+                                <div class="info-item" style="grid-column: span 2;">
+                                    <strong>Flags</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{range .NewNode.Flags}}<span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>{{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                                {{if .NewNode.ModemFlags}}
+                                <div class="info-item" style="grid-column: span 2;">
+                                    <strong>Modem Flags</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{range .NewNode.ModemFlags}}<span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>{{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                                {{if .NewNode.InternetProtocols}}
+                                <div class="info-item" style="grid-column: span 2;">
+                                    <strong>Internet Protocols</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{range .NewNode.InternetProtocols}}<span class="badge badge-success" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>{{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                                {{if .NewNode.InternetHostnames}}
+                                <div class="info-item" style="grid-column: span 2;">
+                                    <strong>Internet Hostnames</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{range .NewNode.InternetHostnames}}<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9rem; margin-right: 0.5rem;">{{.}}</code>{{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                                {{if .NewNode.InternetPorts}}
+                                <div class="info-item">
+                                    <strong>Internet Ports</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{range .NewNode.InternetPorts}}<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9rem; margin-right: 0.5rem;">{{.}}</code>{{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                                {{if .NewNode.InternetEmails}}
+                                <div class="info-item" style="grid-column: span 2;">
+                                    <strong>Internet Emails</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{range .NewNode.InternetEmails}}<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9rem; margin-right: 0.5rem;">{{.}}</code>{{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                            </div>
                             {{end}}
                         {{else if eq .ChangeType "removed"}}
                             <h4>❌ Node removed from nodelist</h4>
                             <p style="color: var(--text-secondary);">Node was no longer listed in subsequent nodelists</p>
                         {{else if eq .ChangeType "modified"}}
                             <h4>📝 Node information changed</h4>
-                            <ul>
+                            <div class="change-list">
                                 {{range $field, $change := .Changes}}
-                                <li><strong>{{$field}}:</strong> {{$change}}</li>
+                                <div class="change-item">
+                                    <strong>
+                                        {{if eq $field "binkp"}}🌐 Binkp Support
+                                        {{else if eq $field "telnet"}}📡 Telnet Support
+                                        {{else if eq $field "modem_flags"}}📞 Modem Flags
+                                        {{else if eq $field "internet_protocols"}}🌐 Internet Protocols
+                                        {{else if eq $field "internet_hostnames"}}🏠 Internet Hostnames
+                                        {{else if eq $field "internet_ports"}}🔌 Internet Ports
+                                        {{else if eq $field "internet_emails"}}📧 Internet Emails
+                                        {{else if eq $field "status"}}📊 Status
+                                        {{else if eq $field "name"}}💻 System Name
+                                        {{else if eq $field "location"}}🌍 Location
+                                        {{else if eq $field "sysop"}}👤 Sysop
+                                        {{else if eq $field "phone"}}📞 Phone
+                                        {{else if eq $field "speed"}}⚡ Speed
+                                        {{else if eq $field "flags"}}🏷️ Flags
+                                        {{else}}{{$field}}{{end}}:
+                                    </strong>
+                                    <span class="change-value">{{$change}}</span>
+                                </div>
                                 {{end}}
-                            </ul>
+                            </div>
                         {{end}}
                     </div>
                 </div>
@@ -1048,6 +1231,23 @@ nav a.active {
 }
 
 .form-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+}
+
+.form-group select {
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius);
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    background: var(--card-bg);
+    width: 100%;
+    cursor: pointer;
+}
+
+.form-group select:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
@@ -1317,6 +1517,29 @@ table a:hover {
     color: var(--text-secondary);
 }
 
+.change-list {
+    margin: 1rem 0;
+}
+
+.change-item {
+    margin: 0.75rem 0;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.change-item:last-child {
+    border-bottom: none;
+}
+
+.change-value {
+    color: var(--text-secondary);
+    font-family: monospace;
+    background: #f8fafc;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    margin-left: 0.5rem;
+}
+
 .added .timeline-content {
     border-left: 4px solid var(--success-color);
 }
@@ -1463,7 +1686,17 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Clear full address when individual fields are used
     if (zoneInput || netInput || nodeInput) {
-        [zoneInput, netInput, nodeInput].forEach(function(input) {
+        // Handle zone select dropdown
+        if (zoneInput) {
+            zoneInput.addEventListener('change', function() {
+                if (this.value && fullAddressInput) {
+                    fullAddressInput.value = '';
+                }
+            });
+        }
+        
+        // Handle net and node input fields
+        [netInput, nodeInput].forEach(function(input) {
             if (input) {
                 input.addEventListener('input', function() {
                     if (this.value.trim() && fullAddressInput) {
