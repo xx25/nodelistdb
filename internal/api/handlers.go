@@ -223,6 +223,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.URL.Query().Get("date")
 	var date time.Time
 	var err error
+	var actualDate time.Time
 
 	if dateStr != "" {
 		date, err = time.Parse("2006-01-02", dateStr)
@@ -230,20 +231,38 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid date format. Use YYYY-MM-DD", http.StatusBadRequest)
 			return
 		}
+		// Find the nearest available date
+		actualDate, err = s.storage.GetNearestAvailableDate(date)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to find available date: %v", err), http.StatusInternalServerError)
+			return
+		}
 	} else {
-		// Default to today
-		date = time.Now().Truncate(24 * time.Hour)
+		// Default to latest available date
+		actualDate, err = s.storage.GetLatestStatsDate()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get latest date: %v", err), http.StatusInternalServerError)
+			return
+		}
 	}
 
-	// Get statistics
-	stats, err := s.storage.GetStats(date)
+	// Get statistics for the actual date
+	stats, err := s.storage.GetStats(actualDate)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get statistics: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	// Include information about date selection in the response
+	response := map[string]interface{}{
+		"stats":         stats,
+		"requested_date": dateStr,
+		"actual_date":   actualDate.Format("2006-01-02"),
+		"date_adjusted": dateStr != "" && actualDate.Format("2006-01-02") != dateStr,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	json.NewEncoder(w).Encode(response)
 }
 
 // GetNodeHistoryHandler returns the complete history of a node
@@ -502,12 +521,42 @@ func (s *Server) SearchNodesBySysopHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(response)
 }
 
+// GetAvailableDatesHandler returns all available dates for stats
+// GET /api/stats/dates
+func (s *Server) GetAvailableDatesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	dates, err := s.storage.GetAvailableDates()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get available dates: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Format dates as strings for JSON response
+	formattedDates := make([]string, len(dates))
+	for i, date := range dates {
+		formattedDates[i] = date.Format("2006-01-02")
+	}
+
+	response := map[string]interface{}{
+		"dates": formattedDates,
+		"count": len(formattedDates),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // SetupRoutes sets up HTTP routes for the API server
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	// API routes
 	mux.HandleFunc("/api/health", s.HealthHandler)
 	mux.HandleFunc("/api/nodes", s.SearchNodesHandler)
 	mux.HandleFunc("/api/stats", s.StatsHandler)
+	mux.HandleFunc("/api/stats/dates", s.GetAvailableDatesHandler)
 	mux.HandleFunc("/api/nodes/search/sysop", s.SearchNodesBySysopHandler)
 	
 	// Node lookup with path parameters

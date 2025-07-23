@@ -1287,6 +1287,88 @@ func getNextDayNumber(afterDay int, s *Storage) int {
 	return afterDay + 7
 }
 
+// GetAvailableDates returns all unique dates that have nodelist data
+func (s *Storage) GetAvailableDates() ([]time.Time, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+	rows, err := conn.Query("SELECT DISTINCT nodelist_date FROM nodes ORDER BY nodelist_date DESC")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get available dates: %w", err)
+	}
+	defer rows.Close()
+
+	var dates []time.Time
+	for rows.Next() {
+		var date time.Time
+		if err := rows.Scan(&date); err != nil {
+			return nil, fmt.Errorf("failed to scan date: %w", err)
+		}
+		dates = append(dates, date)
+	}
+
+	return dates, nil
+}
+
+// GetNearestAvailableDate finds the closest available date to the requested date
+func (s *Storage) GetNearestAvailableDate(requestedDate time.Time) (time.Time, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+	
+	// First check if the exact date exists
+	var count int
+	err := conn.QueryRow("SELECT COUNT(*) FROM nodes WHERE nodelist_date = ?", requestedDate).Scan(&count)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to check if date exists: %w", err)
+	}
+	if count > 0 {
+		return requestedDate, nil
+	}
+
+	// Find the nearest date - get one before and one after
+	var beforeDate, afterDate sql.NullTime
+	
+	// Get the closest date before
+	err = conn.QueryRow(`
+		SELECT MAX(nodelist_date) 
+		FROM nodes 
+		WHERE nodelist_date < ?
+	`, requestedDate).Scan(&beforeDate)
+	if err != nil && err != sql.ErrNoRows {
+		return time.Time{}, fmt.Errorf("failed to get date before: %w", err)
+	}
+
+	// Get the closest date after
+	err = conn.QueryRow(`
+		SELECT MIN(nodelist_date) 
+		FROM nodes 
+		WHERE nodelist_date > ?
+	`, requestedDate).Scan(&afterDate)
+	if err != nil && err != sql.ErrNoRows {
+		return time.Time{}, fmt.Errorf("failed to get date after: %w", err)
+	}
+
+	// Return the closest one, or fall back to latest if none found
+	if beforeDate.Valid && afterDate.Valid {
+		beforeDiff := requestedDate.Sub(beforeDate.Time)
+		afterDiff := afterDate.Time.Sub(requestedDate)
+		if beforeDiff <= afterDiff {
+			return beforeDate.Time, nil
+		}
+		return afterDate.Time, nil
+	} else if beforeDate.Valid {
+		return beforeDate.Time, nil
+	} else if afterDate.Valid {
+		return afterDate.Time, nil
+	}
+
+	// If no dates found at all, return the latest available date
+	return s.GetLatestStatsDate()
+}
+
 func isCurrentlyActive(node *database.Node, s *Storage) bool {
 	conn := s.db.Conn()
 	var maxDate time.Time

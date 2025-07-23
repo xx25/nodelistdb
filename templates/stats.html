@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/datepicker.js"></script>
 </head>
 <body>
     <div class="container">
@@ -24,6 +25,36 @@
         </nav>
         
         <div class="content">
+            <!-- Date Selection Widget -->
+            {{if .AvailableDates}}
+            <div class="card">
+                <h3 style="color: var(--text-primary); margin-bottom: 1rem;">📅 Select Date</h3>
+                <div id="date-picker-container"></div>
+                
+                {{if .DateAdjusted}}
+                <div class="alert" style="margin-top: 1rem; padding: 0.75rem; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.375rem; color: #92400e;">
+                    <strong>📅 Date Adjusted:</strong> Data for the requested date was not available. Showing statistics for the nearest available date: <strong>{{.ActualDate}}</strong>
+                </div>
+                {{end}}
+                
+                <script>
+                    // Initialize the fancy date picker with available dates
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const availableDates = [
+                            {{range .AvailableDates}}
+                            "{{.Format "2006-01-02"}}",
+                            {{end}}
+                        ];
+                        
+                        const currentDate = "{{.ActualDate}}";
+                        
+                        // Create the date picker instance
+                        new NodelistDatePicker('date-picker-container', availableDates, currentDate);
+                    });
+                </script>
+            </div>
+            {{end}}
+
             {{if .NoData}}
                 <div class="card">
                     <div class="alert alert-error">
@@ -43,6 +74,7 @@
                 <div class="card">
                     <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">
                         📊 Network Statistics for {{.Stats.Date.Format "January 2, 2006"}}
+                        {{if .DateAdjusted}}<span style="font-size: 0.8em; color: var(--warning-color); font-weight: normal;">(adjusted)</span>{{end}}
                     </h2>
                     
                     <div class="stats-grid">
