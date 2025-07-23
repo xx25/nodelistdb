@@ -284,8 +284,8 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 	// Compute boolean flags
 	isCM := p.hasFlag(flags, "CM")
 	isMO := p.hasFlag(flags, "MO") 
-	hasBinkp := len(internetProtocols) > 0 && (p.hasProtocol(internetProtocols, "IBN") || p.hasProtocol(internetProtocols, "BND"))
-	hasTelnet := len(internetProtocols) > 0 && (p.hasProtocol(internetProtocols, "ITN") || p.hasProtocol(internetProtocols, "TEL"))
+	hasBinkp := p.hasProtocol(internetProtocols, "IBN") || p.hasProtocol(internetProtocols, "BND") || p.hasFlag(flags, "IBN") || p.hasFlag(flags, "BND")
+	hasTelnet := p.hasProtocol(internetProtocols, "ITN") || p.hasProtocol(internetProtocols, "TEL") || p.hasFlag(flags, "ITN") || p.hasFlag(flags, "TEL")
 	isDown := nodeType == "Down"
 	isHold := nodeType == "Hold"
 	isPvt := nodeType == "Pvt"
@@ -377,11 +377,78 @@ func (p *Parser) parseFlags(flagsStr string) ([]string, []string, []string, []in
 						internetPorts = append(internetPorts, port)
 					}
 				}
+			case "INA": // Internet Address (hostname)
+				internetProtocols = append(internetProtocols, flagName)
+				if len(flagParts) > 1 {
+					hostname := strings.TrimSpace(flagParts[1])
+					if hostname != "" {
+						internetHostnames = append(internetHostnames, hostname)
+					}
+				}
 			case "IEM": // Email
 				if len(flagParts) > 1 {
 					email := strings.TrimSpace(flagParts[1])
 					if email != "" {
 						internetEmails = append(internetEmails, email)
+					}
+				}
+			case "IMI": // Mail via Internet (email)
+				if len(flagParts) > 1 {
+					email := strings.TrimSpace(flagParts[1])
+					if email != "" {
+						internetEmails = append(internetEmails, email)
+					}
+				}
+			case "IFC": // Raw FidoNet over Internet
+				internetProtocols = append(internetProtocols, flagName)
+				if len(flagParts) > 1 {
+					hostname := strings.TrimSpace(flagParts[1])
+					if hostname != "" {
+						internetHostnames = append(internetHostnames, hostname)
+					}
+				}
+				if len(flagParts) > 2 {
+					if port, err := strconv.Atoi(strings.TrimSpace(flagParts[2])); err == nil {
+						internetPorts = append(internetPorts, port)
+					}
+				}
+			case "IFT": // Telnet to FidoNet
+				internetProtocols = append(internetProtocols, flagName)
+				if len(flagParts) > 1 {
+					hostname := strings.TrimSpace(flagParts[1])
+					if hostname != "" {
+						internetHostnames = append(internetHostnames, hostname)
+					}
+				}
+				if len(flagParts) > 2 {
+					if port, err := strconv.Atoi(strings.TrimSpace(flagParts[2])); err == nil {
+						internetPorts = append(internetPorts, port)
+					}
+				}
+			case "IVM": // VModem over Internet
+				internetProtocols = append(internetProtocols, flagName)
+				if len(flagParts) > 1 {
+					hostname := strings.TrimSpace(flagParts[1])
+					if hostname != "" {
+						internetHostnames = append(internetHostnames, hostname)
+					}
+				}
+				if len(flagParts) > 2 {
+					if port, err := strconv.Atoi(strings.TrimSpace(flagParts[2])); err == nil {
+						internetPorts = append(internetPorts, port)
+					}
+				}
+			case "ITX": // Txy over Internet  
+				internetProtocols = append(internetProtocols, flagName)
+				if len(flagParts) > 1 {
+					hostname := strings.TrimSpace(flagParts[1])
+					if hostname != "" {
+						internetHostnames = append(internetHostnames, hostname)
+					}
+				}
+				if len(flagParts) > 2 {
+					if port, err := strconv.Atoi(strings.TrimSpace(flagParts[2])); err == nil {
+						internetPorts = append(internetPorts, port)
 					}
 				}
 			default:
@@ -390,7 +457,14 @@ func (p *Parser) parseFlags(flagsStr string) ([]string, []string, []string, []in
 			}
 		} else {
 			// Simple flags without parameters
-			flags = append(flags, part)
+			// Check if it's an internet protocol flag and add to both arrays
+			switch part {
+			case "IBN", "BND", "ITN", "TEL", "IFC", "IFT", "IVM", "ITX", "INA":
+				internetProtocols = append(internetProtocols, part)
+				flags = append(flags, part)
+			default:
+				flags = append(flags, part)
+			}
 		}
 	}
 	

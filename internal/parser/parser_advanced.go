@@ -571,8 +571,8 @@ func (ap *AdvancedParser) parseAdvancedLine(line string, nodelistDate time.Time,
 	// Compute boolean flags based on comprehensive flag analysis
 	isCM := ap.hasFlag(flags, "CM")
 	isMO := ap.hasFlag(flags, "MO") 
-	hasBinkp := len(internetProtocols) > 0 && (ap.hasProtocol(internetProtocols, "IBN") || ap.hasProtocol(internetProtocols, "BND"))
-	hasTelnet := len(internetProtocols) > 0 && (ap.hasProtocol(internetProtocols, "ITN") || ap.hasProtocol(internetProtocols, "TEL"))
+	hasBinkp := ap.hasProtocol(internetProtocols, "IBN") || ap.hasProtocol(internetProtocols, "BND") || ap.hasFlag(flags, "IBN") || ap.hasFlag(flags, "BND")
+	hasTelnet := ap.hasProtocol(internetProtocols, "ITN") || ap.hasProtocol(internetProtocols, "TEL") || ap.hasFlag(flags, "ITN") || ap.hasFlag(flags, "TEL")
 	isDown := nodeType == "Down"
 	isHold := nodeType == "Hold"
 	isPvt := nodeType == "Pvt"
