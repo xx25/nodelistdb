@@ -167,6 +167,19 @@
                     <strong>Example:</strong><br>
                     <code>GET /api/stats?date=2023-12-01</code>
                 </div>
+
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Available Dates</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/stats/dates</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get a list of all available dates for which statistics data exists in the database.</p>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example:</strong><br>
+                    <code>GET /api/stats/dates</code><br><br>
+                    <strong>Response:</strong><br>
+                    <code>{"dates": ["2023-01-07", "2023-01-14", "..."], "count": 52}</code>
+                </div>
             </div>
 
             <div class="card">
@@ -199,7 +212,10 @@ curl "http://localhost:8080/api/nodes/2/5001/100"<br><br>
 curl "http://localhost:8080/api/nodes/search/sysop?name=John_Doe"<br><br>
 
 # Get network statistics<br>
-curl "http://localhost:8080/api/stats"
+curl "http://localhost:8080/api/stats"<br><br>
+
+# Get available dates for statistics<br>
+curl "http://localhost:8080/api/stats/dates"
                 </div>
 
                 <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Response Format</h3>
