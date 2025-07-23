@@ -44,67 +44,7 @@ func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 
 // SearchHandler handles node search
 func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
-	var nodes []database.Node
-	var count int
-	var searchErr error
-	
-	if r.Method == "POST" {
-		r.ParseForm()
-		
-		// Check if full address was provided
-		if fullAddress := r.FormValue("full_address"); fullAddress != "" {
-			zone, net, node, err := parseNodeAddress(fullAddress)
-			if err != nil {
-				searchErr = fmt.Errorf("Invalid address format: %v", err)
-			} else {
-				latestOnly := true
-				filter := database.NodeFilter{
-					Zone:       &zone,
-					Net:        &net,
-					Node:       &node,
-					LatestOnly: &latestOnly,
-				}
-				nodes, searchErr = s.storage.GetNodes(filter)
-				count = len(nodes)
-			}
-		} else {
-			// Build filter from individual fields
-			latestOnly := true
-			filter := database.NodeFilter{
-				LatestOnly: &latestOnly,
-			}
-			
-			if zone := r.FormValue("zone"); zone != "" {
-				if z, err := strconv.Atoi(zone); err == nil {
-					filter.Zone = &z
-				}
-			}
-			
-			if net := r.FormValue("net"); net != "" {
-				if n, err := strconv.Atoi(net); err == nil {
-					filter.Net = &n
-				}
-			}
-			
-			if node := r.FormValue("node"); node != "" {
-				if n, err := strconv.Atoi(node); err == nil {
-					filter.Node = &n
-				}
-			}
-			
-			if systemName := r.FormValue("system_name"); systemName != "" {
-				filter.SystemName = &systemName
-			}
-			
-			if location := r.FormValue("location"); location != "" {
-				filter.Location = &location
-			}
-			
-			filter.Limit = 100
-			nodes, searchErr = s.storage.GetNodes(filter)
-			count = len(nodes)
-		}
-	}
+	nodes, count, searchErr := s.performNodeSearch(r)
 	
 	data := struct {
 		Title string
@@ -121,6 +61,36 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	if err := s.templates["search"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// performNodeSearch handles the actual node search logic
+func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error) {
+	if r.Method != "POST" {
+		return nil, 0, nil
+	}
+	
+	r.ParseForm()
+	
+	var filter database.NodeFilter
+	var err error
+	
+	// Check if full address was provided
+	if fullAddress := r.FormValue("full_address"); fullAddress != "" {
+		filter, err = buildNodeFilterFromAddress(fullAddress)
+		if err != nil {
+			return nil, 0, fmt.Errorf("Invalid address format: %v", err)
+		}
+	} else {
+		// Build filter from individual fields
+		filter = buildNodeFilterFromForm(r)
+	}
+	
+	nodes, err := s.storage.GetNodes(filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	
+	return nodes, len(nodes), nil
 }
 
 // StatsHandler handles statistics page
