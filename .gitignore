@@ -51,4 +51,3 @@ debug-*.sh
 debug_*.go
 check_*.go
 CLAUDE.md
-test.db

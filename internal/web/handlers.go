@@ -1,7 +1,6 @@
 package web
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -35,31 +34,10 @@ func New(storage *storage.Storage) *Server {
 
 // loadTemplates loads HTML templates
 func (s *Server) loadTemplates() {
-	templates := []string{"index", "search", "node", "stats", "sysop_search", "node_history", "api_help", "analytics", "v34_analytics", "binkp_analytics", "sysop_analytics", "network_lifecycle"}
+	templates := []string{"index", "search", "node", "stats", "sysop_search", "node_history", "api_help"}
 	
 	// Create function map for template functions
 	funcMap := template.FuncMap{
-		"getZoneDescription": getZoneDescription,
-		"add": func(a, b int) int {
-			return a + b
-		},
-		"float64": func(i interface{}) float64 {
-			switch v := i.(type) {
-			case int:
-				return float64(v)
-			case float64:
-				return v
-			default:
-				return 0
-			}
-		},
-		"json": func(v interface{}) string {
-			b, _ := json.Marshal(v)
-			return string(b)
-		},
-		"printf": func(format string, args ...interface{}) string {
-			return fmt.Sprintf(format, args...)
-		},
 		"div": func(a, b interface{}) float64 {
 			switch a := a.(type) {
 			case int:
@@ -209,98 +187,52 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 // StatsHandler handles statistics page
 func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
-	// Get available dates for the date picker
-	availableDates, err := s.storage.GetAvailableDates()
-	if err != nil || len(availableDates) == 0 {
+	// Try to get stats for the most recent date with data
+	latestDate, err := s.storage.GetLatestStatsDate()
+	if err != nil {
 		// No data at all
 		data := struct {
-			Title          string
-			Stats          *database.NetworkStats
-			Error          string
-			NoData         bool
-			AvailableDates []time.Time
-			SelectedDate   time.Time
-			RequestedDate  string
-			DateMessage    string
+			Title string
+			Stats *database.NetworkStats
+			Error string
+			NoData bool
 		}{
-			Title:          "Network Statistics",
-			Stats:          nil,
-			Error:          "No nodelist data available in the database",
-			NoData:         true,
-			AvailableDates: []time.Time{},
-			SelectedDate:   time.Time{},
-			RequestedDate:  "",
-			DateMessage:    "",
+			Title: "Network Statistics",
+			Stats: nil,
+			Error: "No nodelist data available in the database",
+			NoData: true,
 		}
 		s.templates["stats"].Execute(w, data)
 		return
 	}
-
-	// Default to latest date
-	selectedDate := availableDates[0]
-	requestedDate := ""
-	dateMessage := ""
-
-	// Check if a specific date was requested
-	if dateParam := r.URL.Query().Get("date"); dateParam != "" {
-		requestedDate = dateParam
-		if parsedDate, err := time.Parse("2006-01-02", dateParam); err == nil {
-			// Find closest available date
-			if closestDate, err := s.storage.GetClosestAvailableDate(parsedDate); err == nil {
-				selectedDate = closestDate
-				if !selectedDate.Equal(parsedDate) {
-					dateMessage = fmt.Sprintf("Requested date %s not available. Showing closest available date: %s", 
-						parsedDate.Format("2006-01-02"), selectedDate.Format("2006-01-02"))
-				}
-			}
-		} else {
-			dateMessage = fmt.Sprintf("Invalid date format '%s'. Please use YYYY-MM-DD format.", dateParam)
-		}
-	}
 	
-	stats, err := s.storage.GetStats(selectedDate)
+	stats, err := s.storage.GetStats(latestDate)
 	if err != nil {
 		data := struct {
-			Title          string
-			Stats          *database.NetworkStats
-			Error          string
-			NoData         bool
-			AvailableDates []time.Time
-			SelectedDate   time.Time
-			RequestedDate  string
-			DateMessage    string
+			Title string
+			Stats *database.NetworkStats
+			Error string
+			NoData bool
 		}{
-			Title:          "Network Statistics",
-			Stats:          nil,
-			Error:          fmt.Sprintf("Failed to retrieve statistics: %v", err),
-			NoData:         false,
-			AvailableDates: availableDates,
-			SelectedDate:   selectedDate,
-			RequestedDate:  requestedDate,
-			DateMessage:    dateMessage,
+			Title: "Network Statistics",
+			Stats: nil,
+			Error: fmt.Sprintf("Failed to retrieve statistics: %v", err),
+			NoData: false,
 		}
 		s.templates["stats"].Execute(w, data)
 		return
 	}
 	
 	data := struct {
-		Title          string
-		Stats          *database.NetworkStats
-		Error          string
-		NoData         bool
-		AvailableDates []time.Time
-		SelectedDate   time.Time
-		RequestedDate  string
-		DateMessage    string
+		Title string
+		Stats *database.NetworkStats
+		Error string
+		NoData bool
 	}{
-		Title:          "Network Statistics",
-		Stats:          stats,
-		Error:          "",
-		NoData:         false,
-		AvailableDates: availableDates,
-		SelectedDate:   selectedDate,
-		RequestedDate:  requestedDate,
-		DateMessage:    dateMessage,
+		Title: "Network Statistics",
+		Stats: stats,
+		Error: "",
+		NoData: false,
 	}
 	
 	s.templates["stats"].Execute(w, data)
@@ -469,12 +401,6 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/search", s.SearchHandler)
 	mux.HandleFunc("/search/sysop", s.SysopSearchHandler)
 	mux.HandleFunc("/stats", s.StatsHandler)
-	mux.HandleFunc("/analytics", s.AnalyticsHandler)
-	mux.HandleFunc("/analytics/v34", s.V34AnalyticsHandler)
-	mux.HandleFunc("/analytics/binkp", s.BinkpAnalyticsHandler)
-	mux.HandleFunc("/analytics/network/", s.NetworkLifecycleHandler)
-	mux.HandleFunc("/analytics/sysops", s.SysopNamesHandler)
-	mux.HandleFunc("/analytics/trends", s.ProtocolTrendHandler)
 	mux.HandleFunc("/api/help", s.APIHelpHandler)
 	mux.HandleFunc("/node/", s.NodeHistoryHandler)
 	
@@ -497,226 +423,6 @@ func (s *Server) StaticHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
-}
-
-// AnalyticsHandler handles the analytics main page
-func (s *Server) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Title string
-	}{
-		Title: "FidoNet Analytics",
-	}
-	
-	s.templates["analytics"].Execute(w, data)
-}
-
-// V34AnalyticsHandler handles V.34 modem analysis
-func (s *Server) V34AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	
-	report, err := s.storage.GetV34ModemReport()
-	if err != nil {
-		data := struct {
-			Title string
-			Error string
-		}{
-			Title: "V.34 Modem Analysis",
-			Error: fmt.Sprintf("Failed to generate V.34 analysis: %v", err),
-		}
-		s.templates["v34_analytics"].Execute(w, data)
-		return
-	}
-	
-	data := struct {
-		Title     string
-		Report    *database.V34ModemReport
-		QueryTime time.Duration
-	}{
-		Title:     "V.34 Modem Analysis",
-		Report:    report,
-		QueryTime: time.Since(startTime),
-	}
-	
-	s.templates["v34_analytics"].Execute(w, data)
-}
-
-// BinkpAnalyticsHandler handles Binkp protocol analysis
-func (s *Server) BinkpAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	
-	report, err := s.storage.GetBinkpReport()
-	if err != nil {
-		data := struct {
-			Title string
-			Error string
-		}{
-			Title: "Binkp Protocol Analysis",
-			Error: fmt.Sprintf("Failed to generate Binkp analysis: %v", err),
-		}
-		s.templates["binkp_analytics"].Execute(w, data)
-		return
-	}
-	
-	data := struct {
-		Title     string
-		Report    *database.BinkpReport
-		QueryTime time.Duration
-	}{
-		Title:     "Binkp Protocol Analysis",
-		Report:    report,
-		QueryTime: time.Since(startTime),
-	}
-	
-	s.templates["binkp_analytics"].Execute(w, data)
-}
-
-// NetworkLifecycleHandler handles network lifecycle analysis
-func (s *Server) NetworkLifecycleHandler(w http.ResponseWriter, r *http.Request) {
-	var zone, net int
-	var err error
-	
-	// Try to parse from query parameters first (/analytics/network/?zone=2&net=5001)
-	zoneStr := r.URL.Query().Get("zone")
-	netStr := r.URL.Query().Get("net")
-	
-	if zoneStr != "" && netStr != "" {
-		zone, err = strconv.Atoi(zoneStr)
-		if err != nil {
-			http.Error(w, "Invalid zone parameter", http.StatusBadRequest)
-			return
-		}
-		
-		net, err = strconv.Atoi(netStr)
-		if err != nil {
-			http.Error(w, "Invalid net parameter", http.StatusBadRequest)
-			return
-		}
-	} else {
-		// Fall back to URL path parsing /analytics/network/{zone}/{net}
-		parts := strings.Split(r.URL.Path, "/")
-		if len(parts) < 5 {
-			http.Error(w, "Invalid network address. Use /analytics/network/?zone=X&net=Y or /analytics/network/X/Y", http.StatusBadRequest)
-			return
-		}
-		
-		zone, err = strconv.Atoi(parts[3])
-		if err != nil {
-			http.Error(w, "Invalid zone in URL path", http.StatusBadRequest)
-			return
-		}
-		
-		net, err = strconv.Atoi(parts[4])
-		if err != nil {
-			http.Error(w, "Invalid net in URL path", http.StatusBadRequest)
-			return
-		}
-	}
-	
-	startTime := time.Now()
-	report, err := s.storage.GetNetworkLifecycleReport(zone, net)
-	if err != nil {
-		data := struct {
-			Title string
-			Error string
-			Zone  int
-			Net   int
-		}{
-			Title: "Network Lifecycle Analysis",
-			Error: fmt.Sprintf("Failed to generate network analysis: %v", err),
-			Zone:  zone,
-			Net:   net,
-		}
-		s.templates["network_lifecycle"].Execute(w, data)
-		return
-	}
-	
-	data := struct {
-		Title     string
-		Report    *database.NetworkLifecycleReport
-		QueryTime time.Duration
-	}{
-		Title:     "Network Lifecycle Analysis",
-		Report:    report,
-		QueryTime: time.Since(startTime),
-	}
-	
-	s.templates["network_lifecycle"].Execute(w, data)
-}
-
-// SysopNamesHandler handles sysop name analysis
-func (s *Server) SysopNamesHandler(w http.ResponseWriter, r *http.Request) {
-	// Get year parameter, default to current year
-	yearStr := r.URL.Query().Get("year")
-	year := time.Now().Year()
-	if yearStr != "" {
-		if parsedYear, err := strconv.Atoi(yearStr); err == nil && parsedYear > 1980 && parsedYear <= time.Now().Year() {
-			year = parsedYear
-		}
-	}
-	
-	startTime := time.Now()
-	report, err := s.storage.GetSysopNameReportByYear(year)
-	if err != nil {
-		data := struct {
-			Title string
-			Error string
-			Year  int
-		}{
-			Title: "Sysop Name Analysis",
-			Error: fmt.Sprintf("Failed to generate sysop name analysis: %v", err),
-			Year:  year,
-		}
-		s.templates["sysop_analytics"].Execute(w, data)
-		return
-	}
-	
-	data := struct {
-		Title     string
-		Report    *database.SysopNameReport
-		QueryTime time.Duration
-	}{
-		Title:     "Sysop Name Analysis",
-		Report:    report,
-		QueryTime: time.Since(startTime),
-	}
-	
-	s.templates["sysop_analytics"].Execute(w, data)
-}
-
-// ProtocolTrendHandler handles protocol adoption trend analysis
-func (s *Server) ProtocolTrendHandler(w http.ResponseWriter, r *http.Request) {
-	protocol := r.URL.Query().Get("protocol")
-	if protocol == "" {
-		protocol = "V34" // Default
-	}
-	
-	startTime := time.Now()
-	report, err := s.storage.GetProtocolAdoptionTrend(protocol)
-	if err != nil {
-		data := struct {
-			Title    string
-			Error    string
-			Protocol string
-		}{
-			Title:    "Protocol Adoption Trends",
-			Error:    fmt.Sprintf("Failed to generate protocol trend analysis: %v", err),
-			Protocol: protocol,
-		}
-		s.templates["protocol_trend"].Execute(w, data)
-		return
-	}
-	
-	data := struct {
-		Title     string
-		Report    *database.ProtocolAdoptionReport
-		QueryTime time.Duration
-	}{
-		Title:     "Protocol Adoption Trends",
-		Report:    report,
-		QueryTime: time.Since(startTime),
-	}
-	
-	s.templates["protocol_trend"].Execute(w, data)
 }
 
 // parseNodeAddress parses a FidoNet node address like "2:5001/100" or "1:234/56.7"
@@ -751,26 +457,6 @@ func parseNodeAddress(address string) (zone, net, node int, err error) {
 	return zone, net, node, nil
 }
 
-// getZoneDescription returns the description for a FidoNet zone
-func getZoneDescription(zone int) string {
-	switch zone {
-	case 1:
-		return "North America (USA and Canada)"
-	case 2:
-		return "Europe, Former Soviet Union, and Israel"
-	case 3:
-		return "Australasia (includes former Zone 6 nodes)"
-	case 4:
-		return "Latin America (except Puerto Rico)"
-	case 5:
-		return "Africa"
-	case 6:
-		return "Asia (removed July 2007, nodes moved to Zone 3)"
-	default:
-		return "Unknown Zone"
-	}
-}
-
 // Template definitions
 func (s *Server) getTemplate(name string) string {
 	switch name {
@@ -796,7 +482,6 @@ func (s *Server) getTemplate(name string) string {
                 <a href="/search">🔍 Search Nodes</a>
                 <a href="/search/sysop">👤 Search Sysops</a>
                 <a href="/stats">📊 Statistics</a>
-                <a href="/analytics">🔬 Analytics</a>
                 <a href="/api/help">📖 API Help</a>
             </div>
         </nav>
@@ -866,7 +551,6 @@ func (s *Server) getTemplate(name string) string {
                 <a href="/search" class="active">🔍 Search Nodes</a>
                 <a href="/search/sysop">👤 Search Sysops</a>
                 <a href="/stats">📊 Statistics</a>
-                <a href="/analytics">🔬 Analytics</a>
                 <a href="/api/help">📖 API Help</a>
             </div>
         </nav>
@@ -1017,49 +701,11 @@ func (s *Server) getTemplate(name string) string {
                 <a href="/search">🔍 Search Nodes</a>
                 <a href="/search/sysop">👤 Search Sysops</a>
                 <a href="/stats" class="active">📊 Statistics</a>
-                <a href="/analytics">🔬 Analytics</a>
                 <a href="/api/help">📖 API Help</a>
             </div>
         </nav>
         
         <div class="content">
-            {{if not .NoData}}
-                <!-- Date Selection Form -->
-                <div class="card" style="margin-bottom: 2rem;">
-                    <h3 style="margin-bottom: 1rem; color: var(--text-primary);">📅 Select Date for Statistics</h3>
-                    <form method="GET" action="/stats" style="display: flex; gap: 1rem; align-items: end; flex-wrap: wrap;">
-                        <div style="flex: 1; min-width: 200px;">
-                            <label for="date" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary);">Choose Date:</label>
-                            <input 
-                                type="date" 
-                                id="date" 
-                                name="date" 
-                                value="{{if .RequestedDate}}{{.RequestedDate}}{{else}}{{.SelectedDate.Format "2006-01-02"}}{{end}}"
-                                style="padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; width: 100%;"
-                            />
-                        </div>
-                        <div>
-                            <button type="submit" class="btn btn-primary" style="padding: 0.75rem 1.5rem;">
-                                📊 View Statistics
-                            </button>
-                        </div>
-                    </form>
-                    {{if .DateMessage}}
-                        <div style="margin-top: 1rem; padding: 0.75rem; background: var(--accent-color); border-left: 4px solid var(--primary-color); border-radius: var(--radius); color: var(--text-primary);">
-                            ℹ️ {{.DateMessage}}
-                        </div>
-                    {{end}}
-                    {{if gt (len .AvailableDates) 0}}
-                        <div style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-secondary);">
-                            <strong>📊 {{len .AvailableDates}} nodelist{{if ne (len .AvailableDates) 1}}s{{end}} available</strong>
-                            {{if gt (len .AvailableDates) 1}}
-                                <br>Date range: {{(index .AvailableDates 0).Format "2006-01-02"}} (newest) to older dates
-                            {{end}}
-                        </div>
-                    {{end}}
-                </div>
-            {{end}}
-            
             {{if .NoData}}
                 <div class="card">
                     <div class="alert alert-error">
@@ -1133,7 +779,6 @@ func (s *Server) getTemplate(name string) string {
                                 <thead>
                                     <tr>
                                         <th>Zone</th>
-                                        <th>Description</th>
                                         <th>Node Count</th>
                                         <th>Percentage</th>
                                         <th>Representation</th>
@@ -1143,7 +788,6 @@ func (s *Server) getTemplate(name string) string {
                                     {{range $zone, $count := .Stats.ZoneDistribution}}
                                     <tr>
                                         <td><strong>Zone {{$zone}}</strong></td>
-                                        <td style="color: var(--text-secondary);">{{getZoneDescription $zone}}</td>
                                         <td>{{$count}} nodes</td>
                                         <td style="color: var(--text-secondary);">
                                             {{printf "%.1f%%" (div (mul $count 100) $.Stats.TotalNodes)}}
@@ -1170,7 +814,6 @@ func (s *Server) getTemplate(name string) string {
                                 <thead>
                                     <tr>
                                         <th>Region</th>
-                                        <th>Name</th>
                                         <th>Zone</th>
                                         <th>Node Count</th>
                                         <th>Representation</th>
@@ -1180,7 +823,6 @@ func (s *Server) getTemplate(name string) string {
                                     {{range .Stats.LargestRegions}}
                                     <tr>
                                         <td><strong>Region {{.Region}}</strong></td>
-                                        <td style="color: var(--text-secondary);">{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
                                         <td>Zone {{.Zone}}</td>
                                         <td>{{.NodeCount}} nodes</td>
                                         <td>
@@ -1205,7 +847,7 @@ func (s *Server) getTemplate(name string) string {
                                 <thead>
                                     <tr>
                                         <th>Network</th>
-                                        <th>Network Description</th>
+                                        <th>Host System</th>
                                         <th>Node Count</th>
                                         <th>Representation</th>
                                     </tr>
@@ -1214,7 +856,7 @@ func (s *Server) getTemplate(name string) string {
                                     {{range .Stats.LargestNets}}
                                     <tr>
                                         <td><strong>{{.Zone}}:{{.Net}}</strong></td>
-                                        <td style="color: var(--text-secondary);">{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
+                                        <td>{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
                                         <td>{{.NodeCount}} nodes</td>
                                         <td>
                                             <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
@@ -1260,7 +902,6 @@ func (s *Server) getTemplate(name string) string {
                 <a href="/search">🔍 Search Nodes</a>
                 <a href="/search/sysop" class="active">👤 Search Sysops</a>
                 <a href="/stats">📊 Statistics</a>
-                <a href="/analytics">🔬 Analytics</a>
                 <a href="/api/help">📖 API Help</a>
             </div>
         </nav>
@@ -1364,14 +1005,10 @@ func (s *Server) getTemplate(name string) string {
     <div class="container">
         <h1>{{.Title}} - {{.Address}}</h1>
         <nav>
-            <div class="nav-container">
-                <a href="/">🏠 Home</a>
-                <a href="/search">🔍 Search Nodes</a>
-                <a href="/search/sysop">👤 Search Sysops</a>
-                <a href="/stats">📊 Statistics</a>
-                <a href="/analytics">🔬 Analytics</a>
-                <a href="/api/help">📖 API Help</a>
-            </div>
+            <a href="/">Home</a> | 
+            <a href="/search">Search Nodes</a> | 
+            <a href="/search/sysop">Search by Sysop</a> | 
+            <a href="/stats">Statistics</a>
         </nav>
         
         <div class="content">
@@ -1580,7 +1217,6 @@ func (s *Server) getTemplate(name string) string {
                 <a href="/search">🔍 Search Nodes</a>
                 <a href="/search/sysop">👤 Search Sysops</a>
                 <a href="/stats">📊 Statistics</a>
-                <a href="/analytics">🔬 Analytics</a>
                 <a href="/api/help" class="active">📖 API Help</a>
             </div>
         </nav>
@@ -1780,547 +1416,6 @@ curl "http://localhost:8080/api/stats"
             </div>
         </div>
     </div>
-</body>
-</html>`
-
-	case "analytics":
-		return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">Advanced FidoNet historical analysis and reporting</p>
-        </header>
-        
-        <nav>
-            <div class="nav-container">
-                <a href="/">🏠 Home</a>
-                <a href="/search">🔍 Search Nodes</a>
-                <a href="/search/sysop">👤 Search Sysops</a>
-                <a href="/stats">📊 Statistics</a>
-                <a href="/analytics" class="active">🔬 Analytics</a>
-                <a href="/api/help">📖 API Help</a>
-            </div>
-        </nav>
-        
-        <div class="content">
-            <div class="card">
-                <h2>🔬 FidoNet Historical Analytics</h2>
-                <p>Explore comprehensive analytical reports about FidoNet's historical evolution, technology adoption, and network patterns.</p>
-            </div>
-
-            <div class="analytics-grid">
-                <div class="analytics-card">
-                    <h3>📡 Technology Evolution</h3>
-                    <div class="analytics-links">
-                        <a href="/analytics/v34" class="btn btn-primary">V.34 Modem Analysis</a>
-                        <a href="/analytics/binkp" class="btn btn-primary">Binkp Protocol Analysis</a>
-                        <a href="/analytics/trends?protocol=V34" class="btn btn-secondary">Protocol Trends</a>
-                    </div>
-                    <p>Analyze when new technologies first appeared in FidoNet and their adoption patterns over time.</p>
-                </div>
-
-                <div class="analytics-card">
-                    <h3>🌐 Network Lifecycle</h3>
-                    <div class="analytics-links">
-                        <form method="GET" action="/analytics/network" style="margin-bottom: 1rem;">
-                            <input type="number" name="zone" placeholder="Zone" min="1" max="6" style="width: 80px; margin-right: 0.5rem;">
-                            <input type="number" name="net" placeholder="Net" min="1" style="width: 100px; margin-right: 0.5rem;">
-                            <button type="submit" class="btn btn-primary">Analyze Network</button>
-                        </form>
-                    </div>
-                    <p>Track network creation, evolution, and deletion patterns across FidoNet zones.</p>
-                </div>
-
-                <div class="analytics-card">
-                    <h3>👤 Social Analysis</h3>
-                    <div class="analytics-links">
-                        <form method="GET" action="/analytics/sysops" style="margin-bottom: 1rem;">
-                            <input type="number" name="year" placeholder="Year (e.g., 1995)" min="1980" max="2025" style="width: 120px; margin-right: 0.5rem;">
-                            <button type="submit" class="btn btn-primary">Analyze Year</button>
-                        </form>
-                        <a href="/analytics/sysops" class="btn btn-secondary">Current Year</a>
-                    </div>
-                    <p>Discover the most common sysop names and social patterns in FidoNet communities.</p>
-                </div>
-
-                <div class="analytics-card">
-                    <h3>📈 Coming Soon</h3>
-                    <div class="analytics-links">
-                        <span class="btn btn-disabled">Geographic Analysis</span>
-                        <span class="btn btn-disabled">Speed Evolution</span>
-                        <span class="btn btn-disabled">Zone Comparisons</span>
-                    </div>
-                    <p>Additional analytical reports are in development. Check back for updates!</p>
-                </div>
-            </div>
-
-            <div class="card" style="margin-top: 2rem;">
-                <h3>📊 About These Analytics</h3>
-                <p>All analytical reports are generated from historical FidoNet nodelist data spanning decades of network evolution. 
-                These tools help researchers, historians, and network enthusiasts understand the technological and social patterns 
-                that shaped one of the world's largest store-and-forward networks.</p>
-                
-                <div style="margin-top: 1rem;">
-                    <strong>Features:</strong>
-                    <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
-                        <li>🎯 <strong>Precise Analysis</strong> - Find exact dates when technologies first appeared</li>
-                        <li>📈 <strong>Trend Visualization</strong> - Chart data ready for graphing tools</li>
-                        <li>🔍 <strong>Deep Queries</strong> - Complex analytical SQL queries on historical data</li>
-                        <li>⚡ <strong>Fast Results</strong> - Optimized DuckDB queries for quick insights</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script src="/static/app.js"></script>
-</body>
-</html>`
-
-	case "v34_analytics":
-		return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">Analysis of V.34 modem adoption in FidoNet</p>
-        </header>
-        
-        <nav>
-            <div class="nav-container">
-                <a href="/">🏠 Home</a>
-                <a href="/search">🔍 Search Nodes</a>
-                <a href="/search/sysop">👤 Search Sysops</a>
-                <a href="/stats">📊 Statistics</a>
-                <a href="/analytics" class="active">🔬 Analytics</a>
-                <a href="/api/help">📖 API Help</a>
-            </div>
-        </nav>
-        
-        <div class="content">
-            <div style="margin-bottom: 1rem;">
-                <a href="/analytics" class="btn btn-secondary">← Back to Analytics</a>
-            </div>
-
-            {{if .Error}}
-                <div class="alert alert-error">
-                    <strong>Error:</strong> {{.Error}}
-                </div>
-            {{else if .Report}}
-                <div class="card">
-                    <h2>📡 V.34 Modem Analysis Results</h2>
-                    <p><em>Query completed in {{.QueryTime}}</em></p>
-                    
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>{{.Report.FirstAppearance.Format "January 2, 2006"}}</h3>
-                            <p>First V.34 Appearance</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Report.FirstNode.Address}}</h3>
-                            <p>First V.34 Node</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Report.TotalV34Nodes}}</h3>
-                            <p>Total V.34 Adoptions</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>🎯 First V.34 Node Details</h3>
-                    <table class="data-table">
-                        <tr><td><strong>Address:</strong></td><td>{{.Report.FirstNode.Address}}</td></tr>
-                        <tr><td><strong>System Name:</strong></td><td>{{if .Report.FirstNode.SystemName}}{{.Report.FirstNode.SystemName}}{{else}}<em>Not specified</em>{{end}}</td></tr>
-                        <tr><td><strong>Sysop Name:</strong></td><td>{{if .Report.FirstNode.SysopName}}{{.Report.FirstNode.SysopName}}{{else}}<em>Not specified</em>{{end}}</td></tr>
-                        <tr><td><strong>Location:</strong></td><td>{{if .Report.FirstNode.Location}}{{.Report.FirstNode.Location}}{{else}}<em>Not specified</em>{{end}}</td></tr>
-                        <tr><td><strong>First Seen:</strong></td><td>{{.Report.FirstAppearance.Format "January 2, 2006"}}</td></tr>
-                    </table>
-                </div>
-
-                <div class="card">
-                    <h3>📈 V.34 Adoption by Year</h3>
-                    <div class="table-container">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Year</th>
-                                    <th>V.34 Nodes</th>
-                                    <th>Adoption</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {{range .Report.AdoptionByYear}}
-                                <tr>
-                                    <td>{{.Year}}</td>
-                                    <td>{{.Count}}</td>
-                                    <td><div class="progress-bar" style="width: {{printf "%.1f" (mul (div (float64 .Count) (float64 $.Report.TotalV34Nodes)) 100)}}%;"></div></td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {{if .Report.ChartData}}
-                <div class="card">
-                    <h3>📊 Chart Data (JSON)</h3>
-                    <details>
-                        <summary>Click to view chart data for visualization tools</summary>
-                        <pre style="background: #f5f5f5; padding: 1rem; margin-top: 1rem; overflow-x: auto; font-size: 0.9rem;">{{json .Report.ChartData}}</pre>
-                    </details>
-                </div>
-                {{end}}
-            {{end}}
-        </div>
-    </div>
-    <script src="/static/app.js"></script>
-</body>
-</html>`
-
-	case "binkp_analytics":
-		return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">Analysis of Binkp protocol adoption in FidoNet</p>
-        </header>
-        
-        <nav>
-            <div class="nav-container">
-                <a href="/">🏠 Home</a>
-                <a href="/search">🔍 Search Nodes</a>
-                <a href="/search/sysop">👤 Search Sysops</a>
-                <a href="/stats">📊 Statistics</a>
-                <a href="/analytics" class="active">🔬 Analytics</a>
-                <a href="/api/help">📖 API Help</a>
-            </div>
-        </nav>
-        
-        <div class="content">
-            <div style="margin-bottom: 1rem;">
-                <a href="/analytics" class="btn btn-secondary">← Back to Analytics</a>
-            </div>
-
-            {{if .Error}}
-                <div class="alert alert-error">
-                    <strong>Error:</strong> {{.Error}}
-                </div>
-            {{else if .Report}}
-                <div class="card">
-                    <h2>🌐 Binkp Protocol Analysis Results</h2>
-                    <p><em>Query completed in {{.QueryTime}}</em></p>
-                    
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>{{.Report.FirstAppearance.Format "January 2, 2006"}}</h3>
-                            <p>First Binkp Appearance</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Report.FirstNode.Address}}</h3>
-                            <p>First Binkp Node</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Report.TotalBinkpNodes}}</h3>
-                            <p>Total Binkp Adoptions</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>🎯 First Binkp Node Details</h3>
-                    <table class="data-table">
-                        <tr><td><strong>Address:</strong></td><td>{{.Report.FirstNode.Address}}</td></tr>
-                        <tr><td><strong>System Name:</strong></td><td>{{if .Report.FirstNode.SystemName}}{{.Report.FirstNode.SystemName}}{{else}}<em>Not specified</em>{{end}}</td></tr>
-                        <tr><td><strong>Sysop Name:</strong></td><td>{{if .Report.FirstNode.SysopName}}{{.Report.FirstNode.SysopName}}{{else}}<em>Not specified</em>{{end}}</td></tr>
-                        <tr><td><strong>Location:</strong></td><td>{{if .Report.FirstNode.Location}}{{.Report.FirstNode.Location}}{{else}}<em>Not specified</em>{{end}}</td></tr>
-                        <tr><td><strong>First Seen:</strong></td><td>{{.Report.FirstAppearance.Format "January 2, 2006"}}</td></tr>
-                    </table>
-                </div>
-
-                <div class="card">
-                    <h3>📈 Binkp Adoption by Year</h3>
-                    <div class="table-container">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Year</th>
-                                    <th>Binkp Nodes</th>
-                                    <th>Adoption</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {{range .Report.AdoptionByYear}}
-                                <tr>
-                                    <td>{{.Year}}</td>
-                                    <td>{{.Count}}</td>
-                                    <td><div class="progress-bar" style="width: {{printf "%.1f" (mul (div (float64 .Count) (float64 $.Report.TotalBinkpNodes)) 100)}}%;"></div></td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {{if .Report.ChartData}}
-                <div class="card">
-                    <h3>📊 Chart Data (JSON)</h3>
-                    <details>
-                        <summary>Click to view chart data for visualization tools</summary>
-                        <pre style="background: #f5f5f5; padding: 1rem; margin-top: 1rem; overflow-x: auto; font-size: 0.9rem;">{{json .Report.ChartData}}</pre>
-                    </details>
-                </div>
-                {{end}}
-            {{end}}
-        </div>
-    </div>
-    <script src="/static/app.js"></script>
-</body>
-</html>`
-
-	case "sysop_analytics":
-		return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">Analysis of sysop names in FidoNet</p>
-        </header>
-        
-        <nav>
-            <div class="nav-container">
-                <a href="/">🏠 Home</a>
-                <a href="/search">🔍 Search Nodes</a>
-                <a href="/search/sysop">👤 Search Sysops</a>
-                <a href="/stats">📊 Statistics</a>
-                <a href="/analytics" class="active">🔬 Analytics</a>
-                <a href="/api/help">📖 API Help</a>
-            </div>
-        </nav>
-        
-        <div class="content">
-            <div style="margin-bottom: 1rem;">
-                <a href="/analytics" class="btn btn-secondary">← Back to Analytics</a>
-            </div>
-
-            {{if .Error}}
-                <div class="alert alert-error">
-                    <strong>Error:</strong> {{.Error}}
-                </div>
-            {{else if .Report}}
-                <div class="card">
-                    <h2>👤 Sysop Name Analysis for {{.Report.Year}}</h2>
-                    <p><em>Query completed in {{.QueryTime}}</em></p>
-                    
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>{{.Report.Year}}</h3>
-                            <p>Analysis Year</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Report.TotalUnique}}</h3>
-                            <p>Unique Sysop Names</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Report.TotalNodes}}</h3>
-                            <p>Total Nodes</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>🏆 Most Common Sysop Names in {{.Report.Year}}</h3>
-                    <div class="table-container">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Rank</th>
-                                    <th>Sysop Name</th>
-                                    <th>Node Count</th>
-                                    <th>Frequency</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {{range $i, $name := .Report.TopNames}}
-                                <tr>
-                                    <td>{{add $i 1}}</td>
-                                    <td><strong>{{$name.Name}}</strong></td>
-                                    <td>{{$name.Count}}</td>
-                                    <td><div class="progress-bar" style="width: {{printf "%.1f" (mul (div (float64 $name.Count) (float64 (index $.Report.TopNames 0).Count)) 100)}}%;"></div></td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {{if .Report.ChartData}}
-                <div class="card">
-                    <h3>📊 Chart Data (JSON)</h3>
-                    <details>
-                        <summary>Click to view chart data for visualization tools</summary>
-                        <pre style="background: #f5f5f5; padding: 1rem; margin-top: 1rem; overflow-x: auto; font-size: 0.9rem;">{{json .Report.ChartData}}</pre>
-                    </details>
-                </div>
-                {{end}}
-            {{end}}
-        </div>
-    </div>
-    <script src="/static/app.js"></script>
-</body>
-</html>`
-
-	case "network_lifecycle":
-		return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">Network lifecycle and evolution analysis</p>
-        </header>
-        
-        <nav>
-            <div class="nav-container">
-                <a href="/">🏠 Home</a>
-                <a href="/search">🔍 Search Nodes</a>
-                <a href="/search/sysop">👤 Search Sysops</a>
-                <a href="/stats">📊 Statistics</a>
-                <a href="/analytics" class="active">🔬 Analytics</a>
-                <a href="/api/help">📖 API Help</a>
-            </div>
-        </nav>
-        
-        <div class="content">
-            <div style="margin-bottom: 1rem;">
-                <a href="/analytics" class="btn btn-secondary">← Back to Analytics</a>
-            </div>
-
-            {{if .Error}}
-                <div class="alert alert-error">
-                    <strong>Error:</strong> {{.Error}}
-                </div>
-            {{else if .Report}}
-                <div class="card">
-                    <h2>🌐 Network {{.Report.Zone}}:{{.Report.Net}} Lifecycle Analysis</h2>
-                    <p><em>Query completed in {{.QueryTime}}</em></p>
-                    
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>{{.Report.FirstSeen.Format "Jan 2006"}}</h3>
-                            <p>First Seen</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{if .Report.IsActive}}Active{{else}}{{.Report.LastSeen.Format "Jan 2006"}}{{end}}</h3>
-                            <p>{{if .Report.IsActive}}Status{{else}}Last Seen{{end}}</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Report.MaxNodes}}</h3>
-                            <p>Peak Node Count</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Report.Duration}}</h3>
-                            <p>Duration</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>📋 Network Details</h3>
-                    <table class="data-table">
-                        <tr><td><strong>Network:</strong></td><td>{{.Report.Zone}}:{{.Report.Net}}</td></tr>
-                        <tr><td><strong>Host Name:</strong></td><td>{{if .Report.HostName}}{{.Report.HostName}}{{else}}<em>Not specified</em>{{end}}</td></tr>
-                        <tr><td><strong>First Seen:</strong></td><td>{{.Report.FirstSeen.Format "January 2, 2006"}}</td></tr>
-                        <tr><td><strong>Last Seen:</strong></td><td>{{.Report.LastSeen.Format "January 2, 2006"}}</td></tr>
-                        <tr><td><strong>Status:</strong></td><td>{{if .Report.IsActive}}<span class="badge badge-success">Active</span>{{else}}<span class="badge badge-error">Inactive</span>{{end}}</td></tr>
-                        <tr><td><strong>Peak Nodes:</strong></td><td>{{.Report.MaxNodes}}</td></tr>
-                        <tr><td><strong>Total History Points:</strong></td><td>{{len .Report.NodeHistory}}</td></tr>
-                    </table>
-                </div>
-
-                {{if .Report.NodeHistory}}
-                <div class="card">
-                    <h3>📈 Node Count History</h3>
-                    <div class="table-container" style="max-height: 400px; overflow-y: auto;">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Node Count</th>
-                                    <th>Relative Size</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {{range .Report.NodeHistory}}
-                                <tr>
-                                    <td>{{.Date.Format "2006-01-02"}}</td>
-                                    <td>{{.NodeCount}}</td>
-                                    <td><div class="progress-bar" style="width: {{printf "%.1f" (mul (div (float64 .NodeCount) (float64 $.Report.MaxNodes)) 100)}}%;"></div></td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                {{end}}
-
-                {{if .Report.ChartData}}
-                <div class="card">
-                    <h3>📊 Chart Data (JSON)</h3>
-                    <details>
-                        <summary>Click to view chart data for visualization tools</summary>
-                        <pre style="background: #f5f5f5; padding: 1rem; margin-top: 1rem; overflow-x: auto; font-size: 0.9rem;">{{json .Report.ChartData}}</pre>
-                    </details>
-                </div>
-                {{end}}
-            {{end}}
-        </div>
-    </div>
-    <script src="/static/app.js"></script>
 </body>
 </html>`
 
@@ -2903,154 +1998,6 @@ table a:hover {
 .badge-info {
     background: #dbeafe;
     color: #1e40af;
-}
-/* Analytics Styles */
-.analytics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
-    margin: 2rem 0;
-}
-
-.analytics-card {
-    background: var(--card-bg);
-    border-radius: var(--radius);
-    padding: 2rem;
-    box-shadow: var(--shadow);
-    border: 1px solid var(--border-color);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.analytics-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
-}
-
-.analytics-card h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    color: var(--primary-color);
-    font-weight: 600;
-}
-
-.analytics-links {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-}
-
-.analytics-links .btn {
-    text-align: center;
-}
-
-.analytics-links form {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.analytics-links input {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    font-size: 0.9rem;
-}
-
-.btn-disabled {
-    background: var(--secondary-color) !important;
-    color: white;
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-.btn-disabled:hover {
-    background: var(--secondary-color) !important;
-    transform: none;
-}
-
-.progress-bar {
-    height: 20px;
-    background: linear-gradient(90deg, var(--primary-color), var(--primary-hover));
-    border-radius: var(--radius);
-    min-width: 2px;
-    transition: width 0.3s ease;
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1rem;
-}
-
-.data-table th,
-.data-table td {
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.data-table th {
-    background: var(--background);
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.data-table tr:hover {
-    background: var(--background);
-}
-
-.data-table td:last-child {
-    width: 200px;
-}
-
-details {
-    margin-top: 1rem;
-}
-
-details summary {
-    cursor: pointer;
-    padding: 0.5rem;
-    background: var(--background);
-    border-radius: var(--radius);
-    font-weight: 500;
-}
-
-details[open] summary {
-    margin-bottom: 1rem;
-}
-
-pre {
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    max-height: 400px;
-    overflow-y: auto;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .analytics-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .analytics-links form {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .analytics-links input {
-        width: 100%;
-    }
-    
-    .data-table {
-        font-size: 0.9rem;
-    }
-    
-    .data-table th,
-    .data-table td {
-        padding: 0.5rem;
-    }
 }
 `
 }
