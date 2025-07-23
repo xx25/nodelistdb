@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,75 @@ import (
 type Server struct {
 	storage   *storage.Storage
 	templates map[string]*template.Template
+}
+
+// parseNodeURLPath extracts zone, net, and node from URL path /node/{zone}/{net}/{node}
+func parseNodeURLPath(path string) (zone, net, node int, err error) {
+	path = strings.TrimPrefix(path, "/node/")
+	parts := strings.Split(path, "/")
+	
+	if len(parts) < 3 {
+		return 0, 0, 0, fmt.Errorf("invalid node address")
+	}
+	
+	zone, err = strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid zone")
+	}
+	
+	net, err = strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid net")
+	}
+	
+	node, err = strconv.Atoi(parts[2])
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid node")
+	}
+	
+	return zone, net, node, nil
+}
+
+// buildChangeFilter creates a ChangeFilter from URL query parameters
+func buildChangeFilter(query url.Values) storage.ChangeFilter {
+	return storage.ChangeFilter{
+		IgnoreFlags:            query.Get("noflags") == "1",
+		IgnorePhone:            query.Get("nophone") == "1",
+		IgnoreSpeed:            query.Get("nospeed") == "1",
+		IgnoreStatus:           query.Get("nostatus") == "1",
+		IgnoreLocation:         query.Get("nolocation") == "1",
+		IgnoreName:             query.Get("noname") == "1",
+		IgnoreSysop:            query.Get("nosysop") == "1",
+		IgnoreConnectivity:     query.Get("noconnectivity") == "1",
+		IgnoreModemFlags:       query.Get("nomodemflags") == "1",
+		IgnoreInternetProtocols: query.Get("nointernetprotocols") == "1",
+		IgnoreInternetHostnames: query.Get("nointernethostnames") == "1",
+		IgnoreInternetPorts:    query.Get("nointernetports") == "1",
+		IgnoreInternetEmails:   query.Get("nointernetemails") == "1",
+	}
+}
+
+// NodeActivityInfo holds information about a node's activity
+type NodeActivityInfo struct {
+	FirstDate       time.Time
+	LastDate        time.Time
+	CurrentlyActive bool
+}
+
+// analyzeNodeActivity analyzes node history to determine activity information
+func analyzeNodeActivity(history []database.Node) NodeActivityInfo {
+	var info NodeActivityInfo
+	
+	if len(history) > 0 {
+		info.FirstDate = history[0].NodelistDate
+		info.LastDate = history[len(history)-1].NodelistDate
+		
+		// Check if currently active (last entry within 30 days)
+		daysSinceLastSeen := time.Since(info.LastDate).Hours() / 24
+		info.CurrentlyActive = daysSinceLastSeen <= 30
+	}
+	
+	return info
 }
 
 // New creates a new web server
@@ -178,30 +248,9 @@ func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
 
 // NodeHistoryHandler handles node history view
 func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse URL path: /node/{zone}/{net}/{node}
-	path := strings.TrimPrefix(r.URL.Path, "/node/")
-	parts := strings.Split(path, "/")
-	
-	if len(parts) < 3 {
-		http.Error(w, "Invalid node address", http.StatusBadRequest)
-		return
-	}
-	
-	zone, err := strconv.Atoi(parts[0])
+	zone, net, node, err := parseNodeURLPath(r.URL.Path)
 	if err != nil {
-		http.Error(w, "Invalid zone", http.StatusBadRequest)
-		return
-	}
-	
-	net, err := strconv.Atoi(parts[1])
-	if err != nil {
-		http.Error(w, "Invalid net", http.StatusBadRequest)
-		return
-	}
-	
-	node, err := strconv.Atoi(parts[2])
-	if err != nil {
-		http.Error(w, "Invalid node", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	
@@ -217,22 +266,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Parse filter options from query parameters
-	filter := storage.ChangeFilter{
-		IgnoreFlags:            r.URL.Query().Get("noflags") == "1",
-		IgnorePhone:            r.URL.Query().Get("nophone") == "1",
-		IgnoreSpeed:            r.URL.Query().Get("nospeed") == "1",
-		IgnoreStatus:           r.URL.Query().Get("nostatus") == "1",
-		IgnoreLocation:         r.URL.Query().Get("nolocation") == "1",
-		IgnoreName:             r.URL.Query().Get("noname") == "1",
-		IgnoreSysop:            r.URL.Query().Get("nosysop") == "1",
-		IgnoreConnectivity:     r.URL.Query().Get("noconnectivity") == "1",
-		IgnoreModemFlags:       r.URL.Query().Get("nomodemflags") == "1",
-		IgnoreInternetProtocols: r.URL.Query().Get("nointernetprotocols") == "1",
-		IgnoreInternetHostnames: r.URL.Query().Get("nointernethostnames") == "1",
-		IgnoreInternetPorts:    r.URL.Query().Get("nointernetports") == "1",
-		IgnoreInternetEmails:   r.URL.Query().Get("nointernetemails") == "1",
-	}
+	filter := buildChangeFilter(r.URL.Query())
 	
 	// Get node changes with filter applied
 	changes, err := s.storage.GetNodeChanges(zone, net, node, filter)
@@ -241,18 +275,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Get first and last dates
-	var firstDate, lastDate time.Time
-	var currentlyActive bool
-	
-	if len(history) > 0 {
-		firstDate = history[0].NodelistDate
-		lastDate = history[len(history)-1].NodelistDate
-		
-		// Check if currently active (last entry within 30 days)
-		daysSinceLastSeen := time.Since(lastDate).Hours() / 24
-		currentlyActive = daysSinceLastSeen <= 30
-	}
+	activityInfo := analyzeNodeActivity(history)
 	
 	data := struct {
 		Title           string
@@ -269,9 +292,9 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		History:         history,
 		Changes:         changes,
 		Filter:          filter,
-		FirstDate:       firstDate,
-		LastDate:        lastDate,
-		CurrentlyActive: currentlyActive,
+		FirstDate:       activityInfo.FirstDate,
+		LastDate:        activityInfo.LastDate,
+		CurrentlyActive: activityInfo.CurrentlyActive,
 	}
 	
 	if err := s.templates["node_history"].Execute(w, data); err != nil {
