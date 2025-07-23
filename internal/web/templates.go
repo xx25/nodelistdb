@@ -6,6 +6,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"nodelistdb/internal/flags"
 )
 
 // loadTemplates loads HTML templates from files
@@ -14,6 +17,36 @@ func (s *Server) loadTemplates() {
 	
 	// Create function map for template functions
 	funcMap := template.FuncMap{
+		"getFlagDescription": func(flagDescriptions map[string]flags.FlagInfo, flag string) string {
+			if info, exists := flagDescriptions[flag]; exists {
+				return info.Description
+			}
+			return ""
+		},
+		"renderFlagChange": func(flagDescriptions map[string]flags.FlagInfo, changeValue string) template.HTML {
+			// Parse change value like "[MO LO V34] → [MO XA V34]"
+			if !strings.Contains(changeValue, "→") {
+				return template.HTML(changeValue)
+			}
+			
+			parts := strings.Split(changeValue, "→")
+			if len(parts) != 2 {
+				return template.HTML(changeValue)
+			}
+			
+			oldFlags := strings.TrimSpace(parts[0])
+			newFlags := strings.TrimSpace(parts[1])
+			
+			// Parse flags from brackets like "[MO LO V34]"
+			oldFlagList := parseFlagList(oldFlags)
+			newFlagList := parseFlagList(newFlags)
+			
+			// Render with tooltips
+			oldHTML := renderFlagListWithTooltips(flagDescriptions, oldFlagList)
+			newHTML := renderFlagListWithTooltips(flagDescriptions, newFlagList)
+			
+			return template.HTML(oldHTML + " → " + newHTML)
+		},
 		"div": func(a, b interface{}) float64 {
 			switch a := a.(type) {
 			case int:
@@ -99,5 +132,38 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 	return tmpl.Lookup(name+".html"), nil
 }
 
+// Helper functions for flag change rendering
+func parseFlagList(flagString string) []string {
+	// Remove brackets and parse space-separated flags
+	flagString = strings.Trim(flagString, "[]")
+	if flagString == "" {
+		return []string{}
+	}
+	return strings.Fields(flagString)
+}
 
-
+func renderFlagListWithTooltips(flagDescriptions map[string]flags.FlagInfo, flagList []string) string {
+	if len(flagList) == 0 {
+		return "[]"
+	}
+	
+	var result strings.Builder
+	result.WriteString("[")
+	
+	for i, flag := range flagList {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		
+		if desc, exists := flagDescriptions[flag]; exists && desc.Description != "" {
+			// Render with tooltip
+			result.WriteString(fmt.Sprintf(`<span class="flag-tooltip"><span class="badge badge-info" style="margin: 0 1px;">%s</span><span class="tooltip-text">%s</span></span>`, flag, desc.Description))
+		} else {
+			// Render without tooltip
+			result.WriteString(fmt.Sprintf(`<span class="badge badge-info" style="margin: 0 1px;">%s</span>`, flag))
+		}
+	}
+	
+	result.WriteString("]")
+	return result.String()
+}

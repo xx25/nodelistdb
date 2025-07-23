@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"nodelistdb/internal/database"
+	"nodelistdb/internal/flags"
 	"nodelistdb/internal/storage"
 )
 
@@ -550,6 +551,58 @@ func (s *Server) GetAvailableDatesHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
+// FlagsDocumentationHandler returns flag descriptions and categories
+// GET /api/flags
+func (s *Server) FlagsDocumentationHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get flag filter from query parameters
+	category := r.URL.Query().Get("category")
+	
+	flagDescriptions := flags.GetFlagDescriptions()
+	
+	// Filter by category if specified
+	if category != "" {
+		filteredFlags := make(map[string]flags.FlagInfo)
+		for flag, info := range flagDescriptions {
+			if info.Category == category {
+				filteredFlags[flag] = info
+			}
+		}
+		flagDescriptions = filteredFlags
+	}
+	
+	// Group flags by category
+	categories := make(map[string][]map[string]interface{})
+	for flag, info := range flagDescriptions {
+		if categories[info.Category] == nil {
+			categories[info.Category] = []map[string]interface{}{}
+		}
+		
+		flagData := map[string]interface{}{
+			"flag":        flag,
+			"has_value":   info.HasValue,
+			"description": info.Description,
+		}
+		categories[info.Category] = append(categories[info.Category], flagData)
+	}
+	
+	response := map[string]interface{}{
+		"flags":      flagDescriptions,
+		"categories": categories,
+		"count":      len(flagDescriptions),
+		"filter": map[string]interface{}{
+			"category": category,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // SetupRoutes sets up HTTP routes for the API server
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	// API routes
@@ -557,6 +610,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/nodes", s.SearchNodesHandler)
 	mux.HandleFunc("/api/stats", s.StatsHandler)
 	mux.HandleFunc("/api/stats/dates", s.GetAvailableDatesHandler)
+	mux.HandleFunc("/api/flags", s.FlagsDocumentationHandler)
 	mux.HandleFunc("/api/nodes/search/sysop", s.SearchNodesBySysopHandler)
 	
 	// Node lookup with path parameters

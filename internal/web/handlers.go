@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"nodelistdb/internal/database"
+	"nodelistdb/internal/flags"
 	"nodelistdb/internal/storage"
 )
 
@@ -404,6 +405,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		FirstDate       time.Time
 		LastDate        time.Time
 		CurrentlyActive bool
+		FlagDescriptions map[string]flags.FlagInfo
 	}{
 		Title:           "Node History",
 		Address:         fmt.Sprintf("%d:%d/%d", zone, net, node),
@@ -413,6 +415,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		FirstDate:       activityInfo.FirstDate,
 		LastDate:        activityInfo.LastDate,
 		CurrentlyActive: activityInfo.CurrentlyActive,
+		FlagDescriptions: flags.GetFlagDescriptions(),
 	}
 	
 	if err := s.templates["node_history"].Execute(w, data); err != nil {
