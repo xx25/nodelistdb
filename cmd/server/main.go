@@ -30,11 +30,11 @@ func main() {
 	fmt.Printf("Server: http://%s:%s\n", *host, *port)
 	fmt.Println()
 
-	// Initialize database
-	log.Println("Initializing DuckDB database...")
-	db, err := database.New(*dbPath)
+	// Initialize database in read-only mode
+	log.Println("Initializing DuckDB database in read-only mode...")
+	db, err := database.NewReadOnly(*dbPath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Fatalf("Failed to initialize read-only database: %v", err)
 	}
 	defer db.Close()
 
@@ -43,10 +43,8 @@ func main() {
 		fmt.Printf("DuckDB version: %s\n", version)
 	}
 
-	// Create schema
-	if err := db.CreateSchema(); err != nil {
-		log.Fatalf("Failed to create schema: %v", err)
-	}
+	// Skip schema creation in read-only mode
+	log.Println("Running in read-only mode - schema creation skipped")
 
 	log.Println("Database initialized successfully")
 
