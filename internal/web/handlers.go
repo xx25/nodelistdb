@@ -422,10 +422,31 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 
 // APIHelpHandler shows API documentation
 func (s *Server) APIHelpHandler(w http.ResponseWriter, r *http.Request) {
+	// Determine the scheme (http or https)
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	// Check for X-Forwarded-Proto header (common with reverse proxies)
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	}
+	
+	// Get the host from the request
+	host := r.Host
+	if host == "" {
+		host = "localhost:8080" // fallback
+	}
+	
+	// Construct the base URL
+	baseURL := fmt.Sprintf("%s://%s/api/", scheme, host)
+	
 	data := struct {
-		Title string
+		Title   string
+		BaseURL string
 	}{
-		Title: "API Documentation",
+		Title:   "API Documentation",
+		BaseURL: baseURL,
 	}
 	
 	if err := s.templates["api_help"].Execute(w, data); err != nil {
