@@ -132,6 +132,58 @@ func (s *Storage) Close() error {
 }
 
 // InsertNodes inserts a batch of nodes using optimized prepared statements
+func (s *Storage) buildInsertSQL(values []string) string {
+	return fmt.Sprintf(`
+		INSERT INTO nodes (
+			zone, net, node, nodelist_date, day_number,
+			system_name, location, sysop_name, phone, node_type, region, max_speed,
+			is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+			flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			conflict_sequence, has_conflict
+		) VALUES %s
+		ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
+		DO NOTHING
+	`, strings.Join(values, ","))
+}
+
+func (s *Storage) formatNodeValues(node database.Node) string {
+	return fmt.Sprintf(
+		"(%d,%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%s,'%s',%t,%t,%t,%t,%t,%t,%t,%t,%s,%s,%s,%s,%s,%s,%d,%t)",
+		node.Zone, node.Net, node.Node,
+		node.NodelistDate.Format("2006-01-02"), node.DayNumber,
+		escapeSingleQuotes(node.SystemName),
+		escapeSingleQuotes(node.Location),
+		escapeSingleQuotes(node.SysopName),
+		escapeSingleQuotes(node.Phone),
+		node.NodeType,
+		formatNullableInt(node.Region),
+		node.MaxSpeed,
+		node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
+		node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
+		formatArrayDuckDB(node.Flags),
+		formatArrayDuckDB(node.ModemFlags),
+		formatArrayDuckDB(node.InternetProtocols),
+		formatArrayDuckDB(node.InternetHostnames),
+		formatIntArrayDuckDB(node.InternetPorts),
+		formatArrayDuckDB(node.InternetEmails),
+		node.ConflictSequence, node.HasConflict,
+	)
+}
+
+func (s *Storage) insertChunk(tx *sql.Tx, chunk []database.Node) error {
+	var values []string
+	for _, node := range chunk {
+		values = append(values, s.formatNodeValues(node))
+	}
+	
+	insertSQL := s.buildInsertSQL(values)
+	_, err := tx.Exec(insertSQL)
+	if err != nil {
+		return fmt.Errorf("failed to insert chunk: %w", err)
+	}
+	return nil
+}
+
 func (s *Storage) InsertNodes(nodes []database.Node) error {
 	if len(nodes) == 0 {
 		return nil
@@ -142,17 +194,12 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 
 	conn := s.db.Conn()
 
-	// Start transaction
 	tx, err := conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// For DuckDB v1.1.3, use direct SQL execution with native array syntax
-	// This is more efficient than building huge parameter lists
-	
-	// Process in smaller chunks to optimize memory usage
 	chunkSize := 100
 	for i := 0; i < len(nodes); i += chunkSize {
 		end := i + chunkSize
@@ -161,49 +208,8 @@ func (s *Storage) InsertNodes(nodes []database.Node) error {
 		}
 		chunk := nodes[i:end]
 		
-		// Build VALUES clause with DuckDB native syntax
-		var values []string
-		for _, node := range chunk {
-			value := fmt.Sprintf(
-				"(%d,%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%s,'%s',%t,%t,%t,%t,%t,%t,%t,%t,%s,%s,%s,%s,%s,%s,%d,%t)",
-				node.Zone, node.Net, node.Node,
-				node.NodelistDate.Format("2006-01-02"), node.DayNumber,
-				escapeSingleQuotes(node.SystemName),
-				escapeSingleQuotes(node.Location),
-				escapeSingleQuotes(node.SysopName),
-				escapeSingleQuotes(node.Phone),
-				node.NodeType,
-				formatNullableInt(node.Region),
-				node.MaxSpeed,
-				node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
-				node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
-				formatArrayDuckDB(node.Flags),
-				formatArrayDuckDB(node.ModemFlags),
-				formatArrayDuckDB(node.InternetProtocols),
-				formatArrayDuckDB(node.InternetHostnames),
-				formatIntArrayDuckDB(node.InternetPorts),
-				formatArrayDuckDB(node.InternetEmails),
-				node.ConflictSequence, node.HasConflict,
-			)
-			values = append(values, value)
-		}
-		
-		// Execute chunk insert
-		insertSQL := fmt.Sprintf(`
-			INSERT INTO nodes (
-				zone, net, node, nodelist_date, day_number,
-				system_name, location, sysop_name, phone, node_type, region, max_speed,
-				is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-				flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-				conflict_sequence, has_conflict
-			) VALUES %s
-			ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
-			DO NOTHING
-		`, strings.Join(values, ","))
-		
-		_, err := tx.Exec(insertSQL)
-		if err != nil {
-			return fmt.Errorf("failed to insert chunk: %w", err)
+		if err := s.insertChunk(tx, chunk); err != nil {
+			return err
 		}
 	}
 
@@ -645,57 +651,57 @@ func parseIntArray(s string) []int {
 	return result
 }
 
-// parseInterfaceToStringArray converts DuckDB array results to []string
-func parseInterfaceToStringArray(v interface{}) []string {
+// parseInterfaceToArray converts DuckDB array results to []T using generics
+func parseInterfaceToArray[T any](v interface{}, convertFunc func(interface{}) (T, bool), fallbackFunc func(string) []T) []T {
 	if v == nil {
-		return []string{}
+		return []T{}
 	}
 	
 	switch arr := v.(type) {
 	case []interface{}:
-		result := make([]string, 0, len(arr))
+		result := make([]T, 0, len(arr))
 		for _, item := range arr {
-			if s, ok := item.(string); ok {
-				result = append(result, s)
+			if converted, ok := convertFunc(item); ok {
+				result = append(result, converted)
 			}
 		}
 		return result
 	case string:
 		// Fallback for old format
-		return parseStringArray(arr)
+		return fallbackFunc(arr)
 	default:
-		return []string{}
+		return []T{}
 	}
+}
+
+// parseInterfaceToStringArray converts DuckDB array results to []string
+func parseInterfaceToStringArray(v interface{}) []string {
+	return parseInterfaceToArray(v, 
+		func(item interface{}) (string, bool) {
+			s, ok := item.(string)
+			return s, ok
+		}, 
+		parseStringArray)
 }
 
 // parseInterfaceToIntArray converts DuckDB array results to []int
 func parseInterfaceToIntArray(v interface{}) []int {
-	if v == nil {
-		return []int{}
-	}
-	
-	switch arr := v.(type) {
-	case []interface{}:
-		result := make([]int, 0, len(arr))
-		for _, item := range arr {
+	return parseInterfaceToArray(v,
+		func(item interface{}) (int, bool) {
 			switch val := item.(type) {
 			case int:
-				result = append(result, val)
+				return val, true
 			case int32:
-				result = append(result, int(val))
+				return int(val), true
 			case int64:
-				result = append(result, int(val))
+				return int(val), true
 			case float64:
-				result = append(result, int(val))
+				return int(val), true
+			default:
+				return 0, false
 			}
-		}
-		return result
-	case string:
-		// Fallback for old format
-		return parseIntArray(arr)
-	default:
-		return []int{}
-	}
+		},
+		parseIntArray)
 }
 
 // GetNodeHistory retrieves all historical entries for a specific node
