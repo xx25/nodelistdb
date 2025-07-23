@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{{.Title}}</h1>
+            <p class="subtitle">REST API endpoints for programmatic access to nodelist data</p>
+        </header>
+        
+        <nav>
+            <div class="nav-container">
+                <a href="/">🏠 Home</a>
+                <a href="/search">🔍 Search Nodes</a>
+                <a href="/search/sysop">👤 Search Sysops</a>
+                <a href="/stats">📊 Statistics</a>
+                <a href="/api/help" class="active">📖 API Help</a>
+            </div>
+        </nav>
+        
+        <div class="content">
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🚀 Getting Started</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 2rem;">
+                    The NodelistDB API provides RESTful access to FidoNet node data with JSON responses. 
+                    All endpoints support standard HTTP methods and return consistent JSON structures.
+                </p>
+                
+                <div class="alert alert-success">
+                    <strong>Base URL:</strong> <code>http://localhost:8080/api/</code>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🔍 Search Endpoints</h2>
+                
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Search Nodes</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Search for nodes using various criteria. All parameters are optional.</p>
+                
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Query Parameters:</strong><br>
+                    <code>zone</code> - Zone number (e.g., 1, 2, 3)<br>
+                    <code>net</code> - Net number<br>
+                    <code>node</code> - Node number<br>
+                    <code>system_name</code> - System name (partial match)<br>
+                    <code>location</code> - Location (partial match)<br>
+                    <code>node_type</code> - Node type (Hub, Host, Zone, etc.)<br>
+                    <code>is_active</code> - true/false for active nodes<br>
+                    <code>is_cm</code> - true/false for CM nodes<br>
+                    <code>date_from</code> - Start date (YYYY-MM-DD)<br>
+                    <code>date_to</code> - End date (YYYY-MM-DD)<br>
+                    <code>limit</code> - Results limit (default: 100, max: 200)<br>
+                    <code>offset</code> - Results offset for pagination
+                </div>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example:</strong><br>
+                    <code>GET /api/nodes?zone=2&limit=10&is_cm=true</code>
+                </div>
+
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Search by Sysop</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/search/sysop</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Find all nodes operated by a specific sysop across all time periods.</p>
+                
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Query Parameters:</strong><br>
+                    <code>name</code> - Sysop name (required)<br>
+                    <code>limit</code> - Results limit (default: 50, max: 200)
+                </div>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example:</strong><br>
+                    <code>GET /api/nodes/search/sysop?name=John_Doe&limit=25</code>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🎯 Node Specific Endpoints</h2>
+                
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Get Node Information</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/{zone}/{net}/{node}</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Retrieve information for a specific node, including current and historical versions.</p>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example:</strong><br>
+                    <code>GET /api/nodes/2/5001/100</code>
+                </div>
+
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Get Node History</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/{zone}/{net}/{node}/history</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get complete historical records for a specific node.</p>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example:</strong><br>
+                    <code>GET /api/nodes/2/5001/100/history</code>
+                </div>
+
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Get Node Changes</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/{zone}/{net}/{node}/changes</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get detected changes and timeline events for a node. Supports filtering options.</p>
+                
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Filter Parameters:</strong><br>
+                    <code>noflags=1</code> - Ignore flag changes<br>
+                    <code>nophone=1</code> - Ignore phone changes<br>
+                    <code>nospeed=1</code> - Ignore speed changes<br>
+                    <code>nostatus=1</code> - Ignore status changes<br>
+                    <code>nolocation=1</code> - Ignore location changes<br>
+                    <code>noname=1</code> - Ignore name changes<br>
+                    <code>nosysop=1</code> - Ignore sysop changes<br>
+                    <code>noconnectivity=1</code> - Ignore connectivity changes<br>
+                    <code>nointernetprotocols=1</code> - Ignore internet protocol changes<br>
+                    <code>nointernethostnames=1</code> - Ignore hostname changes<br>
+                    <code>nointernetports=1</code> - Ignore port changes<br>
+                    <code>nointernetemails=1</code> - Ignore email changes<br>
+                    <code>nomodemflags=1</code> - Ignore modem flag changes
+                </div>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example:</strong><br>
+                    <code>GET /api/nodes/2/5001/100/changes?noflags=1&nophone=1</code>
+                </div>
+
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Get Node Timeline</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/{zone}/{net}/{node}/timeline</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get timeline data optimized for visualization, including activity periods and gaps.</p>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example:</strong><br>
+                    <code>GET /api/nodes/2/5001/100/timeline</code>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📊 Statistics Endpoints</h2>
+                
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Network Statistics</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/stats</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get comprehensive network statistics including node counts, zone distribution, and capabilities.</p>
+                
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Query Parameters:</strong><br>
+                    <code>date</code> - Specific date for statistics (YYYY-MM-DD, defaults to today)
+                </div>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example:</strong><br>
+                    <code>GET /api/stats?date=2023-12-01</code>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🛠️ System Endpoints</h2>
+                
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Health Check</h3>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
+                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/health</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Check API service status and uptime.</p>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example Response:</strong><br>
+                    <code>{"status": "ok", "time": "2023-12-01T12:00:00Z"}</code>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">💡 Usage Examples</h2>
+                
+                <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Using curl</h3>
+                <div style="background: #1e293b; color: #e2e8f0; padding: 1.5rem; border-radius: var(--radius); margin-bottom: 1rem; font-family: monospace; overflow-x: auto;">
+# Search for nodes in Zone 2<br>
+curl "http://localhost:8080/api/nodes?zone=2&limit=5"<br><br>
+
+# Get specific node information<br>
+curl "http://localhost:8080/api/nodes/2/5001/100"<br><br>
+
+# Search by sysop name<br>
+curl "http://localhost:8080/api/nodes/search/sysop?name=John_Doe"<br><br>
+
+# Get network statistics<br>
+curl "http://localhost:8080/api/stats"
+                </div>
+
+                <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Response Format</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">All API responses use JSON format with consistent structure:</p>
+                <div style="background: #1e293b; color: #e2e8f0; padding: 1.5rem; border-radius: var(--radius); margin-bottom: 2rem; font-family: monospace; overflow-x: auto;">
+{<br>
+&nbsp;&nbsp;"nodes": [...],<br>
+&nbsp;&nbsp;"count": 42,<br>
+&nbsp;&nbsp;"filter": {...}<br>
+}
+                </div>
+            </div>
+
+            <div class="alert alert-success">
+                <strong>💡 Pro Tip:</strong> Use the <code>limit</code> and <code>offset</code> parameters for efficient pagination when dealing with large result sets. The API performs well with limits up to 200 records per request.
+            </div>
+        </div>
+    </div>
+</body>
+</html>

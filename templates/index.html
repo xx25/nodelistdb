@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{{.Title}}</h1>
+            <p class="subtitle">Comprehensive FidoNet historical data and analytics</p>
+        </header>
+        
+        <nav>
+            <div class="nav-container">
+                <a href="/" class="active">🏠 Home</a>
+                <a href="/search">🔍 Search Nodes</a>
+                <a href="/search/sysop">👤 Search Sysops</a>
+                <a href="/stats">📊 Statistics</a>
+                <a href="/api/help">📖 API Help</a>
+            </div>
+        </nav>
+        
+        <div class="content">
+            <div class="card">
+                <p style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 2rem;">
+                    Welcome to the FidoNet Nodelist Database. This system provides comprehensive access to historical and current FidoNet node information, featuring advanced search capabilities and detailed historical analysis.
+                </p>
+                
+                <h2 style="margin-bottom: 1.5rem; color: var(--text-primary);">Quick Actions</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>🔍</h3>
+                        <p style="color: var(--text-primary); font-size: 1rem; margin-top: 1rem;">
+                            <a href="/search" class="btn" style="text-decoration: none; display: inline-block; margin-top: 0.5rem;">Search Nodes</a>
+                        </p>
+                        <small style="color: var(--text-secondary);">Find nodes by zone, net, system name, or location</small>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>👤</h3>
+                        <p style="color: var(--text-primary); font-size: 1rem; margin-top: 1rem;">
+                            <a href="/search/sysop" class="btn" style="text-decoration: none; display: inline-block; margin-top: 0.5rem;">Search Sysops</a>
+                        </p>
+                        <small style="color: var(--text-secondary);">Find all nodes operated by a specific sysop</small>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>📊</h3>
+                        <p style="color: var(--text-primary); font-size: 1rem; margin-top: 1rem;">
+                            <a href="/stats" class="btn" style="text-decoration: none; display: inline-block; margin-top: 0.5rem;">Statistics</a>
+                        </p>
+                        <small style="color: var(--text-secondary);">View network statistics and trends</small>
+                    </div>
+                </div>
+                
+                <div class="alert alert-success" style="margin-top: 2rem;">
+                    <strong>✨ New Feature:</strong> Historical node tracking with timeline visualization and change filtering is now available!
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
