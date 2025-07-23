@@ -393,6 +393,7 @@ func (s *Server) getTemplate(name string) string {
                                 <thead>
                                     <tr>
                                         <th>Zone</th>
+                                        <th>Description</th>
                                         <th>Node Count</th>
                                         <th>Percentage</th>
                                         <th>Representation</th>
@@ -402,6 +403,15 @@ func (s *Server) getTemplate(name string) string {
                                     {{range $zone, $count := .Stats.ZoneDistribution}}
                                     <tr>
                                         <td><strong>Zone {{$zone}}</strong></td>
+                                        <td style="color: var(--text-secondary);">
+                                            {{if eq $zone 1}}United States and Canada
+                                            {{else if eq $zone 2}}Europe, Former Soviet Union, and Israel
+                                            {{else if eq $zone 3}}Australasia (includes former Zone 6 nodes)
+                                            {{else if eq $zone 4}}Latin America (except Puerto Rico)
+                                            {{else if eq $zone 5}}Africa
+                                            {{else if eq $zone 6}}Asia (removed July 2007, nodes moved to Zone 3)
+                                            {{else}}Unknown{{end}}
+                                        </td>
                                         <td>{{$count}} nodes</td>
                                         <td style="color: var(--text-secondary);">
                                             {{printf "%.1f%%" (div (mul $count 100) $.Stats.TotalNodes)}}
@@ -428,6 +438,7 @@ func (s *Server) getTemplate(name string) string {
                                 <thead>
                                     <tr>
                                         <th>Region</th>
+                                        <th>Description</th>
                                         <th>Zone</th>
                                         <th>Node Count</th>
                                         <th>Representation</th>
@@ -437,6 +448,7 @@ func (s *Server) getTemplate(name string) string {
                                     {{range .Stats.LargestRegions}}
                                     <tr>
                                         <td><strong>Region {{.Region}}</strong></td>
+                                        <td style="color: var(--text-secondary);">{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
                                         <td>Zone {{.Zone}}</td>
                                         <td>{{.NodeCount}} nodes</td>
                                         <td>
@@ -461,7 +473,7 @@ func (s *Server) getTemplate(name string) string {
                                 <thead>
                                     <tr>
                                         <th>Network</th>
-                                        <th>Host System</th>
+                                        <th>Description</th>
                                         <th>Node Count</th>
                                         <th>Representation</th>
                                     </tr>

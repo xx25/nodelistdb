@@ -125,19 +125,29 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 // StatsHandler handles statistics page
 func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
-	// Try to get stats for the most recent date with data
-	today := time.Now()
-	var stats *database.NetworkStats
-	var err error
-	
-	// Try today first, then go back up to 30 days
-	for i := 0; i < 30; i++ {
-		date := today.AddDate(0, 0, -i)
-		stats, err = s.storage.GetStats(date)
-		if err == nil && stats != nil && stats.TotalNodes > 0 {
-			break
+	// Get the latest available nodelist date
+	latestDate, err := s.storage.GetLatestStatsDate()
+	if err != nil {
+		data := struct {
+			Title  string
+			Stats  *database.NetworkStats
+			Error  error
+			NoData bool
+		}{
+			Title:  "Network Statistics",
+			Stats:  nil,
+			Error:  fmt.Errorf("Failed to find latest nodelist date: %v", err),
+			NoData: true,
 		}
+		
+		if err := s.templates["stats"].Execute(w, data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
 	}
+	
+	// Get stats for the latest date
+	stats, err := s.storage.GetStats(latestDate)
 	
 	data := struct {
 		Title  string

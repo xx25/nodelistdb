@@ -426,10 +426,15 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	// Get largest regions (top 10)
 	stats.LargestRegions = []database.RegionInfo{}
 	rows, err = conn.Query(`
-		SELECT zone, region, COUNT(*) as count 
-		FROM nodes 
-		WHERE nodelist_date = ? AND region > 0 AND node_type = 'Node'
-		GROUP BY zone, region 
+		WITH RegionCounts AS (
+			SELECT zone, region, COUNT(*) as count,
+				   MAX(CASE WHEN node_type = 'Region' THEN system_name ELSE NULL END) as region_name
+			FROM nodes 
+			WHERE nodelist_date = ? AND region > 0
+			GROUP BY zone, region
+		)
+		SELECT zone, region, count, region_name
+		FROM RegionCounts
 		ORDER BY count DESC 
 		LIMIT 10
 	`, date)
@@ -440,8 +445,12 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 
 	for rows.Next() {
 		var region database.RegionInfo
-		if err := rows.Scan(&region.Zone, &region.Region, &region.NodeCount); err != nil {
+		var regionName sql.NullString
+		if err := rows.Scan(&region.Zone, &region.Region, &region.NodeCount, &regionName); err != nil {
 			return nil, fmt.Errorf("failed to scan region info: %w", err)
+		}
+		if regionName.Valid {
+			region.Name = regionName.String
 		}
 		stats.LargestRegions = append(stats.LargestRegions, region)
 	}
@@ -450,17 +459,22 @@ func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	stats.LargestNets = []database.NetInfo{}
 	rows, err = conn.Query(`
 		WITH NetCounts AS (
-			SELECT zone, net, COUNT(*) as count,
-				   MAX(CASE WHEN node_type = 'Host' THEN system_name ELSE NULL END) as host_name
+			SELECT zone, net, COUNT(*) as count
 			FROM nodes 
 			WHERE nodelist_date = ? AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
 			GROUP BY zone, net
+		),
+		HostNames AS (
+			SELECT zone, net, system_name as host_name
+			FROM nodes
+			WHERE nodelist_date = ? AND node_type = 'Host'
 		)
-		SELECT zone, net, count, host_name
-		FROM NetCounts
-		ORDER BY count DESC 
+		SELECT nc.zone, nc.net, nc.count, hn.host_name
+		FROM NetCounts nc
+		LEFT JOIN HostNames hn ON nc.zone = hn.zone AND nc.net = hn.net
+		ORDER BY nc.count DESC 
 		LIMIT 10
-	`, date)
+	`, date, date)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get largest nets: %w", err)
 	}
