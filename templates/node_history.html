@@ -180,11 +180,25 @@
                                     <strong>
                                         {{if eq $field "binkp"}}🌐 Binkp Support
                                         {{else if eq $field "telnet"}}📡 Telnet Support
+                                        {{else if eq $field "has_inet"}}🌍 Internet Connectivity
                                         {{else if eq $field "modem_flags"}}📞 Modem Flags
-                                        {{else if eq $field "internet_protocols"}}🌐 Internet Protocols
-                                        {{else if eq $field "internet_hostnames"}}🏠 Internet Hostnames
-                                        {{else if eq $field "internet_ports"}}🔌 Internet Ports
-                                        {{else if eq $field "internet_emails"}}📧 Internet Emails
+                                        {{else if eq $field "internet_protocols"}}🌐 Internet Protocols (Legacy)
+                                        {{else if eq $field "internet_hostnames"}}🏠 Internet Hostnames (Legacy)
+                                        {{else if eq $field "internet_ports"}}🔌 Internet Ports (Legacy)
+                                        {{else if eq $field "internet_emails"}}📧 Internet Emails (Legacy)
+                                        {{else if eq $field "inet_IBN"}}🌐 BinkP (IBN)
+                                        {{else if eq $field "inet_IFC"}}📁 File Transfer (IFC)
+                                        {{else if eq $field "inet_ITN"}}📡 Telnet (ITN)
+                                        {{else if eq $field "inet_IVM"}}📞 VModem (IVM)
+                                        {{else if eq $field "inet_IFT"}}📁 FTP (IFT)
+                                        {{else if eq $field "inet_INA"}}🏠 Default Address (INA)
+                                        {{else if eq $field "inet_IEM"}}📧 Default Email (IEM)
+                                        {{else if eq $field "inet_IMI"}}📧 Mail Interface (IMI)
+                                        {{else if eq $field "inet_ITX"}}📧 TransX (ITX)
+                                        {{else if eq $field "inet_ISE"}}📧 SendEmail (ISE)
+                                        {{else if eq $field "inet_flag_INO4"}}🚫 IPv4 Support (INO4)
+                                        {{else if eq $field "inet_flag_ICM"}}📞 Call Me (ICM)
+                                        {{else if eq $field "internet_config"}}🌐 Internet Configuration
                                         {{else if eq $field "status"}}📊 Status
                                         {{else if eq $field "name"}}💻 System Name
                                         {{else if eq $field "location"}}🌍 Location

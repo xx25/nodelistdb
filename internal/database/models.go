@@ -1,6 +1,7 @@
 package database
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -28,6 +29,7 @@ type Node struct {
 	IsCM      bool `json:"is_cm"`
 	IsMO      bool `json:"is_mo"`
 	HasBinkp  bool `json:"has_binkp"`
+	HasInet   bool `json:"has_inet"`    // Any internet connectivity
 	HasTelnet bool `json:"has_telnet"`
 	IsDown    bool `json:"is_down"`
 	IsHold    bool `json:"is_hold"`
@@ -42,9 +44,31 @@ type Node struct {
 	InternetPorts     []int    `json:"internet_ports"`
 	InternetEmails    []string `json:"internet_emails"`
 
+	// Internet configuration JSON
+	InternetConfig json.RawMessage `json:"internet_config,omitempty"`
+
 	// Conflict tracking
 	ConflictSequence int  `json:"conflict_sequence"`
 	HasConflict      bool `json:"has_conflict"`
+}
+
+// InternetProtocolDetail represents details for a specific protocol
+type InternetProtocolDetail struct {
+	Address string `json:"address,omitempty"`
+	Port    int    `json:"port,omitempty"`
+}
+
+// EmailProtocolDetail represents details for email protocols
+type EmailProtocolDetail struct {
+	Email string `json:"email,omitempty"`
+}
+
+// InternetConfiguration represents the structured internet config
+type InternetConfiguration struct {
+	Protocols      map[string]InternetProtocolDetail `json:"protocols,omitempty"`
+	Defaults       map[string]string                 `json:"defaults,omitempty"`
+	EmailProtocols map[string]EmailProtocolDetail    `json:"email_protocols,omitempty"`
+	InfoFlags      []string                          `json:"info_flags,omitempty"`
 }
 
 // NodeFilter represents search criteria for nodes

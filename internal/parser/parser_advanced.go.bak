@@ -439,6 +439,11 @@ func (ap *AdvancedParser) parseAdvancedFlags(flagsStr string) ([]string, []strin
 
 // parseAdvancedLine parses a single nodelist entry line with all advanced features
 func (ap *AdvancedParser) parseAdvancedLine(line string, nodelistDate time.Time, dayNumber int, filePath string, fileCRC uint16) (*database.Node, error) {
+	// Debug for specific line
+	if strings.Contains(line, "FTSC_Chair") {
+		fmt.Printf("DEBUG parseAdvancedLine: Parsing FTSC_Chair line: %s\n", line)
+	}
+	
 	// Sanitize UTF-8 for database storage
 	line = sanitizeUTF8(line)
 	
@@ -565,14 +570,18 @@ func (ap *AdvancedParser) parseAdvancedLine(line string, nodelistDate time.Time,
 		region = ap.Context.CurrentRegion
 	}
 
-	// Parse flags into structured format with full categorization
-	flags, internetProtocols, internetHostnames, internetPorts, internetEmails, modemFlags := ap.parseAdvancedFlags(flagsStr)
+	// Parse flags into structured format with full categorization AND build JSON config
+	flags, internetProtocols, internetHostnames, internetPorts, internetEmails, internetConfig := ap.Parser.parseFlagsWithConfig(flagsStr)
+	
+	// Get modem flags separately (not included in parseFlagsWithConfig yet)
+	_, _, _, _, _, modemFlags := ap.parseAdvancedFlags(flagsStr)
 	
 	// Compute boolean flags based on comprehensive flag analysis
 	isCM := ap.hasFlag(flags, "CM")
 	isMO := ap.hasFlag(flags, "MO") 
 	hasBinkp := ap.hasProtocol(internetProtocols, "IBN") || ap.hasProtocol(internetProtocols, "BND") || ap.hasFlag(flags, "IBN") || ap.hasFlag(flags, "BND")
 	hasTelnet := ap.hasProtocol(internetProtocols, "ITN") || ap.hasProtocol(internetProtocols, "TEL") || ap.hasFlag(flags, "ITN") || ap.hasFlag(flags, "TEL")
+	hasInet := len(internetProtocols) > 0 || len(internetEmails) > 0 || hasBinkp || hasTelnet
 	isDown := nodeType == "Down"
 	isHold := nodeType == "Hold"
 	isPvt := nodeType == "Pvt"
@@ -595,6 +604,7 @@ func (ap *AdvancedParser) parseAdvancedLine(line string, nodelistDate time.Time,
 		IsCM:         isCM,
 		IsMO:         isMO,
 		HasBinkp:     hasBinkp,
+		HasInet:      hasInet,
 		HasTelnet:    hasTelnet,
 		IsDown:       isDown,
 		IsHold:       isHold,
@@ -606,6 +616,7 @@ func (ap *AdvancedParser) parseAdvancedLine(line string, nodelistDate time.Time,
 		InternetHostnames: internetHostnames,
 		InternetPorts:     internetPorts,
 		InternetEmails:    internetEmails,
+		InternetConfig:    internetConfig,
 		ConflictSequence: 0,    // Default to 0 (original entry)
 		HasConflict:      false, // Default to false
 	}

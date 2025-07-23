@@ -47,8 +47,8 @@ func (s *Storage) prepareStatements() error {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		conflict_sequence, has_conflict
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		conflict_sequence, has_conflict, has_inet, internet_config
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var err error
 	s.insertStmt, err = conn.Prepare(insertSQL)
@@ -61,7 +61,8 @@ func (s *Storage) prepareStatements() error {
 	SELECT zone, net, node, nodelist_date, day_number,
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails
+		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		   has_inet, internet_config
 	FROM nodes
 	WHERE 1=1`
 
@@ -139,7 +140,7 @@ func (s *Storage) buildInsertSQL(values []string) string {
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
 			is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 			flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-			conflict_sequence, has_conflict
+			conflict_sequence, has_conflict, has_inet, internet_config
 		) VALUES %s
 		ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
 		DO NOTHING
@@ -147,8 +148,15 @@ func (s *Storage) buildInsertSQL(values []string) string {
 }
 
 func (s *Storage) formatNodeValues(node database.Node) string {
+	// Handle internet_config JSON
+	configStr := "NULL"
+	if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
+		// Escape the JSON for SQL
+		configStr = "'" + escapeSingleQuotes(string(node.InternetConfig)) + "'"
+	}
+	
 	return fmt.Sprintf(
-		"(%d,%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%s,'%s',%t,%t,%t,%t,%t,%t,%t,%t,%s,%s,%s,%s,%s,%s,%d,%t)",
+		"(%d,%d,%d,'%s',%d,'%s','%s','%s','%s','%s',%s,'%s',%t,%t,%t,%t,%t,%t,%t,%t,%s,%s,%s,%s,%s,%s,%d,%t,%t,%s)",
 		node.Zone, node.Net, node.Node,
 		node.NodelistDate.Format("2006-01-02"), node.DayNumber,
 		escapeSingleQuotes(node.SystemName),
@@ -167,6 +175,7 @@ func (s *Storage) formatNodeValues(node database.Node) string {
 		formatIntArrayDuckDB(node.InternetPorts),
 		formatArrayDuckDB(node.InternetEmails),
 		node.ConflictSequence, node.HasConflict,
+		node.HasInet, configStr,
 	)
 }
 
@@ -231,7 +240,7 @@ func (s *Storage) buildBaseQuery(latestOnly bool) string {
 			   system_name, location, sysop_name, phone, node_type, region, max_speed,
 			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-			   conflict_sequence, has_conflict
+			   conflict_sequence, has_conflict, has_inet, internet_config
 		FROM (
 			SELECT *, 
 				   ROW_NUMBER() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
@@ -243,7 +252,7 @@ func (s *Storage) buildBaseQuery(latestOnly bool) string {
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		   conflict_sequence, has_conflict
+		   conflict_sequence, has_conflict, has_inet, internet_config
 	FROM nodes WHERE 1=1`
 }
 
@@ -303,6 +312,7 @@ func (s *Storage) parseNodeRow(rows *sql.Rows) (database.Node, error) {
 	var node database.Node
 	var flags, modemFlags, protocols, hosts, emails interface{}
 	var ports interface{}
+	var internetConfig sql.NullString
 
 	err := rows.Scan(
 		&node.Zone, &node.Net, &node.Node, &node.NodelistDate, &node.DayNumber,
@@ -312,6 +322,7 @@ func (s *Storage) parseNodeRow(rows *sql.Rows) (database.Node, error) {
 		&node.IsDown, &node.IsHold, &node.IsPvt, &node.IsActive,
 		&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
 		&node.ConflictSequence, &node.HasConflict,
+		&node.HasInet, &internetConfig,
 	)
 	if err != nil {
 		return node, fmt.Errorf("failed to scan node: %w", err)
@@ -323,6 +334,11 @@ func (s *Storage) parseNodeRow(rows *sql.Rows) (database.Node, error) {
 	node.InternetHostnames = parseInterfaceToStringArray(hosts)
 	node.InternetPorts = parseInterfaceToIntArray(ports)
 	node.InternetEmails = parseInterfaceToStringArray(emails)
+	
+	// Handle JSON field
+	if internetConfig.Valid {
+		node.InternetConfig = json.RawMessage(internetConfig.String)
+	}
 
 	return node, nil
 }
@@ -717,7 +733,7 @@ func (s *Storage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		   conflict_sequence, has_conflict
+		   conflict_sequence, has_conflict, has_inet, internet_config
 	FROM nodes
 	WHERE zone = ? AND net = ? AND node = ?
 	ORDER BY nodelist_date ASC, conflict_sequence ASC`
@@ -733,6 +749,7 @@ func (s *Storage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
 		var n database.Node
 		var flags, modemFlags, protocols, hosts, emails interface{}
 		var ports interface{}
+		var internetConfig sql.NullString
 
 		err := rows.Scan(
 			&n.Zone, &n.Net, &n.Node, &n.NodelistDate, &n.DayNumber,
@@ -742,6 +759,7 @@ func (s *Storage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
 			&n.IsDown, &n.IsHold, &n.IsPvt, &n.IsActive,
 			&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
 			&n.ConflictSequence, &n.HasConflict,
+			&n.HasInet, &internetConfig,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan node history: %w", err)
@@ -754,6 +772,11 @@ func (s *Storage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
 		n.InternetHostnames = parseInterfaceToStringArray(hosts)
 		n.InternetPorts = parseInterfaceToIntArray(ports)
 		n.InternetEmails = parseInterfaceToStringArray(emails)
+		
+		// Handle JSON field
+		if internetConfig.Valid {
+			n.InternetConfig = json.RawMessage(internetConfig.String)
+		}
 
 		nodes = append(nodes, n)
 	}
@@ -879,6 +902,169 @@ func (s *Storage) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary
 	return results, nil
 }
 
+// parseInternetConfig unmarshals JSON into InternetConfiguration struct
+func parseInternetConfig(data json.RawMessage) (*database.InternetConfiguration, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	
+	var config database.InternetConfiguration
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+// detectInternetConfigChanges compares two JSON configs and returns detailed changes
+func detectInternetConfigChanges(prev, curr json.RawMessage) map[string]string {
+	changes := make(map[string]string)
+	
+	prevConfig, prevErr := parseInternetConfig(prev)
+	currConfig, currErr := parseInternetConfig(curr)
+	
+	// Handle errors or nil configs
+	if prevErr != nil || currErr != nil {
+		if len(prev) > 0 && len(curr) == 0 {
+			changes["internet_config"] = "Removed all internet configuration"
+		} else if len(prev) == 0 && len(curr) > 0 {
+			changes["internet_config"] = "Added internet configuration"
+		}
+		return changes
+	}
+	
+	if prevConfig == nil && currConfig == nil {
+		return changes
+	}
+	
+	if prevConfig == nil && currConfig != nil {
+		// New config added
+		for proto, detail := range currConfig.Protocols {
+			if detail.Port > 0 {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s:%d", detail.Address, detail.Port)
+			} else {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", detail.Address)
+			}
+		}
+		for key, val := range currConfig.Defaults {
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", val)
+		}
+		return changes
+	}
+	
+	if prevConfig != nil && currConfig == nil {
+		// Config removed
+		for proto, detail := range prevConfig.Protocols {
+			if detail.Port > 0 {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s:%d", detail.Address, detail.Port)
+			} else {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", detail.Address)
+			}
+		}
+		return changes
+	}
+	
+	// Compare protocols
+	for proto, currDetail := range currConfig.Protocols {
+		prevDetail, existed := prevConfig.Protocols[proto]
+		if !existed {
+			if currDetail.Port > 0 {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s:%d", currDetail.Address, currDetail.Port)
+			} else {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", currDetail.Address)
+			}
+		} else if prevDetail.Address != currDetail.Address || prevDetail.Port != currDetail.Port {
+			oldStr := prevDetail.Address
+			newStr := currDetail.Address
+			if prevDetail.Port > 0 {
+				oldStr = fmt.Sprintf("%s:%d", prevDetail.Address, prevDetail.Port)
+			}
+			if currDetail.Port > 0 {
+				newStr = fmt.Sprintf("%s:%d", currDetail.Address, currDetail.Port)
+			}
+			changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("%s → %s", oldStr, newStr)
+		}
+	}
+	
+	// Check for removed protocols
+	for proto, prevDetail := range prevConfig.Protocols {
+		if _, exists := currConfig.Protocols[proto]; !exists {
+			if prevDetail.Port > 0 {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s:%d", prevDetail.Address, prevDetail.Port)
+			} else {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", prevDetail.Address)
+			}
+		}
+	}
+	
+	// Compare defaults
+	for key, currVal := range currConfig.Defaults {
+		prevVal, existed := prevConfig.Defaults[key]
+		if !existed {
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", currVal)
+		} else if prevVal != currVal {
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("%s → %s", prevVal, currVal)
+		}
+	}
+	
+	// Check for removed defaults
+	for key, prevVal := range prevConfig.Defaults {
+		if _, exists := currConfig.Defaults[key]; !exists {
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", prevVal)
+		}
+	}
+	
+	// Compare email protocols
+	for proto, currDetail := range currConfig.EmailProtocols {
+		prevDetail, existed := prevConfig.EmailProtocols[proto]
+		if !existed {
+			if currDetail.Email != "" {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", currDetail.Email)
+			} else {
+				changes[fmt.Sprintf("inet_%s", proto)] = "Added (uses default email)"
+			}
+		} else if prevDetail.Email != currDetail.Email {
+			if currDetail.Email != "" {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("%s → %s", prevDetail.Email, currDetail.Email)
+			}
+		}
+	}
+	
+	// Check for removed email protocols
+	for proto, prevDetail := range prevConfig.EmailProtocols {
+		if _, exists := currConfig.EmailProtocols[proto]; !exists {
+			if prevDetail.Email != "" {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", prevDetail.Email)
+			} else {
+				changes[fmt.Sprintf("inet_%s", proto)] = "Removed"
+			}
+		}
+	}
+	
+	// Compare info flags
+	prevFlags := make(map[string]bool)
+	currFlags := make(map[string]bool)
+	
+	for _, flag := range prevConfig.InfoFlags {
+		prevFlags[flag] = true
+	}
+	for _, flag := range currConfig.InfoFlags {
+		currFlags[flag] = true
+	}
+	
+	for flag := range currFlags {
+		if !prevFlags[flag] {
+			changes[fmt.Sprintf("inet_flag_%s", flag)] = "Added"
+		}
+	}
+	for flag := range prevFlags {
+		if !currFlags[flag] {
+			changes[fmt.Sprintf("inet_flag_%s", flag)] = "Removed"
+		}
+	}
+	
+	return changes
+}
+
 // GetNodeChanges analyzes the history of a node and returns detected changes
 func (s *Storage) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error) {
 	// Get all historical entries
@@ -986,6 +1172,19 @@ func (s *Storage) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]da
 		
 		if !filter.IgnoreInternetEmails && !equalStringSlices(prev.InternetEmails, curr.InternetEmails) {
 			fieldChanges["internet_emails"] = fmt.Sprintf("%v → %v", prev.InternetEmails, curr.InternetEmails)
+		}
+		
+		// Check has_inet changes
+		if !filter.IgnoreConnectivity && prev.HasInet != curr.HasInet {
+			fieldChanges["has_inet"] = fmt.Sprintf("%t → %t", prev.HasInet, curr.HasInet)
+		}
+		
+		// Detect internet config changes using new JSON-based detection
+		if !filter.IgnoreConnectivity || !filter.IgnoreInternetProtocols || !filter.IgnoreInternetHostnames {
+			configChanges := detectInternetConfigChanges(prev.InternetConfig, curr.InternetConfig)
+			for key, value := range configChanges {
+				fieldChanges[key] = value
+			}
 		}
 
 		if len(fieldChanges) > 0 {

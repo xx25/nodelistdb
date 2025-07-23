@@ -81,6 +81,7 @@ func (db *DB) CreateSchema() error {
 		is_cm BOOLEAN DEFAULT FALSE,
 		is_mo BOOLEAN DEFAULT FALSE,
 		has_binkp BOOLEAN DEFAULT FALSE,
+		has_inet BOOLEAN DEFAULT FALSE,
 		has_telnet BOOLEAN DEFAULT FALSE,
 		is_down BOOLEAN DEFAULT FALSE,
 		is_hold BOOLEAN DEFAULT FALSE,
@@ -94,6 +95,9 @@ func (db *DB) CreateSchema() error {
 		internet_hostnames TEXT[] DEFAULT [],
 		internet_ports INTEGER[] DEFAULT [],
 		internet_emails TEXT[] DEFAULT [],
+		
+		-- Internet configuration JSON
+		internet_config JSON,
 		
 		-- Conflict tracking
 		conflict_sequence INTEGER DEFAULT 0,  -- 0 = original, 1+ = conflict duplicates

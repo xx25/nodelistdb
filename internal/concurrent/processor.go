@@ -30,7 +30,7 @@ type Result struct {
 // Processor manages concurrent file processing
 type Processor struct {
 	storage    *storage.Storage
-	parser     *parser.AdvancedParser
+	parser     *parser.Parser
 	numWorkers int
 	batchSize  int
 	verbose    bool
@@ -38,7 +38,7 @@ type Processor struct {
 }
 
 // New creates a new concurrent processor
-func New(storage *storage.Storage, parser *parser.AdvancedParser, numWorkers int, batchSize int, verbose bool, quiet bool) *Processor {
+func New(storage *storage.Storage, parser *parser.Parser, numWorkers int, batchSize int, verbose bool, quiet bool) *Processor {
 	return &Processor{
 		storage:    storage,
 		parser:     parser,
@@ -125,7 +125,7 @@ func (p *Processor) worker(ctx context.Context, workerID int, jobs <-chan Job, r
 }
 
 // processJobWithParser processes a single job using the provided parser instance
-func (p *Processor) processJobWithParser(ctx context.Context, job Job, workerParser *parser.AdvancedParser) Result {
+func (p *Processor) processJobWithParser(ctx context.Context, job Job, workerParser *parser.Parser) Result {
 	start := time.Now()
 	
 	if !p.quiet {
