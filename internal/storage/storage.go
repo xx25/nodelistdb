@@ -218,16 +218,9 @@ func (s *Storage) markOriginalAsConflicted(conn *sql.DB, zone, net, node int, da
 }
 
 // GetNodes retrieves nodes based on filter criteria
-func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	conn := s.db.Conn()
-
-	// Build dynamic query based on filter
-	var baseSQL string
-	if filter.LatestOnly != nil && *filter.LatestOnly {
-		baseSQL = `
+func (s *Storage) buildBaseQuery(latestOnly bool) string {
+	if latestOnly {
+		return `
 		SELECT zone, net, node, nodelist_date, day_number,
 			   system_name, location, sysop_name, phone, node_type, region, max_speed,
 			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
@@ -238,20 +231,20 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 				   ROW_NUMBER() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
 			FROM nodes
 		) ranked WHERE rn = 1`
-	} else {
-		baseSQL = `
-		SELECT zone, net, node, nodelist_date, day_number,
-			   system_name, location, sysop_name, phone, node_type, region, max_speed,
-			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-			   conflict_sequence, has_conflict
-		FROM nodes WHERE 1=1`
 	}
+	return `
+	SELECT zone, net, node, nodelist_date, day_number,
+		   system_name, location, sysop_name, phone, node_type, region, max_speed,
+		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		   conflict_sequence, has_conflict
+	FROM nodes WHERE 1=1`
+}
 
+func (s *Storage) buildWhereConditions(filter database.NodeFilter) ([]string, []interface{}) {
 	var conditions []string
 	var args []interface{}
 
-	// Add filter conditions
 	if filter.Zone != nil {
 		conditions = append(conditions, "zone = ?")
 		args = append(args, *filter.Zone)
@@ -297,14 +290,56 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 		args = append(args, *filter.HasBinkp)
 	}
 
-	// Build final query
+	return conditions, args
+}
+
+func (s *Storage) parseNodeRow(rows *sql.Rows) (database.Node, error) {
+	var node database.Node
+	var flags, modemFlags, protocols, hosts, emails interface{}
+	var ports interface{}
+
+	err := rows.Scan(
+		&node.Zone, &node.Net, &node.Node, &node.NodelistDate, &node.DayNumber,
+		&node.SystemName, &node.Location, &node.SysopName, &node.Phone,
+		&node.NodeType, &node.Region, &node.MaxSpeed,
+		&node.IsCM, &node.IsMO, &node.HasBinkp, &node.HasTelnet,
+		&node.IsDown, &node.IsHold, &node.IsPvt, &node.IsActive,
+		&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
+		&node.ConflictSequence, &node.HasConflict,
+	)
+	if err != nil {
+		return node, fmt.Errorf("failed to scan node: %w", err)
+	}
+
+	node.Flags = parseInterfaceToStringArray(flags)
+	node.ModemFlags = parseInterfaceToStringArray(modemFlags)
+	node.InternetProtocols = parseInterfaceToStringArray(protocols)
+	node.InternetHostnames = parseInterfaceToStringArray(hosts)
+	node.InternetPorts = parseInterfaceToIntArray(ports)
+	node.InternetEmails = parseInterfaceToStringArray(emails)
+
+	return node, nil
+}
+
+func (s *Storage) buildOrderByClause() string {
+	return " ORDER BY zone, net, node, nodelist_date DESC"
+}
+
+func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	conn := s.db.Conn()
+
+	baseSQL := s.buildBaseQuery(filter.LatestOnly != nil && *filter.LatestOnly)
+	conditions, args := s.buildWhereConditions(filter)
+
 	if len(conditions) > 0 {
 		baseSQL += " AND " + strings.Join(conditions, " AND ")
 	}
 
-	baseSQL += " ORDER BY zone, net, node, nodelist_date DESC"
+	baseSQL += s.buildOrderByClause()
 
-	// Add pagination
 	if filter.Limit > 0 {
 		baseSQL += fmt.Sprintf(" LIMIT %d", filter.Limit)
 		if filter.Offset > 0 {
@@ -320,31 +355,10 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 
 	var nodes []database.Node
 	for rows.Next() {
-		var node database.Node
-		var flags, modemFlags, protocols, hosts, emails interface{}
-		var ports interface{}
-
-		err := rows.Scan(
-			&node.Zone, &node.Net, &node.Node, &node.NodelistDate, &node.DayNumber,
-			&node.SystemName, &node.Location, &node.SysopName, &node.Phone,
-			&node.NodeType, &node.Region, &node.MaxSpeed,
-			&node.IsCM, &node.IsMO, &node.HasBinkp, &node.HasTelnet,
-			&node.IsDown, &node.IsHold, &node.IsPvt, &node.IsActive,
-			&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
-			&node.ConflictSequence, &node.HasConflict,
-		)
+		node, err := s.parseNodeRow(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan node: %w", err)
+			return nil, err
 		}
-
-		// Parse arrays from DuckDB native format
-		node.Flags = parseInterfaceToStringArray(flags)
-		node.ModemFlags = parseInterfaceToStringArray(modemFlags)
-		node.InternetProtocols = parseInterfaceToStringArray(protocols)
-		node.InternetHostnames = parseInterfaceToStringArray(hosts)
-		node.InternetPorts = parseInterfaceToIntArray(ports)
-		node.InternetEmails = parseInterfaceToStringArray(emails)
-
 		nodes = append(nodes, node)
 	}
 
