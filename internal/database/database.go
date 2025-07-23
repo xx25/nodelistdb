@@ -118,6 +118,10 @@ func (db *DB) CreateSchema() error {
 		internet_ports INTEGER[] DEFAULT [],
 		internet_emails TEXT[] DEFAULT [],
 		
+		-- Internet connectivity analysis
+		has_inet BOOLEAN DEFAULT FALSE,       -- Any internet connectivity
+		internet_config JSON,                 -- JSON configuration for internet settings
+		
 		-- Conflict tracking
 		conflict_sequence INTEGER DEFAULT 0,  -- 0 = original, 1+ = conflict duplicates
 		has_conflict BOOLEAN DEFAULT FALSE,   -- Flag for easy querying of conflicts
@@ -138,7 +142,7 @@ func (db *DB) CreateSchema() error {
 		"CREATE INDEX IF NOT EXISTS idx_nodes_location ON nodes(zone, net)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_system ON nodes(system_name)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type)",
-		"CREATE INDEX IF NOT EXISTS idx_nodes_flags ON nodes(is_cm, is_mo, has_binkp, has_telnet)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_flags ON nodes(is_cm, is_mo, has_binkp, has_telnet, has_inet)",
 	}
 
 	for _, indexSQL := range indexes {
