@@ -26,18 +26,23 @@ jobs:
       with:
         go-version: ${{ matrix.go-version }}
 
-    - name: Set up TDM-GCC on Windows
+    - name: Set up MSYS2 for Windows CGO
+      if: matrix.os == 'windows-latest'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-pkg-config
+          
+    - name: Configure Windows CGO environment  
       if: matrix.os == 'windows-latest'
       shell: powershell
       run: |
-        Write-Output "Installing TDM-GCC for Windows CGO compilation"
-        choco install tdm-gcc-webdl -y --timeout=600
-        Write-Output "TDM-GCC installation completed"
-        
-    - name: Set CGO environment for Windows
-      if: matrix.os == 'windows-latest'  
-      shell: powershell
-      run: |
+        Write-Output "Configuring CGO environment for go-duckdb"
+        # Add MSYS2 to PATH for CGO compilation
+        echo "C:\msys64\ucrt64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         echo "CGO_ENABLED=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         echo "CC=gcc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -56,7 +61,7 @@ jobs:
         go mod download
         go mod verify
 
-    - name: Run tests  
+    - name: Run tests
       run: go test -v ./cmd/... ./internal/...
       timeout-minutes: 15
       env:
