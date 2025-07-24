@@ -1,0 +1,264 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+env:
+  GO_VERSION: '1.23'
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      tag_name: ${{ steps.get_version.outputs.tag }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        VERSION=${{ steps.get_version.outputs.tag }}
+        echo "## NodelistDB ${VERSION}" > RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "### Features" >> RELEASE_NOTES.md
+        echo "- FidoNet nodelist parsing and storage system" >> RELEASE_NOTES.md
+        echo "- DuckDB-based high-performance storage engine" >> RELEASE_NOTES.md
+        echo "- REST API for node search and statistics" >> RELEASE_NOTES.md
+        echo "- Web interface for browsing nodelist data" >> RELEASE_NOTES.md
+        echo "- Command-line tools for parsing and serving" >> RELEASE_NOTES.md
+        echo "- Multi-platform support (Linux, Windows, macOS, FreeBSD)" >> RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "### Architecture" >> RELEASE_NOTES.md
+        echo "- Component-based storage layer with improved security" >> RELEASE_NOTES.md
+        echo "- Parameterized queries prevent SQL injection" >> RELEASE_NOTES.md
+        echo "- Thread-safe operations with optimized batch processing" >> RELEASE_NOTES.md
+        echo "- Comprehensive node change tracking and history" >> RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "### Installation" >> RELEASE_NOTES.md
+        echo "Download the appropriate binary for your platform from the assets below." >> RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "### Usage" >> RELEASE_NOTES.md
+        echo "\`\`\`bash" >> RELEASE_NOTES.md
+        echo "# Parse nodelist files" >> RELEASE_NOTES.md
+        echo "./parser -path /path/to/nodelists -db nodelist.duckdb" >> RELEASE_NOTES.md
+        echo "" >> RELEASE_NOTES.md
+        echo "# Start web server" >> RELEASE_NOTES.md
+        echo "./server -db nodelist.duckdb -port 8080" >> RELEASE_NOTES.md
+        echo "\`\`\`" >> RELEASE_NOTES.md
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.get_version.outputs.tag }}
+        name: NodelistDB ${{ steps.get_version.outputs.tag }}
+        body_path: RELEASE_NOTES.md
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+
+  build-and-upload:
+    name: Build and Upload
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: linux-amd64
+            cgo: "1"
+          - goos: linux
+            goarch: arm64
+            name: linux-arm64
+            cgo: "1"
+          - goos: windows
+            goarch: amd64
+            name: windows-amd64
+            cgo: "1"
+          - goos: windows
+            goarch: arm64
+            name: windows-arm64  
+            cgo: "0"
+          - goos: darwin
+            goarch: amd64
+            name: darwin-amd64
+            cgo: "0"
+          - goos: darwin
+            goarch: arm64
+            name: darwin-arm64
+            cgo: "0"
+          - goos: freebsd
+            goarch: amd64
+            name: freebsd-amd64
+            cgo: "0"
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Install cross-compilation tools
+      run: |
+        if [ "${{ matrix.goos }}" = "windows" ] && [ "${{ matrix.cgo }}" = "1" ]; then
+          sudo apt-get update
+          if [ "${{ matrix.goarch }}" = "amd64" ]; then
+            sudo apt-get install -y gcc-mingw-w64-x86-64
+            echo "CC=x86_64-w64-mingw32-gcc" >> $GITHUB_ENV
+          fi
+        fi
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: |
+        go mod download
+        go mod verify
+
+    - name: Build binaries
+      env:
+        CGO_ENABLED: ${{ matrix.cgo }}
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        # Create output directory
+        mkdir -p dist/${{ matrix.name }}
+        
+        # Build binaries
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          go build -ldflags="-s -w" -o dist/${{ matrix.name }}/parser.exe ./cmd/parser
+          go build -ldflags="-s -w" -o dist/${{ matrix.name }}/server.exe ./cmd/server
+        else
+          go build -ldflags="-s -w" -o dist/${{ matrix.name }}/parser ./cmd/parser
+          go build -ldflags="-s -w" -o dist/${{ matrix.name }}/server ./cmd/server
+        fi
+
+    - name: Copy documentation
+      run: |
+        # Copy README and other docs if they exist
+        [ -f README.md ] && cp README.md dist/${{ matrix.name }}/
+        [ -f CLAUDE.md ] && cp CLAUDE.md dist/${{ matrix.name }}/USAGE.md
+        [ -f LICENSE ] && cp LICENSE dist/${{ matrix.name }}/
+        
+        # Create a simple usage file
+        cat > dist/${{ matrix.name }}/USAGE.txt << 'EOF'
+        NodelistDB - FidoNet Nodelist Database System
+        
+        PARSER USAGE:
+        ./parser -path <nodelist-path> -db <database-file> [options]
+        
+        Options:
+          -path string     Path to nodelist file or directory (required)
+          -db string       Path to DuckDB database file (default: ./nodelist.duckdb)
+          -recursive       Scan directories recursively
+          -verbose         Verbose output
+          -batch int       Batch size for bulk inserts (default: 1000)
+          -workers int     Number of concurrent workers (default: 4)
+          -concurrent      Enable concurrent processing
+        
+        SERVER USAGE:
+        ./server -db <database-file> [options]
+        
+        Options:
+          -db string       Path to DuckDB database file (default: ./nodelist.duckdb)
+          -host string     Host to bind to (default: localhost)
+          -port int        Port to listen on (default: 8080)
+        
+        EXAMPLES:
+        # Parse a single nodelist file
+        ./parser -path nodelist.216 -db nodelist.duckdb -verbose
+        
+        # Parse all nodelists in a directory
+        ./parser -path /path/to/nodelists -db nodelist.duckdb -recursive -concurrent
+        
+        # Start the web server
+        ./server -db nodelist.duckdb -host 0.0.0.0 -port 8080
+        
+        API Endpoints:
+        GET /api/nodes              - Search nodes
+        GET /api/nodes/{z}/{n}/{n}  - Get specific node
+        GET /api/stats              - Network statistics
+        GET /                       - Web interface
+        EOF
+
+    - name: Package release
+      run: |
+        cd dist/${{ matrix.name }}
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          zip -r ../nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip .
+          echo "ASSET_PATH=dist/nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip" >> $GITHUB_ENV
+          echo "ASSET_NAME=nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip" >> $GITHUB_ENV
+        else
+          tar -czf ../nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz .
+          echo "ASSET_PATH=dist/nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+          echo "ASSET_NAME=nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+        fi
+
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ needs.create-release.outputs.tag_name }}
+        files: ${{ env.ASSET_PATH }}
+
+  checksums:
+    name: Generate Checksums
+    needs: [create-release, build-and-upload]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download release assets
+      uses: robinraju/release-downloader@v1.10
+      with:
+        tag: ${{ needs.create-release.outputs.tag_name }}
+        fileName: "nodelistdb-*"
+        out-file-path: "assets"
+
+    - name: Generate checksums
+      run: |
+        cd assets
+        sha256sum nodelistdb-* > SHA256SUMS
+        md5sum nodelistdb-* > MD5SUMS
+
+    - name: Upload checksums
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ needs.create-release.outputs.tag_name }}
+        files: |
+          assets/SHA256SUMS
+          assets/MD5SUMS
