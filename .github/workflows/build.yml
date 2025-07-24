@@ -1,0 +1,160 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go-version: ['1.23']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: |
+        go mod download
+        go mod verify
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out ./...
+
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest'
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        fail_ci_if_error: false
+
+    - name: Build binaries
+      run: |
+        make build
+
+    - name: Run linter (Linux only)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        golangci-lint run
+
+  cross-compile:
+    name: Cross-compile releases
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: linux-amd64
+          - goos: linux
+            goarch: arm64
+            name: linux-arm64
+          - goos: windows
+            goarch: amd64
+            name: windows-amd64
+          - goos: windows
+            goarch: arm64
+            name: windows-arm64
+          - goos: darwin
+            goarch: amd64
+            name: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            name: darwin-arm64
+          - goos: freebsd
+            goarch: amd64
+            name: freebsd-amd64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Download dependencies
+      run: |
+        go mod download
+        go mod verify
+
+    - name: Build for ${{ matrix.name }}
+      env:
+        CGO_ENABLED: 1
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        # Install cross-compilation tools for CGO
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          if [ "${{ matrix.goarch }}" = "amd64" ]; then
+            sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+            export CC=x86_64-w64-mingw32-gcc
+          elif [ "${{ matrix.goarch }}" = "arm64" ]; then
+            sudo apt-get update && sudo apt-get install -y gcc-mingw-w64
+            export CC=aarch64-w64-mingw32-gcc
+          fi
+        elif [ "${{ matrix.goos }}" = "darwin" ]; then
+          # For macOS cross-compilation, we need osxcross or similar
+          # For now, disable CGO for cross-compilation to macOS
+          export CGO_ENABLED=0
+        elif [ "${{ matrix.goos }}" = "freebsd" ]; then
+          export CGO_ENABLED=0
+        fi
+        
+        # Create output directory
+        mkdir -p dist/${{ matrix.name }}
+        
+        # Build parser
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          go build -o dist/${{ matrix.name }}/parser.exe ./cmd/parser
+          go build -o dist/${{ matrix.name }}/server.exe ./cmd/server
+        else
+          go build -o dist/${{ matrix.name }}/parser ./cmd/parser
+          go build -o dist/${{ matrix.name }}/server ./cmd/server
+        fi
+
+    - name: Package release
+      run: |
+        cd dist/${{ matrix.name }}
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          zip -r ../nodelistdb-${{ matrix.name }}.zip .
+        else
+          tar -czf ../nodelistdb-${{ matrix.name }}.tar.gz .
+        fi
+
+    - name: Upload release assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./dist/nodelistdb-${{ matrix.name }}.${{ matrix.goos == 'windows' && 'zip' || 'tar.gz' }}
+        asset_name: nodelistdb-${{ matrix.name }}.${{ matrix.goos == 'windows' && 'zip' || 'tar.gz' }}
+        asset_content_type: ${{ matrix.goos == 'windows' && 'application/zip' || 'application/gzip' }}
