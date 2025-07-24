@@ -42,10 +42,10 @@ jobs:
         go mod verify
 
     - name: Run tests
-      run: go test -v -race -coverprofile=coverage.out ./...
+      run: go test -v -race -coverprofile=coverage.out ./cmd/... ./internal/...
 
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' && hashFiles('coverage.out') != ''
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.out
