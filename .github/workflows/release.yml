@@ -144,16 +144,17 @@ jobs:
           echo "macOS native build"
         fi
 
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-${{ matrix.goarch }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.goarch }}-go-
-          ${{ runner.os }}-go-
+    # Cache disabled to avoid GitHub Actions cache corruption warnings
+    # - name: Cache Go modules
+    #   uses: actions/cache@v4
+    #   with:
+    #     path: |
+    #       ~/.cache/go-build
+    #       ~/go/pkg/mod
+    #     key: ${{ runner.os }}-${{ matrix.goarch }}-go-${{ hashFiles('**/go.sum') }}
+    #     restore-keys: |
+    #       ${{ runner.os }}-${{ matrix.goarch }}-go-
+    #       ${{ runner.os }}-go-
 
     - name: Download dependencies
       run: |
