@@ -128,6 +128,7 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
 
     - name: Install cross-compilation tools
+      shell: bash
       run: |
         if [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "arm64" ]; then
           # Install ARM64 cross-compilation tools on Ubuntu
