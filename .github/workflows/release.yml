@@ -87,38 +87,36 @@ jobs:
   build-and-upload:
     name: Build and Upload
     needs: create-release
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - goos: linux
+          # Native builds on respective platforms
+          - runs-on: ubuntu-latest
+            goos: linux
             goarch: amd64
             name: linux-amd64
             cgo: "1"
-          - goos: linux
+          - runs-on: ubuntu-latest
+            goos: linux
             goarch: arm64
             name: linux-arm64
             cgo: "1"
-          - goos: windows
+          - runs-on: windows-latest
+            goos: windows
             goarch: amd64
             name: windows-amd64
             cgo: "1"
-          - goos: windows
-            goarch: arm64
-            name: windows-arm64  
-            cgo: "0"
-          - goos: darwin
+          - runs-on: macos-latest
+            goos: darwin
             goarch: amd64
             name: darwin-amd64
-            cgo: "0"
-          - goos: darwin
+            cgo: "1"
+          - runs-on: macos-latest
+            goos: darwin
             goarch: arm64
             name: darwin-arm64
-            cgo: "0"
-          - goos: freebsd
-            goarch: amd64
-            name: freebsd-amd64
-            cgo: "0"
+            cgo: "1"
+    runs-on: ${{ matrix.runs-on }}
 
     steps:
     - name: Checkout code
@@ -131,12 +129,17 @@ jobs:
 
     - name: Install cross-compilation tools
       run: |
-        if [ "${{ matrix.goos }}" = "windows" ] && [ "${{ matrix.cgo }}" = "1" ]; then
+        if [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "arm64" ]; then
+          # Install ARM64 cross-compilation tools on Ubuntu
           sudo apt-get update
-          if [ "${{ matrix.goarch }}" = "amd64" ]; then
-            sudo apt-get install -y gcc-mingw-w64-x86-64
-            echo "CC=x86_64-w64-mingw32-gcc" >> $GITHUB_ENV
-          fi
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+        elif [ "${{ matrix.goos }}" = "windows" ]; then
+          # Windows builds run on windows-latest, no cross-compilation needed
+          echo "Windows native build"
+        elif [ "${{ matrix.goos }}" = "darwin" ]; then
+          # macOS builds run on macos-latest, no cross-compilation needed  
+          echo "macOS native build"
         fi
 
     - name: Cache Go modules
@@ -171,8 +174,10 @@ jobs:
           go build -ldflags="-s -w" -o dist/${{ matrix.name }}/parser ./cmd/parser
           go build -ldflags="-s -w" -o dist/${{ matrix.name }}/server ./cmd/server
         fi
+      shell: bash
 
     - name: Copy documentation
+      shell: bash
       run: |
         # Copy README and other docs if they exist
         [ -f README.md ] && cp README.md dist/${{ matrix.name }}/
@@ -221,6 +226,7 @@ jobs:
         EOF
 
     - name: Package release
+      shell: bash
       run: |
         cd dist/${{ matrix.name }}
         if [ "${{ matrix.goos }}" = "windows" ]; then
