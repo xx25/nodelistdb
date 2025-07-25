@@ -227,19 +227,23 @@ jobs:
         GET /                       - Web interface
         EOF
 
-    - name: Package release
+    - name: Package release (Windows)
+      if: matrix.goos == 'windows'
+      shell: pwsh
+      run: |
+        cd dist/${{ matrix.name }}
+        Compress-Archive -Path * -DestinationPath ../nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip
+        echo "ASSET_PATH=dist/nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip" >> $env:GITHUB_ENV
+        echo "ASSET_NAME=nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip" >> $env:GITHUB_ENV
+
+    - name: Package release (Unix)
+      if: matrix.goos != 'windows'
       shell: bash
       run: |
         cd dist/${{ matrix.name }}
-        if [ "${{ matrix.goos }}" = "windows" ]; then
-          zip -r ../nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip .
-          echo "ASSET_PATH=dist/nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip" >> $GITHUB_ENV
-          echo "ASSET_NAME=nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip" >> $GITHUB_ENV
-        else
-          tar -czf ../nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz .
-          echo "ASSET_PATH=dist/nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
-          echo "ASSET_NAME=nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
-        fi
+        tar -czf ../nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz .
+        echo "ASSET_PATH=dist/nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+        echo "ASSET_NAME=nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
 
     - name: Upload Release Asset
       uses: softprops/action-gh-release@v2
