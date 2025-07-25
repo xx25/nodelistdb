@@ -150,8 +150,9 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-${{ matrix.goarch }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
+          ${{ runner.os }}-${{ matrix.goarch }}-go-
           ${{ runner.os }}-go-
 
     - name: Download dependencies
@@ -231,19 +232,23 @@ jobs:
       if: matrix.goos == 'windows'
       shell: pwsh
       run: |
-        cd dist/${{ matrix.name }}
-        Compress-Archive -Path * -DestinationPath ../nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip
-        echo "ASSET_PATH=dist/nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip" >> $env:GITHUB_ENV
-        echo "ASSET_NAME=nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip" >> $env:GITHUB_ENV
+        $archiveName = "nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.zip"
+        cd dist
+        if (Test-Path $archiveName) { Remove-Item $archiveName }
+        Compress-Archive -Path "${{ matrix.name }}/*" -DestinationPath $archiveName
+        echo "ASSET_PATH=dist/$archiveName" >> $env:GITHUB_ENV
+        echo "ASSET_NAME=$archiveName" >> $env:GITHUB_ENV
 
     - name: Package release (Unix)
       if: matrix.goos != 'windows'
       shell: bash
       run: |
-        cd dist/${{ matrix.name }}
-        tar -czf ../nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz .
-        echo "ASSET_PATH=dist/nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
-        echo "ASSET_NAME=nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+        ARCHIVE_NAME="nodelistdb-${{ needs.create-release.outputs.tag_name }}-${{ matrix.name }}.tar.gz"
+        cd dist
+        rm -f "$ARCHIVE_NAME"
+        tar -czf "$ARCHIVE_NAME" -C "${{ matrix.name }}" .
+        echo "ASSET_PATH=dist/$ARCHIVE_NAME" >> $GITHUB_ENV
+        echo "ASSET_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
 
     - name: Upload Release Asset
       uses: softprops/action-gh-release@v2
