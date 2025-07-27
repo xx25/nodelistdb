@@ -82,14 +82,20 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 				   ROW_NUMBER() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
 			FROM nodes
 		) ranked WHERE rn = 1`
+		
+		conditions, conditionArgs := qb.buildWhereConditions(filter)
+		if len(conditions) > 0 {
+			baseSQL += " AND " + strings.Join(conditions, " AND ")
+			args = append(args, conditionArgs...)
+		}
 	} else {
 		baseSQL = qb.NodeSelectSQL()
-	}
-
-	conditions, conditionArgs := qb.buildWhereConditions(filter)
-	if len(conditions) > 0 {
-		baseSQL += " WHERE " + strings.Join(conditions, " AND ")
-		args = append(args, conditionArgs...)
+		
+		conditions, conditionArgs := qb.buildWhereConditions(filter)
+		if len(conditions) > 0 {
+			baseSQL += " WHERE " + strings.Join(conditions, " AND ")
+			args = append(args, conditionArgs...)
+		}
 	}
 
 	// Add ORDER BY
