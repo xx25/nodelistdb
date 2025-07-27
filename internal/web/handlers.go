@@ -1,6 +1,7 @@
 package web
 
 import (
+	"embed"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -16,8 +17,9 @@ import (
 
 // Server represents the web server
 type Server struct {
-	storage   *storage.Storage
-	templates map[string]*template.Template
+	storage     *storage.Storage
+	templates   map[string]*template.Template
+	templatesFS embed.FS
 }
 
 // parseNodeURLPath extracts zone, net, and node from URL path /node/{zone}/{net}/{node}
@@ -90,10 +92,11 @@ func analyzeNodeActivity(history []database.Node) NodeActivityInfo {
 }
 
 // New creates a new web server
-func New(storage *storage.Storage) *Server {
+func New(storage *storage.Storage, templatesFS embed.FS) *Server {
 	server := &Server{
-		storage:   storage,
-		templates: make(map[string]*template.Template),
+		storage:     storage,
+		templates:   make(map[string]*template.Template),
+		templatesFS: templatesFS,
 	}
 	
 	server.loadTemplates()

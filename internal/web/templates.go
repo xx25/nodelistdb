@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"nodelistdb/internal/flags"
 )
+
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
@@ -113,23 +113,23 @@ func (s *Server) loadTemplates() {
 	}
 }
 
-// loadTemplateFromFile loads a template from a file
+// loadTemplateFromFile loads a template from embedded filesystem
 func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*template.Template, error) {
 	templateFile := filepath.Join("templates", name+".html")
 	
-	// Check if file exists
-	if _, err := os.Stat(templateFile); os.IsNotExist(err) {
-		return nil, fmt.Errorf("template file %s not found", templateFile)
+	// Read template from embedded filesystem
+	content, err := s.templatesFS.ReadFile(templateFile)
+	if err != nil {
+		return nil, fmt.Errorf("template file %s not found in embedded filesystem: %v", templateFile, err)
 	}
 	
-	// Parse template file with the correct template name
-	tmpl, err := template.New(name+".html").Funcs(funcMap).ParseFiles(templateFile)
+	// Parse template content with the correct template name
+	tmpl, err := template.New(name+".html").Funcs(funcMap).Parse(string(content))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template %s: %v", templateFile, err)
 	}
 	
-	// Return the template with the expected name
-	return tmpl.Lookup(name+".html"), nil
+	return tmpl, nil
 }
 
 // Helper functions for flag change rendering

@@ -1,0 +1,36 @@
+[Unit]
+Description=NodelistDB FidoNet Nodelist Server
+Documentation=https://github.com/xx25/nodelistdb
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=daemon
+Group=daemon
+WorkingDirectory=/var/nodelistdb
+ExecStart=/opt/nodelistdb/bin/server -db /var/nodelistdb/nodelist.duckdb -host 127.0.0.1 -port 8080
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nodelistdb
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/nodelistdb /var/log/nodelistdb
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target
