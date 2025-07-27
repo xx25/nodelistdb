@@ -19,6 +19,9 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
+//go:embed static/*
+var staticFS embed.FS
+
 func main() {
 	// Command line flags
 	var (
@@ -61,7 +64,7 @@ func main() {
 
 	// Initialize API and Web servers
 	apiServer := api.New(storage)
-	webServer := web.New(storage, templatesFS)
+	webServer := web.New(storage, templatesFS, staticFS)
 
 	// Set up HTTP routes
 	mux := http.NewServeMux()

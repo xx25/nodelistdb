@@ -20,6 +20,7 @@ type Server struct {
 	storage     *storage.Storage
 	templates   map[string]*template.Template
 	templatesFS embed.FS
+	staticFS    embed.FS
 }
 
 // parseNodeURLPath extracts zone, net, and node from URL path /node/{zone}/{net}/{node}
@@ -92,11 +93,12 @@ func analyzeNodeActivity(history []database.Node) NodeActivityInfo {
 }
 
 // New creates a new web server
-func New(storage *storage.Storage, templatesFS embed.FS) *Server {
+func New(storage *storage.Storage, templatesFS embed.FS, staticFS embed.FS) *Server {
 	server := &Server{
 		storage:     storage,
 		templates:   make(map[string]*template.Template),
 		templatesFS: templatesFS,
+		staticFS:    staticFS,
 	}
 	
 	server.loadTemplates()

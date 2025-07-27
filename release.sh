@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION=${1:-"v0.1.8"}
+VERSION=${1:-"v0.1.9"}
 
 echo "Creating release for NodelistDB version: $VERSION"
 
