@@ -90,6 +90,9 @@ type QueryBuilderInterface interface {
 	ZoneDistributionSQL() string
 	LargestRegionsSQL() string
 	LargestNetsSQL() string
+	// Optimized statistics queries for better performance
+	OptimizedLargestRegionsSQL() string
+	OptimizedLargestNetsSQL() string
 	
 	// Node-specific queries
 	NodeHistorySQL() string

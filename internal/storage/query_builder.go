@@ -188,6 +188,38 @@ func (qb *QueryBuilder) StatsSQL() string {
 	GROUP BY nodelist_date`
 }
 
+// OptimizedLargestRegionsSQL returns optimized SQL for largest regions stats with better indexing
+func (qb *QueryBuilder) OptimizedLargestRegionsSQL() string {
+	return `
+	SELECT zone, region, COUNT(*) as count,
+		   FIRST(system_name) FILTER (WHERE node_type = 'Region') as region_name
+	FROM nodes 
+	WHERE nodelist_date = ? AND region > 0
+	GROUP BY zone, region
+	ORDER BY count DESC 
+	LIMIT 10`
+}
+
+// OptimizedLargestNetsSQL returns optimized SQL for largest nets stats with better performance  
+func (qb *QueryBuilder) OptimizedLargestNetsSQL() string {
+	return `
+	SELECT nc.zone, nc.net, nc.count, hn.host_name
+	FROM (
+		SELECT zone, net, COUNT(*) as count
+		FROM nodes 
+		WHERE nodelist_date = ? AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
+		GROUP BY zone, net
+		ORDER BY count DESC
+		LIMIT 10
+	) nc
+	LEFT JOIN (
+		SELECT zone, net, system_name as host_name
+		FROM nodes
+		WHERE nodelist_date = ? AND node_type = 'Host'
+	) hn ON nc.zone = hn.zone AND nc.net = hn.net
+	ORDER BY nc.count DESC`
+}
+
 // ZoneDistributionSQL returns SQL for zone distribution stats
 func (qb *QueryBuilder) ZoneDistributionSQL() string {
 	return "SELECT zone, COUNT(*) FROM nodes WHERE nodelist_date = ? GROUP BY zone"

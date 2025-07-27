@@ -15,6 +15,9 @@ type StatisticsOperations struct {
 	queryBuilder QueryBuilderInterface
 	resultParser *ResultParser
 	mu           sync.RWMutex
+	// Cache for stats results to improve performance for distant dates
+	statsCache   map[string]*database.NetworkStats
+	cacheMu      sync.RWMutex
 }
 
 // NewStatisticsOperations creates a new StatisticsOperations instance
@@ -23,11 +26,23 @@ func NewStatisticsOperations(db *database.DB, queryBuilder QueryBuilderInterface
 		db:           db,
 		queryBuilder: queryBuilder,
 		resultParser: resultParser,
+		statsCache:   make(map[string]*database.NetworkStats),
 	}
 }
 
-// GetStats retrieves network statistics for a specific date
+// GetStats retrieves network statistics for a specific date with caching
 func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats, error) {
+	// Check cache first for distant dates (older than 30 days) to improve performance
+	cacheKey := date.Format("2006-01-02")
+	if date.Before(time.Now().AddDate(0, 0, -30)) {
+		so.cacheMu.RLock()
+		if cached, exists := so.statsCache[cacheKey]; exists {
+			so.cacheMu.RUnlock()
+			return cached, nil
+		}
+		so.cacheMu.RUnlock()
+	}
+
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
@@ -62,9 +77,9 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 		stats.ZoneDistribution[zone] = count
 	}
 
-	// Get largest regions (top 10)
+	// Get largest regions (top 10) - using optimized query
 	stats.LargestRegions = []database.RegionInfo{}
-	regionQuery := so.queryBuilder.LargestRegionsSQL()
+	regionQuery := so.queryBuilder.OptimizedLargestRegionsSQL()
 	rows, err = conn.Query(regionQuery, date)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get largest regions: %w", err)
@@ -79,9 +94,9 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 		stats.LargestRegions = append(stats.LargestRegions, region)
 	}
 
-	// Get largest nets (top 10 per zone, then take overall top 10)
+	// Get largest nets (top 10) - using optimized query
 	stats.LargestNets = []database.NetInfo{}
-	netQuery := so.queryBuilder.LargestNetsSQL()
+	netQuery := so.queryBuilder.OptimizedLargestNetsSQL()
 	rows, err = conn.Query(netQuery, date, date)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get largest nets: %w", err)
@@ -94,6 +109,13 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 			return nil, fmt.Errorf("failed to parse net info: %w", err)
 		}
 		stats.LargestNets = append(stats.LargestNets, net)
+	}
+
+	// Cache distant dates (older than 30 days) to improve future performance
+	if date.Before(time.Now().AddDate(0, 0, -30)) {
+		so.cacheMu.Lock()
+		so.statsCache[cacheKey] = stats
+		so.cacheMu.Unlock()
 	}
 
 	return stats, nil
@@ -440,6 +462,25 @@ func (so *StatisticsOperations) GetGrowthStats(startDate, endDate time.Time) (*G
 	}
 
 	return growth, nil
+}
+
+// ClearStatsCache clears the statistics cache - useful for maintenance or testing
+func (so *StatisticsOperations) ClearStatsCache() {
+	so.cacheMu.Lock()
+	so.statsCache = make(map[string]*database.NetworkStats)
+	so.cacheMu.Unlock()
+}
+
+// GetCacheStats returns information about the stats cache
+func (so *StatisticsOperations) GetCacheStats() map[string]interface{} {
+	so.cacheMu.RLock()
+	defer so.cacheMu.RUnlock()
+	
+	return map[string]interface{}{
+		"cached_entries": len(so.statsCache),
+		"cache_enabled":  true,
+		"cache_threshold_days": 30,
+	}
 }
 
 // ConnectivityStats represents connectivity-related statistics
