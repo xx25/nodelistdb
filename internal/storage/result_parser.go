@@ -299,19 +299,23 @@ func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
 }
 
 // formatArrayForDB formats a string array for database storage
+// Returns JSON string for parameterized queries (DuckDB driver limitation)
 func (rp *ResultParser) formatArrayForDB(arr []string) interface{} {
 	if len(arr) == 0 {
-		return []string{} // Empty slice for DuckDB
+		return "[]" // Empty JSON array
 	}
-	return arr
+	jsonBytes, _ := json.Marshal(arr)
+	return string(jsonBytes)
 }
 
 // formatIntArrayForDB formats an int array for database storage
+// Returns JSON string for parameterized queries (DuckDB driver limitation)
 func (rp *ResultParser) formatIntArrayForDB(arr []int) interface{} {
 	if len(arr) == 0 {
-		return []int{} // Empty slice for DuckDB
+		return "[]" // Empty JSON array
 	}
-	return arr
+	jsonBytes, _ := json.Marshal(arr)
+	return string(jsonBytes)
 }
 
 // ValidateNodeFilter validates a NodeFilter for basic sanity checks
