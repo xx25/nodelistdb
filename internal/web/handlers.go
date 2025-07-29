@@ -447,14 +447,17 @@ func (s *Server) APIHelpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// Construct the base URL
-	baseURL := fmt.Sprintf("%s://%s/api/", scheme, host)
+	apiURL := fmt.Sprintf("%s://%s/api/", scheme, host)
+	siteURL := fmt.Sprintf("%s://%s", scheme, host)
 	
 	data := struct {
 		Title   string
 		BaseURL string
+		SiteURL string
 	}{
 		Title:   "API Documentation",
-		BaseURL: baseURL,
+		BaseURL: apiURL,
+		SiteURL: siteURL,
 	}
 	
 	if err := s.templates["api_help"].Execute(w, data); err != nil {

@@ -182,15 +182,24 @@ func findLatestNodelist() (*NodelistFile, error) {
 func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	years, err := scanNodelistDirectory()
 	
+	// Get base URL from request
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+	
 	data := struct {
-		Title  string
-		Years  []NodelistYear
-		Error  error
-		Latest *NodelistFile
+		Title   string
+		Years   []NodelistYear
+		Error   error
+		Latest  *NodelistFile
+		BaseURL string
 	}{
-		Title: "Download Nodelists",
-		Years: years,
-		Error: err,
+		Title:   "Download Nodelists",
+		Years:   years,
+		Error:   err,
+		BaseURL: baseURL,
 	}
 	
 	// Find latest nodelist

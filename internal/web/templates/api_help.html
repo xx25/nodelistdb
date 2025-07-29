@@ -276,7 +276,7 @@
                     <strong>Endpoint:</strong> <code>GET /download/year/{year}.tar.gz</code><br><br>
                     <strong>Description:</strong> Download all nodelists from a specific year as a tar.gz archive<br><br>
                     <strong>Example:</strong><br>
-                    <code>wget https://example.com/download/year/2024.tar.gz</code>
+                    <code>wget {{.SiteURL}}/download/year/2024.tar.gz</code>
                 </div>
                 
                 <h4 style="color: var(--text-primary); margin-top: 1.5rem; margin-bottom: 0.5rem;">URL List for Mirroring</h4>
@@ -285,9 +285,9 @@
                     <strong>Description:</strong> Text file containing all nodelist download URLs<br><br>
                     <strong>Usage:</strong><br>
                     <code># Download all nodelists<br>
-                    wget -i https://example.com/download/urls.txt<br><br>
+                    wget -i {{.SiteURL}}/download/urls.txt<br><br>
                     # Skip existing files (incremental sync)<br>
-                    wget -nc -i https://example.com/download/urls.txt</code>
+                    wget -nc -i {{.SiteURL}}/download/urls.txt</code>
                 </div>
                 
                 <div class="alert alert-success">
@@ -303,10 +303,10 @@
                 
                 <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
                     <strong>Using wget:</strong><br>
-                    <code>wget https://example.com/nodelist.duckdb</code><br><br>
+                    <code>wget {{.SiteURL}}/nodelist.duckdb</code><br><br>
                     
                     <strong>Using curl:</strong><br>
-                    <code>curl -O https://example.com/nodelist.duckdb</code>
+                    <code>curl -O {{.SiteURL}}/nodelist.duckdb</code>
                 </div>
                 
                 <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
