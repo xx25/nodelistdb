@@ -29,7 +29,7 @@ type Node struct {
 	IsCM      bool `json:"is_cm"`
 	IsMO      bool `json:"is_mo"`
 	HasBinkp  bool `json:"has_binkp"`
-	HasInet   bool `json:"has_inet"`    // Any internet connectivity
+	HasInet   bool `json:"has_inet"` // Any internet connectivity
 	HasTelnet bool `json:"has_telnet"`
 	IsDown    bool `json:"is_down"`
 	IsHold    bool `json:"is_hold"`
@@ -95,7 +95,7 @@ type NodeFilter struct {
 	HasTelnet *bool `json:"has_telnet,omitempty"`
 	IsActive  *bool `json:"is_active,omitempty"`
 
-	// Result options  
+	// Result options
 	LatestOnly *bool `json:"latest_only,omitempty"`
 
 	// Pagination
@@ -121,38 +121,38 @@ type NetInfo struct {
 }
 
 type NetworkStats struct {
-	Date             time.Time `json:"date"`
-	TotalNodes       int       `json:"total_nodes"`
-	ActiveNodes      int       `json:"active_nodes"`
-	CMNodes          int       `json:"cm_nodes"`
-	MONodes          int       `json:"mo_nodes"`
-	BinkpNodes       int       `json:"binkp_nodes"`
-	TelnetNodes      int       `json:"telnet_nodes"`
-	PvtNodes         int       `json:"pvt_nodes"`
-	DownNodes        int       `json:"down_nodes"`
-	HoldNodes        int       `json:"hold_nodes"`
-	InternetNodes    int       `json:"internet_nodes"`
-	ZoneDistribution map[int]int `json:"zone_distribution"`
+	Date             time.Time    `json:"date"`
+	TotalNodes       int          `json:"total_nodes"`
+	ActiveNodes      int          `json:"active_nodes"`
+	CMNodes          int          `json:"cm_nodes"`
+	MONodes          int          `json:"mo_nodes"`
+	BinkpNodes       int          `json:"binkp_nodes"`
+	TelnetNodes      int          `json:"telnet_nodes"`
+	PvtNodes         int          `json:"pvt_nodes"`
+	DownNodes        int          `json:"down_nodes"`
+	HoldNodes        int          `json:"hold_nodes"`
+	InternetNodes    int          `json:"internet_nodes"`
+	ZoneDistribution map[int]int  `json:"zone_distribution"`
 	LargestRegions   []RegionInfo `json:"largest_regions"`
 	LargestNets      []NetInfo    `json:"largest_nets"`
 }
 
 // ProcessingResult represents the result of processing a nodelist file
 type ProcessingResult struct {
-	NodelistDate  time.Time     `json:"nodelist_date"`
-	DayNumber     int           `json:"day_number"`
-	NodesFound    int           `json:"nodes_found"`
-	NodesInserted int           `json:"nodes_inserted"`
+	NodelistDate   time.Time     `json:"nodelist_date"`
+	DayNumber      int           `json:"day_number"`
+	NodesFound     int           `json:"nodes_found"`
+	NodesInserted  int           `json:"nodes_inserted"`
 	ProcessingTime time.Duration `json:"processing_time"`
-	Error         error         `json:"error,omitempty"`
+	Error          error         `json:"error,omitempty"`
 }
 
 // NodeChange represents a change in node data between two dates
 type NodeChange struct {
-	Date        time.Time         `json:"date"`
-	DayNumber   int               `json:"day_number"`
-	ChangeType  string            `json:"change_type"` // "added", "removed", "modified"
-	Changes     map[string]string `json:"changes"`     // field -> "old value -> new value"
-	OldNode     *Node             `json:"old_node,omitempty"`
-	NewNode     *Node             `json:"new_node,omitempty"`
+	Date       time.Time         `json:"date"`
+	DayNumber  int               `json:"day_number"`
+	ChangeType string            `json:"change_type"` // "added", "removed", "modified"
+	Changes    map[string]string `json:"changes"`     // field -> "old value -> new value"
+	OldNode    *Node             `json:"old_node,omitempty"`
+	NewNode    *Node             `json:"new_node,omitempty"`
 }

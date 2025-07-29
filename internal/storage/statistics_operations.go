@@ -16,8 +16,8 @@ type StatisticsOperations struct {
 	resultParser *ResultParser
 	mu           sync.RWMutex
 	// Cache for stats results to improve performance for distant dates
-	statsCache   map[string]*database.NetworkStats
-	cacheMu      sync.RWMutex
+	statsCache map[string]*database.NetworkStats
+	cacheMu    sync.RWMutex
 }
 
 // NewStatisticsOperations creates a new StatisticsOperations instance
@@ -128,7 +128,7 @@ func (so *StatisticsOperations) GetLatestStatsDate() (time.Time, error) {
 
 	conn := so.db.Conn()
 	var latestDate time.Time
-	
+
 	query := so.queryBuilder.LatestDateSQL()
 	err := conn.QueryRow(query).Scan(&latestDate)
 	if err != nil {
@@ -143,7 +143,7 @@ func (so *StatisticsOperations) GetAvailableDates() ([]time.Time, error) {
 	defer so.mu.RUnlock()
 
 	conn := so.db.Conn()
-	
+
 	query := so.queryBuilder.AvailableDatesSQL()
 	rows, err := conn.Query(query)
 	if err != nil {
@@ -173,7 +173,7 @@ func (so *StatisticsOperations) GetNearestAvailableDate(requestedDate time.Time)
 	defer so.mu.RUnlock()
 
 	conn := so.db.Conn()
-	
+
 	// First check if the exact date exists
 	var count int
 	exactQuery := so.queryBuilder.ExactDateExistsSQL()
@@ -187,7 +187,7 @@ func (so *StatisticsOperations) GetNearestAvailableDate(requestedDate time.Time)
 
 	// Find the nearest date - get one before and one after
 	var beforeDate, afterDate sql.NullTime
-	
+
 	// Get the closest date before
 	beforeQuery := so.queryBuilder.NearestDateBeforeSQL()
 	err = conn.QueryRow(beforeQuery, requestedDate).Scan(&beforeDate)
@@ -235,7 +235,7 @@ func (so *StatisticsOperations) GetDateRangeStats(startDate, endDate time.Time) 
 	query := `SELECT DISTINCT nodelist_date FROM nodes 
 		WHERE nodelist_date >= ? AND nodelist_date <= ? 
 		ORDER BY nodelist_date ASC`
-	
+
 	rows, err := conn.Query(query, startDate, endDate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dates in range: %w", err)
@@ -432,18 +432,18 @@ func (so *StatisticsOperations) GetGrowthStats(startDate, endDate time.Time) (*G
 	}
 
 	endStats, err := so.GetStats(endDate)
-	if err != nil {  
+	if err != nil {
 		return nil, fmt.Errorf("failed to get end date stats: %w", err)
 	}
 
 	growth := &GrowthStats{
-		StartDate:     startDate,
-		EndDate:       endDate,
-		StartStats:    *startStats,
-		EndStats:      *endStats,
-		NodeGrowth:    endStats.TotalNodes - startStats.TotalNodes,
-		ActiveGrowth:  endStats.ActiveNodes - startStats.ActiveNodes,
-		BinkpGrowth:   endStats.BinkpNodes - startStats.BinkpNodes,
+		StartDate:      startDate,
+		EndDate:        endDate,
+		StartStats:     *startStats,
+		EndStats:       *endStats,
+		NodeGrowth:     endStats.TotalNodes - startStats.TotalNodes,
+		ActiveGrowth:   endStats.ActiveNodes - startStats.ActiveNodes,
+		BinkpGrowth:    endStats.BinkpNodes - startStats.BinkpNodes,
 		InternetGrowth: endStats.InternetNodes - startStats.InternetNodes,
 	}
 
@@ -452,7 +452,7 @@ func (so *StatisticsOperations) GetGrowthStats(startDate, endDate time.Time) (*G
 		growth.NodeGrowthPercent = float64(growth.NodeGrowth) / float64(startStats.TotalNodes) * 100
 	}
 	if startStats.ActiveNodes > 0 {
-		growth.ActiveGrowthPercent = float64(growth.ActiveGrowth) / float64(startStats.ActiveNodes) * 100  
+		growth.ActiveGrowthPercent = float64(growth.ActiveGrowth) / float64(startStats.ActiveNodes) * 100
 	}
 	if startStats.BinkpNodes > 0 {
 		growth.BinkpGrowthPercent = float64(growth.BinkpGrowth) / float64(startStats.BinkpNodes) * 100
@@ -475,10 +475,10 @@ func (so *StatisticsOperations) ClearStatsCache() {
 func (so *StatisticsOperations) GetCacheStats() map[string]interface{} {
 	so.cacheMu.RLock()
 	defer so.cacheMu.RUnlock()
-	
+
 	return map[string]interface{}{
-		"cached_entries": len(so.statsCache),
-		"cache_enabled":  true,
+		"cached_entries":       len(so.statsCache),
+		"cache_enabled":        true,
 		"cache_threshold_days": 30,
 	}
 }
@@ -505,16 +505,16 @@ type SysopStats struct {
 
 // GrowthStats represents growth statistics between two dates
 type GrowthStats struct {
-	StartDate              time.Time               `json:"start_date"`
-	EndDate                time.Time               `json:"end_date"`
-	StartStats             database.NetworkStats   `json:"start_stats"`
-	EndStats               database.NetworkStats   `json:"end_stats"`
-	NodeGrowth             int                     `json:"node_growth"`
-	ActiveGrowth           int                     `json:"active_growth"`
-	BinkpGrowth            int                     `json:"binkp_growth"`
-	InternetGrowth         int                     `json:"internet_growth"`
-	NodeGrowthPercent      float64                 `json:"node_growth_percent"`
-	ActiveGrowthPercent    float64                 `json:"active_growth_percent"`
-	BinkpGrowthPercent     float64                 `json:"binkp_growth_percent"`
-	InternetGrowthPercent  float64                 `json:"internet_growth_percent"`
+	StartDate             time.Time             `json:"start_date"`
+	EndDate               time.Time             `json:"end_date"`
+	StartStats            database.NetworkStats `json:"start_stats"`
+	EndStats              database.NetworkStats `json:"end_stats"`
+	NodeGrowth            int                   `json:"node_growth"`
+	ActiveGrowth          int                   `json:"active_growth"`
+	BinkpGrowth           int                   `json:"binkp_growth"`
+	InternetGrowth        int                   `json:"internet_growth"`
+	NodeGrowthPercent     float64               `json:"node_growth_percent"`
+	ActiveGrowthPercent   float64               `json:"active_growth_percent"`
+	BinkpGrowthPercent    float64               `json:"binkp_growth_percent"`
+	InternetGrowthPercent float64               `json:"internet_growth_percent"`
 }

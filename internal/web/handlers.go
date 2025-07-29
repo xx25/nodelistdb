@@ -27,45 +27,45 @@ type Server struct {
 func parseNodeURLPath(path string) (zone, net, node int, err error) {
 	path = strings.TrimPrefix(path, "/node/")
 	parts := strings.Split(path, "/")
-	
+
 	if len(parts) < 3 {
 		return 0, 0, 0, fmt.Errorf("invalid node address")
 	}
-	
+
 	zone, err = strconv.Atoi(parts[0])
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("invalid zone")
 	}
-	
+
 	net, err = strconv.Atoi(parts[1])
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("invalid net")
 	}
-	
+
 	node, err = strconv.Atoi(parts[2])
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("invalid node")
 	}
-	
+
 	return zone, net, node, nil
 }
 
 // buildChangeFilter creates a ChangeFilter from URL query parameters
 func buildChangeFilter(query url.Values) storage.ChangeFilter {
 	return storage.ChangeFilter{
-		IgnoreFlags:            query.Get("noflags") == "1",
-		IgnorePhone:            query.Get("nophone") == "1",
-		IgnoreSpeed:            query.Get("nospeed") == "1",
-		IgnoreStatus:           query.Get("nostatus") == "1",
-		IgnoreLocation:         query.Get("nolocation") == "1",
-		IgnoreName:             query.Get("noname") == "1",
-		IgnoreSysop:            query.Get("nosysop") == "1",
-		IgnoreConnectivity:     query.Get("noconnectivity") == "1",
-		IgnoreModemFlags:       query.Get("nomodemflags") == "1",
+		IgnoreFlags:             query.Get("noflags") == "1",
+		IgnorePhone:             query.Get("nophone") == "1",
+		IgnoreSpeed:             query.Get("nospeed") == "1",
+		IgnoreStatus:            query.Get("nostatus") == "1",
+		IgnoreLocation:          query.Get("nolocation") == "1",
+		IgnoreName:              query.Get("noname") == "1",
+		IgnoreSysop:             query.Get("nosysop") == "1",
+		IgnoreConnectivity:      query.Get("noconnectivity") == "1",
+		IgnoreModemFlags:        query.Get("nomodemflags") == "1",
 		IgnoreInternetProtocols: query.Get("nointernetprotocols") == "1",
 		IgnoreInternetHostnames: query.Get("nointernethostnames") == "1",
-		IgnoreInternetPorts:    query.Get("nointernetports") == "1",
-		IgnoreInternetEmails:   query.Get("nointernetemails") == "1",
+		IgnoreInternetPorts:     query.Get("nointernetports") == "1",
+		IgnoreInternetEmails:    query.Get("nointernetemails") == "1",
 	}
 }
 
@@ -79,16 +79,16 @@ type NodeActivityInfo struct {
 // analyzeNodeActivity analyzes node history to determine activity information
 func analyzeNodeActivity(history []database.Node) NodeActivityInfo {
 	var info NodeActivityInfo
-	
+
 	if len(history) > 0 {
 		info.FirstDate = history[0].NodelistDate
 		info.LastDate = history[len(history)-1].NodelistDate
-		
+
 		// Check if currently active (last entry within 30 days)
 		daysSinceLastSeen := time.Since(info.LastDate).Hours() / 24
 		info.CurrentlyActive = daysSinceLastSeen <= 30
 	}
-	
+
 	return info
 }
 
@@ -100,7 +100,7 @@ func New(storage *storage.Storage, templatesFS embed.FS, staticFS embed.FS) *Ser
 		templatesFS: templatesFS,
 		staticFS:    staticFS,
 	}
-	
+
 	server.loadTemplates()
 	return server
 }
@@ -112,7 +112,7 @@ func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 	}{
 		Title: "FidoNet Nodelist Database",
 	}
-	
+
 	if err := s.templates["index"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -121,7 +121,7 @@ func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 // SearchHandler handles node search
 func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	nodes, count, searchErr := s.performNodeSearch(r)
-	
+
 	data := struct {
 		Title string
 		Nodes []database.Node
@@ -133,7 +133,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		Count: count,
 		Error: searchErr,
 	}
-	
+
 	if err := s.templates["search"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -144,12 +144,12 @@ func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error
 	if r.Method != "POST" {
 		return nil, 0, nil
 	}
-	
+
 	r.ParseForm()
-	
+
 	var filter database.NodeFilter
 	var err error
-	
+
 	// Check if full address was provided
 	if fullAddress := r.FormValue("full_address"); fullAddress != "" {
 		filter, err = buildNodeFilterFromAddress(fullAddress)
@@ -160,12 +160,12 @@ func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error
 		// Build filter from individual fields
 		filter = buildNodeFilterFromForm(r)
 	}
-	
+
 	nodes, err := s.storage.GetNodes(filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	
+
 	return nodes, len(nodes), nil
 }
 
@@ -176,7 +176,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var dateAdjusted bool
 	var availableDates []time.Time
-	
+
 	// Get available dates for the dropdown
 	availableDates, err = s.storage.GetAvailableDates()
 	if err != nil {
@@ -199,7 +199,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			ActualDate:     "",
 			DateAdjusted:   false,
 		}
-		
+
 		if err := s.templates["stats"].Execute(w, data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -233,7 +233,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					ActualDate:     "",
 					DateAdjusted:   false,
 				}
-				
+
 				if err := s.templates["stats"].Execute(w, data); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 				}
@@ -263,7 +263,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					ActualDate:     "",
 					DateAdjusted:   false,
 				}
-				
+
 				if err := s.templates["stats"].Execute(w, data); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 				}
@@ -294,17 +294,17 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 				ActualDate:     "",
 				DateAdjusted:   false,
 			}
-			
+
 			if err := s.templates["stats"].Execute(w, data); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 			return
 		}
 	}
-	
+
 	// Get stats for the actual date
 	stats, err := s.storage.GetStats(actualDate)
-	
+
 	data := struct {
 		Title          string
 		Stats          *database.NetworkStats
@@ -324,11 +324,11 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		ActualDate:     actualDate.Format("2006-01-02"),
 		DateAdjusted:   dateAdjusted,
 	}
-	
+
 	if data.NoData && err == nil {
 		data.Error = fmt.Errorf("No nodelist data available. Please import nodelist files first.")
 	}
-	
+
 	if err := s.templates["stats"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -340,17 +340,17 @@ func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
 	var count int
 	var searchErr error
 	var sysopName string
-	
+
 	if r.Method == "POST" {
 		r.ParseForm()
 		sysopName = r.FormValue("sysop_name")
-		
+
 		if sysopName != "" {
 			nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 50)
 			count = len(nodes)
 		}
 	}
-	
+
 	data := struct {
 		Title     string
 		Nodes     []storage.NodeSummary
@@ -364,7 +364,7 @@ func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
 		Error:     searchErr,
 		SysopName: sysopName,
 	}
-	
+
 	if err := s.templates["sysop_search"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -377,52 +377,52 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	// Get node history
 	history, err := s.storage.GetNodeHistory(zone, net, node)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error retrieving node history: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	if len(history) == 0 {
 		http.Error(w, "Node not found", http.StatusNotFound)
 		return
 	}
-	
+
 	filter := buildChangeFilter(r.URL.Query())
-	
+
 	// Get node changes with filter applied
 	changes, err := s.storage.GetNodeChanges(zone, net, node, filter)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error retrieving node changes: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	activityInfo := analyzeNodeActivity(history)
-	
+
 	data := struct {
-		Title           string
-		Address         string
-		History         []database.Node
-		Changes         []database.NodeChange
-		Filter          storage.ChangeFilter
-		FirstDate       time.Time
-		LastDate        time.Time
-		CurrentlyActive bool
+		Title            string
+		Address          string
+		History          []database.Node
+		Changes          []database.NodeChange
+		Filter           storage.ChangeFilter
+		FirstDate        time.Time
+		LastDate         time.Time
+		CurrentlyActive  bool
 		FlagDescriptions map[string]flags.FlagInfo
 	}{
-		Title:           "Node History",
-		Address:         fmt.Sprintf("%d:%d/%d", zone, net, node),
-		History:         history,
-		Changes:         changes,
-		Filter:          filter,
-		FirstDate:       activityInfo.FirstDate,
-		LastDate:        activityInfo.LastDate,
-		CurrentlyActive: activityInfo.CurrentlyActive,
+		Title:            "Node History",
+		Address:          fmt.Sprintf("%d:%d/%d", zone, net, node),
+		History:          history,
+		Changes:          changes,
+		Filter:           filter,
+		FirstDate:        activityInfo.FirstDate,
+		LastDate:         activityInfo.LastDate,
+		CurrentlyActive:  activityInfo.CurrentlyActive,
 		FlagDescriptions: flags.GetFlagDescriptions(),
 	}
-	
+
 	if err := s.templates["node_history"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -439,17 +439,17 @@ func (s *Server) APIHelpHandler(w http.ResponseWriter, r *http.Request) {
 	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
 		scheme = proto
 	}
-	
+
 	// Get the host from the request
 	host := r.Host
 	if host == "" {
 		host = "localhost:8080" // fallback
 	}
-	
+
 	// Construct the base URL
 	apiURL := fmt.Sprintf("%s://%s/api/", scheme, host)
 	siteURL := fmt.Sprintf("%s://%s", scheme, host)
-	
+
 	data := struct {
 		Title   string
 		BaseURL string
@@ -459,7 +459,7 @@ func (s *Server) APIHelpHandler(w http.ResponseWriter, r *http.Request) {
 		BaseURL: apiURL,
 		SiteURL: siteURL,
 	}
-	
+
 	if err := s.templates["api_help"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

@@ -21,24 +21,24 @@ type NodeSummary struct {
 
 // ChangeFilter allows filtering out specific types of changes when analyzing node history
 type ChangeFilter struct {
-	IgnoreFlags              bool // Ignore changes in flag arrays
-	IgnorePhone              bool // Ignore phone number changes
-	IgnoreSpeed              bool // Ignore max speed changes
-	IgnoreStatus             bool // Ignore node type/status changes
-	IgnoreLocation           bool // Ignore location changes
-	IgnoreName               bool // Ignore system name changes
-	IgnoreSysop              bool // Ignore sysop name changes
-	IgnoreConnectivity       bool // Ignore Binkp, Telnet capability changes
-	IgnoreInternetProtocols  bool // Ignore internet protocol changes
-	IgnoreInternetHostnames  bool // Ignore internet hostname changes
-	IgnoreInternetPorts      bool // Ignore internet port changes
-	IgnoreInternetEmails     bool // Ignore internet email changes
-	IgnoreModemFlags         bool // Ignore modem flag changes
+	IgnoreFlags             bool // Ignore changes in flag arrays
+	IgnorePhone             bool // Ignore phone number changes
+	IgnoreSpeed             bool // Ignore max speed changes
+	IgnoreStatus            bool // Ignore node type/status changes
+	IgnoreLocation          bool // Ignore location changes
+	IgnoreName              bool // Ignore system name changes
+	IgnoreSysop             bool // Ignore sysop name changes
+	IgnoreConnectivity      bool // Ignore Binkp, Telnet capability changes
+	IgnoreInternetProtocols bool // Ignore internet protocol changes
+	IgnoreInternetHostnames bool // Ignore internet hostname changes
+	IgnoreInternetPorts     bool // Ignore internet port changes
+	IgnoreInternetEmails    bool // Ignore internet email changes
+	IgnoreModemFlags        bool // Ignore modem flag changes
 }
 
 // BatchInsertConfig holds configuration for batch insert operations
 type BatchInsertConfig struct {
-	ChunkSize    int  // Number of nodes per chunk
+	ChunkSize       int  // Number of nodes per chunk
 	UseTransactions bool // Whether to wrap inserts in transactions
 }
 
@@ -57,22 +57,22 @@ type Operations interface {
 	GetNodeHistory(zone, net, node int) ([]database.Node, error)
 	GetNodeDateRange(zone, net, node int) (firstDate, lastDate time.Time, err error)
 	InsertNodes(nodes []database.Node) error
-	
+
 	// Search operations
 	SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error)
 	GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error)
-	
+
 	// Statistics operations
 	GetStats(date time.Time) (*database.NetworkStats, error)
 	GetLatestStatsDate() (time.Time, error)
 	GetAvailableDates() ([]time.Time, error)
 	GetNearestAvailableDate(requestedDate time.Time) (time.Time, error)
-	
+
 	// Utility operations
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
 	FindConflictingNode(zone, net, node int, date time.Time) (bool, error)
 	GetMaxNodelistDate() (time.Time, error)
-	
+
 	// Lifecycle
 	Close() error
 }
@@ -84,7 +84,7 @@ type QueryBuilderInterface interface {
 	NodeSelectSQL() string
 	BuildBatchInsertSQL(batchSize int) string
 	BuildNodesQuery(filter database.NodeFilter) (string, []interface{})
-	
+
 	// Statistics queries
 	StatsSQL() string
 	ZoneDistributionSQL() string
@@ -93,12 +93,12 @@ type QueryBuilderInterface interface {
 	// Optimized statistics queries for better performance
 	OptimizedLargestRegionsSQL() string
 	OptimizedLargestNetsSQL() string
-	
+
 	// Node-specific queries
 	NodeHistorySQL() string
 	NodeDateRangeSQL() string
 	SysopSearchSQL() string
-	
+
 	// Utility queries
 	ConflictCheckSQL() string
 	MarkConflictSQL() string
@@ -128,14 +128,14 @@ type RowScanner interface {
 
 // Constants for default values and limits
 const (
-	DefaultSearchLimit     = 100
-	MaxSearchLimit        = 1000
-	DefaultChunkSize      = 100
-	MaxChunkSize          = 1000
-	DefaultSysopLimit     = 50
-	MaxSysopLimit         = 200
-	DefaultRegionLimit    = 10
-	DefaultNetLimit       = 10
+	DefaultSearchLimit = 100
+	MaxSearchLimit     = 1000
+	DefaultChunkSize   = 100
+	MaxChunkSize       = 1000
+	DefaultSysopLimit  = 50
+	MaxSysopLimit      = 200
+	DefaultRegionLimit = 10
+	DefaultNetLimit    = 10
 )
 
 // Common SQL field lists to avoid duplication
@@ -145,27 +145,27 @@ const (
 		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
 		conflict_sequence, has_conflict, has_inet, internet_config`
-		
+
 	NodeInsertFields = `zone, net, node, nodelist_date, day_number,
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
 		conflict_sequence, has_conflict, has_inet, internet_config`
-		
+
 	NodeInsertPlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
 )
 
 // Error messages for consistent error handling
 const (
-	ErrNodeNotFound          = "node not found"
-	ErrInvalidZone          = "invalid zone number"
-	ErrInvalidNet           = "invalid net number" 
-	ErrInvalidNode          = "invalid node number"
-	ErrInvalidDateFormat    = "invalid date format"
-	ErrNoDataAvailable      = "no data available for the specified criteria"
-	ErrDatabaseConnection   = "database connection error"
-	ErrQueryExecution       = "query execution error"
-	ErrResultParsing        = "result parsing error"
-	ErrTransactionFailed    = "transaction failed"
-	ErrBatchInsertFailed    = "batch insert failed"
+	ErrNodeNotFound       = "node not found"
+	ErrInvalidZone        = "invalid zone number"
+	ErrInvalidNet         = "invalid net number"
+	ErrInvalidNode        = "invalid node number"
+	ErrInvalidDateFormat  = "invalid date format"
+	ErrNoDataAvailable    = "no data available for the specified criteria"
+	ErrDatabaseConnection = "database connection error"
+	ErrQueryExecution     = "query execution error"
+	ErrResultParsing      = "result parsing error"
+	ErrTransactionFailed  = "transaction failed"
+	ErrBatchInsertFailed  = "batch insert failed"
 )

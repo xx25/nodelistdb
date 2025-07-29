@@ -21,13 +21,13 @@ import (
 func main() {
 	// Command line flags
 	var (
-		dbPath     = flag.String("db", "./nodelist.duckdb", "Path to DuckDB database file")
-		path       = flag.String("path", "", "Path to nodelist file or directory (required)")
-		recursive  = flag.Bool("recursive", false, "Scan directories recursively")
-		verbose    = flag.Bool("verbose", false, "Verbose output")
-		quiet      = flag.Bool("quiet", false, "Quiet mode - only print errors (useful for cron)")
-		batchSize  = flag.Int("batch", 1000, "Batch size for bulk inserts")
-		workers    = flag.Int("workers", 4, "Number of concurrent workers")
+		dbPath           = flag.String("db", "./nodelist.duckdb", "Path to DuckDB database file")
+		path             = flag.String("path", "", "Path to nodelist file or directory (required)")
+		recursive        = flag.Bool("recursive", false, "Scan directories recursively")
+		verbose          = flag.Bool("verbose", false, "Verbose output")
+		quiet            = flag.Bool("quiet", false, "Quiet mode - only print errors (useful for cron)")
+		batchSize        = flag.Int("batch", 1000, "Batch size for bulk inserts")
+		workers          = flag.Int("workers", 4, "Number of concurrent workers")
 		enableConcurrent = flag.Bool("concurrent", false, "Enable concurrent processing")
 	)
 	flag.Parse()
@@ -112,22 +112,22 @@ func main() {
 
 	// Process files
 	startTime := time.Now()
-	
+
 	ctx := context.Background()
-	
+
 	if *enableConcurrent && len(files) > 1 {
 		// Use concurrent processing
 		if !*quiet {
 			fmt.Printf("Using concurrent processing with %d workers\n", *workers)
 		}
 		processor := concurrent.New(storage, nodelistParser, *workers, *batchSize, *verbose, *quiet)
-		
+
 		err := processor.ProcessFiles(ctx, files)
 		if err != nil {
 			log.Fatalf("Concurrent processing failed: %v", err)
 		}
 	} else {
-		// Use sequential processing  
+		// Use sequential processing
 		if !*quiet {
 			fmt.Println("Using sequential processing")
 		}
@@ -143,7 +143,7 @@ func main() {
 				remaining := time.Duration(len(files)-i) * avgTimePerFile
 				etaStr = fmt.Sprintf(" (ETA: %v)", remaining.Round(time.Second))
 			}
-			
+
 			if !*quiet {
 				fmt.Printf("[%d/%d] Processing: %s%s\n", i+1, len(files), filePath, etaStr)
 			}
@@ -167,7 +167,7 @@ func main() {
 			if len(nodes) > 0 && nodes[0].NodelistDate.Year() > 1900 {
 				nodelistDate := nodes[0].NodelistDate
 				if *verbose {
-					fmt.Printf("  Checking if nodelist already processed: date=%s (year %d, day %d)\n", 
+					fmt.Printf("  Checking if nodelist already processed: date=%s (year %d, day %d)\n",
 						nodelistDate.Format("2006-01-02"), nodelistDate.Year(), nodes[0].DayNumber)
 				}
 				isProcessed, err := storage.IsNodelistProcessed(nodelistDate)
@@ -180,7 +180,7 @@ func main() {
 				}
 				if isProcessed {
 					if *verbose {
-						fmt.Printf("  ALREADY IMPORTED: Nodelist for %s (year %d, day %d) was previously processed\n", 
+						fmt.Printf("  ALREADY IMPORTED: Nodelist for %s (year %d, day %d) was previously processed\n",
 							nodelistDate.Format("2006-01-02"), nodelistDate.Year(), nodes[0].DayNumber)
 						fmt.Printf("    This prevents duplicate imports of the same nodelist date\n")
 					} else if !*quiet {
@@ -197,7 +197,7 @@ func main() {
 				if end > len(nodes) {
 					end = len(nodes)
 				}
-				
+
 				batch := nodes[i:end]
 				if err := insertBatch(storage, batch, *verbose, *quiet); err != nil {
 					fmt.Printf("  ERROR inserting batch: %v\n", err)
@@ -211,7 +211,7 @@ func main() {
 				fmt.Printf("  ✓ Parsed %d nodes\n", len(nodes))
 			}
 		}
-		
+
 		// Summary for sequential processing
 		if !*quiet {
 			fmt.Printf("Files processed: %d/%d\n", filesProcessed, len(files))
@@ -282,7 +282,7 @@ func findNodelistFiles(path string, recursive bool) ([]string, error) {
 // isNodelistFile checks if a file is a nodelist file based on naming patterns
 func isNodelistFile(filePath string) bool {
 	filename := strings.ToLower(filepath.Base(filePath))
-	
+
 	// Common nodelist filename patterns
 	patterns := []string{
 		"nodelist",
@@ -305,26 +305,26 @@ func parseConflictKey(errorMsg string) (int, int, int, string, bool) {
 	pattern := `duplicate key "([^"]+)"`
 	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(errorMsg)
-	
+
 	if len(matches) < 2 {
 		return 0, 0, 0, "", false
 	}
-	
+
 	keyStr := matches[1]
 	parts := strings.Split(keyStr, ", ")
 	if len(parts) < 4 {
 		return 0, 0, 0, "", false
 	}
-	
+
 	zone, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
 	net, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
 	node, err3 := strconv.Atoi(strings.TrimSpace(parts[2]))
 	date := strings.TrimSpace(parts[3])
-	
+
 	if err1 != nil || err2 != nil || err3 != nil {
 		return 0, 0, 0, "", false
 	}
-	
+
 	return zone, net, node, date, true
 }
 
@@ -339,7 +339,7 @@ func insertBatch(storage *storage.Storage, batch []database.Node, verbose bool, 
 		// Check if this is a primary key constraint error
 		if strings.Contains(err.Error(), "PRIMARY KEY or UNIQUE constraint violated") && strings.Contains(err.Error(), "duplicate key") {
 			fmt.Printf("  DATABASE CONFLICT DETECTED: %v\n", err)
-			
+
 			// Parse the conflicting key from the error message
 			zone, net, node, dateStr, parsed := parseConflictKey(err.Error())
 			if parsed {
@@ -348,7 +348,7 @@ func insertBatch(storage *storage.Storage, batch []database.Node, verbose bool, 
 				if parseErr == nil {
 					conflictExists, checkErr := storage.FindConflictingNode(zone, net, node, conflictDate)
 					if checkErr == nil && conflictExists {
-						fmt.Printf("    CONFLICT ANALYSIS for node %d:%d/%d on %s:\n", 
+						fmt.Printf("    CONFLICT ANALYSIS for node %d:%d/%d on %s:\n",
 							zone, net, node, dateStr)
 						fmt.Printf("      Node already exists in database for this date\n")
 						fmt.Printf("      DIAGNOSIS: Multiple nodelist files contain the same node for the same date\n")
@@ -367,7 +367,7 @@ func insertBatch(storage *storage.Storage, batch []database.Node, verbose bool, 
 			} else {
 				fmt.Printf("    Could not parse duplicate key from error message\n")
 				fmt.Printf("    Raw error: %s\n", err.Error())
-				
+
 				// Debug: show what we're trying to parse
 				if strings.Contains(err.Error(), "duplicate key") {
 					start := strings.Index(err.Error(), "duplicate key \"")

@@ -44,7 +44,7 @@ func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 		"status": "ok",
 		"time":   time.Now().UTC(),
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -264,10 +264,10 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Include information about date selection in the response
 	response := map[string]interface{}{
-		"stats":         stats,
+		"stats":          stats,
 		"requested_date": dateStr,
-		"actual_date":   actualDate.Format("2006-01-02"),
-		"date_adjusted": dateStr != "" && actualDate.Format("2006-01-02") != dateStr,
+		"actual_date":    actualDate.Format("2006-01-02"),
+		"date_adjusted":  dateStr != "" && actualDate.Format("2006-01-02") != dateStr,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -370,19 +370,19 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse filter options
 	query := r.URL.Query()
 	filter := storage.ChangeFilter{
-		IgnoreFlags:              query.Get("noflags") == "1",
-		IgnorePhone:              query.Get("nophone") == "1",
-		IgnoreSpeed:              query.Get("nospeed") == "1",
-		IgnoreStatus:             query.Get("nostatus") == "1",
-		IgnoreLocation:           query.Get("nolocation") == "1",
-		IgnoreName:               query.Get("noname") == "1",
-		IgnoreSysop:              query.Get("nosysop") == "1",
-		IgnoreConnectivity:       query.Get("noconnectivity") == "1",
-		IgnoreInternetProtocols:  query.Get("nointernetprotocols") == "1",
-		IgnoreInternetHostnames:  query.Get("nointernethostnames") == "1",
-		IgnoreInternetPorts:      query.Get("nointernetports") == "1",
-		IgnoreInternetEmails:     query.Get("nointernetemails") == "1",
-		IgnoreModemFlags:         query.Get("nomodemflags") == "1",
+		IgnoreFlags:             query.Get("noflags") == "1",
+		IgnorePhone:             query.Get("nophone") == "1",
+		IgnoreSpeed:             query.Get("nospeed") == "1",
+		IgnoreStatus:            query.Get("nostatus") == "1",
+		IgnoreLocation:          query.Get("nolocation") == "1",
+		IgnoreName:              query.Get("noname") == "1",
+		IgnoreSysop:             query.Get("nosysop") == "1",
+		IgnoreConnectivity:      query.Get("noconnectivity") == "1",
+		IgnoreInternetProtocols: query.Get("nointernetprotocols") == "1",
+		IgnoreInternetHostnames: query.Get("nointernethostnames") == "1",
+		IgnoreInternetPorts:     query.Get("nointernetports") == "1",
+		IgnoreInternetEmails:    query.Get("nointernetemails") == "1",
+		IgnoreModemFlags:        query.Get("nomodemflags") == "1",
 	}
 
 	// Get node changes
@@ -457,7 +457,7 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 			"type":       "active",
 			"data":       node,
 		}
-		
+
 		// Check for gaps to detect removal periods
 		if i < len(history)-1 {
 			nextNode := history[i+1]
@@ -511,7 +511,7 @@ func (s *Server) SearchNodesBySysopHandler(w http.ResponseWriter, r *http.Reques
 
 	// Convert spaces to underscores as that's how data is stored in nodelist database
 	searchName := strings.ReplaceAll(sysopName, " ", "_")
-	
+
 	// Search nodes
 	nodes, err := s.storage.SearchNodesBySysop(searchName, limit)
 	if err != nil {
@@ -569,9 +569,9 @@ func (s *Server) FlagsDocumentationHandler(w http.ResponseWriter, r *http.Reques
 
 	// Get flag filter from query parameters
 	category := r.URL.Query().Get("category")
-	
+
 	flagDescriptions := flags.GetFlagDescriptions()
-	
+
 	// Filter by category if specified
 	if category != "" {
 		filteredFlags := make(map[string]flags.FlagInfo)
@@ -582,14 +582,14 @@ func (s *Server) FlagsDocumentationHandler(w http.ResponseWriter, r *http.Reques
 		}
 		flagDescriptions = filteredFlags
 	}
-	
+
 	// Group flags by category
 	categories := make(map[string][]map[string]interface{})
 	for flag, info := range flagDescriptions {
 		if categories[info.Category] == nil {
 			categories[info.Category] = []map[string]interface{}{}
 		}
-		
+
 		flagData := map[string]interface{}{
 			"flag":        flag,
 			"has_value":   info.HasValue,
@@ -597,7 +597,7 @@ func (s *Server) FlagsDocumentationHandler(w http.ResponseWriter, r *http.Reques
 		}
 		categories[info.Category] = append(categories[info.Category], flagData)
 	}
-	
+
 	response := map[string]interface{}{
 		"flags":      flagDescriptions,
 		"categories": categories,
@@ -667,16 +667,16 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/nodes/search/sysop", s.SearchNodesBySysopHandler)
 	mux.HandleFunc("/api/download/database", s.DownloadDatabaseHandler)
 	mux.HandleFunc("/api/nodelist/latest", s.LatestNodelistAPIHandler)
-	
+
 	// OpenAPI documentation routes
 	mux.HandleFunc("/api/openapi.yaml", s.OpenAPISpecHandler)
 	mux.HandleFunc("/api/docs", s.SwaggerUIHandler)
-	
+
 	// Node lookup with path parameters
 	mux.HandleFunc("/api/nodes/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		pathParts := strings.Split(strings.TrimPrefix(path, "/api/nodes/"), "/")
-		
+
 		// Route to appropriate handler based on path structure
 		if len(pathParts) >= 4 && pathParts[3] == "history" {
 			// /api/nodes/{zone}/{net}/{node}/history
@@ -698,37 +698,21 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 
 // OpenAPISpecHandler serves the OpenAPI specification
 func (s *Server) OpenAPISpecHandler(w http.ResponseWriter, r *http.Request) {
-	// Get the path to the OpenAPI spec file
-	specPath := filepath.Join("api", "openapi.yaml")
-	
-	// Check if file exists
-	if _, err := os.Stat(specPath); os.IsNotExist(err) {
-		http.Error(w, "OpenAPI specification not found", http.StatusNotFound)
-		return
-	}
-	
-	// Read the file
-	specContent, err := os.ReadFile(specPath)
-	if err != nil {
-		http.Error(w, "Failed to read OpenAPI specification", http.StatusInternalServerError)
-		return
-	}
-	
 	// Set appropriate headers
 	w.Header().Set("Content-Type", "application/x-yaml")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	
+
 	// Handle CORS preflight
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	
-	// Serve the specification
+
+	// Serve the embedded specification
 	w.WriteHeader(http.StatusOK)
-	w.Write(specContent)
+	w.Write(OpenAPISpec)
 }
 
 // SwaggerUIHandler serves the Swagger UI interface
@@ -738,14 +722,14 @@ func (s *Server) SwaggerUIHandler(w http.ResponseWriter, r *http.Request) {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	
+
 	host := r.Host
 	if host == "" {
 		host = "localhost:8080"
 	}
-	
+
 	specURL := fmt.Sprintf("%s://%s/api/openapi.yaml", scheme, host)
-	
+
 	// Serve a simple Swagger UI HTML page
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
@@ -808,7 +792,7 @@ func (s *Server) SwaggerUIHandler(w http.ResponseWriter, r *http.Request) {
     </script>
 </body>
 </html>`, specURL)
-	
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(html))
@@ -828,7 +812,7 @@ func (s *Server) LatestNodelistAPIHandler(w http.ResponseWriter, r *http.Request
 		http.Error(w, "No nodelist files found", http.StatusNotFound)
 		return
 	}
-	
+
 	// Open the file
 	file, err := os.Open(latest.Path)
 	if err != nil {
@@ -836,7 +820,7 @@ func (s *Server) LatestNodelistAPIHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer file.Close()
-	
+
 	// Check if file is gzipped
 	if latest.IsCompressed {
 		// For API, we'll return metadata about the file instead of decompressing
@@ -861,22 +845,22 @@ func (s *Server) LatestNodelistAPIHandler(w http.ResponseWriter, r *http.Request
 // Helper function to find latest nodelist for API
 func findLatestNodelistAPI() (*NodelistFileAPI, error) {
 	basePath := getNodelistPathAPI()
-	
+
 	// Read year directories
 	yearDirs, err := os.ReadDir(basePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read nodelist directory: %v", err)
 	}
-	
+
 	var latestFile *NodelistFileAPI
 	var latestYear int
 	var latestDay int
-	
+
 	for _, yearDir := range yearDirs {
 		if !yearDir.IsDir() {
 			continue
 		}
-		
+
 		yearName := yearDir.Name()
 		if len(yearName) != 4 {
 			continue
@@ -885,28 +869,28 @@ func findLatestNodelistAPI() (*NodelistFileAPI, error) {
 		if err != nil {
 			continue
 		}
-		
+
 		yearPath := filepath.Join(basePath, yearName)
 		files, err := os.ReadDir(yearPath)
 		if err != nil {
 			continue
 		}
-		
+
 		for _, file := range files {
 			if file.IsDir() {
 				continue
 			}
-			
+
 			name := file.Name()
 			if !strings.HasPrefix(strings.ToLower(name), "nodelist.") {
 				continue
 			}
-			
+
 			parts := strings.Split(name, ".")
 			if len(parts) < 2 {
 				continue
 			}
-			
+
 			dayStr := parts[1]
 			if len(dayStr) != 3 {
 				continue
@@ -915,15 +899,15 @@ func findLatestNodelistAPI() (*NodelistFileAPI, error) {
 			if err != nil {
 				continue
 			}
-			
+
 			// Check if this is the latest file
 			if yearInt > latestYear || (yearInt == latestYear && dayNum > latestDay) {
 				latestYear = yearInt
 				latestDay = dayNum
-				
+
 				info, _ := file.Info()
 				date := time.Date(yearInt, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, dayNum-1)
-				
+
 				latestFile = &NodelistFileAPI{
 					Name:         name,
 					Year:         yearName,
@@ -936,11 +920,11 @@ func findLatestNodelistAPI() (*NodelistFileAPI, error) {
 			}
 		}
 	}
-	
+
 	if latestFile == nil {
 		return nil, fmt.Errorf("no nodelist files found")
 	}
-	
+
 	return latestFile, nil
 }
 

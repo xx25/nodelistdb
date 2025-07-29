@@ -50,7 +50,7 @@ func (no *NodeOperations) InsertNodes(nodes []database.Node) error {
 			end = len(nodes)
 		}
 		chunk := nodes[i:end]
-		
+
 		if err := no.insertChunkSafely(tx, chunk); err != nil {
 			return fmt.Errorf("failed to insert chunk: %w", err)
 		}
@@ -67,7 +67,7 @@ func (no *NodeOperations) insertChunkSafely(tx *sql.Tx, chunk []database.Node) e
 
 	// Build parameterized query
 	insertSQL := no.queryBuilder.BuildBatchInsertSQL(len(chunk))
-	
+
 	// Flatten all node arguments into a single slice
 	var args []interface{}
 	for _, node := range chunk {
@@ -79,7 +79,7 @@ func (no *NodeOperations) insertChunkSafely(tx *sql.Tx, chunk []database.Node) e
 	if err != nil {
 		return fmt.Errorf("failed to execute batch insert: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -181,7 +181,7 @@ func (no *NodeOperations) GetNodeDateRange(zone, net, node int) (firstDate, last
 
 	query := no.queryBuilder.NodeDateRangeSQL()
 	row := conn.QueryRow(query, zone, net, node)
-	
+
 	err = row.Scan(&firstDate, &lastDate)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -218,7 +218,7 @@ func (no *NodeOperations) FindConflictingNode(zone, net, node int, date time.Tim
 	var count int
 	query := no.queryBuilder.ConflictCheckSQL()
 	queryErr := tx.QueryRow(query, zone, net, node, date).Scan(&count)
-	
+
 	if queryErr != nil {
 		if queryErr == sql.ErrNoRows {
 			return false, nil // No conflict found in committed data
@@ -247,7 +247,7 @@ func (no *NodeOperations) IsNodelistProcessed(nodelistDate time.Time) (bool, err
 	var count int
 	query := no.queryBuilder.IsProcessedSQL()
 	err := conn.QueryRow(query, nodelistDate).Scan(&count)
-	
+
 	if err != nil {
 		return false, fmt.Errorf("failed to check if nodelist is processed: %w", err)
 	}
@@ -285,12 +285,12 @@ func (no *NodeOperations) NodeExists(zone, net, node int) (bool, error) {
 		Node:  &node,
 		Limit: 1,
 	}
-	
+
 	nodes, err := no.GetNodes(filter)
 	if err != nil {
 		return false, err
 	}
-	
+
 	return len(nodes) > 0, nil
 }
 
@@ -304,16 +304,16 @@ func (no *NodeOperations) GetLatestNodeVersion(zone, net, node int) (*database.N
 		LatestOnly: &latestOnly,
 		Limit:      1,
 	}
-	
+
 	nodes, err := no.GetNodes(filter)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("node %d:%d/%d not found", zone, net, node)
 	}
-	
+
 	return &nodes[0], nil
 }
 
@@ -381,7 +381,7 @@ func (no *NodeOperations) GetNodesByZone(zone int, limit int) ([]database.Node, 
 		Zone:  &zone,
 		Limit: limit,
 	}
-	
+
 	return no.GetNodes(filter)
 }
 
@@ -396,6 +396,6 @@ func (no *NodeOperations) GetNodesByNet(zone, net int, limit int) ([]database.No
 		Net:   &net,
 		Limit: limit,
 	}
-	
+
 	return no.GetNodes(filter)
 }

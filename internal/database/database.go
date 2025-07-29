@@ -19,7 +19,7 @@ type DB struct {
 func New(path string) (*DB, error) {
 	// Configure DuckDB connection string with optimizations
 	dsn := fmt.Sprintf("%s?memory_limit=8GB&threads=4", path)
-	
+
 	conn, err := sql.Open("duckdb", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DuckDB connection: %w", err)
@@ -42,7 +42,7 @@ func New(path string) (*DB, error) {
 func NewReadOnly(path string) (*DB, error) {
 	// Configure DuckDB connection string with read-only access
 	dsn := fmt.Sprintf("%s?access_mode=read_only&memory_limit=8GB&threads=4", path)
-	
+
 	conn, err := sql.Open("duckdb", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open read-only DuckDB connection: %w", err)
@@ -65,7 +65,7 @@ func NewReadOnly(path string) (*DB, error) {
 func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	
+
 	if db.conn != nil {
 		return db.conn.Close()
 	}

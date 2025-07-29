@@ -10,11 +10,10 @@ import (
 	"nodelistdb/internal/flags"
 )
 
-
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
 	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download"}
-	
+
 	// Create function map for template functions
 	funcMap := template.FuncMap{
 		"getFlagDescription": func(flagDescriptions map[string]flags.FlagInfo, flag string) string {
@@ -28,23 +27,23 @@ func (s *Server) loadTemplates() {
 			if !strings.Contains(changeValue, "→") {
 				return template.HTML(changeValue)
 			}
-			
+
 			parts := strings.Split(changeValue, "→")
 			if len(parts) != 2 {
 				return template.HTML(changeValue)
 			}
-			
+
 			oldFlags := strings.TrimSpace(parts[0])
 			newFlags := strings.TrimSpace(parts[1])
-			
+
 			// Parse flags from brackets like "[MO LO V34]"
 			oldFlagList := parseFlagList(oldFlags)
 			newFlagList := parseFlagList(newFlags)
-			
+
 			// Render with tooltips
 			oldHTML := renderFlagListWithTooltips(flagDescriptions, oldFlagList)
 			newHTML := renderFlagListWithTooltips(flagDescriptions, newFlagList)
-			
+
 			return template.HTML(oldHTML + " → " + newHTML)
 		},
 		"div": func(a, b interface{}) float64 {
@@ -108,7 +107,7 @@ func (s *Server) loadTemplates() {
 				MB = KB * 1024
 				GB = MB * 1024
 			)
-			
+
 			switch {
 			case size >= GB:
 				return fmt.Sprintf("%.2f GB", float64(size)/float64(GB))
@@ -121,7 +120,7 @@ func (s *Server) loadTemplates() {
 			}
 		},
 	}
-	
+
 	for _, tmplName := range templates {
 		tmpl, err := s.loadTemplateFromFile(tmplName, funcMap)
 		if err != nil {
@@ -134,19 +133,19 @@ func (s *Server) loadTemplates() {
 // loadTemplateFromFile loads a template from embedded filesystem
 func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*template.Template, error) {
 	templateFile := filepath.Join("templates", name+".html")
-	
+
 	// Read template from embedded filesystem
 	content, err := s.templatesFS.ReadFile(templateFile)
 	if err != nil {
 		return nil, fmt.Errorf("template file %s not found in embedded filesystem: %v", templateFile, err)
 	}
-	
+
 	// Parse template content with the correct template name
-	tmpl, err := template.New(name+".html").Funcs(funcMap).Parse(string(content))
+	tmpl, err := template.New(name + ".html").Funcs(funcMap).Parse(string(content))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template %s: %v", templateFile, err)
 	}
-	
+
 	return tmpl, nil
 }
 
@@ -164,15 +163,15 @@ func renderFlagListWithTooltips(flagDescriptions map[string]flags.FlagInfo, flag
 	if len(flagList) == 0 {
 		return "[]"
 	}
-	
+
 	var result strings.Builder
 	result.WriteString("[")
-	
+
 	for i, flag := range flagList {
 		if i > 0 {
 			result.WriteString(" ")
 		}
-		
+
 		if desc, exists := flagDescriptions[flag]; exists && desc.Description != "" {
 			// Render with tooltip
 			result.WriteString(fmt.Sprintf(`<span class="flag-tooltip"><span class="badge badge-info" style="margin: 0 1px;">%s</span><span class="tooltip-text">%s</span></span>`, flag, desc.Description))
@@ -181,7 +180,7 @@ func renderFlagListWithTooltips(flagDescriptions map[string]flags.FlagInfo, flag
 			result.WriteString(fmt.Sprintf(`<span class="badge badge-info" style="margin: 0 1px;">%s</span>`, flag))
 		}
 	}
-	
+
 	result.WriteString("]")
 	return result.String()
 }

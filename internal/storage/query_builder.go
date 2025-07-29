@@ -35,7 +35,7 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 
 	// Create placeholder for one row
 	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	
+
 	// Build batch values
 	values := make([]string, batchSize)
 	for i := 0; i < batchSize; i++ {
@@ -82,7 +82,7 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 				   ROW_NUMBER() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
 			FROM nodes
 		) ranked WHERE rn = 1`
-		
+
 		conditions, conditionArgs := qb.buildWhereConditions(filter)
 		if len(conditions) > 0 {
 			baseSQL += " AND " + strings.Join(conditions, " AND ")
@@ -90,7 +90,7 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 		}
 	} else {
 		baseSQL = qb.NodeSelectSQL()
-		
+
 		conditions, conditionArgs := qb.buildWhereConditions(filter)
 		if len(conditions) > 0 {
 			baseSQL += " WHERE " + strings.Join(conditions, " AND ")
@@ -105,7 +105,7 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 	if filter.Limit > 0 {
 		baseSQL += " LIMIT ?"
 		args = append(args, filter.Limit)
-		
+
 		if filter.Offset > 0 {
 			baseSQL += " OFFSET ?"
 			args = append(args, filter.Offset)
@@ -200,7 +200,7 @@ func (qb *QueryBuilder) OptimizedLargestRegionsSQL() string {
 	LIMIT 10`
 }
 
-// OptimizedLargestNetsSQL returns optimized SQL for largest nets stats with better performance  
+// OptimizedLargestNetsSQL returns optimized SQL for largest nets stats with better performance
 func (qb *QueryBuilder) OptimizedLargestNetsSQL() string {
 	return `
 	SELECT nc.zone, nc.net, nc.count, hn.host_name

@@ -32,39 +32,39 @@ func GetFlagDescriptions() map[string]FlagInfo {
 		"CSP":  {Category: "modem", HasValue: false, Description: "Compucom SpeedModem (CSP, proprietary protocol)"},
 		"ZYX":  {Category: "modem", HasValue: false, Description: "ZyXEL modem (supports proprietary and standard protocols)"},
 		"VFC":  {Category: "modem", HasValue: false, Description: "V.Fast Class (V.FC, pre-V.34 28800 bps, Rockwell standard)"},
-		
+
 		// Internet flags
-		"IBN":  {Category: "internet", HasValue: true, Description: "BinkP"},
-		"IFC":  {Category: "internet", HasValue: true, Description: "File transfer"},
-		"ITN":  {Category: "internet", HasValue: true, Description: "Telnet"},
-		"IVM":  {Category: "internet", HasValue: true, Description: "VModem"},
-		"IFT":  {Category: "internet", HasValue: true, Description: "FTP"},
-		"INA":  {Category: "internet", HasValue: true, Description: "Internet address"},
-		"IP":   {Category: "internet", HasValue: true, Description: "General IP"},
-		
+		"IBN": {Category: "internet", HasValue: true, Description: "BinkP"},
+		"IFC": {Category: "internet", HasValue: true, Description: "File transfer"},
+		"ITN": {Category: "internet", HasValue: true, Description: "Telnet"},
+		"IVM": {Category: "internet", HasValue: true, Description: "VModem"},
+		"IFT": {Category: "internet", HasValue: true, Description: "FTP"},
+		"INA": {Category: "internet", HasValue: true, Description: "Internet address"},
+		"IP":  {Category: "internet", HasValue: true, Description: "General IP"},
+
 		// Email protocols
-		"IEM":  {Category: "internet", HasValue: true, Description: "Email"},
-		"IMI":  {Category: "internet", HasValue: true, Description: "Mail interface"},
-		"ITX":  {Category: "internet", HasValue: true, Description: "TransX"},
-		"IUC":  {Category: "internet", HasValue: true, Description: "UUencoded"},
-		"ISE":  {Category: "internet", HasValue: true, Description: "SendEmail"},
-		
+		"IEM": {Category: "internet", HasValue: true, Description: "Email"},
+		"IMI": {Category: "internet", HasValue: true, Description: "Mail interface"},
+		"ITX": {Category: "internet", HasValue: true, Description: "TransX"},
+		"IUC": {Category: "internet", HasValue: true, Description: "UUencoded"},
+		"ISE": {Category: "internet", HasValue: true, Description: "SendEmail"},
+
 		// Capability flags
-		"CM":   {Category: "capability", HasValue: false, Description: "Continuous Mail"},
-		"MO":   {Category: "capability", HasValue: false, Description: "Mail Only"},
-		"LO":   {Category: "capability", HasValue: false, Description: "Local Only"},
-		"XA":   {Category: "capability", HasValue: false, Description: "Extended addressing"},
-		"XB":   {Category: "capability", HasValue: false, Description: "Bark requests"},
-		"XC":   {Category: "capability", HasValue: false, Description: "Compressed mail"},
-		"XP":   {Category: "capability", HasValue: false, Description: "Extended protocol"},
-		"XR":   {Category: "capability", HasValue: false, Description: "Accepts file requests"},
-		"XW":   {Category: "capability", HasValue: false, Description: "X.75 windowing"},
-		"XX":   {Category: "capability", HasValue: false, Description: "No file/update requests"},
-		
+		"CM": {Category: "capability", HasValue: false, Description: "Continuous Mail"},
+		"MO": {Category: "capability", HasValue: false, Description: "Mail Only"},
+		"LO": {Category: "capability", HasValue: false, Description: "Local Only"},
+		"XA": {Category: "capability", HasValue: false, Description: "Extended addressing"},
+		"XB": {Category: "capability", HasValue: false, Description: "Bark requests"},
+		"XC": {Category: "capability", HasValue: false, Description: "Compressed mail"},
+		"XP": {Category: "capability", HasValue: false, Description: "Extended protocol"},
+		"XR": {Category: "capability", HasValue: false, Description: "Accepts file requests"},
+		"XW": {Category: "capability", HasValue: false, Description: "X.75 windowing"},
+		"XX": {Category: "capability", HasValue: false, Description: "No file/update requests"},
+
 		// Schedule flags
-		"U":    {Category: "schedule", HasValue: true, Description: "Availability"},
-		"T":    {Category: "schedule", HasValue: true, Description: "Time zone"},
-		
+		"U": {Category: "schedule", HasValue: true, Description: "Availability"},
+		"T": {Category: "schedule", HasValue: true, Description: "Time zone"},
+
 		// User flags
 		"ENC":  {Category: "user", HasValue: false, Description: "Encrypted"},
 		"NC":   {Category: "user", HasValue: false, Description: "Network Coordinator"},
@@ -80,14 +80,14 @@ func GetFlagDescriptions() map[string]FlagInfo {
 func GetParserFlagMap() map[string]ParserFlagInfo {
 	descriptions := GetFlagDescriptions()
 	parserMap := make(map[string]ParserFlagInfo)
-	
+
 	for flag, info := range descriptions {
 		parserMap[flag] = ParserFlagInfo{
 			Category: info.Category,
 			HasValue: info.HasValue,
 		}
 	}
-	
+
 	return parserMap
 }
 

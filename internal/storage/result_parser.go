@@ -46,7 +46,7 @@ func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) 
 	node.InternetHostnames = rp.parseInterfaceToStringArray(hosts)
 	node.InternetPorts = rp.parseInterfaceToIntArray(ports)
 	node.InternetEmails = rp.parseInterfaceToStringArray(emails)
-	
+
 	// Handle JSON field
 	if internetConfig.Valid {
 		node.InternetConfig = json.RawMessage(internetConfig.String)
@@ -87,16 +87,16 @@ func (rp *ResultParser) ParseNetworkStatsRow(scanner RowScanner) (*database.Netw
 func (rp *ResultParser) ParseRegionInfoRow(scanner RowScanner) (database.RegionInfo, error) {
 	var region database.RegionInfo
 	var regionName sql.NullString
-	
+
 	err := scanner.Scan(&region.Zone, &region.Region, &region.NodeCount, &regionName)
 	if err != nil {
 		return region, fmt.Errorf("failed to scan region info: %w", err)
 	}
-	
+
 	if regionName.Valid {
 		region.Name = regionName.String
 	}
-	
+
 	return region, nil
 }
 
@@ -104,26 +104,25 @@ func (rp *ResultParser) ParseRegionInfoRow(scanner RowScanner) (database.RegionI
 func (rp *ResultParser) ParseNetInfoRow(scanner RowScanner) (database.NetInfo, error) {
 	var net database.NetInfo
 	var hostName sql.NullString
-	
+
 	err := scanner.Scan(&net.Zone, &net.Net, &net.NodeCount, &hostName)
 	if err != nil {
 		return net, fmt.Errorf("failed to scan net info: %w", err)
 	}
-	
+
 	if hostName.Valid {
 		net.Name = hostName.String
 	}
-	
+
 	return net, nil
 }
-
 
 // parseInterfaceToStringArray converts DuckDB array results to []string
 func (rp *ResultParser) parseInterfaceToStringArray(v interface{}) []string {
 	if v == nil {
 		return []string{}
 	}
-	
+
 	switch arr := v.(type) {
 	case []interface{}:
 		result := make([]string, 0, len(arr))
@@ -146,7 +145,7 @@ func (rp *ResultParser) parseInterfaceToIntArray(v interface{}) []int {
 	if v == nil {
 		return []int{}
 	}
-	
+
 	switch arr := v.(type) {
 	case []interface{}:
 		result := make([]int, 0, len(arr))
@@ -176,19 +175,19 @@ func (rp *ResultParser) parseStringArray(s string) []string {
 	if s == "[]" || s == "" {
 		return []string{}
 	}
-	
+
 	// Try JSON unmarshaling first
 	var result []string
 	if err := json.Unmarshal([]byte(s), &result); err == nil {
 		return result
 	}
-	
+
 	// Fallback to simple parsing
 	s = strings.Trim(s, "[]")
 	if s == "" {
 		return []string{}
 	}
-	
+
 	// Split by comma and clean up quotes
 	parts := strings.Split(s, ",")
 	cleaned := make([]string, 0, len(parts))
@@ -199,7 +198,7 @@ func (rp *ResultParser) parseStringArray(s string) []string {
 			cleaned = append(cleaned, part)
 		}
 	}
-	
+
 	return cleaned
 }
 
@@ -208,19 +207,19 @@ func (rp *ResultParser) parseIntArray(s string) []int {
 	if s == "[]" || s == "" {
 		return []int{}
 	}
-	
+
 	// Try JSON unmarshaling first
 	var result []int
 	if err := json.Unmarshal([]byte(s), &result); err == nil {
 		return result
 	}
-	
+
 	// Fallback to simple parsing
 	s = strings.Trim(s, "[]")
 	if s == "" {
 		return []int{}
 	}
-	
+
 	parts := strings.Split(s, ",")
 	result = make([]int, 0, len(parts))
 	for _, part := range parts {
@@ -229,7 +228,7 @@ func (rp *ResultParser) parseIntArray(s string) []int {
 			result = append(result, val)
 		}
 	}
-	
+
 	return result
 }
 
@@ -238,7 +237,7 @@ func (rp *ResultParser) formatArrayDuckDB(arr []string) string {
 	if len(arr) == 0 {
 		return "ARRAY[]::TEXT[]"
 	}
-	
+
 	escaped := make([]string, len(arr))
 	for i, s := range arr {
 		escaped[i] = "'" + rp.escapeSingleQuotes(s) + "'"
@@ -251,7 +250,7 @@ func (rp *ResultParser) formatIntArrayDuckDB(arr []int) string {
 	if len(arr) == 0 {
 		return "ARRAY[]::INTEGER[]"
 	}
-	
+
 	strs := make([]string, len(arr))
 	for i, n := range arr {
 		strs[i] = fmt.Sprintf("%d", n)
@@ -323,27 +322,27 @@ func (rp *ResultParser) ValidateNodeFilter(filter database.NodeFilter) error {
 	if filter.Zone != nil && (*filter.Zone < 1 || *filter.Zone > 65535) {
 		return fmt.Errorf("invalid zone: must be between 1 and 65535")
 	}
-	
+
 	if filter.Net != nil && (*filter.Net < 0 || *filter.Net > 65535) {
 		return fmt.Errorf("invalid net: must be between 0 and 65535")
 	}
-	
+
 	if filter.Node != nil && (*filter.Node < 0 || *filter.Node > 65535) {
 		return fmt.Errorf("invalid node: must be between 0 and 65535")
 	}
-	
+
 	if filter.Limit < 0 || filter.Limit > MaxSearchLimit {
 		return fmt.Errorf("invalid limit: must be between 0 and %d", MaxSearchLimit)
 	}
-	
+
 	if filter.Offset < 0 {
 		return fmt.Errorf("invalid offset: must be non-negative")
 	}
-	
+
 	if filter.DateFrom != nil && filter.DateTo != nil && filter.DateFrom.After(*filter.DateTo) {
 		return fmt.Errorf("invalid date range: date_from cannot be after date_to")
 	}
-	
+
 	return nil
 }
 
@@ -356,12 +355,12 @@ func (rp *ResultParser) SanitizeStringInput(input string) string {
 		}
 		return r
 	}, input)
-	
+
 	// Limit length to prevent excessive memory usage
 	const maxLength = 1000
 	if len(cleaned) > maxLength {
 		cleaned = cleaned[:maxLength]
 	}
-	
+
 	return cleaned
 }

@@ -39,7 +39,7 @@ type ParseResult struct {
 // Context tracks the current parsing context
 type Context struct {
 	CurrentZone   int
-	CurrentNet    int  
+	CurrentNet    int
 	CurrentRegion *int
 }
 
@@ -47,20 +47,19 @@ type Context struct {
 type Parser struct {
 	// Configuration
 	verbose bool
-	
+
 	// Format detection
 	DetectedFormat NodelistFormat
 	LegacyFlagMap  map[string]string
 	ModernFlagMap  map[string]flags.ParserFlagInfo
-	
-	// Header parsing patterns
-	HeaderPattern  *regexp.Regexp
-	LinePattern    *regexp.Regexp
-	
-	// Context tracking
-	Context        Context
-}
 
+	// Header parsing patterns
+	HeaderPattern *regexp.Regexp
+	LinePattern   *regexp.Regexp
+
+	// Context tracking
+	Context Context
+}
 
 // New creates a new parser instance
 func New(verbose bool) *Parser {
@@ -73,10 +72,10 @@ func New(verbose bool) *Parser {
 		HeaderPattern: regexp.MustCompile(`^;[AST]\s+(.+)$`),
 		LinePattern:   regexp.MustCompile(`^([^,]*),([^,]+),(.+)$`),
 		LegacyFlagMap: map[string]string{
-			"XP:": "XA",  // Extended addressing
-			"MO:": "MO",  // Mail Only
-			"LO:": "LO",  // Local Only
-			"CM:": "CM",  // Continuous Mail
+			"XP:": "XA", // Extended addressing
+			"MO:": "MO", // Mail Only
+			"LO:": "LO", // Local Only
+			"CM:": "CM", // Continuous Mail
 		},
 		ModernFlagMap: flags.GetParserFlagMap(),
 	}
@@ -128,7 +127,7 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	var fileCRC uint16
 	var firstNodeLine string
 	headerParsed := false
-	
+
 	// Track duplicates within this file
 	nodeTracker := make(map[string][]int) // key: "zone:net/node", value: slice of indices in nodes array
 	duplicateStats := struct {
@@ -161,7 +160,7 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 					dayNumber = dayNum
 					headerParsed = true
 					if p.verbose {
-						fmt.Printf("  Header parsing successful: %s (Day %d, CRC %d)\n", 
+						fmt.Printf("  Header parsing successful: %s (Day %d, CRC %d)\n",
 							nodelistDate.Format("2006-01-02"), dayNumber, fileCRC)
 					}
 				}
@@ -201,38 +200,38 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 		if node != nil {
 			// Check for duplicates within this file
 			nodeKey := fmt.Sprintf("%d:%d/%d", node.Zone, node.Net, node.Node)
-			
+
 			if existingIndices, exists := nodeTracker[nodeKey]; exists {
 				// This is a duplicate - handle conflict tracking
 				if p.verbose {
-					fmt.Printf("  DUPLICATE DETECTED: Node %s appears multiple times in %s (line %d)\n", 
+					fmt.Printf("  DUPLICATE DETECTED: Node %s appears multiple times in %s (line %d)\n",
 						nodeKey, filePath, lineNum)
 					fmt.Printf("    Previous occurrences at indices: %v\n", existingIndices)
 					fmt.Printf("    System Name: '%s', Location: '%s'\n", node.SystemName, node.Location)
 				}
-				
+
 				// Set conflict sequence for this duplicate
 				node.ConflictSequence = len(existingIndices)
 				node.HasConflict = true
-				
+
 				// Mark all previous occurrences as having conflicts
 				for _, idx := range existingIndices {
 					nodes[idx].HasConflict = true
 				}
-				
+
 				duplicateStats.totalDuplicates++
 				if len(existingIndices) == 1 {
 					// First duplicate for this node
 					duplicateStats.conflictGroups++
 				}
-				
+
 				// Add current index to tracker
 				nodeTracker[nodeKey] = append(existingIndices, len(nodes))
 			} else {
 				// First occurrence - add to tracker
 				nodeTracker[nodeKey] = []int{len(nodes)}
 			}
-			
+
 			nodes = append(nodes, *node)
 		}
 	}
@@ -250,9 +249,9 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 		fmt.Printf("Parsed %d nodes from %s (Format: %v)\n", len(nodes), filepath.Base(filePath), p.DetectedFormat)
 		fmt.Printf("  File: %s\n", filePath)
 		fmt.Printf("  Date: %s (Day %d)\n", nodelistDate.Format("2006-01-02"), dayNumber)
-		
+
 		if duplicateStats.totalDuplicates > 0 {
-			fmt.Printf("  ⚠️  DUPLICATES FOUND: %d duplicate entries across %d nodes\n", 
+			fmt.Printf("  ⚠️  DUPLICATES FOUND: %d duplicate entries across %d nodes\n",
 				duplicateStats.totalDuplicates, duplicateStats.conflictGroups)
 			fmt.Printf("     These duplicates have been preserved with conflict tracking\n")
 		} else {
@@ -276,32 +275,32 @@ func (p *Parser) detectFormat(line string, firstLine string) NodelistFormat {
 	if strings.Contains(line, "IBN") || strings.Contains(line, "ITN") || strings.Contains(line, "INA:") {
 		return Format2020
 	}
-	
+
 	// Check for 2000s era flags
 	if strings.Contains(line, "V34") || strings.Contains(line, "V90") || strings.Contains(line, "X75") {
 		return Format2000
 	}
-	
+
 	// Check for 1990s basic flags
 	if strings.Contains(line, "XA") || strings.Contains(line, "CM") || strings.Contains(line, "MO") {
 		return Format1990
 	}
-	
+
 	// Check for 1986 colon format
 	if strings.Contains(line, "XP:") || strings.Contains(line, "MO:") || strings.Contains(line, "CM:") {
 		return Format1986
 	}
-	
+
 	// Default to 1990s format
 	return Format1990
 }
 
 // parseLine parses a single nodelist entry line
 func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, filePath string) (*database.Node, error) {
-	
+
 	// Sanitize UTF-8 for database storage
 	line = sanitizeUTF8(line)
-	
+
 	// Handle different line formats - FidoNet standard is comma-separated
 	fields := strings.Split(line, ",")
 	if len(fields) < 7 {
@@ -311,7 +310,7 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 	// Extract basic fields
 	nodeTypeStr := strings.TrimSpace(fields[0])
 	nodeNumStr := strings.TrimSpace(fields[1])
-	
+
 	// Strip leading "-" from node numbers (legacy format)
 	if strings.HasPrefix(nodeNumStr, "-") {
 		nodeNumStr = nodeNumStr[1:]
@@ -356,8 +355,8 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 			nodeType = "Zone"
 			if z, err := strconv.Atoi(nodeNumStr); err == nil {
 				zone = z
-				net = z  // Zone nodes have net = zone
-				node = 0 // Zone coordinator
+				net = z                   // Zone nodes have net = zone
+				node = 0                  // Zone coordinator
 				p.Context.CurrentZone = z // Update context
 				p.Context.CurrentNet = z
 			} else {
@@ -415,14 +414,13 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 
 	// Parse flags into structured format with full categorization AND build JSON config
 	flags, internetProtocols, internetHostnames, internetPorts, internetEmails, internetConfig := p.parseFlagsWithConfig(flagsStr)
-	
+
 	// Get modem flags separately (not included in parseFlagsWithConfig yet)
 	_, _, _, _, _, modemFlags := p.parseAdvancedFlags(flagsStr)
-	
-	
+
 	// Compute boolean flags based on comprehensive flag analysis
 	isCM := p.hasFlag(flags, "CM")
-	isMO := p.hasFlag(flags, "MO") 
+	isMO := p.hasFlag(flags, "MO")
 	hasBinkp := p.hasProtocol(internetProtocols, "IBN") || p.hasProtocol(internetProtocols, "BND") || p.hasFlag(flags, "IBN") || p.hasFlag(flags, "BND")
 	hasTelnet := p.hasProtocol(internetProtocols, "ITN") || p.hasProtocol(internetProtocols, "TEL") || p.hasFlag(flags, "ITN") || p.hasFlag(flags, "TEL")
 	hasInet := len(internetProtocols) > 0 || len(internetEmails) > 0 || hasBinkp || hasTelnet
@@ -433,36 +431,36 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 
 	// Create node with all enhanced data
 	dbNode := database.Node{
-		Zone:         zone,
-		Net:          net,
-		Node:         node,
-		NodelistDate: nodelistDate,
-		DayNumber:    dayNumber,
-		SystemName:   systemName,
-		Location:     location,
-		SysopName:    sysopName,
-		Phone:        phone,
-		NodeType:     nodeType,
-		Region:       region,
-		MaxSpeed:     maxSpeed,
-		IsCM:         isCM,
-		IsMO:         isMO,
-		HasBinkp:     hasBinkp,
-		HasInet:      hasInet,
-		HasTelnet:    hasTelnet,
-		IsDown:       isDown,
-		IsHold:       isHold,
-		IsPvt:        isPvt,
-		IsActive:     isActive,
-		Flags:        flags,
-		ModemFlags:   modemFlags,
+		Zone:              zone,
+		Net:               net,
+		Node:              node,
+		NodelistDate:      nodelistDate,
+		DayNumber:         dayNumber,
+		SystemName:        systemName,
+		Location:          location,
+		SysopName:         sysopName,
+		Phone:             phone,
+		NodeType:          nodeType,
+		Region:            region,
+		MaxSpeed:          maxSpeed,
+		IsCM:              isCM,
+		IsMO:              isMO,
+		HasBinkp:          hasBinkp,
+		HasInet:           hasInet,
+		HasTelnet:         hasTelnet,
+		IsDown:            isDown,
+		IsHold:            isHold,
+		IsPvt:             isPvt,
+		IsActive:          isActive,
+		Flags:             flags,
+		ModemFlags:        modemFlags,
 		InternetProtocols: internetProtocols,
 		InternetHostnames: internetHostnames,
 		InternetPorts:     internetPorts,
 		InternetEmails:    internetEmails,
 		InternetConfig:    internetConfig,
-		ConflictSequence: 0,    // Default to 0 (original entry)
-		HasConflict:      false, // Default to false
+		ConflictSequence:  0,     // Default to 0 (original entry)
+		HasConflict:       false, // Default to false
 	}
 
 	return &dbNode, nil
@@ -474,7 +472,7 @@ func (p *Parser) parseProtocolValue(value string) (address string, port int) {
 	if portNum, err := strconv.Atoi(value); err == nil && portNum > 0 && portNum < 65536 {
 		return "", portNum
 	}
-	
+
 	// Check for IPv6 address in brackets
 	if strings.HasPrefix(value, "[") && strings.Contains(value, "]") {
 		// IPv6 with optional port: [::1]:port
@@ -487,7 +485,7 @@ func (p *Parser) parseProtocolValue(value string) (address string, port int) {
 		}
 		return address, port
 	}
-	
+
 	// Check for standard address:port format
 	if lastColon := strings.LastIndex(value, ":"); lastColon > 0 {
 		// Make sure it's not part of IPv6 without brackets
@@ -499,17 +497,17 @@ func (p *Parser) parseProtocolValue(value string) (address string, port int) {
 			}
 		}
 	}
-	
+
 	// It's just an address (hostname, IPv4, or unbracketed IPv6)
 	return value, 0
 }
 
 // buildInternetConfig builds the JSON configuration from parsed flag data
-func (p *Parser) buildInternetConfig(protocols map[string]database.InternetProtocolDetail, 
-	defaults map[string]string, 
+func (p *Parser) buildInternetConfig(protocols map[string]database.InternetProtocolDetail,
+	defaults map[string]string,
 	emailProtocols map[string]database.EmailProtocolDetail,
 	infoFlags []string) []byte {
-	
+
 	// Build JSON config if we have any internet-related data
 	if len(protocols) > 0 || len(defaults) > 0 || len(emailProtocols) > 0 || len(infoFlags) > 0 {
 		config := database.InternetConfiguration{
@@ -518,13 +516,13 @@ func (p *Parser) buildInternetConfig(protocols map[string]database.InternetProto
 			EmailProtocols: emailProtocols,
 			InfoFlags:      infoFlags,
 		}
-		
+
 		configJSON, err := json.Marshal(config)
 		if err == nil {
 			return configJSON
 		}
 	}
-	
+
 	return nil
 }
 
@@ -535,26 +533,26 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 	var internetHostnames []string
 	var internetPorts []int
 	var internetEmails []string
-	
+
 	// For building structured config
 	protocols := make(map[string]database.InternetProtocolDetail)
 	defaults := make(map[string]string)
 	emailProtocols := make(map[string]database.EmailProtocolDetail)
 	var infoFlags []string
-	
+
 	// Default ports for protocols
 	defaultPorts := map[string]int{
-		"IBN": 24554,  // BinkP
-		"ITN": 23,     // Telnet
-		"IFC": 60179,  // EMSI over TCP
-		"IFT": 21,     // FTP
+		"IBN": 24554, // BinkP
+		"ITN": 23,    // Telnet
+		"IFC": 60179, // EMSI over TCP
+		"IFT": 21,    // FTP
 	}
 
 	if flagsStr == "" {
 		return flags, internetProtocols, internetHostnames, internetPorts, internetEmails, nil
 	}
 
-	// Parse comma-separated flags  
+	// Parse comma-separated flags
 	parts := strings.Split(flagsStr, ",")
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -566,12 +564,12 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 		if colonIndex := strings.Index(part, ":"); colonIndex > 0 {
 			flagName := strings.TrimSpace(part[:colonIndex])
 			flagValue := strings.TrimSpace(part[colonIndex+1:])
-			
+
 			switch flagName {
 			// Connection protocols
 			case "IBN", "IFC", "ITN", "IVM", "IFT":
 				internetProtocols = append(internetProtocols, flagName)
-				
+
 				detail := database.InternetProtocolDetail{}
 				if flagValue != "" {
 					addr, port := p.parseProtocolValue(flagValue)
@@ -589,7 +587,7 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 				if detail.Address != "" || detail.Port > 0 {
 					protocols[flagName] = detail
 				}
-				
+
 			// Default internet address
 			case "INA":
 				internetProtocols = append(internetProtocols, flagName)
@@ -597,14 +595,14 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 					defaults["INA"] = flagValue
 					internetHostnames = append(internetHostnames, flagValue)
 				}
-				
+
 			// Email protocols
 			case "IEM":
 				if flagValue != "" {
 					defaults["IEM"] = flagValue // Default email
 					internetEmails = append(internetEmails, flagValue)
 				}
-				
+
 			case "IMI", "ITX", "ISE":
 				emailDetail := database.EmailProtocolDetail{}
 				if flagValue != "" {
@@ -612,7 +610,7 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 					internetEmails = append(internetEmails, flagValue)
 				}
 				emailProtocols[flagName] = emailDetail
-				
+
 			// General IP flag
 			case "IP":
 				internetProtocols = append(internetProtocols, flagName)
@@ -631,11 +629,11 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 						protocols[flagName] = detail
 					}
 				}
-				
+
 			// User flags with values (U:time, T:zone)
 			case "U", "T", "Tyz":
 				flags = append(flags, part)
-				
+
 			default:
 				// Unknown flag with parameter - store as-is
 				flags = append(flags, part)
@@ -652,28 +650,28 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 				} else {
 					protocols[part] = database.InternetProtocolDetail{}
 				}
-				
+
 			// Email protocol flags without values
 			case "IMI", "ITX", "ISE", "IUC", "EMA", "EVY":
 				emailProtocols[part] = database.EmailProtocolDetail{}
-				
+
 			// Information flags
 			case "INO4", "INO6", "ICM":
 				infoFlags = append(infoFlags, part)
-				
+
 			// Alternative protocol names
 			case "BND": // Alternative name for IBN
 				internetProtocols = append(internetProtocols, "IBN")
 				if _, exists := protocols["IBN"]; !exists {
 					protocols["IBN"] = database.InternetProtocolDetail{Port: 24554}
 				}
-				
+
 			case "TEL": // Alternative name for ITN
 				internetProtocols = append(internetProtocols, "ITN")
 				if _, exists := protocols["ITN"]; !exists {
 					protocols["ITN"] = database.InternetProtocolDetail{Port: 23}
 				}
-				
+
 			default:
 				// Regular flag
 				flags = append(flags, part)
@@ -683,7 +681,7 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 
 	// Build JSON config
 	internetConfig := p.buildInternetConfig(protocols, defaults, emailProtocols, infoFlags)
-	
+
 	return flags, internetProtocols, internetHostnames, internetPorts, internetEmails, internetConfig
 }
 
@@ -719,14 +717,14 @@ func (p *Parser) parseAdvancedFlags(flagsStr string) ([]string, []string, []stri
 					flagName := part[:colonIndex]
 					value := part[colonIndex+1:]
 					internetProtocols = append(internetProtocols, flagName)
-					
+
 					// Parse address/port
 					if strings.Contains(value, ".") || strings.Contains(value, ":") {
 						internetHostnames = append(internetHostnames, value)
 					} else if port, err := strconv.Atoi(value); err == nil {
 						internetPorts = append(internetPorts, port)
 					}
-					
+
 					// Handle email addresses
 					if flagName == "IEM" || flagName == "IMI" || flagName == "ITX" {
 						internetEmails = append(internetEmails, value)
@@ -736,11 +734,11 @@ func (p *Parser) parseAdvancedFlags(flagsStr string) ([]string, []string, []stri
 				}
 			}
 		}
-		
+
 		// Always add to all flags
 		allFlags = append(allFlags, part)
 	}
-	
+
 	return allFlags, internetProtocols, internetHostnames, internetPorts, internetEmails, modemFlags
 }
 
@@ -816,7 +814,7 @@ func (p *Parser) extractDateFromLine(line string) (time.Time, int, error) {
 				if month == 0 {
 					return time.Time{}, 0, fmt.Errorf("invalid month: %s", matches[3])
 				}
-				
+
 				// Extract year from comment or filename context
 				year := 1989 // Default for old nodelists
 				if yearMatch := regexp.MustCompile(`(\d{4})`).FindStringSubmatch(line); len(yearMatch) > 1 {
@@ -824,7 +822,7 @@ func (p *Parser) extractDateFromLine(line string) (time.Time, int, error) {
 						year = y
 					}
 				}
-				
+
 				return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC), dayNum, nil
 			},
 		},
@@ -839,7 +837,7 @@ func (p *Parser) extractDateFromLine(line string) (time.Time, int, error) {
 	// Fallback: look for day number only
 	if matches := regexp.MustCompile(`[Dd]ay\s+(?:number\s+)?(\d+)`).FindStringSubmatch(line); len(matches) > 1 {
 		dayNum, _ := strconv.Atoi(matches[1])
-		
+
 		// Try to find year in the line
 		year := 1989 // Default
 		if yearMatch := regexp.MustCompile(`(\d{4})`).FindStringSubmatch(line); len(yearMatch) > 1 {
@@ -847,7 +845,7 @@ func (p *Parser) extractDateFromLine(line string) (time.Time, int, error) {
 				year = y
 			}
 		}
-		
+
 		// Calculate date from day number
 		date := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, dayNum-1)
 		return date, dayNum, nil
@@ -858,7 +856,7 @@ func (p *Parser) extractDateFromLine(line string) (time.Time, int, error) {
 
 func (p *Parser) extractDateFromFile(filePath string) (time.Time, int, error) {
 	filename := filepath.Base(filePath)
-	
+
 	// Try various filename patterns
 	patterns := []struct {
 		regex   *regexp.Regexp
@@ -939,7 +937,7 @@ func (p *Parser) extractYearFromPath(filePath string) int {
 		year, _ := strconv.Atoi(matches[1])
 		return year
 	}
-	
+
 	// Look for 2-digit year in path
 	year2Re := regexp.MustCompile(`\b([89]\d|[0-5]\d)\b`)
 	if matches := year2Re.FindStringSubmatch(filepath.Base(filePath)); len(matches) > 1 {
@@ -949,7 +947,7 @@ func (p *Parser) extractYearFromPath(filePath string) int {
 		}
 		return 1900 + year
 	}
-	
+
 	return 0
 }
 
@@ -960,7 +958,7 @@ func (p *Parser) parseMonth(monthStr string) int {
 		"february": 2, "feb": 2,
 		"march": 3, "mar": 3,
 		"april": 4, "apr": 4,
-		"may": 5,
+		"may":  5,
 		"june": 6, "jun": 6,
 		"july": 7, "jul": 7,
 		"august": 8, "aug": 8,
@@ -977,7 +975,7 @@ func sanitizeUTF8(s string) string {
 	if utf8.ValidString(s) {
 		return s
 	}
-	
+
 	// Build a new string with valid UTF-8 characters only
 	var result strings.Builder
 	for _, r := range s {

@@ -35,9 +35,9 @@ func (so *SearchOperations) SearchNodesBySysop(sysopName string, limit int) ([]N
 	if sysopName == "" {
 		return nil, fmt.Errorf("sysop name cannot be empty")
 	}
-	
+
 	sysopName = so.resultParser.SanitizeStringInput(sysopName)
-	
+
 	if limit <= 0 {
 		limit = DefaultSysopLimit
 	} else if limit > MaxSysopLimit {
@@ -85,7 +85,7 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, filter ChangeFil
 	}
 
 	var changes []database.NodeChange
-	
+
 	// Add the first appearance
 	changes = append(changes, database.NodeChange{
 		Date:       history[0].NodelistDate,
@@ -115,7 +115,7 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, filter ChangeFil
 				Changes:    make(map[string]string),
 				OldNode:    prev,
 			})
-			
+
 			changes = append(changes, database.NodeChange{
 				Date:       curr.NodelistDate,
 				DayNumber:  curr.DayNumber,
@@ -181,7 +181,7 @@ func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter
 	if !filter.IgnoreFlags && !so.equalStringSlices(prev.Flags, curr.Flags) {
 		fieldChanges["flags"] = fmt.Sprintf("%v → %v", prev.Flags, curr.Flags)
 	}
-	
+
 	// Internet connectivity changes
 	if !filter.IgnoreConnectivity {
 		if prev.HasBinkp != curr.HasBinkp {
@@ -191,32 +191,32 @@ func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter
 			fieldChanges["telnet"] = fmt.Sprintf("%t → %t", prev.HasTelnet, curr.HasTelnet)
 		}
 	}
-	
+
 	if !filter.IgnoreModemFlags && !so.equalStringSlices(prev.ModemFlags, curr.ModemFlags) {
 		fieldChanges["modem_flags"] = fmt.Sprintf("%v → %v", prev.ModemFlags, curr.ModemFlags)
 	}
-	
+
 	if !filter.IgnoreInternetProtocols && !so.equalStringSlices(prev.InternetProtocols, curr.InternetProtocols) {
 		fieldChanges["internet_protocols"] = fmt.Sprintf("%v → %v", prev.InternetProtocols, curr.InternetProtocols)
 	}
-	
+
 	if !filter.IgnoreInternetHostnames && !so.equalStringSlices(prev.InternetHostnames, curr.InternetHostnames) {
 		fieldChanges["internet_hostnames"] = fmt.Sprintf("%v → %v", prev.InternetHostnames, curr.InternetHostnames)
 	}
-	
+
 	if !filter.IgnoreInternetPorts && !so.equalIntSlices(prev.InternetPorts, curr.InternetPorts) {
 		fieldChanges["internet_ports"] = fmt.Sprintf("%v → %v", prev.InternetPorts, curr.InternetPorts)
 	}
-	
+
 	if !filter.IgnoreInternetEmails && !so.equalStringSlices(prev.InternetEmails, curr.InternetEmails) {
 		fieldChanges["internet_emails"] = fmt.Sprintf("%v → %v", prev.InternetEmails, curr.InternetEmails)
 	}
-	
+
 	// Check has_inet changes
 	if !filter.IgnoreConnectivity && prev.HasInet != curr.HasInet {
 		fieldChanges["has_inet"] = fmt.Sprintf("%t → %t", prev.HasInet, curr.HasInet)
 	}
-	
+
 	// Detect internet config changes using JSON-based detection
 	if !filter.IgnoreConnectivity || !filter.IgnoreInternetProtocols || !filter.IgnoreInternetHostnames {
 		configChanges := so.detectInternetConfigChanges(prev.InternetConfig, curr.InternetConfig)
@@ -231,10 +231,10 @@ func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter
 // detectInternetConfigChanges compares two JSON configs and returns detailed changes
 func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessage) map[string]string {
 	changes := make(map[string]string)
-	
+
 	prevConfig, prevErr := so.parseInternetConfig(prev)
 	currConfig, currErr := so.parseInternetConfig(curr)
-	
+
 	// Handle errors or nil configs
 	if prevErr != nil || currErr != nil {
 		if len(prev) > 0 && len(curr) == 0 {
@@ -244,11 +244,11 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 		}
 		return changes
 	}
-	
+
 	if prevConfig == nil && currConfig == nil {
 		return changes
 	}
-	
+
 	if prevConfig == nil && currConfig != nil {
 		// New config added
 		for proto, detail := range currConfig.Protocols {
@@ -263,7 +263,7 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 		}
 		return changes
 	}
-	
+
 	if prevConfig != nil && currConfig == nil {
 		// Config removed
 		for proto, detail := range prevConfig.Protocols {
@@ -275,7 +275,7 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 		}
 		return changes
 	}
-	
+
 	// Compare protocols
 	for proto, currDetail := range currConfig.Protocols {
 		prevDetail, existed := prevConfig.Protocols[proto]
@@ -297,7 +297,7 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 			changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("%s → %s", oldStr, newStr)
 		}
 	}
-	
+
 	// Check for removed protocols
 	for proto, prevDetail := range prevConfig.Protocols {
 		if _, exists := currConfig.Protocols[proto]; !exists {
@@ -308,7 +308,7 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 			}
 		}
 	}
-	
+
 	// Compare defaults
 	for key, currVal := range currConfig.Defaults {
 		prevVal, existed := prevConfig.Defaults[key]
@@ -318,14 +318,14 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("%s → %s", prevVal, currVal)
 		}
 	}
-	
+
 	// Check for removed defaults
 	for key, prevVal := range prevConfig.Defaults {
 		if _, exists := currConfig.Defaults[key]; !exists {
 			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", prevVal)
 		}
 	}
-	
+
 	// Compare email protocols
 	for proto, currDetail := range currConfig.EmailProtocols {
 		prevDetail, existed := prevConfig.EmailProtocols[proto]
@@ -341,7 +341,7 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 			}
 		}
 	}
-	
+
 	// Check for removed email protocols
 	for proto, prevDetail := range prevConfig.EmailProtocols {
 		if _, exists := currConfig.EmailProtocols[proto]; !exists {
@@ -352,18 +352,18 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 			}
 		}
 	}
-	
+
 	// Compare info flags
 	prevFlags := make(map[string]bool)
 	currFlags := make(map[string]bool)
-	
+
 	for _, flag := range prevConfig.InfoFlags {
 		prevFlags[flag] = true
 	}
 	for _, flag := range currConfig.InfoFlags {
 		currFlags[flag] = true
 	}
-	
+
 	for flag := range currFlags {
 		if !prevFlags[flag] {
 			changes[fmt.Sprintf("inet_flag_%s", flag)] = "Added"
@@ -374,7 +374,7 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 			changes[fmt.Sprintf("inet_flag_%s", flag)] = "Removed"
 		}
 	}
-	
+
 	return changes
 }
 
@@ -383,7 +383,7 @@ func (so *SearchOperations) parseInternetConfig(data json.RawMessage) (*database
 	if len(data) == 0 {
 		return nil, nil
 	}
-	
+
 	var config database.InternetConfiguration
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, err
@@ -422,7 +422,7 @@ func (so *SearchOperations) isConsecutiveNodelist(date1, date2 time.Time) bool {
 	var count int
 	query := so.queryBuilder.ConsecutiveNodelistCheckSQL()
 	err := conn.QueryRow(query, date1, date2).Scan(&count)
-	
+
 	return err == nil && count == 0
 }
 
@@ -431,7 +431,7 @@ func (so *SearchOperations) getNextNodelistDate(afterDate time.Time) time.Time {
 	var nextDate time.Time
 	query := so.queryBuilder.NextNodelistDateSQL()
 	err := conn.QueryRow(query, afterDate).Scan(&nextDate)
-	
+
 	if err != nil {
 		return afterDate.AddDate(0, 0, 7) // Assume weekly
 	}
@@ -448,11 +448,11 @@ func (so *SearchOperations) isCurrentlyActive(node *database.Node) bool {
 	var maxDate time.Time
 	query := so.queryBuilder.LatestDateSQL()
 	err := conn.QueryRow(query).Scan(&maxDate)
-	
+
 	if err != nil {
 		return false
 	}
-	
+
 	return node.NodelistDate.Equal(maxDate)
 }
 
@@ -461,9 +461,9 @@ func (so *SearchOperations) SearchNodesBySystemName(systemName string, limit int
 	if systemName == "" {
 		return nil, fmt.Errorf("system name cannot be empty")
 	}
-	
+
 	systemName = so.resultParser.SanitizeStringInput(systemName)
-	
+
 	if limit <= 0 {
 		limit = DefaultSearchLimit
 	}
@@ -472,7 +472,7 @@ func (so *SearchOperations) SearchNodesBySystemName(systemName string, limit int
 		SystemName: &systemName,
 		Limit:      limit,
 	}
-	
+
 	return so.nodeOps.GetNodes(filter)
 }
 
@@ -481,9 +481,9 @@ func (so *SearchOperations) SearchNodesByLocation(location string, limit int) ([
 	if location == "" {
 		return nil, fmt.Errorf("location cannot be empty")
 	}
-	
+
 	location = so.resultParser.SanitizeStringInput(location)
-	
+
 	if limit <= 0 {
 		limit = DefaultSearchLimit
 	}
@@ -492,7 +492,7 @@ func (so *SearchOperations) SearchNodesByLocation(location string, limit int) ([
 		Location: &location,
 		Limit:    limit,
 	}
-	
+
 	return so.nodeOps.GetNodes(filter)
 }
 
@@ -501,12 +501,12 @@ func (so *SearchOperations) SearchActiveNodes(filter database.NodeFilter) ([]dat
 	// Force active filter
 	active := true
 	filter.IsActive = &active
-	
+
 	// Set default limit if not specified
 	if filter.Limit == 0 {
 		filter.Limit = DefaultSearchLimit
 	}
-	
+
 	return so.nodeOps.GetNodes(filter)
 }
 
@@ -515,7 +515,7 @@ func (so *SearchOperations) SearchNodesWithProtocol(protocol string, limit int) 
 	if protocol == "" {
 		return nil, fmt.Errorf("protocol cannot be empty")
 	}
-	
+
 	if limit <= 0 {
 		limit = DefaultSearchLimit
 	}
@@ -523,7 +523,7 @@ func (so *SearchOperations) SearchNodesWithProtocol(protocol string, limit int) 
 	// Map common protocol names to boolean fields
 	var filter database.NodeFilter
 	filter.Limit = limit
-	
+
 	switch strings.ToUpper(protocol) {
 	case "BINKP", "IBN":
 		hasBinkp := true
@@ -535,6 +535,6 @@ func (so *SearchOperations) SearchNodesWithProtocol(protocol string, limit int) 
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", protocol)
 	}
-	
+
 	return so.nodeOps.GetNodes(filter)
 }

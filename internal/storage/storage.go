@@ -11,13 +11,13 @@ import (
 
 // Storage provides thread-safe database operations using specialized components
 type Storage struct {
-	db                *database.DB
-	queryBuilder      QueryBuilderInterface
-	resultParser      *ResultParser
-	nodeOperations    *NodeOperations
-	searchOperations  *SearchOperations
-	statsOperations   *StatisticsOperations
-	mu                sync.RWMutex
+	db               *database.DB
+	queryBuilder     QueryBuilderInterface
+	resultParser     *ResultParser
+	nodeOperations   *NodeOperations
+	searchOperations *SearchOperations
+	statsOperations  *StatisticsOperations
+	mu               sync.RWMutex
 }
 
 // New creates a new Storage instance with all specialized components
@@ -25,19 +25,19 @@ func New(db *database.DB) (*Storage, error) {
 	// Create the foundational components
 	queryBuilder := NewQueryBuilder()
 	resultParser := NewResultParser()
-	
+
 	// Create the storage instance
 	storage := &Storage{
 		db:           db,
 		queryBuilder: queryBuilder,
 		resultParser: resultParser,
 	}
-	
+
 	// Create specialized operation components
 	storage.nodeOperations = NewNodeOperations(db, queryBuilder, resultParser)
 	storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
 	storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
-	
+
 	return storage, nil
 }
 
@@ -45,7 +45,7 @@ func New(db *database.DB) (*Storage, error) {
 func (s *Storage) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// The individual components don't have close methods currently,
 	// but we maintain this for backward compatibility
 	return nil
@@ -154,7 +154,7 @@ func (s *Storage) GetNodesByZone(zone int, limit int) ([]database.Node, error) {
 	return s.nodeOperations.GetNodesByZone(zone, limit)
 }
 
-// GetNodesByNet retrieves all nodes for a specific net within a zone  
+// GetNodesByNet retrieves all nodes for a specific net within a zone
 func (s *Storage) GetNodesByNet(zone, net int, limit int) ([]database.Node, error) {
 	return s.nodeOperations.GetNodesByNet(zone, net, limit)
 }
@@ -242,13 +242,13 @@ func (s *Storage) GetResultParser() *ResultParser {
 func (s *Storage) HealthCheck() error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	// Test database connection
 	conn := s.db.Conn()
 	if err := conn.Ping(); err != nil {
 		return fmt.Errorf("database connection failed: %w", err)
 	}
-	
+
 	// Test basic query functionality
 	_, err := s.statsOperations.GetLatestStatsDate()
 	if err != nil {
@@ -258,21 +258,21 @@ func (s *Storage) HealthCheck() error {
 			return fmt.Errorf("query execution failed: %w", err)
 		}
 	}
-	
+
 	return nil
 }
 
 // GetComponentInfo returns information about the storage components
 func (s *Storage) GetComponentInfo() map[string]interface{} {
 	return map[string]interface{}{
-		"version":           "2.0.0-refactored",
-		"architecture":      "component-based",
-		"query_builder":     "safe parameterized queries",
-		"result_parser":     "type-safe parsing",
-		"node_operations":   "CRUD operations with validation",
-		"search_operations": "advanced search and change detection",
-		"stats_operations":  "comprehensive statistics",
-		"thread_safety":     "mutex-protected operations",
+		"version":             "2.0.0-refactored",
+		"architecture":        "component-based",
+		"query_builder":       "safe parameterized queries",
+		"result_parser":       "type-safe parsing",
+		"node_operations":     "CRUD operations with validation",
+		"search_operations":   "advanced search and change detection",
+		"stats_operations":    "comprehensive statistics",
+		"thread_safety":       "mutex-protected operations",
 		"backward_compatible": true,
 	}
 }
@@ -284,7 +284,7 @@ func (s *Storage) GetComponentInfo() map[string]interface{} {
 func (s *Storage) MigrateFromLegacyStorage() error {
 	// This method can be used to perform any necessary data migrations
 	// or validation checks when upgrading from the old storage implementation
-	
+
 	// For now, just perform a health check
 	return s.HealthCheck()
 }

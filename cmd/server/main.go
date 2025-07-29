@@ -15,7 +15,6 @@ import (
 	"nodelistdb/internal/web"
 )
 
-
 func main() {
 	// Command line flags
 	var (
@@ -62,10 +61,10 @@ func main() {
 
 	// Set up HTTP routes
 	mux := http.NewServeMux()
-	
+
 	// API routes
 	apiServer.SetupRoutes(mux)
-	
+
 	// Web routes
 	webServer.SetupRoutes(mux)
 
@@ -89,7 +88,7 @@ func main() {
 		log.Printf("    http://%s:%s/api/nodes/1/234/56  - Get specific node\n", *host, *port)
 		log.Printf("    http://%s:%s/api/stats           - Network statistics\n", *host, *port)
 		log.Println()
-		
+
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
 		}

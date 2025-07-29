@@ -19,11 +19,11 @@ type Job struct {
 
 // Result represents the result of processing a job
 type Result struct {
-	JobID     int
-	FilePath  string
-	Nodes     []database.Node
-	Error     error
-	Duration  time.Duration
+	JobID      int
+	FilePath   string
+	Nodes      []database.Node
+	Error      error
+	Duration   time.Duration
 	NodesCount int
 }
 
@@ -108,16 +108,16 @@ func (p *Processor) worker(ctx context.Context, workerID int, jobs <-chan Job, r
 				}
 				return
 			}
-			
+
 			// Process the job with the worker's dedicated parser
 			result := p.processJobWithParser(ctx, job, workerParser)
-			
+
 			select {
 			case results <- result:
 			case <-ctx.Done():
 				return
 			}
-			
+
 		case <-ctx.Done():
 			return
 		}
@@ -127,7 +127,7 @@ func (p *Processor) worker(ctx context.Context, workerID int, jobs <-chan Job, r
 // processJobWithParser processes a single job using the provided parser instance
 func (p *Processor) processJobWithParser(ctx context.Context, job Job, workerParser *parser.Parser) Result {
 	start := time.Now()
-	
+
 	if !p.quiet {
 		fmt.Printf("[Job %d] Processing: %s\n", job.JobID, job.FilePath)
 	}
@@ -171,30 +171,30 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 	var batch []database.Node
 	var totalInserted int
 	var batchCount int
-	
+
 	successfulJobs := 0
 	startTime := time.Now()
 	var avgInsertionTime time.Duration
 	var insertionCount int
-	
+
 	if !p.quiet {
 		fmt.Printf("\n=== DATABASE INSERTION PHASE ===\n")
 		fmt.Printf("Collecting results from %d jobs and performing batch inserts...\n", expectedResults)
 	}
-	
+
 	for result := range results {
 		if result.Error != nil {
 			totalErrors++
 			fmt.Printf("ERROR processing %s: %v\n", result.FilePath, result.Error)
 			continue
 		}
-		
+
 		successfulJobs++
 		totalNodes += result.NodesCount
-		
+
 		// Add nodes to batch
 		batch = append(batch, result.Nodes...)
-		
+
 		// Progress update every 10 jobs
 		if successfulJobs%10 == 0 || successfulJobs == expectedResults-totalErrors {
 			elapsed := time.Since(startTime)
@@ -210,7 +210,7 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 					totalExpectedNodes := totalNodes + estimatedRemainingNodes
 					remainingNodesToInsert := totalExpectedNodes - totalInserted
 					estimatedBatchesRemaining := (remainingNodesToInsert + p.batchSize - 1) / p.batchSize
-					
+
 					// Calculate ETA based on average insertion time
 					estimatedRemainingTime := time.Duration(estimatedBatchesRemaining) * avgInsertionTime
 					eta = estimatedRemainingTime.Round(time.Second).String()
@@ -220,22 +220,22 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 					remaining := estimatedTotal - elapsed
 					eta = remaining.Round(time.Second).String()
 				}
-				
-				fmt.Printf("Collection progress: %d/%d jobs (%.1f%%) - %d nodes collected, %d inserted - ETA: %v\n", 
+
+				fmt.Printf("Collection progress: %d/%d jobs (%.1f%%) - %d nodes collected, %d inserted - ETA: %v\n",
 					successfulJobs, expectedResults-totalErrors, progress, totalNodes, totalInserted, eta)
 			}
 		}
-		
+
 		// Insert batch when it reaches batch size or this is the last successful result
 		if len(batch) >= p.batchSize || (successfulJobs == expectedResults-totalErrors && len(batch) > 0) {
 			batchCount++
-			
+
 			insertStart := time.Now()
 			if err := p.insertBatchWithProgress(ctx, batch, batchCount, totalInserted, totalNodes); err != nil {
 				return fmt.Errorf("failed to insert batch: %w", err)
 			}
 			insertDuration := time.Since(insertStart)
-			
+
 			// Update average insertion time
 			insertionCount++
 			if insertionCount == 1 {
@@ -244,22 +244,22 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 				// Running average
 				avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
 			}
-			
+
 			totalInserted += len(batch)
 			batch = nil // Reset batch
 		}
 	}
-	
+
 	// Insert any remaining batch
 	if len(batch) > 0 {
 		batchCount++
-		
+
 		insertStart := time.Now()
 		if err := p.insertBatchWithProgress(ctx, batch, batchCount, totalInserted, totalNodes); err != nil {
 			return fmt.Errorf("failed to insert final batch: %w", err)
 		}
 		insertDuration := time.Since(insertStart)
-		
+
 		// Update average insertion time for final batch
 		insertionCount++
 		if insertionCount == 1 {
@@ -267,21 +267,21 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 		} else {
 			avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
 		}
-		
+
 		totalInserted += len(batch)
 	}
-	
+
 	if !p.quiet {
-		fmt.Printf("\n✓ Database insertion complete: %d batches, %d nodes inserted in %v\n", 
+		fmt.Printf("\n✓ Database insertion complete: %d batches, %d nodes inserted in %v\n",
 			batchCount, totalInserted, time.Since(startTime).Round(time.Second))
-		fmt.Printf("Concurrent processing complete: %d jobs processed, %d nodes imported, %d errors\n", 
+		fmt.Printf("Concurrent processing complete: %d jobs processed, %d nodes imported, %d errors\n",
 			successfulJobs, totalNodes, totalErrors)
 	}
-	
+
 	if totalErrors > 0 {
 		return fmt.Errorf("%d jobs failed during processing", totalErrors)
 	}
-	
+
 	return nil
 }
 
@@ -290,21 +290,20 @@ func (p *Processor) insertBatchWithProgress(ctx context.Context, batch []databas
 	if !p.quiet {
 		fmt.Printf("Inserting batch %d: %d nodes...\n", batchNum, len(batch))
 	}
-	
+
 	start := time.Now()
 	err := p.storage.InsertNodes(batch)
 	duration := time.Since(start)
-	
+
 	if err != nil {
 		fmt.Printf("✗ Batch %d failed: %v\n", batchNum, err)
 		return err
 	}
-	
+
 	if !p.quiet {
 		rate := float64(len(batch)) / duration.Seconds()
 		fmt.Printf("✓ Batch %d inserted in %v (%.0f nodes/sec)\n", batchNum, duration.Round(time.Millisecond), rate)
 	}
-	
+
 	return nil
 }
-
