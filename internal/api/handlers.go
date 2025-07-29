@@ -719,8 +719,22 @@ func (s *Server) OpenAPISpecHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) SwaggerUIHandler(w http.ResponseWriter, r *http.Request) {
 	// Get the base URL for the API spec
 	scheme := "http"
+
+	// Check for HTTPS in multiple ways to handle reverse proxies
 	if r.TLS != nil {
 		scheme = "https"
+	} else if r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	} else if r.Header.Get("X-Forwarded-Ssl") == "on" {
+		scheme = "https"
+	} else if r.Header.Get("X-Url-Scheme") == "https" {
+		scheme = "https"
+	} else if r.Header.Get("Forwarded") != "" {
+		// Parse RFC 7239 Forwarded header
+		forwarded := r.Header.Get("Forwarded")
+		if strings.Contains(strings.ToLower(forwarded), "proto=https") {
+			scheme = "https"
+		}
 	}
 
 	host := r.Host
