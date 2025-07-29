@@ -298,7 +298,7 @@ func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
 }
 
 // formatArrayForDB formats a string array for database storage
-// Returns JSON string for parameterized queries (DuckDB driver limitation)
+// Returns JSON string that needs to be cast to array type in SQL
 func (rp *ResultParser) formatArrayForDB(arr []string) interface{} {
 	if len(arr) == 0 {
 		return "[]" // Empty JSON array
@@ -308,7 +308,7 @@ func (rp *ResultParser) formatArrayForDB(arr []string) interface{} {
 }
 
 // formatIntArrayForDB formats an int array for database storage
-// Returns JSON string for parameterized queries (DuckDB driver limitation)
+// Returns JSON string that needs to be cast to array type in SQL
 func (rp *ResultParser) formatIntArrayForDB(arr []int) interface{} {
 	if len(arr) == 0 {
 		return "[]" // Empty JSON array

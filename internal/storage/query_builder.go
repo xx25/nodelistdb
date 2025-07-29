@@ -24,7 +24,9 @@ func (qb *QueryBuilder) InsertNodeSQL() string {
 		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
 		conflict_sequence, has_conflict, has_inet, internet_config
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+		json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::INTEGER[], json(?)::VARCHAR[],
+		?, ?, ?, ?)`
 }
 
 // BuildBatchInsertSQL creates a batch INSERT statement with proper parameterization
@@ -33,8 +35,8 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 		return qb.InsertNodeSQL()
 	}
 
-	// Create placeholder for one row
-	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	// Create placeholder for one row with JSON casting for array fields
+	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::INTEGER[], json(?)::VARCHAR[], ?, ?, ?, ?)"
 
 	// Build batch values
 	values := make([]string, batchSize)
