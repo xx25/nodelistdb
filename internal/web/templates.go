@@ -13,7 +13,7 @@ import (
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
-	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help"}
+	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download"}
 	
 	// Create function map for template functions
 	funcMap := template.FuncMap{
@@ -100,6 +100,24 @@ func (s *Server) loadTemplates() {
 				}
 			default:
 				return 0
+			}
+		},
+		"formatFileSize": func(size int64) string {
+			const (
+				KB = 1024
+				MB = KB * 1024
+				GB = MB * 1024
+			)
+			
+			switch {
+			case size >= GB:
+				return fmt.Sprintf("%.2f GB", float64(size)/float64(GB))
+			case size >= MB:
+				return fmt.Sprintf("%.2f MB", float64(size)/float64(MB))
+			case size >= KB:
+				return fmt.Sprintf("%.2f KB", float64(size)/float64(KB))
+			default:
+				return fmt.Sprintf("%d B", size)
 			}
 		},
 	}

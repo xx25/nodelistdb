@@ -19,6 +19,7 @@
                 <a href="/search">🔍 Search Nodes</a>
                 <a href="/search/sysop">👤 Search Sysops</a>
                 <a href="/stats">📊 Statistics</a>
+                <a href="/nodelists">📥 Download Nodelists</a>
                 <a href="/api/help" class="active">📖 API Help</a>
             </div>
         </nav>
@@ -194,6 +195,132 @@
                 <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
                     <strong>Example Response:</strong><br>
                     <code>{"status": "ok", "time": "2023-12-01T12:00:00Z"}</code>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🗄️ Database Structure</h2>
+                
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Main Table: nodes</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">The database stores FidoNet nodelist data in a DuckDB database with the following schema:</p>
+                
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Core Identity Fields:</strong><br>
+                    <code>zone</code> - Zone number (INTEGER)<br>
+                    <code>net</code> - Net number (INTEGER)<br>
+                    <code>node</code> - Node number (INTEGER)<br>
+                    <code>nodelist_date</code> - Date from nodelist (DATE)<br>
+                    <code>day_number</code> - Day of year (INTEGER)<br><br>
+                    
+                    <strong>Node Information:</strong><br>
+                    <code>system_name</code> - BBS system name (TEXT)<br>
+                    <code>location</code> - Geographic location (TEXT)<br>
+                    <code>sysop_name</code> - System operator name (TEXT)<br>
+                    <code>phone</code> - Phone number (TEXT)<br>
+                    <code>node_type</code> - Zone/Region/Host/Hub/Pvt/Down/Hold (TEXT)<br>
+                    <code>region</code> - Region number if applicable (INTEGER)<br>
+                    <code>max_speed</code> - Maximum connection speed (TEXT)<br><br>
+                    
+                    <strong>Boolean Flags (computed):</strong><br>
+                    <code>is_cm</code> - Continuous Mail (BOOLEAN)<br>
+                    <code>is_mo</code> - Mail Only (BOOLEAN)<br>
+                    <code>has_binkp</code> - Supports Binkp protocol (BOOLEAN)<br>
+                    <code>has_inet</code> - Has internet connectivity (BOOLEAN)<br>
+                    <code>has_telnet</code> - Supports Telnet (BOOLEAN)<br>
+                    <code>is_down</code> - Node is down (BOOLEAN)<br>
+                    <code>is_hold</code> - Node is on hold (BOOLEAN)<br>
+                    <code>is_pvt</code> - Private node (BOOLEAN)<br>
+                    <code>is_active</code> - Node is active (BOOLEAN)<br><br>
+                    
+                    <strong>Array Fields:</strong><br>
+                    <code>flags</code> - All flags (TEXT[])<br>
+                    <code>modem_flags</code> - Modem-specific flags (TEXT[])<br>
+                    <code>internet_protocols</code> - Supported protocols (TEXT[])<br>
+                    <code>internet_hostnames</code> - Internet hostnames (TEXT[])<br>
+                    <code>internet_ports</code> - Internet ports (INTEGER[])<br>
+                    <code>internet_emails</code> - Email addresses (TEXT[])<br><br>
+                    
+                    <strong>Internet Configuration:</strong><br>
+                    <code>internet_config</code> - Structured JSON configuration (JSON)<br><br>
+                    
+                    <strong>Conflict Tracking:</strong><br>
+                    <code>conflict_sequence</code> - Sequence for duplicate nodes (INTEGER)<br>
+                    <code>has_conflict</code> - Indicates duplicate entries (BOOLEAN)
+                </div>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Primary Key:</strong><br>
+                    <code>(zone, net, node, nodelist_date, conflict_sequence)</code><br><br>
+                    
+                    <strong>Note:</strong> The database preserves duplicate node entries that exist in original FidoNet nodelists due to human error. Duplicates are tracked with <code>conflict_sequence</code> (0 for first occurrence, 1+ for duplicates) and marked with <code>has_conflict = true</code>.
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📥 Nodelist File Downloads</h2>
+                
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Download Individual Nodelists</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Download individual nodelist files directly. Files are automatically decompressed if stored as .gz:</p>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Endpoint:</strong> <code>GET /download/nodelist/{year}/{filename}</code><br><br>
+                    <strong>Example:</strong><br>
+                    <code>GET /download/nodelist/2024/nodelist.365</code><br>
+                    <code>GET /download/latest</code> (redirects to most recent nodelist)
+                </div>
+                
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Bulk Download Options</h3>
+                
+                <h4 style="color: var(--text-primary); margin-top: 1.5rem; margin-bottom: 0.5rem;">Year Archives</h4>
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Endpoint:</strong> <code>GET /download/year/{year}.tar.gz</code><br><br>
+                    <strong>Description:</strong> Download all nodelists from a specific year as a tar.gz archive<br><br>
+                    <strong>Example:</strong><br>
+                    <code>wget https://example.com/download/year/2024.tar.gz</code>
+                </div>
+                
+                <h4 style="color: var(--text-primary); margin-top: 1.5rem; margin-bottom: 0.5rem;">URL List for Mirroring</h4>
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Endpoint:</strong> <code>GET /download/urls.txt</code><br><br>
+                    <strong>Description:</strong> Text file containing all nodelist download URLs<br><br>
+                    <strong>Usage:</strong><br>
+                    <code># Download all nodelists<br>
+                    wget -i https://example.com/download/urls.txt<br><br>
+                    # Skip existing files (incremental sync)<br>
+                    wget -nc -i https://example.com/download/urls.txt</code>
+                </div>
+                
+                <div class="alert alert-success">
+                    <strong>Note:</strong> All download endpoints support HTTP range requests for resumable downloads. The server automatically handles .gz decompression transparently.
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">💾 Database Download</h2>
+                
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Download Complete Database</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">You can download the complete DuckDB database file for local analysis and querying:</p>
+                
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Using wget:</strong><br>
+                    <code>wget https://example.com/nodelist.duckdb</code><br><br>
+                    
+                    <strong>Using curl:</strong><br>
+                    <code>curl -O https://example.com/nodelist.duckdb</code>
+                </div>
+                
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Query locally with DuckDB:</strong><br>
+                    <code># Install DuckDB CLI from https://duckdb.org<br>
+                    duckdb nodelist.duckdb<br><br>
+                    
+                    # Example queries:<br>
+                    SELECT COUNT(*) FROM nodes WHERE zone = 2;<br>
+                    SELECT DISTINCT system_name FROM nodes WHERE has_binkp = true;</code>
+                </div>
+                
+                <div class="alert alert-success">
+                    <strong>Database Info:</strong> The database is updated weekly with the latest FidoNet nodelist data. Current size is approximately X MB compressed.
                 </div>
             </div>
 

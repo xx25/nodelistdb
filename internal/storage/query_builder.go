@@ -295,7 +295,7 @@ func (qb *QueryBuilder) SysopSearchSQL() string {
 			FIRST(location ORDER BY nodelist_date DESC) as location,
 			FIRST(sysop_name ORDER BY nodelist_date DESC) as sysop_name
 		FROM nodes
-		WHERE sysop_name ILIKE '%' || ? || '%'
+		WHERE REPLACE(sysop_name, '_', ' ') ILIKE '%' || REPLACE(?, '_', ' ') || '%'
 		GROUP BY zone, net, node
 	)
 	SELECT 

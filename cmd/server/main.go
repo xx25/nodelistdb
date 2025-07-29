@@ -1,7 +1,6 @@
 package main
 
 import (
-	"embed"
 	"flag"
 	"fmt"
 	"log"
@@ -16,11 +15,6 @@ import (
 	"nodelistdb/internal/web"
 )
 
-//go:embed templates/*.html
-var templatesFS embed.FS
-
-//go:embed static/*
-var staticFS embed.FS
 
 func main() {
 	// Command line flags
@@ -64,7 +58,7 @@ func main() {
 
 	// Initialize API and Web servers
 	apiServer := api.New(storage)
-	webServer := web.New(storage, templatesFS, staticFS)
+	webServer := web.New(storage, web.TemplatesFS, web.StaticFS)
 
 	// Set up HTTP routes
 	mux := http.NewServeMux()
