@@ -52,3 +52,4 @@ debug_*.go
 check_*.go
 CLAUDE.md
 test.db
+sync_nodelists.sh

@@ -145,7 +145,7 @@ func (db *DB) CreateSchema() error {
 		"CREATE INDEX IF NOT EXISTS idx_nodes_flags ON nodes(is_cm, is_mo, has_binkp, has_telnet, has_inet)",
 		// Performance optimizations for stats queries
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_zone ON nodes(nodelist_date, zone)",
-		"CREATE INDEX IF NOT EXISTS idx_nodes_date_region ON nodes(nodelist_date, zone, region) WHERE region > 0",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_date_region ON nodes(nodelist_date, zone, region)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_net_type ON nodes(nodelist_date, zone, net, node_type)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_stats_flags ON nodes(nodelist_date, is_active, is_down, is_hold, is_cm, is_mo, has_binkp, has_telnet, is_pvt)",
 	}
