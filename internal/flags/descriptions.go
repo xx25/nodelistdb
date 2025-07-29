@@ -7,7 +7,39 @@ type FlagInfo struct {
 	Description string `json:"description"` // human-readable description
 }
 
+// timeLetterToUTC maps time letters to UTC times according to FTS-5001
+var timeLetterToUTC = map[byte]string{
+	'A': "00:00", 'a': "00:30",
+	'B': "01:00", 'b': "01:30",
+	'C': "02:00", 'c': "02:30",
+	'D': "03:00", 'd': "03:30",
+	'E': "04:00", 'e': "04:30",
+	'F': "05:00", 'f': "05:30",
+	'G': "06:00", 'g': "06:30",
+	'H': "07:00", 'h': "07:30",
+	'I': "08:00", 'i': "08:30",
+	'J': "09:00", 'j': "09:30",
+	'K': "10:00", 'k': "10:30",
+	'L': "11:00", 'l': "11:30",
+	'M': "12:00", 'm': "12:30",
+	'N': "13:00", 'n': "13:30",
+	'O': "14:00", 'o': "14:30",
+	'P': "15:00", 'p': "15:30",
+	'Q': "16:00", 'q': "16:30",
+	'R': "17:00", 'r': "17:30",
+	'S': "18:00", 's': "18:30",
+	'T': "19:00", 't': "19:30",
+	'U': "20:00", 'u': "20:30",
+	'V': "21:00", 'v': "21:30",
+	'W': "22:00", 'w': "22:30",
+	'X': "23:00", 'x': "23:30",
+	// Special cases found in nodelists
+	'Y': "23:59", 'y': "23:59", // End of day
+	'Z': "23:59", 'z': "23:59", // Also end of day
+}
+
 // GetFlagDescriptions returns the complete flag documentation map
+// with dynamic generation of T-prefixed time availability flags
 func GetFlagDescriptions() map[string]FlagInfo {
 	return map[string]FlagInfo{
 		// Modem flags
@@ -66,14 +98,35 @@ func GetFlagDescriptions() map[string]FlagInfo {
 		"T": {Category: "schedule", HasValue: true, Description: "Time zone"},
 
 		// User flags
-		"ENC":  {Category: "user", HasValue: false, Description: "Encrypted"},
-		"NC":   {Category: "user", HasValue: false, Description: "Network Coordinator"},
-		"NEC":  {Category: "user", HasValue: false, Description: "Net Echomail Coordinator"},
-		"REC":  {Category: "user", HasValue: false, Description: "Region Echomail Coordinator"},
-		"ZEC":  {Category: "user", HasValue: false, Description: "Zone Echomail Coordinator"},
-		"PING": {Category: "user", HasValue: false, Description: "Ping OK"},
-		"RPK":  {Category: "user", HasValue: false, Description: "Regional Pointlist Keeper"},
+		"ENC":   {Category: "user", HasValue: false, Description: "Encrypted"},
+		"NC":    {Category: "user", HasValue: false, Description: "Network Coordinator"},
+		"NEC":   {Category: "user", HasValue: false, Description: "Net Echomail Coordinator"},
+		"REC":   {Category: "user", HasValue: false, Description: "Region Echomail Coordinator"},
+		"ZEC":   {Category: "user", HasValue: false, Description: "Zone Echomail Coordinator"},
+		"PING":  {Category: "user", HasValue: false, Description: "Ping OK"},
+		"TRACE": {Category: "user", HasValue: false, Description: "Network trace capability - notifies sender when PING messages pass through this node"},
+		"RPK":   {Category: "user", HasValue: false, Description: "Regional Pointlist Keeper"},
 	}
+}
+
+// GetTFlagInfo generates FlagInfo for T-prefixed time availability flags
+func GetTFlagInfo(flag string) (FlagInfo, bool) {
+	if len(flag) != 3 || flag[0] != 'T' {
+		return FlagInfo{}, false
+	}
+	
+	startTime, startOk := timeLetterToUTC[flag[1]]
+	endTime, endOk := timeLetterToUTC[flag[2]]
+	
+	if !startOk || !endOk {
+		return FlagInfo{}, false
+	}
+	
+	return FlagInfo{
+		Category:    "schedule",
+		HasValue:    false,
+		Description: "Available " + startTime + "-" + endTime + " UTC",
+	}, true
 }
 
 // GetParserFlagMap returns a simplified map for parser use (without descriptions)

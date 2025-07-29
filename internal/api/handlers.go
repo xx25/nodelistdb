@@ -569,8 +569,19 @@ func (s *Server) FlagsDocumentationHandler(w http.ResponseWriter, r *http.Reques
 
 	// Get flag filter from query parameters
 	category := r.URL.Query().Get("category")
+	specificFlag := r.URL.Query().Get("flag")
 
 	flagDescriptions := flags.GetFlagDescriptions()
+
+	// If a specific flag is requested, check if it's a T-flag that needs dynamic generation
+	if specificFlag != "" && len(specificFlag) == 3 && specificFlag[0] == 'T' {
+		if _, exists := flagDescriptions[specificFlag]; !exists {
+			// Try to generate T-flag description dynamically
+			if info, ok := flags.GetTFlagInfo(specificFlag); ok {
+				flagDescriptions[specificFlag] = info
+			}
+		}
+	}
 
 	// Filter by category if specified
 	if category != "" {
