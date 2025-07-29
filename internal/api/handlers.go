@@ -668,6 +668,10 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/download/database", s.DownloadDatabaseHandler)
 	mux.HandleFunc("/api/nodelist/latest", s.LatestNodelistAPIHandler)
 	
+	// OpenAPI documentation routes
+	mux.HandleFunc("/api/openapi.yaml", s.OpenAPISpecHandler)
+	mux.HandleFunc("/api/docs", s.SwaggerUIHandler)
+	
 	// Node lookup with path parameters
 	mux.HandleFunc("/api/nodes/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -690,6 +694,124 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 			s.SearchNodesHandler(w, r)
 		}
 	})
+}
+
+// OpenAPISpecHandler serves the OpenAPI specification
+func (s *Server) OpenAPISpecHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the path to the OpenAPI spec file
+	specPath := filepath.Join("api", "openapi.yaml")
+	
+	// Check if file exists
+	if _, err := os.Stat(specPath); os.IsNotExist(err) {
+		http.Error(w, "OpenAPI specification not found", http.StatusNotFound)
+		return
+	}
+	
+	// Read the file
+	specContent, err := os.ReadFile(specPath)
+	if err != nil {
+		http.Error(w, "Failed to read OpenAPI specification", http.StatusInternalServerError)
+		return
+	}
+	
+	// Set appropriate headers
+	w.Header().Set("Content-Type", "application/x-yaml")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	
+	// Handle CORS preflight
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	
+	// Serve the specification
+	w.WriteHeader(http.StatusOK)
+	w.Write(specContent)
+}
+
+// SwaggerUIHandler serves the Swagger UI interface
+func (s *Server) SwaggerUIHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the base URL for the API spec
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	
+	host := r.Host
+	if host == "" {
+		host = "localhost:8080"
+	}
+	
+	specURL := fmt.Sprintf("%s://%s/api/openapi.yaml", scheme, host)
+	
+	// Serve a simple Swagger UI HTML page
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NodelistDB API Documentation</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui.css" />
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow: -moz-scrollbars-vertical;
+            overflow-y: scroll;
+        }
+        *, *:before, *:after {
+            box-sizing: inherit;
+        }
+        body {
+            margin:0;
+            background: #fafafa;
+        }
+        .swagger-ui .topbar {
+            background-color: #2c3e50;
+        }
+        .swagger-ui .topbar .download-url-wrapper .download-url-button {
+            background-color: #34495e;
+        }
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-standalone-preset.js"></script>
+    <script>
+    window.onload = function() {
+        const ui = SwaggerUIBundle({
+            url: '%s',
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIStandalonePreset
+            ],
+            plugins: [
+                SwaggerUIBundle.plugins.DownloadUrl
+            ],
+            layout: "StandaloneLayout",
+            validatorUrl: null,
+            docExpansion: "list",
+            operationsSorter: "alpha",
+            tagsSorter: "alpha",
+            tryItOutEnabled: true,
+            filter: true,
+            supportedSubmitMethods: ["get", "post", "put", "delete", "patch"],
+            onComplete: function() {
+                console.log("NodelistDB API documentation loaded");
+            }
+        });
+    };
+    </script>
+</body>
+</html>`, specURL)
+	
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(html))
 }
 
 // LatestNodelistAPIHandler returns the latest nodelist file
