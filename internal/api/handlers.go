@@ -81,14 +81,29 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if systemName := query.Get("system_name"); systemName != "" {
+		// Prevent memory exhaustion from very short search strings
+		if len(strings.TrimSpace(systemName)) < 2 {
+			http.Error(w, "system_name must be at least 2 characters long", http.StatusBadRequest)
+			return
+		}
 		filter.SystemName = &systemName
 	}
 
 	if location := query.Get("location"); location != "" {
+		// Prevent memory exhaustion from very short search strings
+		if len(strings.TrimSpace(location)) < 2 {
+			http.Error(w, "location must be at least 2 characters long", http.StatusBadRequest)
+			return
+		}
 		filter.Location = &location
 	}
 
 	if sysopName := query.Get("sysop_name"); sysopName != "" {
+		// Prevent memory exhaustion from very short search strings
+		if len(strings.TrimSpace(sysopName)) < 2 {
+			http.Error(w, "sysop_name must be at least 2 characters long", http.StatusBadRequest)
+			return
+		}
 		filter.SysopName = &sysopName
 	}
 
@@ -125,10 +140,14 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 	// Pagination
 	if limit := query.Get("limit"); limit != "" {
 		if l, err := strconv.Atoi(limit); err == nil && l > 0 {
+			// Cap maximum limit to prevent memory exhaustion
+			if l > 500 {
+				l = 500
+			}
 			filter.Limit = l
 		}
 	} else {
-		filter.Limit = 100 // Default limit
+		filter.Limit = 50 // Default limit - reduced to prevent memory exhaustion
 	}
 
 	if offset := query.Get("offset"); offset != "" {

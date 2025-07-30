@@ -63,7 +63,7 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 	latestOnly := true
 	filter := database.NodeFilter{
 		LatestOnly: &latestOnly,
-		Limit:      100, // Default limit
+		Limit:      50, // Default limit - reduced to prevent memory exhaustion
 	}
 
 	if zone := r.FormValue("zone"); zone != "" {
@@ -85,11 +85,17 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 	}
 
 	if systemName := r.FormValue("system_name"); systemName != "" {
-		filter.SystemName = &systemName
+		// Prevent memory exhaustion from very short search strings
+		if len(strings.TrimSpace(systemName)) >= 2 {
+			filter.SystemName = &systemName
+		}
 	}
 
 	if location := r.FormValue("location"); location != "" {
-		filter.Location = &location
+		// Prevent memory exhaustion from very short search strings
+		if len(strings.TrimSpace(location)) >= 2 {
+			filter.Location = &location
+		}
 	}
 
 	return filter
