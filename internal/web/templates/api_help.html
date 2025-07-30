@@ -67,13 +67,16 @@
                     <code>is_cm</code> - true/false for CM nodes<br>
                     <code>date_from</code> - Start date (YYYY-MM-DD)<br>
                     <code>date_to</code> - End date (YYYY-MM-DD)<br>
+                    <code>latest_only</code> - true/false, restrict to most recent nodelist only (default: false, includes all historical data)<br>
                     <code>limit</code> - Results limit (default: 100, max: 200)<br>
                     <code>offset</code> - Results offset for pagination
                 </div>
                 
                 <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example:</strong><br>
-                    <code>GET /api/nodes?zone=2&limit=10&is_cm=true</code>
+                    <strong>Examples:</strong><br>
+                    <code>GET /api/nodes?zone=2&limit=10&is_cm=true</code><br>
+                    <code>GET /api/nodes?location=Berlin&latest_only=true</code><br>
+                    <code>GET /api/nodes?system_name=BBS&date_from=2020-01-01</code>
                 </div>
 
             </div>

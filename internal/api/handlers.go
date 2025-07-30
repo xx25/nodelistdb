@@ -151,6 +151,12 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
+	// Latest only filter (default: false, includes historical data)
+	if latestOnly := query.Get("latest_only"); latestOnly != "" {
+		latest := strings.ToLower(latestOnly) == "true"
+		filter.LatestOnly = &latest
+	}
+	
 	// Prevent overly broad searches that can cause memory exhaustion
 	if !hasSpecificConstraint {
 		http.Error(w, "Search requires at least one specific constraint (zone, net, node, system_name, location, sysop_name, node_type, is_active, is_cm, or date range)", http.StatusBadRequest)
@@ -198,6 +204,7 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 			"is_cm":       filter.IsCM,
 			"date_from":   filter.DateFrom,
 			"date_to":     filter.DateTo,
+			"latest_only": filter.LatestOnly,
 			"limit":       filter.Limit,
 			"offset":      filter.Offset,
 		},

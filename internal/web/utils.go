@@ -60,7 +60,10 @@ func buildNodeFilterFromAddress(address string) (database.NodeFilter, error) {
 
 // buildNodeFilterFromForm creates a node filter from individual form fields
 func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
-	latestOnly := true
+	// Check if historical search is requested
+	includeHistorical := r.FormValue("include_historical") == "1"
+	latestOnly := !includeHistorical
+	
 	filter := database.NodeFilter{
 		LatestOnly: &latestOnly,
 		Limit:      25, // Default limit
