@@ -148,7 +148,7 @@ const (
 	MaxSearchLimit     = 1000
 	DefaultChunkSize   = 100
 	MaxChunkSize       = 1000
-	DefaultSysopLimit  = 50
+	DefaultSysopLimit  = 100
 	MaxSysopLimit      = 200
 	DefaultRegionLimit = 10
 	DefaultNetLimit    = 10

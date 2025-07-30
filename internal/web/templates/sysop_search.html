@@ -56,7 +56,7 @@
                     <h2 style="color: var(--text-primary); margin-bottom: 1rem;">
                         Search Results 
                         <span class="badge badge-info" style="font-size: 0.8rem; margin-left: 0.5rem;">
-                            {{.Count}} nodes found
+                            {{.Count}} nodes found{{if eq .Count 100}} (limited to 100 results){{end}}
                         </span>
                     </h2>
                     

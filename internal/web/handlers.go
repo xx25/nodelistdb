@@ -351,7 +351,7 @@ func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
 		sysopName = r.FormValue("sysop_name")
 
 		if sysopName != "" {
-			nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 50)
+			nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 100)
 			count = len(nodes)
 		}
 	}

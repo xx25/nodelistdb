@@ -178,11 +178,22 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 			args = append(args, conditionArgs...)
 		}
 	} else {
-		baseSQL = qb.NodeSelectSQL()
+		// Historical search - still group by node to avoid duplicates, but show most recent info
+		baseSQL = `
+		SELECT zone, net, node, nodelist_date, day_number,
+			   system_name, location, sysop_name, phone, node_type, region, max_speed,
+			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+		FROM (
+			SELECT *, 
+				   ROW_NUMBER() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
+			FROM nodes
+		) ranked WHERE rn = 1`
 
 		conditions, conditionArgs := qb.buildWhereConditions(filter)
 		if len(conditions) > 0 {
-			baseSQL += " WHERE " + strings.Join(conditions, " AND ")
+			baseSQL += " AND " + strings.Join(conditions, " AND ")
 			args = append(args, conditionArgs...)
 		}
 	}

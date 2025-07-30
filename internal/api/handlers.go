@@ -173,7 +173,7 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 			filter.Limit = l
 		}
 	} else {
-		filter.Limit = 50 // Default limit - reduced to prevent memory exhaustion
+		filter.Limit = 100 // Default limit
 	}
 
 	if offset := query.Get("offset"); offset != "" {

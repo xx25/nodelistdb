@@ -66,7 +66,7 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 	
 	filter := database.NodeFilter{
 		LatestOnly: &latestOnly,
-		Limit:      25, // Default limit
+		Limit:      100, // Default limit
 	}
 	
 	// Track if we have any specific constraints to prevent overly broad searches
