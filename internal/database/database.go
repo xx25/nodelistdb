@@ -133,9 +133,7 @@ func (db *DB) CreateSchema() error {
 		has_conflict BOOLEAN DEFAULT FALSE,   -- Flag for easy querying of conflicts
 		
 		-- FTS unique identifier for full-text search
-		fts_id TEXT GENERATED ALWAYS AS (
-			CONCAT(zone, ':', net, '/', node, '@', strftime(nodelist_date, '%Y-%m-%d'), '#', conflict_sequence)
-		) STORED,
+		fts_id TEXT NOT NULL,
 		
 		PRIMARY KEY (zone, net, node, nodelist_date, conflict_sequence)
 	)`

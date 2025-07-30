@@ -33,7 +33,7 @@ func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) 
 		&node.IsDown, &node.IsHold, &node.IsPvt, &node.IsActive,
 		&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
 		&node.ConflictSequence, &node.HasConflict,
-		&node.HasInet, &internetConfig,
+		&node.HasInet, &internetConfig, &node.FtsId,
 	)
 	if err != nil {
 		return node, fmt.Errorf("failed to scan node: %w", err)
@@ -273,6 +273,14 @@ func (rp *ResultParser) escapeSingleQuotes(s string) string {
 
 // NodeToInsertArgs converts a Node to arguments for parameterized INSERT
 func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
+	// Compute FTS ID if not already set
+	if node.FtsId == "" {
+		// Create a mutable copy to compute FTS ID
+		nodeCopy := node
+		nodeCopy.ComputeFtsId()
+		node = nodeCopy
+	}
+	
 	// Handle internet_config JSON
 	var configJSON interface{}
 	if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
@@ -293,7 +301,7 @@ func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
 		rp.formatIntArrayForDB(node.InternetPorts),
 		rp.formatArrayForDB(node.InternetEmails),
 		node.ConflictSequence, node.HasConflict,
-		node.HasInet, configJSON,
+		node.HasInet, configJSON, node.FtsId,
 	}
 }
 

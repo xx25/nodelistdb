@@ -23,10 +23,10 @@ func (qb *QueryBuilder) InsertNodeSQL() string {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		conflict_sequence, has_conflict, has_inet, internet_config
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::INTEGER[], json(?)::VARCHAR[],
-		?, ?, ?, ?)`
+		?, ?, ?, ?, ?)`
 }
 
 // BuildBatchInsertSQL creates a batch INSERT statement with proper parameterization
@@ -36,7 +36,7 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 	}
 
 	// Create placeholder for one row with JSON casting for array fields
-	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::INTEGER[], json(?)::VARCHAR[], ?, ?, ?, ?)"
+	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::INTEGER[], json(?)::VARCHAR[], ?, ?, ?, ?, ?)"
 
 	// Build batch values
 	values := make([]string, batchSize)
@@ -50,7 +50,7 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
 			is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 			flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-			conflict_sequence, has_conflict, has_inet, internet_config
+			conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 		) VALUES %s
 		ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
 		DO NOTHING`, strings.Join(values, ","))
@@ -63,7 +63,7 @@ func (qb *QueryBuilder) NodeSelectSQL() string {
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		   conflict_sequence, has_conflict, has_inet, internet_config
+		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	FROM nodes`
 }
 
@@ -271,7 +271,7 @@ func (qb *QueryBuilder) NodeHistorySQL() string {
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-		   conflict_sequence, has_conflict, has_inet, internet_config
+		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	FROM nodes
 	WHERE zone = ? AND net = ? AND node = ?
 	ORDER BY nodelist_date ASC, conflict_sequence ASC`

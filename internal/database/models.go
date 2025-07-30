@@ -2,6 +2,7 @@ package database
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -50,6 +51,17 @@ type Node struct {
 	// Conflict tracking
 	ConflictSequence int  `json:"conflict_sequence"`
 	HasConflict      bool `json:"has_conflict"`
+	
+	// FTS identifier
+	FtsId string `json:"fts_id"`
+}
+
+// ComputeFtsId generates the FTS identifier for this node
+func (n *Node) ComputeFtsId() {
+	n.FtsId = fmt.Sprintf("%d:%d/%d@%s#%d", 
+		n.Zone, n.Net, n.Node, 
+		n.NodelistDate.Format("2006-01-02"), 
+		n.ConflictSequence)
 }
 
 // InternetProtocolDetail represents details for a specific protocol
