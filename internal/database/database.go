@@ -264,19 +264,8 @@ func (db *DB) CreateFTSIndexes() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	
-	// Create FTS index for location, sysop_name, and system_name text searches
-	ftsSQL := `
-	PRAGMA create_fts_index(
-		'nodes',
-		'fts_id',
-		'location',
-		'sysop_name',
-		'system_name',
-		stemmer := 'porter',
-		stopwords := 'english',
-		strip_accents := 1,
-		lower := 1
-	)`
+	// Create FTS index for text searches using correct DuckDB syntax
+	ftsSQL := `PRAGMA create_fts_index('nodes', 'fts_id', 'location', 'sysop_name', 'system_name')`
 	
 	if _, err := db.conn.Exec(ftsSQL); err != nil {
 		return fmt.Errorf("failed to create FTS index: %w", err)
