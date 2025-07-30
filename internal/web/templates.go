@@ -20,6 +20,12 @@ func (s *Server) loadTemplates() {
 			if info, exists := flagDescriptions[flag]; exists {
 				return info.Description
 			}
+			// Check if it's a T-flag that needs dynamic generation
+			if len(flag) == 3 && flag[0] == 'T' {
+				if info, ok := flags.GetTFlagInfo(flag); ok {
+					return info.Description
+				}
+			}
 			return ""
 		},
 		"renderFlagChange": func(flagDescriptions map[string]flags.FlagInfo, changeValue string) template.HTML {
@@ -172,9 +178,19 @@ func renderFlagListWithTooltips(flagDescriptions map[string]flags.FlagInfo, flag
 			result.WriteString(" ")
 		}
 
+		// Check static descriptions first
 		if desc, exists := flagDescriptions[flag]; exists && desc.Description != "" {
 			// Render with tooltip
 			result.WriteString(fmt.Sprintf(`<span class="flag-tooltip"><span class="badge badge-info" style="margin: 0 1px;">%s</span><span class="tooltip-text">%s</span></span>`, flag, desc.Description))
+		} else if len(flag) == 3 && flag[0] == 'T' {
+			// Check if it's a T-flag that needs dynamic generation
+			if info, ok := flags.GetTFlagInfo(flag); ok && info.Description != "" {
+				// Render with tooltip
+				result.WriteString(fmt.Sprintf(`<span class="flag-tooltip"><span class="badge badge-info" style="margin: 0 1px;">%s</span><span class="tooltip-text">%s</span></span>`, flag, info.Description))
+			} else {
+				// Render without tooltip
+				result.WriteString(fmt.Sprintf(`<span class="badge badge-info" style="margin: 0 1px;">%s</span>`, flag))
+			}
 		} else {
 			// Render without tooltip
 			result.WriteString(fmt.Sprintf(`<span class="badge badge-info" style="margin: 0 1px;">%s</span>`, flag))
