@@ -278,22 +278,41 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 			whereClause = " WHERE " + strings.Join(conditions, " AND ")
 		}
 		
+		// For historical search: get latest entry for each node that matches criteria
+		// Using argMax to avoid JOINs - much faster in ClickHouse
 		baseSQL = `
-		SELECT zone, net, node, nodelist_date, day_number,
-			   system_name, location, sysop_name, phone, node_type, region, max_speed,
-			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
-		FROM (
-			SELECT *,
-				   row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
-			FROM nodes
-			WHERE (zone, net, node) IN (
-				SELECT DISTINCT zone, net, node
-				FROM nodes` + whereClause + `
-			)
-		) ranked
-		WHERE rn = 1`
+		SELECT 
+			zone, net, node,
+			argMax(nodelist_date, nodelist_date) as nodelist_date,
+			argMax(day_number, nodelist_date) as day_number,
+			argMax(system_name, nodelist_date) as system_name,
+			argMax(location, nodelist_date) as location,
+			argMax(sysop_name, nodelist_date) as sysop_name,
+			argMax(phone, nodelist_date) as phone,
+			argMax(node_type, nodelist_date) as node_type,
+			argMax(region, nodelist_date) as region,
+			argMax(max_speed, nodelist_date) as max_speed,
+			argMax(is_cm, nodelist_date) as is_cm,
+			argMax(is_mo, nodelist_date) as is_mo,
+			argMax(has_binkp, nodelist_date) as has_binkp,
+			argMax(has_telnet, nodelist_date) as has_telnet,
+			argMax(is_down, nodelist_date) as is_down,
+			argMax(is_hold, nodelist_date) as is_hold,
+			argMax(is_pvt, nodelist_date) as is_pvt,
+			argMax(is_active, nodelist_date) as is_active,
+			argMax(flags, nodelist_date) as flags,
+			argMax(modem_flags, nodelist_date) as modem_flags,
+			argMax(internet_protocols, nodelist_date) as internet_protocols,
+			argMax(internet_hostnames, nodelist_date) as internet_hostnames,
+			argMax(internet_ports, nodelist_date) as internet_ports,
+			argMax(internet_emails, nodelist_date) as internet_emails,
+			argMax(conflict_sequence, nodelist_date) as conflict_sequence,
+			argMax(has_conflict, nodelist_date) as has_conflict,
+			argMax(has_inet, nodelist_date) as has_inet,
+			argMax(internet_config, nodelist_date) as internet_config,
+			argMax(fts_id, nodelist_date) as fts_id
+		FROM nodes` + whereClause + `
+		GROUP BY zone, net, node`
 	}
 
 	// Add ORDER BY
