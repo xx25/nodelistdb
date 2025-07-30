@@ -84,6 +84,12 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, filter ChangeFil
 		return nil, nil
 	}
 
+	// Pre-load all unique nodelist dates for efficient gap checking
+	allDates, err := so.getAllNodelistDates()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load nodelist dates: %w", err)
+	}
+
 	var changes []database.NodeChange
 
 	// Add the first appearance
@@ -106,7 +112,7 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, filter ChangeFil
 		}
 
 		// Check if node was removed (gap in dates)
-		if !so.isConsecutiveNodelist(prev.NodelistDate, curr.NodelistDate) {
+		if !so.isConsecutiveNodelist(prev.NodelistDate, curr.NodelistDate, allDates) {
 			// Node was removed and then re-added
 			changes = append(changes, database.NodeChange{
 				Date:       so.getNextNodelistDate(prev.NodelistDate),
@@ -416,14 +422,38 @@ func (so *SearchOperations) equalIntSlices(a, b []int) bool {
 	return true
 }
 
-func (so *SearchOperations) isConsecutiveNodelist(date1, date2 time.Time) bool {
-	// Check if there's a nodelist between these two dates
+// getAllNodelistDates loads all unique nodelist dates from the database
+func (so *SearchOperations) getAllNodelistDates() ([]time.Time, error) {
 	conn := so.db.Conn()
-	var count int
-	query := so.queryBuilder.ConsecutiveNodelistCheckSQL()
-	err := conn.QueryRow(query, date1, date2).Scan(&count)
+	query := "SELECT DISTINCT nodelist_date FROM nodes ORDER BY nodelist_date"
+	
+	rows, err := conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var dates []time.Time
+	for rows.Next() {
+		var date time.Time
+		if err := rows.Scan(&date); err != nil {
+			return nil, err
+		}
+		dates = append(dates, date)
+	}
+	
+	return dates, rows.Err()
+}
 
-	return err == nil && count == 0
+func (so *SearchOperations) isConsecutiveNodelist(date1, date2 time.Time, allDates []time.Time) bool {
+	// Use the pre-loaded dates list instead of expensive database query
+	// Check if there's any date between date1 and date2
+	for _, date := range allDates {
+		if date.After(date1) && date.Before(date2) {
+			return false
+		}
+	}
+	return true
 }
 
 func (so *SearchOperations) getNextNodelistDate(afterDate time.Time) time.Time {

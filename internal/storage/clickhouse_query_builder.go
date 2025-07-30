@@ -414,7 +414,7 @@ func (cqb *ClickHouseQueryBuilder) NodeDateRangeSQL() string {
 }
 
 func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
-	// ClickHouse-compatible sysop search query
+	// ClickHouse-compatible sysop search query without correlated subqueries
 	return `
 	WITH node_ranges AS (
 		SELECT 
@@ -427,16 +427,17 @@ func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
 		FROM nodes
 		WHERE replace(sysop_name_lower, '_', ' ') LIKE concat('%', lower(replace(?, '_', ' ')), '%')
 		GROUP BY zone, net, node
+	),
+	max_date AS (
+		SELECT MAX(nodelist_date) as latest_date FROM nodes
 	)
 	SELECT 
 		nr.zone, nr.net, nr.node, nr.system_name, nr.location, nr.sysop_name,
 		nr.first_date, nr.last_date,
-		CASE WHEN EXISTS (
-			SELECT 1 FROM nodes n 
-			WHERE n.zone = nr.zone AND n.net = nr.net AND n.node = nr.node 
-			AND n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
-		) THEN true ELSE false END as currently_active
+		CASE WHEN n.nodelist_date IS NOT NULL THEN true ELSE false END as currently_active
 	FROM node_ranges nr
+	CROSS JOIN max_date md
+	LEFT JOIN nodes n ON (n.zone = nr.zone AND n.net = nr.net AND n.node = nr.node AND n.nodelist_date = md.latest_date)
 	ORDER BY nr.first_date DESC
 	LIMIT ?`
 }
