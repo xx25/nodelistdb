@@ -21,6 +21,7 @@ type MockStorage struct {
 	nodeHistory []database.Node
 	nodeChanges []database.NodeChange
 	nodeSummary []storage.NodeSummary
+	sysops      []storage.SysopInfo
 	shouldError bool
 	errorMsg    string
 }
@@ -91,6 +92,49 @@ func (m *MockStorage) SearchNodesBySysop(sysopName string, limit int) ([]storage
 		return nil, fmt.Errorf(m.errorMsg)
 	}
 	return m.nodeSummary, nil
+}
+
+func (m *MockStorage) GetUniqueSysops(nameFilter string, limit, offset int) ([]storage.SysopInfo, error) {
+	if m.shouldError {
+		return nil, fmt.Errorf(m.errorMsg)
+	}
+	// Filter sysops by name if filter is provided
+	if nameFilter != "" {
+		var filtered []storage.SysopInfo
+		for _, s := range m.sysops {
+			if strings.Contains(strings.ToLower(s.Name), strings.ToLower(nameFilter)) {
+				filtered = append(filtered, s)
+			}
+		}
+		return filtered, nil
+	}
+	// Apply pagination
+	start := offset
+	if start > len(m.sysops) {
+		return []storage.SysopInfo{}, nil
+	}
+	end := start + limit
+	if end > len(m.sysops) {
+		end = len(m.sysops)
+	}
+	return m.sysops[start:end], nil
+}
+
+func (m *MockStorage) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
+	if m.shouldError {
+		return nil, fmt.Errorf(m.errorMsg)
+	}
+	// Filter nodes by sysop name
+	var filtered []database.Node
+	for _, n := range m.nodes {
+		if n.SysopName == sysopName {
+			filtered = append(filtered, n)
+		}
+	}
+	if limit > 0 && len(filtered) > limit {
+		return filtered[:limit], nil
+	}
+	return filtered, nil
 }
 
 // testServer wraps Server to allow dependency injection for testing
@@ -183,6 +227,24 @@ func newMockServer() (*Server, *MockStorage) {
 				CurrentlyActive: true,
 			},
 		},
+		sysops: []storage.SysopInfo{
+			{
+				Name:        "Test_Sysop",
+				NodeCount:   3,
+				ActiveNodes: 2,
+				FirstSeen:   time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+				LastSeen:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+				Zones:       []int{1, 2},
+			},
+			{
+				Name:        "Another_Sysop",
+				NodeCount:   1,
+				ActiveNodes: 1,
+				FirstSeen:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+				LastSeen:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+				Zones:       []int{2},
+			},
+		},
 	}
 
 	// Create a test server that will use the mock for handlers
@@ -254,6 +316,146 @@ func createGetNodeHandler(mockStorage *MockStorage) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(nodes[0])
+	}
+}
+
+func createSysopsHandler(mockStorage *MockStorage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Parse query parameters
+		query := r.URL.Query()
+		nameFilter := query.Get("name")
+		limit := 50
+		if limitStr := query.Get("limit"); limitStr != "" {
+			fmt.Sscanf(limitStr, "%d", &limit)
+		}
+		offset := 0
+		if offsetStr := query.Get("offset"); offsetStr != "" {
+			fmt.Sscanf(offsetStr, "%d", &offset)
+		}
+
+		sysops, err := mockStorage.GetUniqueSysops(nameFilter, limit, offset)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get sysops: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		response := map[string]interface{}{
+			"sysops": sysops,
+			"count":  len(sysops),
+			"filter": map[string]interface{}{
+				"name":   nameFilter,
+				"limit":  limit,
+				"offset": offset,
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+func createSysopNodesHandler(mockStorage *MockStorage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Extract sysop name from path
+		pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/sysops/"), "/")
+		if len(pathParts) < 2 || pathParts[1] != "nodes" {
+			http.Error(w, "Invalid path format", http.StatusBadRequest)
+			return
+		}
+
+		sysopName := pathParts[0]
+		if sysopName == "" {
+			http.Error(w, "Sysop name cannot be empty", http.StatusBadRequest)
+			return
+		}
+
+		limit := 100
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			fmt.Sscanf(limitStr, "%d", &limit)
+		}
+
+		nodes, err := mockStorage.GetNodesBySysop(sysopName, limit)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get nodes: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		response := map[string]interface{}{
+			"sysop_name": sysopName,
+			"nodes":      nodes,
+			"count":      len(nodes),
+			"limit":      limit,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+func createNodeChangesHandler(mockStorage *MockStorage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Parse path parameters (simplified for testing)
+		pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/nodes/"), "/")
+		if len(pathParts) < 4 {
+			http.Error(w, "Invalid path format", http.StatusBadRequest)
+			return
+		}
+
+		// Parse filter options
+		query := r.URL.Query()
+		filter := storage.ChangeFilter{}
+		
+		// Check for new exclude parameter format
+		if excludeStr := query.Get("exclude"); excludeStr != "" {
+			excludeFields := strings.Split(excludeStr, ",")
+			for _, field := range excludeFields {
+				field = strings.TrimSpace(strings.ToLower(field))
+				switch field {
+				case "flags":
+					filter.IgnoreFlags = true
+				case "phone":
+					filter.IgnorePhone = true
+				case "speed":
+					filter.IgnoreSpeed = true
+				}
+			}
+		} else {
+			// Support old format
+			filter.IgnoreFlags = query.Get("noflags") == "1"
+			filter.IgnorePhone = query.Get("nophone") == "1"
+			filter.IgnoreSpeed = query.Get("nospeed") == "1"
+		}
+
+		changes, err := mockStorage.GetNodeChanges(1, 234, 56, filter)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get node changes: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		response := map[string]interface{}{
+			"address": "1:234/56",
+			"changes": changes,
+			"count":   len(changes),
+			"filter":  filter,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -424,5 +626,214 @@ func TestGetNodeHandler_NotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+func TestSysopsHandler_Success(t *testing.T) {
+	_, mockStorage := newMockServer()
+	handler := createSysopsHandler(mockStorage)
+
+	req := httptest.NewRequest("GET", "/api/sysops", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse JSON response: %v", err)
+	}
+
+	sysops, ok := response["sysops"].([]interface{})
+	if !ok || len(sysops) != 2 {
+		t.Errorf("Expected 2 sysops in response, got %v", response["sysops"])
+	}
+}
+
+func TestSysopsHandler_WithNameFilter(t *testing.T) {
+	_, mockStorage := newMockServer()
+	handler := createSysopsHandler(mockStorage)
+
+	req := httptest.NewRequest("GET", "/api/sysops?name=Test", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse JSON response: %v", err)
+	}
+
+	sysops, ok := response["sysops"].([]interface{})
+	if !ok || len(sysops) != 1 {
+		t.Errorf("Expected 1 sysop in filtered response, got %v", response["sysops"])
+	}
+}
+
+func TestSysopsHandler_Pagination(t *testing.T) {
+	_, mockStorage := newMockServer()
+	handler := createSysopsHandler(mockStorage)
+
+	req := httptest.NewRequest("GET", "/api/sysops?limit=1&offset=1", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse JSON response: %v", err)
+	}
+
+	sysops, ok := response["sysops"].([]interface{})
+	if !ok || len(sysops) != 1 {
+		t.Errorf("Expected 1 sysop with pagination, got %v", response["sysops"])
+	}
+}
+
+func TestSysopNodesHandler_Success(t *testing.T) {
+	_, mockStorage := newMockServer()
+	// Add a node with matching sysop name
+	mockStorage.nodes = append(mockStorage.nodes, database.Node{
+		Zone:       2,
+		Net:        5001,
+		Node:       100,
+		SystemName: "Test Sysop Node",
+		SysopName:  "Test_Sysop",
+		IsActive:   true,
+	})
+	
+	handler := createSysopNodesHandler(mockStorage)
+
+	req := httptest.NewRequest("GET", "/api/sysops/Test_Sysop/nodes", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse JSON response: %v", err)
+	}
+
+	if response["sysop_name"] != "Test_Sysop" {
+		t.Errorf("Expected sysop_name 'Test_Sysop', got %v", response["sysop_name"])
+	}
+
+	nodes, ok := response["nodes"].([]interface{})
+	if !ok || len(nodes) != 1 {
+		t.Errorf("Expected 1 node for sysop, got %v", response["nodes"])
+	}
+}
+
+func TestSysopNodesHandler_InvalidPath(t *testing.T) {
+	_, mockStorage := newMockServer()
+	handler := createSysopNodesHandler(mockStorage)
+
+	req := httptest.NewRequest("GET", "/api/sysops/Test_Sysop", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+func TestNodeChangesHandler_NewExcludeFormat(t *testing.T) {
+	_, mockStorage := newMockServer()
+	handler := createNodeChangesHandler(mockStorage)
+
+	req := httptest.NewRequest("GET", "/api/nodes/1/234/56/changes?exclude=flags,phone,speed", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse JSON response: %v", err)
+	}
+
+	filter, ok := response["filter"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected filter in response")
+	}
+
+	if filter["IgnoreFlags"] != true || filter["IgnorePhone"] != true || filter["IgnoreSpeed"] != true {
+		t.Errorf("Expected exclude parameters to be applied, got %v", filter)
+	}
+}
+
+func TestNodeChangesHandler_OldFormatBackwardCompatibility(t *testing.T) {
+	_, mockStorage := newMockServer()
+	handler := createNodeChangesHandler(mockStorage)
+
+	req := httptest.NewRequest("GET", "/api/nodes/1/234/56/changes?noflags=1&nophone=1", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse JSON response: %v", err)
+	}
+
+	filter, ok := response["filter"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected filter in response")
+	}
+
+	if filter["IgnoreFlags"] != true || filter["IgnorePhone"] != true {
+		t.Errorf("Expected old format parameters to be applied, got %v", filter)
+	}
+}
+
+func TestSearchNodesHandler_WithSysopName(t *testing.T) {
+	_, mockStorage := newMockServer()
+	handler := createSearchNodesHandler(mockStorage)
+
+	req := httptest.NewRequest("GET", "/api/nodes?sysop_name=Test_Sysop", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse JSON response: %v", err)
+	}
+
+	// The handler should have processed the sysop_name parameter
+	nodes, ok := response["nodes"].([]interface{})
+	if !ok {
+		t.Errorf("Expected nodes in response, got %v", response)
+	}
+
+	if len(nodes) != 1 {
+		t.Errorf("Expected 1 node matching sysop filter, got %d", len(nodes))
 	}
 }

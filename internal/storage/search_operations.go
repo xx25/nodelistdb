@@ -538,3 +538,137 @@ func (so *SearchOperations) SearchNodesWithProtocol(protocol string, limit int) 
 
 	return so.nodeOps.GetNodes(filter)
 }
+
+// GetUniqueSysops returns a list of unique sysops with their node counts
+func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
+	so.mu.RLock()
+	defer so.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = DefaultSysopLimit
+	} else if limit > MaxSysopLimit {
+		limit = MaxSysopLimit
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+
+	conn := so.db.Conn()
+	
+	// Build query - if nameFilter is provided, filter by it
+	var query string
+	var args []interface{}
+	
+	if nameFilter != "" {
+		// Sanitize the filter
+		nameFilter = so.resultParser.SanitizeStringInput(nameFilter)
+		query = `
+			WITH sysop_stats AS (
+				SELECT 
+					sysop_name,
+					COUNT(DISTINCT (zone || ':' || net || '/' || node)) as node_count,
+					COUNT(DISTINCT CASE WHEN is_active = true THEN (zone || ':' || net || '/' || node) END) as active_nodes,
+					MIN(nodelist_date) as first_seen,
+					MAX(nodelist_date) as last_seen,
+					ARRAY_AGG(DISTINCT zone ORDER BY zone) as zones
+				FROM nodes
+				WHERE sysop_name ILIKE ?
+				GROUP BY sysop_name
+			)
+			SELECT 
+				sysop_name,
+				node_count,
+				active_nodes,
+				first_seen,
+				last_seen,
+				zones
+			FROM sysop_stats
+			ORDER BY node_count DESC, sysop_name
+			LIMIT ? OFFSET ?
+		`
+		args = []interface{}{"%" + nameFilter + "%", limit, offset}
+	} else {
+		query = `
+			WITH sysop_stats AS (
+				SELECT 
+					sysop_name,
+					COUNT(DISTINCT (zone || ':' || net || '/' || node)) as node_count,
+					COUNT(DISTINCT CASE WHEN is_active = true THEN (zone || ':' || net || '/' || node) END) as active_nodes,
+					MIN(nodelist_date) as first_seen,
+					MAX(nodelist_date) as last_seen,
+					ARRAY_AGG(DISTINCT zone ORDER BY zone) as zones
+				FROM nodes
+				GROUP BY sysop_name
+			)
+			SELECT 
+				sysop_name,
+				node_count,
+				active_nodes,
+				first_seen,
+				last_seen,
+				zones
+			FROM sysop_stats
+			ORDER BY node_count DESC, sysop_name
+			LIMIT ? OFFSET ?
+		`
+		args = []interface{}{limit, offset}
+	}
+
+	rows, err := conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unique sysops: %w", err)
+	}
+	defer rows.Close()
+
+	var sysops []SysopInfo
+	for rows.Next() {
+		var info SysopInfo
+		var zones []int
+		
+		err := rows.Scan(
+			&info.Name,
+			&info.NodeCount,
+			&info.ActiveNodes,
+			&info.FirstSeen,
+			&info.LastSeen,
+			&zones,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan sysop row: %w", err)
+		}
+		
+		info.Zones = zones
+		sysops = append(sysops, info)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sysop rows: %w", err)
+	}
+
+	return sysops, nil
+}
+
+// GetNodesBySysop returns all nodes for a specific sysop
+func (so *SearchOperations) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
+	if sysopName == "" {
+		return nil, fmt.Errorf("sysop name cannot be empty")
+	}
+
+	// Convert spaces to underscores as that's how data is stored
+	sysopName = strings.ReplaceAll(sysopName, " ", "_")
+	
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	} else if limit > MaxSearchLimit {
+		limit = MaxSearchLimit
+	}
+
+	// Use NodeFilter with exact match on sysop name
+	filter := database.NodeFilter{
+		SysopName: &sysopName,
+		Limit:     limit,
+	}
+
+	return so.nodeOps.GetNodes(filter)
+}

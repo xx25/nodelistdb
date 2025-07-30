@@ -19,6 +19,16 @@ type NodeSummary struct {
 	CurrentlyActive bool      `json:"currently_active"`
 }
 
+// SysopInfo represents information about a sysop
+type SysopInfo struct {
+	Name         string    `json:"name"`
+	NodeCount    int       `json:"node_count"`
+	ActiveNodes  int       `json:"active_nodes"`
+	FirstSeen    time.Time `json:"first_seen"`
+	LastSeen     time.Time `json:"last_seen"`
+	Zones        []int     `json:"zones"`
+}
+
 // ChangeFilter allows filtering out specific types of changes when analyzing node history
 type ChangeFilter struct {
 	IgnoreFlags             bool // Ignore changes in flag arrays

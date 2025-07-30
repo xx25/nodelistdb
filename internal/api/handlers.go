@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -85,6 +86,10 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 
 	if location := query.Get("location"); location != "" {
 		filter.Location = &location
+	}
+
+	if sysopName := query.Get("sysop_name"); sysopName != "" {
+		filter.SysopName = &sysopName
 	}
 
 	if nodeType := query.Get("node_type"); nodeType != "" {
@@ -369,20 +374,58 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Parse filter options
 	query := r.URL.Query()
-	filter := storage.ChangeFilter{
-		IgnoreFlags:             query.Get("noflags") == "1",
-		IgnorePhone:             query.Get("nophone") == "1",
-		IgnoreSpeed:             query.Get("nospeed") == "1",
-		IgnoreStatus:            query.Get("nostatus") == "1",
-		IgnoreLocation:          query.Get("nolocation") == "1",
-		IgnoreName:              query.Get("noname") == "1",
-		IgnoreSysop:             query.Get("nosysop") == "1",
-		IgnoreConnectivity:      query.Get("noconnectivity") == "1",
-		IgnoreInternetProtocols: query.Get("nointernetprotocols") == "1",
-		IgnoreInternetHostnames: query.Get("nointernethostnames") == "1",
-		IgnoreInternetPorts:     query.Get("nointernetports") == "1",
-		IgnoreInternetEmails:    query.Get("nointernetemails") == "1",
-		IgnoreModemFlags:        query.Get("nomodemflags") == "1",
+	filter := storage.ChangeFilter{}
+	
+	// Check for new exclude parameter format
+	if excludeStr := query.Get("exclude"); excludeStr != "" {
+		// Parse comma-separated list of fields to exclude
+		excludeFields := strings.Split(excludeStr, ",")
+		for _, field := range excludeFields {
+			field = strings.TrimSpace(strings.ToLower(field))
+			switch field {
+			case "flags":
+				filter.IgnoreFlags = true
+			case "phone":
+				filter.IgnorePhone = true
+			case "speed":
+				filter.IgnoreSpeed = true
+			case "status":
+				filter.IgnoreStatus = true
+			case "location":
+				filter.IgnoreLocation = true
+			case "name":
+				filter.IgnoreName = true
+			case "sysop":
+				filter.IgnoreSysop = true
+			case "connectivity":
+				filter.IgnoreConnectivity = true
+			case "internetprotocols", "internet_protocols":
+				filter.IgnoreInternetProtocols = true
+			case "internethostnames", "internet_hostnames":
+				filter.IgnoreInternetHostnames = true
+			case "internetports", "internet_ports":
+				filter.IgnoreInternetPorts = true
+			case "internetemails", "internet_emails":
+				filter.IgnoreInternetEmails = true
+			case "modemflags", "modem_flags":
+				filter.IgnoreModemFlags = true
+			}
+		}
+	} else {
+		// Maintain backward compatibility with old format
+		filter.IgnoreFlags = query.Get("noflags") == "1"
+		filter.IgnorePhone = query.Get("nophone") == "1"
+		filter.IgnoreSpeed = query.Get("nospeed") == "1"
+		filter.IgnoreStatus = query.Get("nostatus") == "1"
+		filter.IgnoreLocation = query.Get("nolocation") == "1"
+		filter.IgnoreName = query.Get("noname") == "1"
+		filter.IgnoreSysop = query.Get("nosysop") == "1"
+		filter.IgnoreConnectivity = query.Get("noconnectivity") == "1"
+		filter.IgnoreInternetProtocols = query.Get("nointernetprotocols") == "1"
+		filter.IgnoreInternetHostnames = query.Get("nointernethostnames") == "1"
+		filter.IgnoreInternetPorts = query.Get("nointernetports") == "1"
+		filter.IgnoreInternetEmails = query.Get("nointernetemails") == "1"
+		filter.IgnoreModemFlags = query.Get("nomodemflags") == "1"
 	}
 
 	// Get node changes
@@ -559,6 +602,109 @@ func (s *Server) GetAvailableDatesHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
+// SysopsHandler handles requests for listing sysops
+// GET /api/sysops?name=John&limit=50&offset=0
+func (s *Server) SysopsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse query parameters
+	query := r.URL.Query()
+	nameFilter := query.Get("name")
+
+	// Parse limit
+	limit := 50
+	if limitStr := query.Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 200 {
+			limit = l
+		}
+	}
+
+	// Parse offset
+	offset := 0
+	if offsetStr := query.Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	// Get unique sysops
+	sysops, err := s.storage.GetUniqueSysops(nameFilter, limit, offset)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get sysops: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"sysops": sysops,
+		"count":  len(sysops),
+		"filter": map[string]interface{}{
+			"name":   nameFilter,
+			"limit":  limit,
+			"offset": offset,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// SysopNodesHandler handles requests for getting nodes by sysop
+// GET /api/sysops/{name}/nodes?limit=100
+func (s *Server) SysopNodesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract sysop name from path
+	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/sysops/"), "/")
+	if len(pathParts) < 2 || pathParts[1] != "nodes" {
+		http.Error(w, "Invalid path format. Expected: /api/sysops/{name}/nodes", http.StatusBadRequest)
+		return
+	}
+
+	sysopName := pathParts[0]
+	if sysopName == "" {
+		http.Error(w, "Sysop name cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	// URL decode the sysop name
+	decodedName, err := url.PathUnescape(sysopName)
+	if err != nil {
+		http.Error(w, "Invalid sysop name encoding", http.StatusBadRequest)
+		return
+	}
+
+	// Get limit
+	limit := 100
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+
+	// Get nodes for this sysop
+	nodes, err := s.storage.GetNodesBySysop(decodedName, limit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get nodes: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"sysop_name": decodedName,
+		"nodes":      nodes,
+		"count":      len(nodes),
+		"limit":      limit,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // FlagsDocumentationHandler returns flag descriptions and categories
 // GET /api/flags
 func (s *Server) FlagsDocumentationHandler(w http.ResponseWriter, r *http.Request) {
@@ -675,13 +821,28 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/stats", s.StatsHandler)
 	mux.HandleFunc("/api/stats/dates", s.GetAvailableDatesHandler)
 	mux.HandleFunc("/api/flags", s.FlagsDocumentationHandler)
-	mux.HandleFunc("/api/nodes/search/sysop", s.SearchNodesBySysopHandler)
+	mux.HandleFunc("/api/nodes/search/sysop", s.SearchNodesBySysopHandler) // Deprecated, kept for backward compatibility
+	mux.HandleFunc("/api/sysops", s.SysopsHandler)
 	mux.HandleFunc("/api/download/database", s.DownloadDatabaseHandler)
 	mux.HandleFunc("/api/nodelist/latest", s.LatestNodelistAPIHandler)
 
 	// OpenAPI documentation routes
 	mux.HandleFunc("/api/openapi.yaml", s.OpenAPISpecHandler)
 	mux.HandleFunc("/api/docs", s.SwaggerUIHandler)
+
+	// Sysop-specific routes
+	mux.HandleFunc("/api/sysops/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		pathParts := strings.Split(strings.TrimPrefix(path, "/api/sysops/"), "/")
+		
+		// Check if this is /api/sysops/{name}/nodes pattern
+		if len(pathParts) >= 2 && pathParts[1] == "nodes" {
+			s.SysopNodesHandler(w, r)
+		} else {
+			// For /api/sysops or /api/sysops/, redirect to the base handler
+			s.SysopsHandler(w, r)
+		}
+	})
 
 	// Node lookup with path parameters
 	mux.HandleFunc("/api/nodes/", func(w http.ResponseWriter, r *http.Request) {

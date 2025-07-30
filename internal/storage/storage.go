@@ -95,6 +95,16 @@ func (s *Storage) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary
 	return s.searchOperations.SearchNodesBySysop(sysopName, limit)
 }
 
+// GetUniqueSysops returns a list of unique sysops with their node counts
+func (s *Storage) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
+	return s.searchOperations.GetUniqueSysops(nameFilter, limit, offset)
+}
+
+// GetNodesBySysop returns all nodes for a specific sysop
+func (s *Storage) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
+	return s.searchOperations.GetNodesBySysop(sysopName, limit)
+}
+
 // GetNodeChanges analyzes the history of a node and returns detected changes
 func (s *Storage) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error) {
 	return s.searchOperations.GetNodeChanges(zone, net, node, filter)

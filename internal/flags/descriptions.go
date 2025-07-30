@@ -43,27 +43,33 @@ var timeLetterToUTC = map[byte]string{
 func GetFlagDescriptions() map[string]FlagInfo {
 	return map[string]FlagInfo{
 		// Modem flags
-		"V21":  {Category: "modem", HasValue: false, Description: "ITU-T V.21 (300 bps, full-duplex, FSK modulation)"},
-		"V22":  {Category: "modem", HasValue: false, Description: "ITU-T V.22 (1200 bps, full-duplex, QAM modulation)"},
-		"V29":  {Category: "modem", HasValue: false, Description: "ITU-T V.29 (9600 bps, half-duplex, used for fax and data)"},
-		"V32":  {Category: "modem", HasValue: false, Description: "ITU-T V.32 (9600 bps, full-duplex, QAM modulation)"},
-		"V32B": {Category: "modem", HasValue: false, Description: "ITU-T V.32bis (14400 bps, full-duplex, QAM modulation)"},
-		"V33":  {Category: "modem", HasValue: false, Description: "ITU-T V.33 (14400 bps, half-duplex, data/fax transmission)"},
-		"V34":  {Category: "modem", HasValue: false, Description: "ITU-T V.34 (up to 28800 bps, full-duplex, advanced QAM modulation)"},
-		"V42":  {Category: "modem", HasValue: false, Description: "ITU-T V.42 (LAPM error correction protocol)"},
-		"V42B": {Category: "modem", HasValue: false, Description: "ITU-T V.42bis (data compression, up to 4:1 ratio)"},
+		"V21":  {Category: "modem", HasValue: false, Description: "ITU-T V.21 (300 bps, full-duplex)"},
+		"V22":  {Category: "modem", HasValue: false, Description: "ITU-T V.22 (1200 bps, full-duplex)"},
+		"V23":  {Category: "modem", HasValue: false, Description: "CCITT V.23 (1200/75 bps, full-duplex)"},
+		"V29":  {Category: "modem", HasValue: false, Description: "ITU-T V.29 (9600 bps, half-duplex)"},
+		"V32":  {Category: "modem", HasValue: false, Description: "ITU-T V.32 (9600 bps, full-duplex)"},
+		"V32B": {Category: "modem", HasValue: false, Description: "ITU-T V.32bis (14400 bps, full-duplex)"},
+		"V32T": {Category: "modem", HasValue: false, Description: "V.32 Terbo mode"},
+		"V33":  {Category: "modem", HasValue: false, Description: "ITU-T V.33"},
+		"V34":  {Category: "modem", HasValue: false, Description: "ITU-T V.34 (28800 bps, full-duplex)"},
+		"V42":  {Category: "modem", HasValue: false, Description: "LAP-M error correction w/fallback to MNP 1-4"},
+		"V42B": {Category: "modem", HasValue: false, Description: "LAP-M error correction w/fallback to MNP 1-5"},
 		"V90C": {Category: "modem", HasValue: false, Description: "ITU-T V.90 (56 kbps, client side, analog download)"},
 		"V90S": {Category: "modem", HasValue: false, Description: "ITU-T V.90 (56 kbps, server side, digital upload)"},
+		"X2C":  {Category: "modem", HasValue: false, Description: "US Robotics x2 client (56 kbit/s from X2S to X2C, V.34-type reverse)"},
+		"X2S":  {Category: "modem", HasValue: false, Description: "US Robotics x2 server (digital interface, 64kbit/s X2S-X2S or 56kbit/s to X2C)"},
+		"Z19":  {Category: "modem", HasValue: false, Description: "Zyxel 19.2 Kbps (implies V.32Bis & V.42Bis & ZYX)"},
 		"X75":  {Category: "modem", HasValue: false, Description: "ITU-T X.75 (ISDN B-channel protocol, 64 kbps)"},
-		"HST":  {Category: "modem", HasValue: false, Description: "USRobotics HST (High-Speed Transfer, proprietary, 9600-14400 bps)"},
-		"H96":  {Category: "modem", HasValue: false, Description: "USRobotics HST 9600 (early HST modem, 9600 bps)"},
-		"H14":  {Category: "modem", HasValue: false, Description: "USRobotics HST 14400 (improved speed variant, 14400 bps)"},
-		"H16":  {Category: "modem", HasValue: false, Description: "USRobotics HST 16800 (advanced speed variant, 16800 bps)"},
-		"MAX":  {Category: "modem", HasValue: false, Description: "Microcom AX/96xx series (proprietary modulation, 9600 bps+)"},
-		"PEP":  {Category: "modem", HasValue: false, Description: "Packet Ensemble Protocol (proprietary error correction and modulation)"},
-		"CSP":  {Category: "modem", HasValue: false, Description: "Compucom SpeedModem (CSP, proprietary protocol)"},
-		"ZYX":  {Category: "modem", HasValue: false, Description: "ZyXEL modem (supports proprietary and standard protocols)"},
-		"VFC":  {Category: "modem", HasValue: false, Description: "V.Fast Class (V.FC, pre-V.34 28800 bps, Rockwell standard)"},
+		"HST":  {Category: "modem", HasValue: false, Description: "USR Courier HST"},
+		"H96":  {Category: "modem", HasValue: false, Description: "Hayes V9600"},
+		"H14":  {Category: "modem", HasValue: false, Description: "USR Courier HST up to 14.4Kbps"},
+		"H16":  {Category: "modem", HasValue: false, Description: "USR Courier HST up to 16.8Kbps"},
+		"MAX":  {Category: "modem", HasValue: false, Description: "Microcom AX/96xx series"},
+		"PEP":  {Category: "modem", HasValue: false, Description: "Packet Ensemble Protocol"},
+		"CSP":  {Category: "modem", HasValue: false, Description: "Compucom Speedmodem"},
+		"ZYX":  {Category: "modem", HasValue: false, Description: "Zyxel (implies V.32Bis & V.42Bis)"},
+		"VFC":  {Category: "modem", HasValue: false, Description: "Rockwell's V.Fast Class"},
+		"MNP":  {Category: "modem", HasValue: false, Description: "Microcom Networking Protocol error correction"},
 
 		// Internet flags
 		"IBN": {Category: "internet", HasValue: true, Description: "BinkP"},
@@ -92,10 +98,16 @@ func GetFlagDescriptions() map[string]FlagInfo {
 		"XR": {Category: "capability", HasValue: false, Description: "Accepts file requests"},
 		"XW": {Category: "capability", HasValue: false, Description: "X.75 windowing"},
 		"XX": {Category: "capability", HasValue: false, Description: "No file/update requests"},
+		"MN": {Category: "capability", HasValue: false, Description: "No compression supported"},
 
 		// Schedule flags
-		"U": {Category: "schedule", HasValue: true, Description: "Availability"},
-		"T": {Category: "schedule", HasValue: true, Description: "Time zone"},
+		"U":  {Category: "schedule", HasValue: true, Description: "Availability"},
+		"T":  {Category: "schedule", HasValue: true, Description: "Time zone"},
+		"DA": {Category: "schedule", HasValue: true, Description: "Daily hours of operation"},
+		"WK": {Category: "schedule", HasValue: true, Description: "Week days hours of operation"},
+		"WE": {Category: "schedule", HasValue: true, Description: "Week ends hours of operation"},
+		"SU": {Category: "schedule", HasValue: true, Description: "Sundays hours of operation"},
+		"SA": {Category: "schedule", HasValue: true, Description: "Saturdays hours of operation"},
 
 		// User flags
 		"ENC":   {Category: "user", HasValue: false, Description: "Encrypted"},
@@ -106,6 +118,15 @@ func GetFlagDescriptions() map[string]FlagInfo {
 		"PING":  {Category: "user", HasValue: false, Description: "Ping OK"},
 		"TRACE": {Category: "user", HasValue: false, Description: "Network trace capability - notifies sender when PING messages pass through this node"},
 		"RPK":   {Category: "user", HasValue: false, Description: "Regional Pointlist Keeper"},
+		"RE":    {Category: "user", HasValue: false, Description: "Node exercises some access restrictions"},
+
+		// Mail hour flags (dedicated mail periods)
+		"#01": {Category: "schedule", HasValue: false, Description: "Zone 5 mail hour (01:00-02:00 UTC)"},
+		"#02": {Category: "schedule", HasValue: false, Description: "Zone 2 mail hour (02:30-03:30 UTC)"},
+		"#08": {Category: "schedule", HasValue: false, Description: "Zone 4 mail hour (08:00-09:00 UTC)"},
+		"#09": {Category: "schedule", HasValue: false, Description: "Zone 1 mail hour (09:00-10:00 UTC)"},
+		"#18": {Category: "schedule", HasValue: false, Description: "Zone 3 mail hour (18:00-19:00 UTC)"},
+		"#20": {Category: "schedule", HasValue: false, Description: "Zone 6 mail hour (20:00-21:00 UTC)"},
 	}
 }
 

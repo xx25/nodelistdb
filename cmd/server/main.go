@@ -86,6 +86,8 @@ func main() {
 		log.Printf("    http://%s:%s/api/health          - API health check\n", *host, *port)
 		log.Printf("    http://%s:%s/api/nodes           - Search nodes\n", *host, *port)
 		log.Printf("    http://%s:%s/api/nodes/1/234/56  - Get specific node\n", *host, *port)
+		log.Printf("    http://%s:%s/api/sysops          - List sysops\n", *host, *port)
+		log.Printf("    http://%s:%s/api/sysops/{name}/nodes - Get nodes for sysop\n", *host, *port)
 		log.Printf("    http://%s:%s/api/stats           - Network statistics\n", *host, *port)
 		log.Println()
 
