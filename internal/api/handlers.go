@@ -61,22 +61,28 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	filter := database.NodeFilter{}
 	query := r.URL.Query()
+	
+	// Track if we have any specific constraints to prevent overly broad searches
+	hasSpecificConstraint := false
 
 	if zone := query.Get("zone"); zone != "" {
 		if z, err := strconv.Atoi(zone); err == nil {
 			filter.Zone = &z
+			hasSpecificConstraint = true
 		}
 	}
 
 	if net := query.Get("net"); net != "" {
 		if n, err := strconv.Atoi(net); err == nil {
 			filter.Net = &n
+			hasSpecificConstraint = true
 		}
 	}
 
 	if node := query.Get("node"); node != "" {
 		if n, err := strconv.Atoi(node); err == nil {
 			filter.Node = &n
+			hasSpecificConstraint = true
 		}
 	}
 
@@ -87,6 +93,7 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filter.SystemName = &systemName
+		hasSpecificConstraint = true
 	}
 
 	if location := query.Get("location"); location != "" {
@@ -96,6 +103,7 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filter.Location = &location
+		hasSpecificConstraint = true
 	}
 
 	if sysopName := query.Get("sysop_name"); sysopName != "" {
@@ -105,10 +113,12 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filter.SysopName = &sysopName
+		hasSpecificConstraint = true
 	}
 
 	if nodeType := query.Get("node_type"); nodeType != "" {
 		filter.NodeType = &nodeType
+		hasSpecificConstraint = true
 	}
 
 	if isActive := query.Get("is_active"); isActive != "" {
@@ -118,23 +128,33 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 			inactive := false
 			filter.IsActive = &inactive
 		}
+		hasSpecificConstraint = true
 	}
 
 	if isCM := query.Get("is_cm"); isCM != "" {
 		cm := strings.ToLower(isCM) == "true"
 		filter.IsCM = &cm
+		hasSpecificConstraint = true
 	}
 
 	if dateFrom := query.Get("date_from"); dateFrom != "" {
 		if t, err := time.Parse("2006-01-02", dateFrom); err == nil {
 			filter.DateFrom = &t
+			hasSpecificConstraint = true
 		}
 	}
 
 	if dateTo := query.Get("date_to"); dateTo != "" {
 		if t, err := time.Parse("2006-01-02", dateTo); err == nil {
 			filter.DateTo = &t
+			hasSpecificConstraint = true
 		}
+	}
+	
+	// Prevent overly broad searches that can cause memory exhaustion
+	if !hasSpecificConstraint {
+		http.Error(w, "Search requires at least one specific constraint (zone, net, node, system_name, location, sysop_name, node_type, is_active, is_cm, or date range)", http.StatusBadRequest)
+		return
 	}
 
 	// Pagination

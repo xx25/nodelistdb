@@ -65,22 +65,27 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 		LatestOnly: &latestOnly,
 		Limit:      50, // Default limit - reduced to prevent memory exhaustion
 	}
+	
+	constraintCount := 0
 
 	if zone := r.FormValue("zone"); zone != "" {
 		if z, err := strconv.Atoi(zone); err == nil {
 			filter.Zone = &z
+			constraintCount++
 		}
 	}
 
 	if net := r.FormValue("net"); net != "" {
 		if n, err := strconv.Atoi(net); err == nil {
 			filter.Net = &n
+			constraintCount++
 		}
 	}
 
 	if node := r.FormValue("node"); node != "" {
 		if n, err := strconv.Atoi(node); err == nil {
 			filter.Node = &n
+			constraintCount++
 		}
 	}
 
@@ -88,6 +93,7 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 		// Prevent memory exhaustion from very short search strings
 		if len(strings.TrimSpace(systemName)) >= 2 {
 			filter.SystemName = &systemName
+			constraintCount++
 		}
 	}
 
@@ -95,7 +101,15 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 		// Prevent memory exhaustion from very short search strings
 		if len(strings.TrimSpace(location)) >= 2 {
 			filter.Location = &location
+			constraintCount++
 		}
+	}
+
+	// For broad searches with minimal constraints, reduce limit to prevent memory issues
+	if constraintCount == 1 {
+		filter.Limit = 25 // Further reduce limit for single-constraint searches
+	} else if constraintCount == 0 {
+		filter.Limit = 10 // Very restrictive for no constraints (fallback safety)
 	}
 
 	return filter
