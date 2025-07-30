@@ -15,18 +15,26 @@ import (
 	"nodelistdb/internal/config"
 	"nodelistdb/internal/database"
 	"nodelistdb/internal/storage"
+	"nodelistdb/internal/version"
 	"nodelistdb/internal/web"
 )
 
 func main() {
 	// Command line flags
 	var (
-		configPath = flag.String("config", "config.json", "Path to configuration file")
-		dbPath     = flag.String("db", "", "Path to database file (overrides config)")
-		port       = flag.String("port", "8080", "HTTP server port")
-		host       = flag.String("host", "localhost", "HTTP server host")
+		configPath    = flag.String("config", "config.json", "Path to configuration file")
+		dbPath        = flag.String("db", "", "Path to database file (overrides config)")
+		port          = flag.String("port", "8080", "HTTP server port")
+		host          = flag.String("host", "localhost", "HTTP server host")
+		showVersion   = flag.Bool("version", false, "Show version information")
 	)
 	flag.Parse()
+
+	// Handle version flag
+	if *showVersion {
+		fmt.Printf("NodelistDB Server %s\n", version.GetFullVersionInfo())
+		os.Exit(0)
+	}
 
 	// Load configuration
 	cfg, err := config.LoadConfig(*configPath)

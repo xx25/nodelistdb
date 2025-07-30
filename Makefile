@@ -17,17 +17,27 @@ deps: ## Download and tidy Go dependencies
 	go mod download
 	go mod tidy
 
+# Version information
+VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME := $(shell date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+# Build flags
+LDFLAGS := -X 'nodelistdb/internal/version.Version=$(VERSION)' \
+           -X 'nodelistdb/internal/version.GitCommit=$(COMMIT)' \
+           -X 'nodelistdb/internal/version.BuildTime=$(BUILD_TIME)'
+
 # Build targets
 build: build-parser build-server ## Build all binaries
 
 build-parser: ## Build parser binary
 	@echo "Building parser..."
-	go build -o bin/parser ./cmd/parser
+	go build -ldflags "$(LDFLAGS)" -o bin/parser ./cmd/parser
 	@echo "✓ Parser built successfully"
 
 build-server: ## Build server binary
 	@echo "Building server..."
-	go build -o bin/server ./cmd/server
+	go build -ldflags "$(LDFLAGS)" -o bin/server ./cmd/server
 	@echo "✓ Server built successfully"
 
 # Development targets  

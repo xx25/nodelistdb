@@ -17,6 +17,7 @@ import (
 	"nodelistdb/internal/database"
 	"nodelistdb/internal/parser"
 	"nodelistdb/internal/storage"
+	"nodelistdb/internal/version"
 )
 
 func main() {
@@ -35,9 +36,15 @@ func main() {
 		enableBulkMode   = flag.Bool("bulk", false, "Enable bulk transaction mode for better DuckDB performance")
 		createFTSIndexes = flag.Bool("create-fts", true, "Create Full-Text Search indexes after import")
 		rebuildFTSOnly   = flag.Bool("rebuild-fts", false, "Only rebuild FTS indexes (no data import)")
+		showVersion      = flag.Bool("version", false, "Show version information")
 	)
 	flag.Parse()
 
+	// Handle version flag
+	if *showVersion {
+		fmt.Printf("NodelistDB Parser %s\n", version.GetFullVersionInfo())
+		os.Exit(0)
+	}
 
 	if *path == "" && !*rebuildFTSOnly {
 		fmt.Fprintf(os.Stderr, "Error: -path is required (unless using -rebuild-fts)\n")

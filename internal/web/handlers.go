@@ -13,6 +13,7 @@ import (
 	"nodelistdb/internal/database"
 	"nodelistdb/internal/flags"
 	"nodelistdb/internal/storage"
+	"nodelistdb/internal/version"
 )
 
 // Server represents the web server
@@ -108,9 +109,11 @@ func New(storage *storage.Storage, templatesFS embed.FS, staticFS embed.FS) *Ser
 // IndexHandler handles the home page
 func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 	data := struct {
-		Title string
+		Title   string
+		Version string
 	}{
-		Title: "FidoNet Nodelist Database",
+		Title:   "FidoNet Nodelist Database",
+		Version: version.GetVersionInfo(),
 	}
 
 	if err := s.templates["index"].Execute(w, data); err != nil {
@@ -123,15 +126,17 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	nodes, count, searchErr := s.performNodeSearch(r)
 
 	data := struct {
-		Title string
-		Nodes []database.Node
-		Count int
-		Error error
+		Title   string
+		Nodes   []database.Node
+		Count   int
+		Error   error
+		Version string
 	}{
-		Title: "Search Nodes",
-		Nodes: nodes,
-		Count: count,
-		Error: searchErr,
+		Title:   "Search Nodes",
+		Nodes:   nodes,
+		Count:   count,
+		Error:   searchErr,
+		Version: version.GetVersionInfo(),
 	}
 
 	if err := s.templates["search"].Execute(w, data); err != nil {
@@ -362,12 +367,14 @@ func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
 		Count     int
 		Error     error
 		SysopName string
+		Version   string
 	}{
 		Title:     "Search by Sysop",
 		Nodes:     nodes,
 		Count:     count,
 		Error:     searchErr,
 		SysopName: sysopName,
+		Version:   version.GetVersionInfo(),
 	}
 
 	if err := s.templates["sysop_search"].Execute(w, data); err != nil {
@@ -459,10 +466,12 @@ func (s *Server) APIHelpHandler(w http.ResponseWriter, r *http.Request) {
 		Title   string
 		BaseURL string
 		SiteURL string
+		Version string
 	}{
 		Title:   "API Documentation",
 		BaseURL: apiURL,
 		SiteURL: siteURL,
+		Version: version.GetVersionInfo(),
 	}
 
 	if err := s.templates["api_help"].Execute(w, data); err != nil {
