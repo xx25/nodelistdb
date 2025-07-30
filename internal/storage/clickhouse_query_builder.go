@@ -120,22 +120,22 @@ func (cqb *ClickHouseQueryBuilder) BuildClickHouseFTSQuery(filter database.NodeF
 
 	baseQuery := cqb.NodeSelectSQL()
 
-	// Text search using ClickHouse LIKE (bloom filter indexes help performance)
+	// Text search using materialized lowercase columns with bloom filter indexes
 	if filter.SystemName != nil && *filter.SystemName != "" {
-		conditions = append(conditions, "system_name ILIKE ?")
-		args = append(args, "%"+*filter.SystemName+"%")
+		conditions = append(conditions, "system_name_lower LIKE ?")
+		args = append(args, "%"+strings.ToLower(*filter.SystemName)+"%")
 		usedFTS = true
 	}
 
 	if filter.Location != nil && *filter.Location != "" {
-		conditions = append(conditions, "location ILIKE ?")
-		args = append(args, "%"+*filter.Location+"%")
+		conditions = append(conditions, "location_lower LIKE ?")
+		args = append(args, "%"+strings.ToLower(*filter.Location)+"%")
 		usedFTS = true
 	}
 
 	if filter.SysopName != nil && *filter.SysopName != "" {
-		conditions = append(conditions, "sysop_name ILIKE ?")
-		args = append(args, "%"+*filter.SysopName+"%")
+		conditions = append(conditions, "sysop_name_lower LIKE ?")
+		args = append(args, "%"+strings.ToLower(*filter.SysopName)+"%")
 		usedFTS = true
 	}
 
@@ -245,7 +245,111 @@ func (cqb *ClickHouseQueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 }
 
 func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []interface{}) {
-	return cqb.QueryBuilder.BuildNodesQuery(filter)
+	var baseSQL string
+	var args []interface{}
+
+	if filter.LatestOnly != nil && *filter.LatestOnly {
+		// ClickHouse-compatible latest only query
+		baseSQL = `
+		SELECT zone, net, node, nodelist_date, day_number,
+			   system_name, location, sysop_name, phone, node_type, region, max_speed,
+			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+		FROM nodes
+		WHERE (zone, net, node, nodelist_date) IN (
+			SELECT zone, net, node, MAX(nodelist_date) as max_date
+			FROM nodes
+			GROUP BY zone, net, node
+		)`
+
+		conditions, conditionArgs := cqb.buildClickHouseWhereConditions(filter)
+		if len(conditions) > 0 {
+			baseSQL += " AND " + strings.Join(conditions, " AND ")
+			args = append(args, conditionArgs...)
+		}
+	} else {
+		baseSQL = cqb.NodeSelectSQL()
+
+		conditions, conditionArgs := cqb.buildClickHouseWhereConditions(filter)
+		if len(conditions) > 0 {
+			baseSQL += " WHERE " + strings.Join(conditions, " AND ")
+			args = append(args, conditionArgs...)
+		}
+	}
+
+	// Add ORDER BY
+	baseSQL += " ORDER BY zone, net, node, nodelist_date DESC"
+
+	// Add LIMIT and OFFSET
+	if filter.Limit > 0 {
+		baseSQL += fmt.Sprintf(" LIMIT %d", filter.Limit)
+		if filter.Offset > 0 {
+			baseSQL += fmt.Sprintf(" OFFSET %d", filter.Offset)
+		}
+	}
+
+	return baseSQL, args
+}
+
+// buildClickHouseWhereConditions creates WHERE clause conditions compatible with ClickHouse
+func (cqb *ClickHouseQueryBuilder) buildClickHouseWhereConditions(filter database.NodeFilter) ([]string, []interface{}) {
+	var conditions []string
+	var args []interface{}
+
+	if filter.Zone != nil {
+		conditions = append(conditions, "zone = ?")
+		args = append(args, *filter.Zone)
+	}
+	if filter.Net != nil {
+		conditions = append(conditions, "net = ?")
+		args = append(args, *filter.Net)
+	}
+	if filter.Node != nil {
+		conditions = append(conditions, "node = ?")
+		args = append(args, *filter.Node)
+	}
+	if filter.DateFrom != nil {
+		conditions = append(conditions, "nodelist_date >= ?")
+		args = append(args, *filter.DateFrom)
+	}
+	if filter.DateTo != nil {
+		conditions = append(conditions, "nodelist_date <= ?")
+		args = append(args, *filter.DateTo)
+	}
+	if filter.SystemName != nil {
+		// Use materialized lowercase column for better index usage
+		conditions = append(conditions, "system_name_lower LIKE ?")
+		args = append(args, "%"+strings.ToLower(*filter.SystemName)+"%")
+	}
+	if filter.Location != nil {
+		// Use materialized lowercase column for better index usage
+		conditions = append(conditions, "location_lower LIKE ?")
+		args = append(args, "%"+strings.ToLower(*filter.Location)+"%")
+	}
+	if filter.SysopName != nil {
+		// Use materialized lowercase column for better index usage
+		conditions = append(conditions, "sysop_name_lower LIKE ?")
+		args = append(args, "%"+strings.ToLower(*filter.SysopName)+"%")
+	}
+	if filter.NodeType != nil {
+		conditions = append(conditions, "node_type = ?")
+		args = append(args, *filter.NodeType)
+	}
+	if filter.IsActive != nil {
+		conditions = append(conditions, "is_active = ?")
+		args = append(args, *filter.IsActive)
+	}
+	if filter.IsCM != nil {
+		conditions = append(conditions, "is_cm = ?")
+		args = append(args, *filter.IsCM)
+	}
+	if filter.HasBinkp != nil {
+		conditions = append(conditions, "has_binkp = ?")
+		args = append(args, *filter.HasBinkp)
+	}
+
+	return conditions, args
 }
 
 func (cqb *ClickHouseQueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []interface{}, bool) {
@@ -254,7 +358,23 @@ func (cqb *ClickHouseQueryBuilder) BuildFTSQuery(filter database.NodeFilter) (st
 }
 
 func (cqb *ClickHouseQueryBuilder) StatsSQL() string {
-	return cqb.QueryBuilder.StatsSQL()
+	// ClickHouse-compatible statistics query using countIf instead of FILTER
+	return `
+	SELECT 
+		nodelist_date,
+		COUNT(*) as total_nodes,
+		countIf(is_active AND NOT is_down AND NOT is_hold) as active_nodes,
+		countIf(is_cm) as cm_nodes,
+		countIf(is_mo) as mo_nodes,
+		countIf(has_binkp) as binkp_nodes,
+		countIf(has_telnet) as telnet_nodes,
+		countIf(is_pvt) as pvt_nodes,
+		countIf(is_down) as down_nodes,
+		countIf(is_hold) as hold_nodes,
+		countIf(length(internet_protocols) > 0) as internet_nodes
+	FROM nodes 
+	WHERE nodelist_date = ?
+	GROUP BY nodelist_date`
 }
 
 func (cqb *ClickHouseQueryBuilder) ZoneDistributionSQL() string {
@@ -270,7 +390,15 @@ func (cqb *ClickHouseQueryBuilder) LargestNetsSQL() string {
 }
 
 func (cqb *ClickHouseQueryBuilder) OptimizedLargestRegionsSQL() string {
-	return cqb.QueryBuilder.OptimizedLargestRegionsSQL()
+	// ClickHouse-compatible largest regions query using argMax instead of FIRST
+	return `
+	SELECT zone, region, COUNT(*) as count,
+		   argMax(system_name, CASE WHEN node_type = 'Region' THEN 1 ELSE 0 END) as region_name
+	FROM nodes 
+	WHERE nodelist_date = ? AND region > 0
+	GROUP BY zone, region
+	ORDER BY count DESC 
+	LIMIT 10`
 }
 
 func (cqb *ClickHouseQueryBuilder) OptimizedLargestNetsSQL() string {
@@ -286,7 +414,31 @@ func (cqb *ClickHouseQueryBuilder) NodeDateRangeSQL() string {
 }
 
 func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
-	return cqb.QueryBuilder.SysopSearchSQL()
+	// ClickHouse-compatible sysop search query
+	return `
+	WITH node_ranges AS (
+		SELECT 
+			zone, net, node,
+			MIN(nodelist_date) as first_date,
+			MAX(nodelist_date) as last_date,
+			argMax(system_name, nodelist_date) as system_name,
+			argMax(location, nodelist_date) as location,
+			argMax(sysop_name, nodelist_date) as sysop_name
+		FROM nodes
+		WHERE replace(sysop_name_lower, '_', ' ') LIKE concat('%', lower(replace(?, '_', ' ')), '%')
+		GROUP BY zone, net, node
+	)
+	SELECT 
+		nr.zone, nr.net, nr.node, nr.system_name, nr.location, nr.sysop_name,
+		nr.first_date, nr.last_date,
+		CASE WHEN EXISTS (
+			SELECT 1 FROM nodes n 
+			WHERE n.zone = nr.zone AND n.net = nr.net AND n.node = nr.node 
+			AND n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
+		) THEN true ELSE false END as currently_active
+	FROM node_ranges nr
+	ORDER BY nr.first_date DESC
+	LIMIT ?`
 }
 
 func (cqb *ClickHouseQueryBuilder) ConflictCheckSQL() string {
@@ -327,4 +479,59 @@ func (cqb *ClickHouseQueryBuilder) ConsecutiveNodelistCheckSQL() string {
 
 func (cqb *ClickHouseQueryBuilder) NextNodelistDateSQL() string {
 	return cqb.QueryBuilder.NextNodelistDateSQL()
+}
+
+func (cqb *ClickHouseQueryBuilder) UniqueSysopsWithFilterSQL() string {
+	// ClickHouse-compatible unique sysops query with filter
+	return `
+		WITH sysop_stats AS (
+			SELECT 
+				sysop_name,
+				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as node_count,
+				COUNT(DISTINCT CASE WHEN is_active = true THEN concat(toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
+				MIN(nodelist_date) as first_seen,
+				MAX(nodelist_date) as last_seen,
+				arraySort(arrayDistinct(groupArray(zone))) as zones
+			FROM nodes
+			WHERE sysop_name_lower LIKE lower(?)
+			GROUP BY sysop_name
+		)
+		SELECT 
+			sysop_name,
+			node_count,
+			active_nodes,
+			first_seen,
+			last_seen,
+			zones
+		FROM sysop_stats
+		ORDER BY node_count DESC, sysop_name
+		LIMIT ? OFFSET ?
+	`
+}
+
+func (cqb *ClickHouseQueryBuilder) UniqueSysopsSQL() string {
+	// ClickHouse-compatible unique sysops query
+	return `
+		WITH sysop_stats AS (
+			SELECT 
+				sysop_name,
+				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as node_count,
+				COUNT(DISTINCT CASE WHEN is_active = true THEN concat(toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
+				MIN(nodelist_date) as first_seen,
+				MAX(nodelist_date) as last_seen,
+				arraySort(arrayDistinct(groupArray(zone))) as zones
+			FROM nodes
+			GROUP BY sysop_name
+		)
+		SELECT 
+			sysop_name,
+			node_count,
+			active_nodes,
+			first_seen,
+			last_seen,
+			zones
+		FROM sysop_stats
+		ORDER BY node_count DESC, sysop_name
+		LIMIT ? OFFSET ?
+	`
 }

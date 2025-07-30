@@ -122,6 +122,10 @@ type QueryBuilderInterface interface {
 	NearestDateAfterSQL() string
 	ConsecutiveNodelistCheckSQL() string
 	NextNodelistDateSQL() string
+	
+	// Sysop queries
+	UniqueSysopsWithFilterSQL() string
+	UniqueSysopsSQL() string
 }
 
 // ResultParserInterface defines the contract for parsing database results

@@ -563,55 +563,10 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 	if nameFilter != "" {
 		// Sanitize the filter
 		nameFilter = so.resultParser.SanitizeStringInput(nameFilter)
-		query = `
-			WITH sysop_stats AS (
-				SELECT 
-					sysop_name,
-					COUNT(DISTINCT (zone || ':' || net || '/' || node)) as node_count,
-					COUNT(DISTINCT CASE WHEN is_active = true THEN (zone || ':' || net || '/' || node) END) as active_nodes,
-					MIN(nodelist_date) as first_seen,
-					MAX(nodelist_date) as last_seen,
-					ARRAY_AGG(DISTINCT zone ORDER BY zone) as zones
-				FROM nodes
-				WHERE sysop_name ILIKE ?
-				GROUP BY sysop_name
-			)
-			SELECT 
-				sysop_name,
-				node_count,
-				active_nodes,
-				first_seen,
-				last_seen,
-				zones
-			FROM sysop_stats
-			ORDER BY node_count DESC, sysop_name
-			LIMIT ? OFFSET ?
-		`
+		query = so.queryBuilder.UniqueSysopsWithFilterSQL()
 		args = []interface{}{"%" + nameFilter + "%", limit, offset}
 	} else {
-		query = `
-			WITH sysop_stats AS (
-				SELECT 
-					sysop_name,
-					COUNT(DISTINCT (zone || ':' || net || '/' || node)) as node_count,
-					COUNT(DISTINCT CASE WHEN is_active = true THEN (zone || ':' || net || '/' || node) END) as active_nodes,
-					MIN(nodelist_date) as first_seen,
-					MAX(nodelist_date) as last_seen,
-					ARRAY_AGG(DISTINCT zone ORDER BY zone) as zones
-				FROM nodes
-				GROUP BY sysop_name
-			)
-			SELECT 
-				sysop_name,
-				node_count,
-				active_nodes,
-				first_seen,
-				last_seen,
-				zones
-			FROM sysop_stats
-			ORDER BY node_count DESC, sysop_name
-			LIMIT ? OFFSET ?
-		`
+		query = so.queryBuilder.UniqueSysopsSQL()
 		args = []interface{}{limit, offset}
 	}
 
@@ -624,7 +579,7 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 	var sysops []SysopInfo
 	for rows.Next() {
 		var info SysopInfo
-		var zones []int
+		var zonesInterface interface{}
 		
 		err := rows.Scan(
 			&info.Name,
@@ -632,13 +587,40 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 			&info.ActiveNodes,
 			&info.FirstSeen,
 			&info.LastSeen,
-			&zones,
+			&zonesInterface,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan sysop row: %w", err)
 		}
 		
-		info.Zones = zones
+		// Convert zones to []int - handle both []int and []int32 from different databases
+		switch zones := zonesInterface.(type) {
+		case []int:
+			info.Zones = zones
+		case []int32:
+			info.Zones = make([]int, len(zones))
+			for i, z := range zones {
+				info.Zones[i] = int(z)
+			}
+		case []interface{}:
+			info.Zones = make([]int, len(zones))
+			for i, z := range zones {
+				switch v := z.(type) {
+				case int:
+					info.Zones[i] = v
+				case int32:
+					info.Zones[i] = int(v)
+				case int64:
+					info.Zones[i] = int(v)
+				case float64:
+					info.Zones[i] = int(v)
+				}
+			}
+		default:
+			// Fallback to empty zones if type is unexpected
+			info.Zones = []int{}
+		}
+		
 		sysops = append(sysops, info)
 	}
 

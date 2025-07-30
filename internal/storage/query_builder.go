@@ -457,6 +457,61 @@ func (qb *QueryBuilder) NextNodelistDateSQL() string {
 	return "SELECT MIN(nodelist_date) FROM nodes WHERE nodelist_date > ?"
 }
 
+// UniqueSysopsWithFilterSQL returns SQL for getting unique sysops with name filter
+func (qb *QueryBuilder) UniqueSysopsWithFilterSQL() string {
+	return `
+		WITH sysop_stats AS (
+			SELECT 
+				sysop_name,
+				COUNT(DISTINCT (zone || ':' || net || '/' || node)) as node_count,
+				COUNT(DISTINCT CASE WHEN is_active = true THEN (zone || ':' || net || '/' || node) END) as active_nodes,
+				MIN(nodelist_date) as first_seen,
+				MAX(nodelist_date) as last_seen,
+				ARRAY_AGG(DISTINCT zone ORDER BY zone) as zones
+			FROM nodes
+			WHERE sysop_name ILIKE ?
+			GROUP BY sysop_name
+		)
+		SELECT 
+			sysop_name,
+			node_count,
+			active_nodes,
+			first_seen,
+			last_seen,
+			zones
+		FROM sysop_stats
+		ORDER BY node_count DESC, sysop_name
+		LIMIT ? OFFSET ?
+	`
+}
+
+// UniqueSysopsSQL returns SQL for getting all unique sysops
+func (qb *QueryBuilder) UniqueSysopsSQL() string {
+	return `
+		WITH sysop_stats AS (
+			SELECT 
+				sysop_name,
+				COUNT(DISTINCT (zone || ':' || net || '/' || node)) as node_count,
+				COUNT(DISTINCT CASE WHEN is_active = true THEN (zone || ':' || net || '/' || node) END) as active_nodes,
+				MIN(nodelist_date) as first_seen,
+				MAX(nodelist_date) as last_seen,
+				ARRAY_AGG(DISTINCT zone ORDER BY zone) as zones
+			FROM nodes
+			GROUP BY sysop_name
+		)
+		SELECT 
+			sysop_name,
+			node_count,
+			active_nodes,
+			first_seen,
+			last_seen,
+			zones
+		FROM sysop_stats
+		ORDER BY node_count DESC, sysop_name
+		LIMIT ? OFFSET ?
+	`
+}
+
 // BuildFTSQuery constructs a Full-Text Search query with fallback to ILIKE
 func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []interface{}, bool) {
 	var conditions []string
