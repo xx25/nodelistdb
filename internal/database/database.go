@@ -38,6 +38,62 @@ func New(path string) (*DB, error) {
 	return db, nil
 }
 
+// NewWithDSN creates a new DuckDB connection with a custom DSN
+func NewWithDSN(dsn string) (*DB, error) {
+	conn, err := sql.Open("duckdb", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open DuckDB connection: %w", err)
+	}
+
+	// Test connection
+	if err := conn.Ping(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to ping DuckDB: %w", err)
+	}
+
+	db := &DB{
+		conn: conn,
+	}
+
+	return db, nil
+}
+
+// NewWithPerfSettings creates a new DuckDB connection with performance settings
+func NewWithPerfSettings(path, memoryLimit, tempDir string, threads int, readOnly, bulkMode bool, checkpointThreshold string, walAutoCheckpoint int) (*DB, error) {
+	// Build basic DSN
+	dsn := path + "?"
+	
+	if readOnly {
+		dsn += "access_mode=read_only&"
+	}
+	dsn += fmt.Sprintf("memory_limit=%s&threads=%d", memoryLimit, threads)
+	
+	if tempDir != "" {
+		dsn += fmt.Sprintf("&temp_directory=%s", tempDir)
+	}
+
+	// Create connection
+	conn, err := sql.Open("duckdb", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open DuckDB connection: %w", err)
+	}
+
+	// Test connection
+	if err := conn.Ping(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to ping DuckDB: %w", err)
+	}
+
+	// Apply performance settings via PRAGMA (done later in bulk mode)
+	// Note: PRAGMA statements moved to bulk mode transaction to avoid connection hanging
+
+	db := &DB{
+		conn: conn,
+	}
+
+	return db, nil
+}
+
 // NewReadOnly creates a new read-only DuckDB connection
 func NewReadOnly(path string) (*DB, error) {
 	// Configure DuckDB connection string with read-only access

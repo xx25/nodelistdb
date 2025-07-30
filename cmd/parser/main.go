@@ -32,6 +32,7 @@ func main() {
 		batchSize        = flag.Int("batch", 1000, "Batch size for bulk inserts")
 		workers          = flag.Int("workers", 4, "Number of concurrent workers")
 		enableConcurrent = flag.Bool("concurrent", false, "Enable concurrent processing")
+		enableBulkMode   = flag.Bool("bulk", false, "Enable bulk transaction mode for better DuckDB performance")
 		createFTSIndexes = flag.Bool("create-fts", true, "Create Full-Text Search indexes after import")
 		rebuildFTSOnly   = flag.Bool("rebuild-fts", false, "Only rebuild FTS indexes (no data import)")
 	)
@@ -67,6 +68,13 @@ func main() {
 		cfg.Database.DuckDB.Path = *dbPath
 	}
 
+	// Enable bulk mode if specified via command line
+	if *enableBulkMode && cfg.Database.Type == config.DatabaseTypeDuckDB {
+		cfg.Database.DuckDB.BulkMode = true
+		cfg.Database.DuckDB.DisableWAL = true
+		cfg.Database.DuckDB.WALAutoCheckpoint = 0 // Disable auto checkpointing
+	}
+
 	if !*quiet {
 		fmt.Printf("FidoNet Nodelist Parser (%s)\n", cfg.Database.Type)
 		fmt.Println("================================")
@@ -81,6 +89,7 @@ func main() {
 		fmt.Printf("Batch size: %d\n", *batchSize)
 		fmt.Printf("Workers: %d\n", *workers)
 		fmt.Printf("Concurrent: %t\n", *enableConcurrent)
+		fmt.Printf("Bulk mode: %t\n", *enableBulkMode)
 		fmt.Printf("Verbose: %t\n", *verbose)
 		fmt.Println()
 	}
@@ -93,7 +102,16 @@ func main() {
 	var db database.DatabaseInterface
 	switch cfg.Database.Type {
 	case config.DatabaseTypeDuckDB:
-		db, err = database.New(cfg.Database.DuckDB.Path)
+		db, err = database.NewWithPerfSettings(
+			cfg.Database.DuckDB.Path,
+			cfg.Database.DuckDB.MemoryLimit,
+			cfg.Database.DuckDB.TempDirectory,
+			cfg.Database.DuckDB.Threads,
+			cfg.Database.DuckDB.ReadOnly,
+			cfg.Database.DuckDB.BulkMode,
+			cfg.Database.DuckDB.CheckpointThreshold,
+			cfg.Database.DuckDB.WALAutoCheckpoint,
+		)
 	case config.DatabaseTypeClickHouse:
 		// Convert config to ClickHouse config and create connection
 		chConfig := &database.ClickHouseConfig{
@@ -164,6 +182,24 @@ func main() {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
 	defer storageLayer.Close()
+
+	// Enable bulk mode if requested and supported
+	if *enableBulkMode && cfg.Database.Type == config.DatabaseTypeDuckDB {
+		if !*quiet {
+			fmt.Println("Starting bulk transaction mode...")
+		}
+		if err := storageLayer.BeginBulkMode(); err != nil {
+			log.Fatalf("Failed to start bulk mode: %v", err)
+		}
+		defer func() {
+			if !*quiet {
+				fmt.Println("Committing bulk transaction...")
+			}
+			if err := storageLayer.EndBulkMode(); err != nil {
+				log.Printf("Warning: Failed to end bulk mode cleanly: %v", err)
+			}
+		}()
+	}
 
 	// Handle FTS rebuild mode
 	if *rebuildFTSOnly {

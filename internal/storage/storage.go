@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"sync"
@@ -17,6 +18,11 @@ type Storage struct {
 	nodeOperations   *NodeOperations
 	searchOperations *SearchOperations
 	statsOperations  *StatisticsOperations
+	
+	// Bulk mode transaction state
+	bulkTx           *sql.Tx
+	bulkMode         bool
+	bulkNodesCount   int // Track total nodes processed in bulk mode
 	mu               sync.RWMutex
 }
 
@@ -66,7 +72,46 @@ func (s *Storage) Close() error {
 
 // InsertNodes inserts a batch of nodes using optimized batch processing
 func (s *Storage) InsertNodes(nodes []database.Node) error {
+	// If bulk mode is active, use the bulk transaction
+	if s.bulkMode && s.bulkTx != nil {
+		return s.insertNodesWithTransaction(s.bulkTx, nodes)
+	}
 	return s.nodeOperations.InsertNodes(nodes)
+}
+
+// insertNodesWithTransaction inserts nodes using a provided transaction
+func (s *Storage) insertNodesWithTransaction(tx *sql.Tx, nodes []database.Node) error {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	chunkSize := 10000 // Use smaller chunks for bulk mode to avoid memory issues
+	totalChunks := (len(nodes) + chunkSize - 1) / chunkSize
+	
+	for i := 0; i < len(nodes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+		chunk := nodes[i:end]
+		chunkNum := (i / chunkSize) + 1
+
+		fmt.Printf("  Bulk inserting chunk %d/%d: %d nodes...\n", chunkNum, totalChunks, len(chunk))
+		start := time.Now()
+		
+		// Use direct SQL generation for bulk imports
+		insertSQL := s.queryBuilder.BuildDirectBatchInsertSQL(chunk, s.resultParser)
+		if _, err := tx.Exec(insertSQL); err != nil {
+			return fmt.Errorf("failed to insert chunk of %d nodes: %w", len(chunk), err)
+		}
+		
+		duration := time.Since(start)
+		speed := float64(len(chunk)) / duration.Seconds()
+		s.bulkNodesCount += len(chunk)
+		fmt.Printf("  ✓ Chunk %d inserted in %v (%.0f nodes/sec) - Total: %d nodes\n", chunkNum, duration, speed, s.bulkNodesCount)
+	}
+
+	return nil
 }
 
 // GetNodes retrieves nodes based on filter criteria
@@ -240,6 +285,82 @@ func (s *Storage) GetNodeOperations() *NodeOperations {
 // GetSearchOperations returns the search operations component for direct access
 func (s *Storage) GetSearchOperations() *SearchOperations {
 	return s.searchOperations
+}
+
+// --- Bulk Mode Operations ---
+
+// BeginBulkMode starts a bulk transaction mode for improved performance
+// This disables autocommit and uses a single transaction for all operations
+func (s *Storage) BeginBulkMode() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	if s.bulkMode {
+		return fmt.Errorf("bulk mode already active")
+	}
+	
+	conn := s.db.Conn()
+	tx, err := conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin bulk transaction: %w", err)
+	}
+	
+	s.bulkTx = tx
+	s.bulkMode = true
+	s.bulkNodesCount = 0 // Reset counter
+	
+	// Apply DuckDB-specific performance settings if it's DuckDB
+	if _, isDuckDB := s.db.(*database.DB); isDuckDB {
+		// Try to set performance optimizations, but don't fail if they don't work
+		tx.Exec("PRAGMA wal_autocheckpoint=0")
+		tx.Exec("PRAGMA enable_object_cache")
+	}
+	
+	return nil
+}
+
+// EndBulkMode commits the bulk transaction and returns to normal mode
+func (s *Storage) EndBulkMode() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	if !s.bulkMode {
+		return fmt.Errorf("bulk mode not active")
+	}
+	
+	var err error
+	if s.bulkTx != nil {
+		err = s.bulkTx.Commit()
+		s.bulkTx = nil
+	}
+	
+	s.bulkMode = false
+	
+	// Report final bulk mode statistics
+	if s.bulkNodesCount > 0 {
+		fmt.Printf("Bulk mode completed: %d total nodes processed\n", s.bulkNodesCount)
+	}
+	
+	// Re-enable WAL checkpointing if it's DuckDB
+	if _, isDuckDB := s.db.(*database.DB); isDuckDB {
+		conn := s.db.Conn()
+		if _, wErr := conn.Exec("PRAGMA wal_autocheckpoint=1000"); wErr != nil {
+			// Log but don't fail - this is non-critical
+		}
+	}
+	
+	if err != nil {
+		return fmt.Errorf("failed to commit bulk transaction: %w", err)
+	}
+	
+	return nil
+}
+
+// IsBulkMode returns whether bulk mode is currently active
+func (s *Storage) IsBulkMode() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.bulkMode
 }
 
 // GetStatisticsOperations returns the statistics operations component for direct access
