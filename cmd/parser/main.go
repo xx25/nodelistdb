@@ -321,6 +321,11 @@ func findNodelistFiles(path string, recursive bool) ([]string, error) {
 // isNodelistFile checks if a file is a nodelist file based on naming patterns
 func isNodelistFile(filePath string) bool {
 	filename := strings.ToLower(filepath.Base(filePath))
+	
+	// Remove .gz extension for pattern matching
+	if strings.HasSuffix(filename, ".gz") {
+		filename = strings.TrimSuffix(filename, ".gz")
+	}
 
 	// Common nodelist filename patterns
 	patterns := []string{

@@ -2,8 +2,10 @@ package parser
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -112,15 +114,26 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 		}
 	}
 
-	// Read file
+	// Read file (with gzip support)
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
 	}
 	defer file.Close()
 
+	// Create reader that handles both regular and gzipped files
+	var reader io.Reader = file
+	if strings.HasSuffix(strings.ToLower(filePath), ".gz") {
+		gzipReader, err := gzip.NewReader(file)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create gzip reader for %s: %w", filePath, err)
+		}
+		defer gzipReader.Close()
+		reader = gzipReader
+	}
+
 	var nodes []database.Node
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(reader)
 	lineNum := 0
 	var nodelistDate time.Time
 	var dayNumber int
@@ -915,7 +928,18 @@ func (p *Parser) extractDateFromFile(filePath string) (time.Time, int, error) {
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	// Create reader that handles both regular and gzipped files  
+	var reader io.Reader = file
+	if strings.HasSuffix(strings.ToLower(filePath), ".gz") {
+		gzipReader, err := gzip.NewReader(file)
+		if err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to create gzip reader for %s: %w", filePath, err)
+		}
+		defer gzipReader.Close()
+		reader = gzipReader
+	}
+
+	scanner := bufio.NewScanner(reader)
 	lineCount := 0
 	for scanner.Scan() && lineCount < 20 {
 		lineCount++
