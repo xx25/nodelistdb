@@ -44,7 +44,8 @@ func getGitVersion() string {
 	if output, err := cmd.Output(); err == nil {
 		version := strings.TrimSpace(string(output))
 		if version != "" {
-			return version
+			// Remove 'v' prefix if present since templates add it
+			return strings.TrimPrefix(version, "v")
 		}
 	}
 	

@@ -170,13 +170,23 @@ jobs:
         # Create output directory
         mkdir -p dist/${{ matrix.name }}
         
+        # Get version information
+        VERSION="${{ needs.create-release.outputs.tag_name }}"
+        # Remove 'v' prefix from version since templates add it
+        VERSION="${VERSION#v}"
+        COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        
+        # Build flags with version injection
+        LDFLAGS="-s -w -X 'nodelistdb/internal/version.Version=${VERSION}' -X 'nodelistdb/internal/version.GitCommit=${COMMIT}' -X 'nodelistdb/internal/version.BuildTime=${BUILD_TIME}'"
+        
         # Build binaries
         if [ "${{ matrix.goos }}" = "windows" ]; then
-          go build -ldflags="-s -w" -o dist/${{ matrix.name }}/parser.exe ./cmd/parser
-          go build -ldflags="-s -w" -o dist/${{ matrix.name }}/server.exe ./cmd/server
+          go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/parser.exe ./cmd/parser
+          go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/server.exe ./cmd/server
         else
-          go build -ldflags="-s -w" -o dist/${{ matrix.name }}/parser ./cmd/parser
-          go build -ldflags="-s -w" -o dist/${{ matrix.name }}/server ./cmd/server
+          go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/parser ./cmd/parser
+          go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/server ./cmd/server
         fi
       shell: bash
 

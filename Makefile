@@ -18,7 +18,8 @@ deps: ## Download and tidy Go dependencies
 	go mod tidy
 
 # Version information
-VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+VERSION_RAW := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+VERSION := $(shell echo "$(VERSION_RAW)" | sed 's/^v//')
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME := $(shell date -u +"%Y-%m-%d %H:%M:%S UTC")
 
