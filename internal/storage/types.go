@@ -94,6 +94,7 @@ type QueryBuilderInterface interface {
 	NodeSelectSQL() string
 	BuildBatchInsertSQL(batchSize int) string
 	BuildNodesQuery(filter database.NodeFilter) (string, []interface{})
+	BuildFTSQuery(filter database.NodeFilter) (string, []interface{}, bool)
 
 	// Statistics queries
 	StatsSQL() string

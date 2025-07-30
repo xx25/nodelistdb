@@ -29,11 +29,13 @@ func main() {
 		batchSize        = flag.Int("batch", 1000, "Batch size for bulk inserts")
 		workers          = flag.Int("workers", 4, "Number of concurrent workers")
 		enableConcurrent = flag.Bool("concurrent", false, "Enable concurrent processing")
+		createFTSIndexes = flag.Bool("create-fts", true, "Create Full-Text Search indexes after import")
+		rebuildFTSOnly   = flag.Bool("rebuild-fts", false, "Only rebuild FTS indexes (no data import)")
 	)
 	flag.Parse()
 
-	if *path == "" {
-		fmt.Fprintf(os.Stderr, "Error: -path is required\n")
+	if *path == "" && !*rebuildFTSOnly {
+		fmt.Fprintf(os.Stderr, "Error: -path is required (unless using -rebuild-fts)\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -81,6 +83,28 @@ func main() {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
 	defer storage.Close()
+
+	// Handle FTS rebuild mode
+	if *rebuildFTSOnly {
+		if !*quiet {
+			fmt.Println("Rebuilding Full-Text Search indexes...")
+		}
+		
+		// Drop existing FTS indexes
+		if err := db.DropFTSIndexes(); err != nil {
+			log.Printf("Warning: Could not drop existing FTS indexes: %v", err)
+		}
+		
+		// Create new FTS indexes
+		if err := db.CreateFTSIndexes(); err != nil {
+			log.Fatalf("Failed to create FTS indexes: %v", err)
+		}
+		
+		if !*quiet {
+			fmt.Println("FTS indexes rebuilt successfully!")
+		}
+		return
+	}
 
 	// Initialize advanced parser
 	nodelistParser := parser.NewAdvanced(*verbose)
@@ -220,6 +244,21 @@ func main() {
 				duration := time.Since(startTime)
 				fmt.Printf("Average: %.2f nodes/second\n", float64(totalNodes)/duration.Seconds())
 			}
+		}
+	}
+
+	// Create FTS indexes for better search performance (after data loading)
+	if *createFTSIndexes {
+		if !*quiet {
+			fmt.Println("\nCreating Full-Text Search indexes...")
+		}
+		if err := db.CreateFTSIndexes(); err != nil {
+			if !*quiet {
+				fmt.Printf("Warning: Could not create FTS indexes: %v\n", err)
+				fmt.Println("Text search will use slower ILIKE queries")
+			}
+		} else if !*quiet {
+			fmt.Println("FTS indexes created successfully!")
 		}
 	}
 

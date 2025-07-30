@@ -95,8 +95,12 @@ func (no *NodeOperations) GetNodes(filter database.NodeFilter) ([]database.Node,
 
 	conn := no.db.Conn()
 
-	// Build safe parameterized query
-	query, args := no.queryBuilder.BuildNodesQuery(filter)
+	// Try FTS first for text searches, fallback to ILIKE
+	query, args, usedFTS := no.queryBuilder.BuildFTSQuery(filter)
+	if !usedFTS {
+		// Fallback to traditional ILIKE queries
+		query, args = no.queryBuilder.BuildNodesQuery(filter)
+	}
 
 	rows, err := conn.Query(query, args...)
 	if err != nil {

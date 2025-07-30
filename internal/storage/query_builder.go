@@ -369,3 +369,146 @@ func (qb *QueryBuilder) ConsecutiveNodelistCheckSQL() string {
 func (qb *QueryBuilder) NextNodelistDateSQL() string {
 	return "SELECT MIN(nodelist_date) FROM nodes WHERE nodelist_date > ?"
 }
+
+// BuildFTSQuery constructs a Full-Text Search query with fallback to ILIKE
+func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []interface{}, bool) {
+	var conditions []string
+	var args []interface{}
+	var hasFTSConditions bool
+	
+	baseSQL := `
+	SELECT n.zone, n.net, n.node, n.nodelist_date, n.day_number,
+		   n.system_name, n.location, n.sysop_name, n.phone, n.node_type, n.region, n.max_speed,
+		   n.is_cm, n.is_mo, n.has_binkp, n.has_telnet, n.is_down, n.is_hold, n.is_pvt, n.is_active,
+		   n.flags, n.modem_flags, n.internet_protocols, n.internet_hostnames, n.internet_ports, n.internet_emails,
+		   n.conflict_sequence, n.has_conflict, n.has_inet, n.internet_config,
+		   COALESCE(fts.score, 0) as fts_score
+	FROM nodes n`
+	
+	// Build FTS join for text search fields
+	var ftsJoin string
+	var ftsFields []string
+	
+	if filter.Location != nil && len(strings.TrimSpace(*filter.Location)) >= 2 {
+		ftsFields = append(ftsFields, "location")
+		hasFTSConditions = true
+	}
+	if filter.SysopName != nil && len(strings.TrimSpace(*filter.SysopName)) >= 2 {
+		ftsFields = append(ftsFields, "sysop_name")
+		hasFTSConditions = true
+	}
+	if filter.SystemName != nil && len(strings.TrimSpace(*filter.SystemName)) >= 2 {
+		ftsFields = append(ftsFields, "system_name")
+		hasFTSConditions = true
+	}
+	
+	if hasFTSConditions {
+		// Build combined search term
+		var searchTerms []string
+		if filter.Location != nil {
+			searchTerms = append(searchTerms, strings.TrimSpace(*filter.Location))
+		}
+		if filter.SysopName != nil {
+			searchTerms = append(searchTerms, strings.TrimSpace(*filter.SysopName))
+		}
+		if filter.SystemName != nil {
+			searchTerms = append(searchTerms, strings.TrimSpace(*filter.SystemName))
+		}
+		
+		searchTerm := strings.Join(searchTerms, " ")
+		
+		ftsJoin = fmt.Sprintf(`
+		LEFT JOIN (
+			SELECT fts_id, 
+				   fts_main_nodes.match_bm25('fts_id', ?, fields := '%s') AS score
+			FROM nodes
+		) fts ON n.fts_id = fts.fts_id AND fts.score IS NOT NULL`,
+			strings.Join(ftsFields, ","))
+		
+		baseSQL += ftsJoin
+		args = append(args, searchTerm)
+	}
+	
+	// Add other non-FTS conditions
+	nonFTSConditions, nonFTSArgs := qb.buildNonTextConditions(filter)
+	conditions = append(conditions, nonFTSConditions...)
+	args = append(args, nonFTSArgs...)
+	
+	// Latest only logic
+	if filter.LatestOnly != nil && *filter.LatestOnly {
+		if hasFTSConditions {
+			// With FTS, we need to wrap in a subquery for latest only
+			baseSQL = fmt.Sprintf(`
+			SELECT * FROM (
+				%s
+			) ranked_nodes WHERE ranked_nodes.fts_score > 0`, baseSQL)
+		} else {
+			// Use the standard latest only approach
+			query, args := qb.BuildNodesQuery(filter)
+			return query, args, false
+		}
+	}
+	
+	if len(conditions) > 0 {
+		baseSQL += " WHERE " + strings.Join(conditions, " AND ")
+	}
+	
+	// Order by FTS score if we have FTS conditions
+	if hasFTSConditions {
+		baseSQL += " ORDER BY fts_score DESC, n.nodelist_date DESC"
+	} else {
+		baseSQL += " ORDER BY n.nodelist_date DESC"
+	}
+	
+	// Add limit
+	if filter.Limit > 0 {
+		baseSQL += fmt.Sprintf(" LIMIT %d", filter.Limit)
+	}
+	
+	return baseSQL, args, hasFTSConditions
+}
+
+// buildNonTextConditions builds conditions for non-text search fields
+func (qb *QueryBuilder) buildNonTextConditions(filter database.NodeFilter) ([]string, []interface{}) {
+	var conditions []string
+	var args []interface{}
+	
+	if filter.Zone != nil {
+		conditions = append(conditions, "n.zone = ?")
+		args = append(args, *filter.Zone)
+	}
+	if filter.Net != nil {
+		conditions = append(conditions, "n.net = ?")
+		args = append(args, *filter.Net)
+	}
+	if filter.Node != nil {
+		conditions = append(conditions, "n.node = ?")
+		args = append(args, *filter.Node)
+	}
+	if filter.DateFrom != nil {
+		conditions = append(conditions, "n.nodelist_date >= ?")
+		args = append(args, *filter.DateFrom)
+	}
+	if filter.DateTo != nil {
+		conditions = append(conditions, "n.nodelist_date <= ?")
+		args = append(args, *filter.DateTo)
+	}
+	if filter.NodeType != nil {
+		conditions = append(conditions, "n.node_type = ?")
+		args = append(args, *filter.NodeType)
+	}
+	if filter.IsActive != nil {
+		conditions = append(conditions, "n.is_active = ?")
+		args = append(args, *filter.IsActive)
+	}
+	if filter.IsCM != nil {
+		conditions = append(conditions, "n.is_cm = ?")
+		args = append(args, *filter.IsCM)
+	}
+	if filter.HasBinkp != nil {
+		conditions = append(conditions, "n.has_binkp = ?")
+		args = append(args, *filter.HasBinkp)
+	}
+	
+	return conditions, args
+}

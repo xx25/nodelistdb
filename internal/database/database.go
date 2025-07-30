@@ -84,6 +84,12 @@ func (db *DB) CreateSchema() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	// Initialize FTS extension for better text search performance
+	if err := db.initializeFTSExtension(); err != nil {
+		// FTS is optional - log warning but continue
+		fmt.Printf("Warning: Could not initialize FTS extension: %v\n", err)
+	}
+
 	// Create nodes table optimized for DuckDB
 	createSQL := `
 	CREATE TABLE nodes (
@@ -126,6 +132,11 @@ func (db *DB) CreateSchema() error {
 		conflict_sequence INTEGER DEFAULT 0,  -- 0 = original, 1+ = conflict duplicates
 		has_conflict BOOLEAN DEFAULT FALSE,   -- Flag for easy querying of conflicts
 		
+		-- FTS unique identifier for full-text search
+		fts_id TEXT GENERATED ALWAYS AS (
+			CONCAT(zone, ':', net, '/', node, '@', strftime(nodelist_date, '%Y-%m-%d'), '#', conflict_sequence)
+		) STORED,
+		
 		PRIMARY KEY (zone, net, node, nodelist_date, conflict_sequence)
 	)`
 
@@ -139,10 +150,13 @@ func (db *DB) CreateSchema() error {
 	// Create optimized indexes for DuckDB
 	indexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date ON nodes(nodelist_date)",
-		"CREATE INDEX IF NOT EXISTS idx_nodes_location ON nodes(zone, net)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_zone_net ON nodes(zone, net)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_system ON nodes(system_name)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_location ON nodes(location)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_sysop ON nodes(sysop_name)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_flags ON nodes(is_cm, is_mo, has_binkp, has_telnet, has_inet)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_fts_id ON nodes(fts_id)",
 		// Performance optimizations for stats queries
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_zone ON nodes(nodelist_date, zone)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_region ON nodes(nodelist_date, zone, region)",
@@ -174,4 +188,58 @@ func (db *DB) GetVersion() (string, error) {
 	}
 
 	return version, nil
+}
+
+// initializeFTSExtension initializes the Full-Text Search extension
+func (db *DB) initializeFTSExtension() error {
+	// Install FTS extension
+	if _, err := db.conn.Exec("INSTALL fts"); err != nil {
+		return fmt.Errorf("failed to install FTS extension: %w", err)
+	}
+	
+	// Load FTS extension
+	if _, err := db.conn.Exec("LOAD fts"); err != nil {
+		return fmt.Errorf("failed to load FTS extension: %w", err)
+	}
+	
+	return nil
+}
+
+// CreateFTSIndexes creates Full-Text Search indexes after data loading
+func (db *DB) CreateFTSIndexes() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	
+	// Create FTS index for location, sysop_name, and system_name text searches
+	ftsSQL := `
+	PRAGMA create_fts_index(
+		'nodes',
+		'fts_id',
+		'location',
+		'sysop_name',
+		'system_name',
+		stemmer := 'porter',
+		stopwords := 'english',
+		strip_accents := 1,
+		lower := 1
+	)`
+	
+	if _, err := db.conn.Exec(ftsSQL); err != nil {
+		return fmt.Errorf("failed to create FTS index: %w", err)
+	}
+	
+	return nil
+}
+
+// DropFTSIndexes drops Full-Text Search indexes (for maintenance)
+func (db *DB) DropFTSIndexes() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	
+	// Drop FTS schema if it exists
+	if _, err := db.conn.Exec("DROP SCHEMA IF EXISTS fts_main_nodes CASCADE"); err != nil {
+		return fmt.Errorf("failed to drop FTS indexes: %w", err)
+	}
+	
+	return nil
 }
