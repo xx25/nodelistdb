@@ -61,7 +61,8 @@ func buildNodeFilterFromAddress(address string) (database.NodeFilter, error) {
 // buildNodeFilterFromForm creates a node filter from individual form fields
 func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 	// Check if historical search is requested
-	includeHistorical := r.FormValue("include_historical") == "1"
+	// Default to including historical data since checkbox is checked by default in UI
+	includeHistorical := r.FormValue("include_historical") != "0"
 	latestOnly := !includeHistorical
 	
 	filter := database.NodeFilter{

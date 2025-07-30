@@ -122,19 +122,19 @@ func (cqb *ClickHouseQueryBuilder) BuildClickHouseFTSQuery(filter database.NodeF
 
 	// Text search using materialized lowercase columns with bloom filter indexes
 	if filter.SystemName != nil && *filter.SystemName != "" {
-		conditions = append(conditions, "system_name_lower LIKE ?")
+		conditions = append(conditions, "lower(system_name) LIKE ?")
 		args = append(args, "%"+strings.ToLower(*filter.SystemName)+"%")
 		usedFTS = true
 	}
 
 	if filter.Location != nil && *filter.Location != "" {
-		conditions = append(conditions, "location_lower LIKE ?")
+		conditions = append(conditions, "lower(location) LIKE ?")
 		args = append(args, "%"+strings.ToLower(*filter.Location)+"%")
 		usedFTS = true
 	}
 
 	if filter.SysopName != nil && *filter.SysopName != "" {
-		conditions = append(conditions, "sysop_name_lower LIKE ?")
+		conditions = append(conditions, "lower(sysop_name) LIKE ?")
 		args = append(args, "%"+strings.ToLower(*filter.SysopName)+"%")
 		usedFTS = true
 	}
@@ -336,18 +336,18 @@ func (cqb *ClickHouseQueryBuilder) buildClickHouseWhereConditions(filter databas
 		args = append(args, *filter.DateTo)
 	}
 	if filter.SystemName != nil {
-		// Use materialized lowercase column for better index usage
-		conditions = append(conditions, "system_name_lower LIKE ?")
+		// Use inline lower() function since materialized columns don't exist
+		conditions = append(conditions, "lower(system_name) LIKE ?")
 		args = append(args, "%"+strings.ToLower(*filter.SystemName)+"%")
 	}
 	if filter.Location != nil {
-		// Use materialized lowercase column for better index usage
-		conditions = append(conditions, "location_lower LIKE ?")
+		// Use inline lower() function since materialized columns don't exist
+		conditions = append(conditions, "lower(location) LIKE ?")
 		args = append(args, "%"+strings.ToLower(*filter.Location)+"%")
 	}
 	if filter.SysopName != nil {
-		// Use materialized lowercase column for better index usage
-		conditions = append(conditions, "sysop_name_lower LIKE ?")
+		// Use inline lower() function since materialized columns don't exist
+		conditions = append(conditions, "lower(sysop_name) LIKE ?")
 		args = append(args, "%"+strings.ToLower(*filter.SysopName)+"%")
 	}
 	if filter.NodeType != nil {
@@ -512,7 +512,7 @@ func (cqb *ClickHouseQueryBuilder) UniqueSysopsWithFilterSQL() string {
 				MAX(nodelist_date) as last_seen,
 				arraySort(arrayDistinct(groupArray(zone))) as zones
 			FROM nodes
-			WHERE sysop_name_lower LIKE lower(?)
+			WHERE lower(sysop_name) LIKE lower(?)
 			GROUP BY sysop_name
 		)
 		SELECT 
