@@ -11,14 +11,14 @@ import (
 
 // NodeOperations handles all node-related database operations
 type NodeOperations struct {
-	db           *database.DB
+	db           database.DatabaseInterface
 	queryBuilder QueryBuilderInterface
 	resultParser *ResultParser
 	mu           sync.RWMutex
 }
 
 // NewNodeOperations creates a new NodeOperations instance
-func NewNodeOperations(db *database.DB, queryBuilder QueryBuilderInterface, resultParser *ResultParser) *NodeOperations {
+func NewNodeOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser *ResultParser) *NodeOperations {
 	return &NodeOperations{
 		db:           db,
 		queryBuilder: queryBuilder,

@@ -11,7 +11,7 @@ import (
 
 // StatisticsOperations handles all statistics-related database operations
 type StatisticsOperations struct {
-	db           *database.DB
+	db           database.DatabaseInterface
 	queryBuilder QueryBuilderInterface
 	resultParser *ResultParser
 	mu           sync.RWMutex
@@ -21,7 +21,7 @@ type StatisticsOperations struct {
 }
 
 // NewStatisticsOperations creates a new StatisticsOperations instance
-func NewStatisticsOperations(db *database.DB, queryBuilder QueryBuilderInterface, resultParser *ResultParser) *StatisticsOperations {
+func NewStatisticsOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser *ResultParser) *StatisticsOperations {
 	return &StatisticsOperations{
 		db:           db,
 		queryBuilder: queryBuilder,

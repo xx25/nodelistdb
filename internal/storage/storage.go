@@ -11,7 +11,7 @@ import (
 
 // Storage provides thread-safe database operations using specialized components
 type Storage struct {
-	db               *database.DB
+	db               database.DatabaseInterface
 	queryBuilder     QueryBuilderInterface
 	resultParser     *ResultParser
 	nodeOperations   *NodeOperations
@@ -21,10 +21,21 @@ type Storage struct {
 }
 
 // New creates a new Storage instance with all specialized components
-func New(db *database.DB) (*Storage, error) {
-	// Create the foundational components
-	queryBuilder := NewQueryBuilder()
-	resultParser := NewResultParser()
+func New(db database.DatabaseInterface) (*Storage, error) {
+	var queryBuilder QueryBuilderInterface
+	var resultParser *ResultParser
+
+	// Check if this is a ClickHouse database and use specialized components
+	if _, isClickHouse := db.(*database.ClickHouseDB); isClickHouse {
+		chQueryBuilder := NewClickHouseQueryBuilder()
+		chResultParser := NewClickHouseResultParser()
+		queryBuilder = chQueryBuilder
+		resultParser = chResultParser.ResultParser
+	} else {
+		// Default to DuckDB components
+		queryBuilder = NewQueryBuilder()
+		resultParser = NewResultParser()
+	}
 
 	// Create the storage instance
 	storage := &Storage{
@@ -254,8 +265,7 @@ func (s *Storage) HealthCheck() error {
 	defer s.mu.RUnlock()
 
 	// Test database connection
-	conn := s.db.Conn()
-	if err := conn.Ping(); err != nil {
+	if err := s.db.Ping(); err != nil {
 		return fmt.Errorf("database connection failed: %w", err)
 	}
 

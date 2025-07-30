@@ -12,7 +12,7 @@ import (
 
 // SearchOperations handles all search-related database operations
 type SearchOperations struct {
-	db           *database.DB
+	db           database.DatabaseInterface
 	queryBuilder QueryBuilderInterface
 	resultParser *ResultParser
 	nodeOps      *NodeOperations // Reference for getting node history
@@ -20,7 +20,7 @@ type SearchOperations struct {
 }
 
 // NewSearchOperations creates a new SearchOperations instance
-func NewSearchOperations(db *database.DB, queryBuilder QueryBuilderInterface, resultParser *ResultParser, nodeOps *NodeOperations) *SearchOperations {
+func NewSearchOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser *ResultParser, nodeOps *NodeOperations) *SearchOperations {
 	return &SearchOperations{
 		db:           db,
 		queryBuilder: queryBuilder,

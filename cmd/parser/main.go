@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"nodelistdb/internal/concurrent"
+	"nodelistdb/internal/config"
 	"nodelistdb/internal/database"
 	"nodelistdb/internal/parser"
 	"nodelistdb/internal/storage"
@@ -21,7 +22,8 @@ import (
 func main() {
 	// Command line flags
 	var (
-		dbPath           = flag.String("db", "./nodelist.duckdb", "Path to DuckDB database file")
+		configPath       = flag.String("config", "config.json", "Path to configuration file")
+		dbPath           = flag.String("db", "", "Path to database file (overrides config)")
 		path             = flag.String("path", "", "Path to nodelist file or directory (required)")
 		recursive        = flag.Bool("recursive", false, "Scan directories recursively")
 		verbose          = flag.Bool("verbose", false, "Verbose output")
@@ -34,16 +36,34 @@ func main() {
 	)
 	flag.Parse()
 
+
 	if *path == "" && !*rebuildFTSOnly {
 		fmt.Fprintf(os.Stderr, "Error: -path is required (unless using -rebuild-fts)\n")
 		flag.Usage()
 		os.Exit(1)
 	}
 
+	// Load configuration
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Override database path if specified via command line
+	if *dbPath != "" && cfg.Database.Type == config.DatabaseTypeDuckDB {
+		cfg.Database.DuckDB.Path = *dbPath
+	}
+
 	if !*quiet {
-		fmt.Println("FidoNet Nodelist Parser (DuckDB)")
+		fmt.Printf("FidoNet Nodelist Parser (%s)\n", cfg.Database.Type)
 		fmt.Println("================================")
-		fmt.Printf("Database: %s\n", *dbPath)
+		switch cfg.Database.Type {
+		case config.DatabaseTypeDuckDB:
+			fmt.Printf("Database: %s (DuckDB)\n", cfg.Database.DuckDB.Path)
+		case config.DatabaseTypeClickHouse:
+			fmt.Printf("Database: %s:%d/%s (ClickHouse)\n", 
+				cfg.Database.ClickHouse.Host, cfg.Database.ClickHouse.Port, cfg.Database.ClickHouse.Database)
+		}
 		fmt.Printf("Path: %s\n", *path)
 		fmt.Printf("Batch size: %d\n", *batchSize)
 		fmt.Printf("Workers: %d\n", *workers)
@@ -52,20 +72,68 @@ func main() {
 		fmt.Println()
 	}
 
-	// Initialize database
+	// Initialize database based on configuration
 	if *verbose {
-		log.Println("Initializing DuckDB database...")
+		log.Printf("Initializing %s database...", cfg.Database.Type)
 	}
 
-	db, err := database.New(*dbPath)
+	var db database.DatabaseInterface
+	switch cfg.Database.Type {
+	case config.DatabaseTypeDuckDB:
+		db, err = database.New(cfg.Database.DuckDB.Path)
+	case config.DatabaseTypeClickHouse:
+		// Convert config to ClickHouse config and create connection
+		chConfig := &database.ClickHouseConfig{
+			Host:         cfg.Database.ClickHouse.Host,
+			Port:         cfg.Database.ClickHouse.Port,
+			Database:     cfg.Database.ClickHouse.Database,
+			Username:     cfg.Database.ClickHouse.Username,
+			Password:     cfg.Database.ClickHouse.Password,
+			UseSSL:       cfg.Database.ClickHouse.UseSSL,
+			MaxOpenConns: cfg.Database.ClickHouse.MaxOpenConns,
+			MaxIdleConns: cfg.Database.ClickHouse.MaxIdleConns,
+		}
+		
+		// Parse timeout strings
+		if cfg.Database.ClickHouse.DialTimeout != "" {
+			if chConfig.DialTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.DialTimeout); err != nil {
+				log.Fatalf("Invalid dial timeout: %v", err)
+			}
+		} else {
+			chConfig.DialTimeout = 30 * time.Second
+		}
+		
+		if cfg.Database.ClickHouse.ReadTimeout != "" {
+			if chConfig.ReadTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.ReadTimeout); err != nil {
+				log.Fatalf("Invalid read timeout: %v", err)
+			}
+		} else {
+			chConfig.ReadTimeout = 5 * time.Minute
+		}
+		
+		if cfg.Database.ClickHouse.WriteTimeout != "" {
+			if chConfig.WriteTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.WriteTimeout); err != nil {
+				log.Fatalf("Invalid write timeout: %v", err)
+			}
+		} else {
+			chConfig.WriteTimeout = 1 * time.Minute
+		}
+		
+		chConfig.Compression = cfg.Database.ClickHouse.Compression
+		
+		db, err = database.NewClickHouse(chConfig)
+	default:
+		log.Fatalf("Unsupported database type: %s", cfg.Database.Type)
+	}
+	
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
-	// Get DuckDB version
+	// Get database version
 	if version, err := db.GetVersion(); err == nil {
-		fmt.Printf("DuckDB version: %s\n", version)
+		fmt.Printf("%s version: %s\n", cfg.Database.Type, version)
 	}
 
 	// Create schema
@@ -78,11 +146,11 @@ func main() {
 	}
 
 	// Initialize storage layer
-	storage, err := storage.New(db)
+	storageLayer, err := storage.New(db)
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
-	defer storage.Close()
+	defer storageLayer.Close()
 
 	// Handle FTS rebuild mode
 	if *rebuildFTSOnly {
@@ -144,7 +212,7 @@ func main() {
 		if !*quiet {
 			fmt.Printf("Using concurrent processing with %d workers\n", *workers)
 		}
-		processor := concurrent.New(storage, nodelistParser, *workers, *batchSize, *verbose, *quiet)
+		processor := concurrent.New(storageLayer, nodelistParser, *workers, *batchSize, *verbose, *quiet)
 
 		err := processor.ProcessFiles(ctx, files)
 		if err != nil {
@@ -194,7 +262,7 @@ func main() {
 					fmt.Printf("  Checking if nodelist already processed: date=%s (year %d, day %d)\n",
 						nodelistDate.Format("2006-01-02"), nodelistDate.Year(), nodes[0].DayNumber)
 				}
-				isProcessed, err := storage.IsNodelistProcessed(nodelistDate)
+				isProcessed, err := storageLayer.IsNodelistProcessed(nodelistDate)
 				if err != nil {
 					fmt.Printf("  ERROR checking if nodelist processed: %v\n", err)
 					continue
@@ -223,7 +291,7 @@ func main() {
 				}
 
 				batch := nodes[i:end]
-				if err := insertBatch(storage, batch, *verbose, *quiet); err != nil {
+				if err := insertBatch(storageLayer, batch, *verbose, *quiet); err != nil {
 					fmt.Printf("  ERROR inserting batch: %v\n", err)
 					break // Skip remaining batches from this file
 				}
