@@ -161,7 +161,7 @@ func (cno *ClickHouseNodeOperations) insertChunkClickHouse(tx *sql.Tx, chunk []d
 		return nil
 	}
 
-	// Use ClickHouse-specific direct SQL generation
+	// Use ClickHouse-specific direct SQL generation with ClickHouse result parser
 	insertSQL := cno.queryBuilder.BuildDirectBatchInsertSQL(chunk, cno.resultParser.ResultParser)
 
 	_, err := tx.Exec(insertSQL)

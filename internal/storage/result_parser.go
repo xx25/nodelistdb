@@ -18,12 +18,12 @@ func NewResultParser() *ResultParser {
 	return &ResultParser{}
 }
 
-// ParseNodeRow parses a database row into a Node struct
+// ParseNodeRow parses a database row into a Node struct (supports both DuckDB and ClickHouse)
 func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) {
 	var node database.Node
 	var flags, modemFlags, protocols, hosts, emails interface{}
 	var ports interface{}
-	var internetConfig sql.NullString
+	var internetConfig interface{} // Use interface{} to support both DuckDB and ClickHouse JSON types
 
 	err := scanner.Scan(
 		&node.Zone, &node.Net, &node.Node, &node.NodelistDate, &node.DayNumber,
@@ -39,7 +39,7 @@ func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) 
 		return node, fmt.Errorf("failed to scan node: %w", err)
 	}
 
-	// Parse arrays from DuckDB native format
+	// Parse arrays (compatible with both DuckDB and ClickHouse)
 	node.Flags = rp.parseInterfaceToStringArray(flags)
 	node.ModemFlags = rp.parseInterfaceToStringArray(modemFlags)
 	node.InternetProtocols = rp.parseInterfaceToStringArray(protocols)
@@ -47,12 +47,42 @@ func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) 
 	node.InternetPorts = rp.parseInterfaceToIntArray(ports)
 	node.InternetEmails = rp.parseInterfaceToStringArray(emails)
 
-	// Handle JSON field
-	if internetConfig.Valid {
-		node.InternetConfig = json.RawMessage(internetConfig.String)
-	}
+	// Handle JSON field (support both DuckDB sql.NullString and ClickHouse JSON types)
+	rp.parseInternetConfig(&node, internetConfig)
 
 	return node, nil
+}
+
+// parseInternetConfig handles JSON parsing for both DuckDB and ClickHouse
+func (rp *ResultParser) parseInternetConfig(node *database.Node, internetConfig interface{}) {
+	if internetConfig == nil {
+		return
+	}
+
+	switch config := internetConfig.(type) {
+	case sql.NullString:
+		// DuckDB format
+		if config.Valid && config.String != "" && config.String != "{}" {
+			node.InternetConfig = json.RawMessage(config.String)
+		}
+	case string:
+		// ClickHouse string format
+		if config != "" && config != "{}" {
+			node.InternetConfig = json.RawMessage(config)
+		}
+	case []byte:
+		// ClickHouse byte array format
+		if len(config) > 0 && string(config) != "{}" {
+			node.InternetConfig = json.RawMessage(config)
+		}
+	case map[string]interface{}:
+		// ClickHouse JSON object format
+		if len(config) > 0 {
+			if jsonBytes, err := json.Marshal(config); err == nil {
+				node.InternetConfig = json.RawMessage(jsonBytes)
+			}
+		}
+	}
 }
 
 // ParseNodeSummaryRow parses a database row into a NodeSummary struct
@@ -117,7 +147,7 @@ func (rp *ResultParser) ParseNetInfoRow(scanner RowScanner) (database.NetInfo, e
 	return net, nil
 }
 
-// parseInterfaceToStringArray converts DuckDB array results to []string
+// parseInterfaceToStringArray converts array results to []string (supports both DuckDB and ClickHouse)
 func (rp *ResultParser) parseInterfaceToStringArray(v interface{}) []string {
 	if v == nil {
 		return []string{}
@@ -125,6 +155,7 @@ func (rp *ResultParser) parseInterfaceToStringArray(v interface{}) []string {
 
 	switch arr := v.(type) {
 	case []interface{}:
+		// DuckDB format
 		result := make([]string, 0, len(arr))
 		for _, item := range arr {
 			if s, ok := item.(string); ok {
@@ -132,15 +163,19 @@ func (rp *ResultParser) parseInterfaceToStringArray(v interface{}) []string {
 			}
 		}
 		return result
+	case []string:
+		// ClickHouse native []string format
+		return arr
 	case string:
-		// Fallback for old format or string representations
+		// Fallback for string representations
 		return rp.parseStringArray(arr)
 	default:
+		// Unknown type, return empty
 		return []string{}
 	}
 }
 
-// parseInterfaceToIntArray converts DuckDB array results to []int
+// parseInterfaceToIntArray converts array results to []int (supports both DuckDB and ClickHouse)
 func (rp *ResultParser) parseInterfaceToIntArray(v interface{}) []int {
 	if v == nil {
 		return []int{}
@@ -148,6 +183,7 @@ func (rp *ResultParser) parseInterfaceToIntArray(v interface{}) []int {
 
 	switch arr := v.(type) {
 	case []interface{}:
+		// DuckDB format
 		result := make([]int, 0, len(arr))
 		for _, item := range arr {
 			switch val := item.(type) {
@@ -162,8 +198,18 @@ func (rp *ResultParser) parseInterfaceToIntArray(v interface{}) []int {
 			}
 		}
 		return result
+	case []int:
+		// ClickHouse native []int format
+		return arr
+	case []int32:
+		// ClickHouse Int32 arrays
+		result := make([]int, len(arr))
+		for i, v := range arr {
+			result[i] = int(v)
+		}
+		return result
 	case string:
-		// Fallback for old format or string representations
+		// Fallback for string representations
 		return rp.parseIntArray(arr)
 	default:
 		return []int{}
