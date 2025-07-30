@@ -159,6 +159,11 @@ func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error
 	} else {
 		// Build filter from individual fields
 		filter = buildNodeFilterFromForm(r)
+		
+		// Check if search would be too resource-intensive
+		if filter.Limit == 0 {
+			return nil, 0, fmt.Errorf("Search requires more specific criteria. Please specify zone or net along with node number, or search by system name/location (minimum 2 characters)")
+		}
 	}
 
 	nodes, err := s.storage.GetNodes(filter)

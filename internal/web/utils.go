@@ -63,29 +63,34 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 	latestOnly := true
 	filter := database.NodeFilter{
 		LatestOnly: &latestOnly,
-		Limit:      50, // Default limit - reduced to prevent memory exhaustion
+		Limit:      25, // Default limit
 	}
 	
-	constraintCount := 0
+	// Track if we have any specific constraints to prevent overly broad searches
+	hasSpecificConstraint := false
 
 	if zone := r.FormValue("zone"); zone != "" {
 		if z, err := strconv.Atoi(zone); err == nil {
 			filter.Zone = &z
-			constraintCount++
+			hasSpecificConstraint = true
 		}
 	}
 
 	if net := r.FormValue("net"); net != "" {
 		if n, err := strconv.Atoi(net); err == nil {
 			filter.Net = &n
-			constraintCount++
+			hasSpecificConstraint = true
 		}
 	}
 
 	if node := r.FormValue("node"); node != "" {
 		if n, err := strconv.Atoi(node); err == nil {
 			filter.Node = &n
-			constraintCount++
+			// Only consider node alone as sufficient constraint if zone or net is also specified
+			// This prevents resource-intensive queries like searching for node=0 across all zones/nets
+			if filter.Zone != nil || filter.Net != nil {
+				hasSpecificConstraint = true
+			}
 		}
 	}
 
@@ -93,7 +98,7 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 		// Prevent memory exhaustion from very short search strings
 		if len(strings.TrimSpace(systemName)) >= 2 {
 			filter.SystemName = &systemName
-			constraintCount++
+			hasSpecificConstraint = true
 		}
 	}
 
@@ -101,15 +106,13 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 		// Prevent memory exhaustion from very short search strings
 		if len(strings.TrimSpace(location)) >= 2 {
 			filter.Location = &location
-			constraintCount++
+			hasSpecificConstraint = true
 		}
 	}
 
-	// For broad searches with minimal constraints, reduce limit to prevent memory issues
-	if constraintCount == 1 {
-		filter.Limit = 25 // Further reduce limit for single-constraint searches
-	} else if constraintCount == 0 {
-		filter.Limit = 10 // Very restrictive for no constraints (fallback safety)
+	// Return empty filter for resource-intensive searches to prevent OOM
+	if !hasSpecificConstraint {
+		return database.NodeFilter{LatestOnly: &latestOnly, Limit: 0} // Limit 0 = no results
 	}
 
 	return filter
