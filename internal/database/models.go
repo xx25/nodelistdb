@@ -24,7 +24,7 @@ type Node struct {
 	Phone      string `json:"phone"`
 	NodeType   string `json:"node_type"` // Zone, Region, Host, Hub, Pvt, Down, Hold
 	Region     *int   `json:"region,omitempty"`
-	MaxSpeed   string `json:"max_speed"`
+	MaxSpeed   uint32 `json:"max_speed"`
 
 	// Boolean flags (computed from raw flags)
 	IsCM      bool `json:"is_cm"`

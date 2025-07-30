@@ -163,9 +163,9 @@ func (db *ClickHouseDB) CreateSchema() error {
 		location String,
 		sysop_name String,
 		phone String,
-		node_type String,
+		node_type LowCardinality(String),
 		region Nullable(Int32),
-		max_speed String,
+		max_speed UInt32 DEFAULT 0,
 		
 		-- Boolean flags (computed from raw flags)
 		is_cm Bool DEFAULT false,

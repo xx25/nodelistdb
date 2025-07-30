@@ -103,7 +103,7 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 		}
 		
 		// Max speed
-		buf.WriteString(fmt.Sprintf("'%s',", qb.escapeSQL(node.MaxSpeed)))
+		buf.WriteString(fmt.Sprintf("%d,", node.MaxSpeed))
 		
 		// Boolean flags
 		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,", 

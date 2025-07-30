@@ -333,7 +333,14 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 	location := strings.TrimSpace(fields[3])
 	sysopName := strings.TrimSpace(fields[4])
 	phone := strings.TrimSpace(fields[5])
-	maxSpeed := strings.TrimSpace(fields[6])
+	maxSpeedStr := strings.TrimSpace(fields[6])
+	var maxSpeed uint32
+	if maxSpeedStr != "" {
+		if speed, err := strconv.ParseUint(maxSpeedStr, 10, 32); err == nil {
+			maxSpeed = uint32(speed)
+		}
+		// If parsing fails, maxSpeed remains 0 (default)
+	}
 
 	// Parse flags (field 7 and beyond)
 	var flagsStr string

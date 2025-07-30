@@ -104,7 +104,7 @@ func (db *DB) CreateSchema() error {
 		phone TEXT NOT NULL,
 		node_type TEXT NOT NULL,
 		region INTEGER,
-		max_speed TEXT NOT NULL,
+		max_speed INTEGER NOT NULL DEFAULT 0,
 		
 		-- Boolean flags (computed from raw flags)
 		is_cm BOOLEAN DEFAULT FALSE,

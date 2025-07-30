@@ -24,6 +24,7 @@ func main() {
 	var (
 		configPath       = flag.String("config", "config.json", "Path to configuration file")
 		dbPath           = flag.String("db", "", "Path to database file (overrides config)")
+		dbType           = flag.String("dbtype", "", "Database type: 'duckdb' or 'clickhouse' (overrides config)")
 		path             = flag.String("path", "", "Path to nodelist file or directory (required)")
 		recursive        = flag.Bool("recursive", false, "Scan directories recursively")
 		verbose          = flag.Bool("verbose", false, "Verbose output")
@@ -47,6 +48,18 @@ func main() {
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Override database type if specified via command line
+	if *dbType != "" {
+		switch *dbType {
+		case "duckdb":
+			cfg.Database.Type = config.DatabaseTypeDuckDB
+		case "clickhouse":
+			cfg.Database.Type = config.DatabaseTypeClickHouse
+		default:
+			log.Fatalf("Invalid database type: %s (must be 'duckdb' or 'clickhouse')", *dbType)
+		}
 	}
 
 	// Override database path if specified via command line

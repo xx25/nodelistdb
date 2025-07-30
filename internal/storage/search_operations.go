@@ -176,7 +176,7 @@ func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter
 		fieldChanges["phone"] = fmt.Sprintf("%s → %s", prev.Phone, curr.Phone)
 	}
 	if !filter.IgnoreSpeed && prev.MaxSpeed != curr.MaxSpeed {
-		fieldChanges["speed"] = fmt.Sprintf("%s → %s", prev.MaxSpeed, curr.MaxSpeed)
+		fieldChanges["speed"] = fmt.Sprintf("%d → %d", prev.MaxSpeed, curr.MaxSpeed)
 	}
 	if !filter.IgnoreFlags && !so.equalStringSlices(prev.Flags, curr.Flags) {
 		fieldChanges["flags"] = fmt.Sprintf("%v → %v", prev.Flags, curr.Flags)

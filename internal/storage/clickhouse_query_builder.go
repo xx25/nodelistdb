@@ -69,7 +69,7 @@ func (cqb *ClickHouseQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.No
 		}
 		
 		// Max speed
-		buf.WriteString(fmt.Sprintf("'%s',", cqb.escapeClickHouseSQL(node.MaxSpeed)))
+		buf.WriteString(fmt.Sprintf("%d,", node.MaxSpeed))
 		
 		// Boolean flags
 		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,", 
