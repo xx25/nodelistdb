@@ -188,16 +188,26 @@ jobs:
         [ -f CLAUDE.md ] && cp CLAUDE.md dist/${{ matrix.name }}/USAGE.md
         [ -f LICENSE ] && cp LICENSE dist/${{ matrix.name }}/
         
+        # Copy configuration examples
+        [ -f config.sample.json ] && cp config.sample.json dist/${{ matrix.name }}/config-duckdb-example.json
+        [ -f config-clickhouse-test.json ] && cp config-clickhouse-test.json dist/${{ matrix.name }}/config-clickhouse-example.json
+        
         # Create a simple usage file
         cat > dist/${{ matrix.name }}/USAGE.txt << 'EOF'
         NodelistDB - FidoNet Nodelist Database System
         
         PARSER USAGE:
+        # DuckDB (default)
         ./parser -path <nodelist-path> -db <database-file> [options]
+        
+        # ClickHouse
+        ./parser -path <nodelist-path> -config <config-file> -dbtype clickhouse [options]
         
         Options:
           -path string     Path to nodelist file or directory (required)
           -db string       Path to DuckDB database file (default: ./nodelist.duckdb)
+          -config string   Path to configuration file (default: config.json)
+          -dbtype string   Database type: 'duckdb' or 'clickhouse' (overrides config)
           -recursive       Scan directories recursively
           -verbose         Verbose output
           -batch int       Batch size for bulk inserts (default: 1000)
@@ -205,22 +215,41 @@ jobs:
           -concurrent      Enable concurrent processing
         
         SERVER USAGE:
+        # DuckDB (default)
         ./server -db <database-file> [options]
+        
+        # ClickHouse
+        ./server -config <config-file> [options]
         
         Options:
           -db string       Path to DuckDB database file (default: ./nodelist.duckdb)
+          -config string   Path to configuration file (default: config.json)
           -host string     Host to bind to (default: localhost)
           -port int        Port to listen on (default: 8080)
         
         EXAMPLES:
-        # Parse a single nodelist file
+        # Parse a single nodelist file (DuckDB)
         ./parser -path nodelist.216 -db nodelist.duckdb -verbose
         
-        # Parse all nodelists in a directory
+        # Parse all nodelists in a directory (DuckDB)
         ./parser -path /path/to/nodelists -db nodelist.duckdb -recursive -concurrent
         
-        # Start the web server
+        # Parse with ClickHouse
+        ./parser -path nodelist.216 -config config-clickhouse-example.json -dbtype clickhouse -verbose
+        
+        # Start the web server (DuckDB)
         ./server -db nodelist.duckdb -host 0.0.0.0 -port 8080
+        
+        # Start the web server (ClickHouse)
+        ./server -config config-clickhouse-example.json -host 0.0.0.0 -port 8080
+        
+        CONFIGURATION:
+        Copy one of the example configuration files to config.json and edit as needed:
+        - config-duckdb-example.json    (for DuckDB usage)
+        - config-clickhouse-example.json (for ClickHouse usage)
+        
+        For ClickHouse, ensure your ClickHouse server is running and accessible.
+        The default config connects to localhost:9000 with no authentication.
         
         API Endpoints:
         GET /api/nodes              - Search nodes
