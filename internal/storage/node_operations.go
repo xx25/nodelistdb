@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -93,6 +94,17 @@ func (no *NodeOperations) GetNodes(filter database.NodeFilter) ([]database.Node,
 	if !usedFTS {
 		// Fallback to traditional ILIKE queries
 		query, args = no.queryBuilder.BuildNodesQuery(filter)
+	}
+
+	// DEBUG: Log the query being executed if debug mode is enabled
+	if os.Getenv("DEBUG_SQL") == "true" {
+		fmt.Printf("\n[DEBUG SQL] Query (NodeOperations):\n%s\n", query)
+		fmt.Printf("[DEBUG SQL] Args: %v\n", args)
+		fmt.Printf("[DEBUG SQL] Filter: %+v\n", filter)
+		if filter.LatestOnly != nil {
+			fmt.Printf("[DEBUG SQL] LatestOnly = %v\n", *filter.LatestOnly)
+		}
+		fmt.Printf("[DEBUG SQL] UsedFTS = %v\n\n", usedFTS)
 	}
 
 	rows, err := conn.Query(query, args...)
