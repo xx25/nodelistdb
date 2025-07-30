@@ -191,6 +191,14 @@ func (cno *ClickHouseNodeOperations) GetNodes(filter database.NodeFilter) ([]dat
 		query, args = cno.queryBuilder.BuildNodesQuery(filter)
 	}
 
+	// DEBUG: Log the query being executed
+	fmt.Printf("DEBUG: ClickHouse Query:\n%s\n", query)
+	fmt.Printf("DEBUG: Args: %v\n", args)
+	fmt.Printf("DEBUG: Filter: %+v\n", filter)
+	if filter.LatestOnly != nil {
+		fmt.Printf("DEBUG: LatestOnly = %v\n", *filter.LatestOnly)
+	}
+
 	rows, err := conn.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query nodes: %w", err)
