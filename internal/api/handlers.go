@@ -529,49 +529,6 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(response)
 }
 
-// SearchNodesBySysopHandler searches for nodes by sysop name
-// GET /api/nodes/search/sysop?name=John+Doe&limit=50
-func (s *Server) SearchNodesBySysopHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Get sysop name from query
-	sysopName := r.URL.Query().Get("name")
-	if sysopName == "" {
-		http.Error(w, "Missing 'name' parameter", http.StatusBadRequest)
-		return
-	}
-
-	// Get limit
-	limit := 50
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 200 {
-			limit = l
-		}
-	}
-
-	// Convert spaces to underscores as that's how data is stored in nodelist database
-	searchName := strings.ReplaceAll(sysopName, " ", "_")
-
-	// Search nodes
-	nodes, err := s.storage.SearchNodesBySysop(searchName, limit)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
-		"sysop_name": sysopName,
-		"nodes":      nodes,
-		"count":      len(nodes),
-		"limit":      limit,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
 
 // GetAvailableDatesHandler returns all available dates for stats
 // GET /api/stats/dates
@@ -821,7 +778,6 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/stats", s.StatsHandler)
 	mux.HandleFunc("/api/stats/dates", s.GetAvailableDatesHandler)
 	mux.HandleFunc("/api/flags", s.FlagsDocumentationHandler)
-	mux.HandleFunc("/api/nodes/search/sysop", s.SearchNodesBySysopHandler) // Deprecated, kept for backward compatibility
 	mux.HandleFunc("/api/sysops", s.SysopsHandler)
 	mux.HandleFunc("/api/download/database", s.DownloadDatabaseHandler)
 	mux.HandleFunc("/api/nodelist/latest", s.LatestNodelistAPIHandler)
