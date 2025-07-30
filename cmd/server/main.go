@@ -27,6 +27,7 @@ func main() {
 		port          = flag.String("port", "8080", "HTTP server port")
 		host          = flag.String("host", "localhost", "HTTP server host")
 		showVersion   = flag.Bool("version", false, "Show version information")
+		debugSQL      = flag.Bool("debug-sql", false, "Enable SQL query debugging")
 	)
 	flag.Parse()
 
@@ -123,6 +124,14 @@ func main() {
 	// Get database version
 	if version, err := db.GetVersion(); err == nil {
 		fmt.Printf("%s version: %s\n", strings.ToUpper(string(cfg.Database.Type)), version)
+	}
+
+	// Enable SQL debugging if requested
+	if *debugSQL {
+		fmt.Println("=== SQL DEBUGGING ENABLED ===")
+		fmt.Println("All SQL queries will be logged to console")
+		fmt.Println("============================")
+		os.Setenv("DEBUG_SQL", "true")
 	}
 
 	// Skip schema creation in read-only mode
