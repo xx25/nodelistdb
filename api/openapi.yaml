@@ -34,7 +34,7 @@ servers:
     description: NodelistDB API Server
 
 paths:
-  /health:
+  /api/health:
     get:
       summary: Health Check
       description: Returns the health status of the API server
@@ -57,7 +57,7 @@ paths:
                     format: date-time
                     example: "2025-07-29T14:30:00Z"
 
-  /nodes:
+  /api/nodes:
     get:
       summary: Search Nodes
       description: |
@@ -111,24 +111,12 @@ paths:
           schema:
             type: string
             example: "John Doe"
-        - name: has_binkp
+        - name: node_type
           in: query
-          description: Filter by Binkp capability
+          description: Node type (Zone, Region, Host, Hub, Pvt, Down, Hold)
           schema:
-            type: boolean
-            example: true
-        - name: has_telnet
-          in: query
-          description: Filter by Telnet capability
-          schema:
-            type: boolean
-            example: true
-        - name: has_inet
-          in: query
-          description: Filter by internet connectivity
-          schema:
-            type: boolean
-            example: true
+            type: string
+            example: "Hub"
         - name: is_cm
           in: query
           description: Filter by CM (Continuous Mail) flag
@@ -155,13 +143,6 @@ paths:
             type: string
             format: date
             example: "2024-12-31"
-        - name: latest_only
-          in: query
-          description: Return only the most recent entry for each node
-          schema:
-            type: boolean
-            default: false
-            example: true
         - name: limit
           in: query
           description: Maximum number of results to return
@@ -206,7 +187,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /nodes/{zone}/{net}/{node}:
+  /api/nodes/{zone}/{net}/{node}:
     get:
       summary: Get Specific Node
       description: Get detailed information for a specific node by its address
@@ -258,7 +239,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /nodes/{zone}/{net}/{node}/history:
+  /api/nodes/{zone}/{net}/{node}/history:
     get:
       summary: Get Node History
       description: Get complete historical timeline for a specific node
@@ -312,7 +293,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /nodes/{zone}/{net}/{node}/changes:
+  /api/nodes/{zone}/{net}/{node}/changes:
     get:
       summary: Get Node Changes
       description: Get a summary of changes to a node over time
@@ -355,7 +336,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /nodes/{zone}/{net}/{node}/timeline:
+  /api/nodes/{zone}/{net}/{node}/timeline:
     get:
       summary: Get Node Timeline
       description: Get a visual timeline representation of node changes
@@ -394,54 +375,8 @@ paths:
                     items:
                       $ref: '#/components/schemas/TimelineEvent'
 
-  /nodes/search/sysop:
-    get:
-      summary: Search Nodes by Sysop
-      description: Search for nodes operated by a specific sysop
-      operationId: searchNodesBySysop
-      tags:
-        - Nodes
-      parameters:
-        - name: name
-          in: query
-          required: true
-          description: Sysop name to search for (partial match)
-          schema:
-            type: string
-            example: "John Doe"
-        - name: limit
-          in: query
-          description: Maximum number of results
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
-        - name: offset
-          in: query
-          description: Number of results to skip
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-      responses:
-        '200':
-          description: Sysop search results
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  nodes:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/NodeSummary'
-                  count:
-                    type: integer
-        '400':
-          $ref: '#/components/responses/BadRequest'
 
-  /stats:
+  /api/stats:
     get:
       summary: Get Network Statistics
       description: Get comprehensive FidoNet network statistics
@@ -458,7 +393,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /stats/dates:
+  /api/stats/dates:
     get:
       summary: Get Available Dates
       description: Get list of all dates for which nodelist data is available
@@ -483,7 +418,7 @@ paths:
                     type: integer
                     example: 52
 
-  /flags:
+  /api/flags:
     get:
       summary: Get Flags Documentation
       description: Get comprehensive documentation for all FidoNet node flags
@@ -503,7 +438,7 @@ paths:
                     additionalProperties:
                       $ref: '#/components/schemas/FlagDefinition'
 
-  /download/database:
+  /api/download/database:
     get:
       summary: Download Database
       description: Download the complete DuckDB database file for offline analysis
@@ -521,7 +456,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /nodelist/latest:
+  /api/nodelist/latest:
     get:
       summary: Get Latest Nodelist
       description: Get information about the latest available nodelist
@@ -535,6 +470,141 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NodelistInfo'
+
+  /api/sysops:
+    get:
+      summary: List Sysops
+      description: Get a list of unique sysop names with optional filtering
+      operationId: getSysops
+      tags:
+        - Sysops
+      parameters:
+        - name: name
+          in: query
+          description: Filter sysops by name (partial match)
+          schema:
+            type: string
+            example: "John"
+        - name: limit
+          in: query
+          description: Maximum number of results
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of sysops
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sysops:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: "John Doe"
+                        node_count:
+                          type: integer
+                          example: 5
+                  count:
+                    type: integer
+                  filter:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+
+  /api/sysops/{name}/nodes:
+    get:
+      summary: Get Sysop Nodes
+      description: Get all nodes operated by a specific sysop
+      operationId: getSysopNodes
+      tags:
+        - Sysops
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Sysop name (URL encoded)
+          schema:
+            type: string
+            example: "John_Doe"
+        - name: limit
+          in: query
+          description: Maximum number of results
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Nodes operated by the sysop
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sysop_name:
+                    type: string
+                    example: "John Doe"
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Node'
+                  count:
+                    type: integer
+                  limit:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/openapi.yaml:
+    get:
+      summary: OpenAPI Specification
+      description: Get the OpenAPI specification for this API
+      operationId: getOpenAPISpec
+      tags:
+        - Documentation
+      responses:
+        '200':
+          description: OpenAPI specification
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+
+  /api/docs:
+    get:
+      summary: API Documentation
+      description: Interactive Swagger UI documentation for this API
+      operationId: getAPIDocs
+      tags:
+        - Documentation
+      responses:
+        '200':
+          description: Swagger UI HTML page
+          content:
+            text/html:
+              schema:
+                type: string
 
 components:
   schemas:

@@ -275,19 +275,19 @@
                 <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Using curl</h3>
                 <div style="background: #1e293b; color: #e2e8f0; padding: 1.5rem; border-radius: var(--radius); margin-bottom: 1rem; font-family: monospace; overflow-x: auto;">
 # Search for nodes in Zone 2<br>
-curl "{{.BaseURL}}nodes?zone=2&limit=5"<br><br>
+curl "{{.BaseURL}}api/nodes?zone=2&limit=5"<br><br>
 
 # Get specific node information<br>
-curl "{{.BaseURL}}nodes/2/5001/100"<br><br>
+curl "{{.BaseURL}}api/nodes/2/5001/100"<br><br>
 
 # Search by sysop name<br>
-curl "{{.BaseURL}}nodes/search/sysop?name=John_Doe"<br><br>
+curl "{{.BaseURL}}api/nodes?sysop_name=John_Doe"<br><br>
 
 # Get network statistics<br>
-curl "{{.BaseURL}}stats"<br><br>
+curl "{{.BaseURL}}api/stats"<br><br>
 
 # Get available dates for statistics<br>
-curl "{{.BaseURL}}stats/dates"
+curl "{{.BaseURL}}api/stats/dates"
                 </div>
 
                 <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Response Format</h3>
