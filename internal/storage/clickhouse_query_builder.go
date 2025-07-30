@@ -269,25 +269,31 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 			args = append(args, conditionArgs...)
 		}
 	} else {
-		// Historical search - group by node to avoid duplicates, show most recent info
+		// Historical search - ClickHouse optimized version without JOINs
+		conditions, conditionArgs := cqb.buildClickHouseWhereConditions(filter)
+		args = append(args, conditionArgs...)
+		
+		var whereClause string
+		if len(conditions) > 0 {
+			whereClause = " WHERE " + strings.Join(conditions, " AND ")
+		}
+		
 		baseSQL = `
 		SELECT zone, net, node, nodelist_date, day_number,
 			   system_name, location, sysop_name, phone, node_type, region, max_speed,
 			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
 			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
 			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
-		FROM nodes
-		WHERE (zone, net, node, nodelist_date) IN (
-			SELECT zone, net, node, MAX(nodelist_date) as max_date
+		FROM (
+			SELECT *,
+				   row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
 			FROM nodes
-			GROUP BY zone, net, node
-		)`
-
-		conditions, conditionArgs := cqb.buildClickHouseWhereConditions(filter)
-		if len(conditions) > 0 {
-			baseSQL += " AND " + strings.Join(conditions, " AND ")
-			args = append(args, conditionArgs...)
-		}
+			WHERE (zone, net, node) IN (
+				SELECT DISTINCT zone, net, node
+				FROM nodes` + whereClause + `
+			)
+		) ranked
+		WHERE rn = 1`
 	}
 
 	// Add ORDER BY

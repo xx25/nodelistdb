@@ -178,24 +178,32 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 			args = append(args, conditionArgs...)
 		}
 	} else {
-		// Historical search - still group by node to avoid duplicates, but show most recent info
+		// Historical search - find nodes that have ever matched criteria, show most recent info
+		conditions, conditionArgs := qb.buildWhereConditions(filter)
+		args = append(args, conditionArgs...)
+		
+		var whereClause string
+		if len(conditions) > 0 {
+			whereClause = " WHERE " + strings.Join(conditions, " AND ")
+		}
+		
 		baseSQL = `
-		SELECT zone, net, node, nodelist_date, day_number,
-			   system_name, location, sysop_name, phone, node_type, region, max_speed,
-			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
-			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+		WITH matching_nodes AS (
+			SELECT DISTINCT zone, net, node
+			FROM nodes` + whereClause + `
+		)
+		SELECT n.zone, n.net, n.node, n.nodelist_date, n.day_number,
+			   n.system_name, n.location, n.sysop_name, n.phone, n.node_type, n.region, n.max_speed,
+			   n.is_cm, n.is_mo, n.has_binkp, n.has_telnet, n.is_down, n.is_hold, n.is_pvt, n.is_active,
+			   n.flags, n.modem_flags, n.internet_protocols, n.internet_hostnames, n.internet_ports, n.internet_emails,
+			   n.conflict_sequence, n.has_conflict, n.has_inet, n.internet_config, n.fts_id
 		FROM (
 			SELECT *, 
 				   ROW_NUMBER() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
 			FROM nodes
-		) ranked WHERE rn = 1`
-
-		conditions, conditionArgs := qb.buildWhereConditions(filter)
-		if len(conditions) > 0 {
-			baseSQL += " AND " + strings.Join(conditions, " AND ")
-			args = append(args, conditionArgs...)
-		}
+		) n
+		INNER JOIN matching_nodes mn ON (n.zone = mn.zone AND n.net = mn.net AND n.node = mn.node)
+		WHERE n.rn = 1`
 	}
 
 	// Add ORDER BY
