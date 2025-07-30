@@ -306,23 +306,50 @@ func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
 }
 
 // formatArrayForDB formats a string array for database storage
-// Returns JSON string that needs to be cast to array type in SQL
+// Returns optimized DuckDB ARRAY[] literal (faster than JSON casting)
 func (rp *ResultParser) formatArrayForDB(arr []string) interface{} {
 	if len(arr) == 0 {
-		return "[]" // Empty JSON array
+		return "ARRAY[]::TEXT[]"
 	}
-	jsonBytes, _ := json.Marshal(arr)
-	return string(jsonBytes)
+	
+	// Pre-allocate buffer for better performance
+	var buf strings.Builder
+	buf.WriteString("ARRAY[")
+	
+	for i, s := range arr {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		buf.WriteByte('\'')
+		// Fast escape - only escape single quotes
+		buf.WriteString(strings.ReplaceAll(s, "'", "''"))
+		buf.WriteByte('\'')
+	}
+	
+	buf.WriteByte(']')
+	return buf.String()
 }
 
-// formatIntArrayForDB formats an int array for database storage
-// Returns JSON string that needs to be cast to array type in SQL
+// formatIntArrayForDB formats an int array for database storage  
+// Returns optimized DuckDB ARRAY[] literal (faster than JSON casting)
 func (rp *ResultParser) formatIntArrayForDB(arr []int) interface{} {
 	if len(arr) == 0 {
-		return "[]" // Empty JSON array
+		return "ARRAY[]::INTEGER[]"
 	}
-	jsonBytes, _ := json.Marshal(arr)
-	return string(jsonBytes)
+	
+	// Pre-allocate buffer for better performance
+	var buf strings.Builder
+	buf.WriteString("ARRAY[")
+	
+	for i, n := range arr {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		buf.WriteString(strconv.Itoa(n))
+	}
+	
+	buf.WriteByte(']')
+	return buf.String()
 }
 
 // ValidateNodeFilter validates a NodeFilter for basic sanity checks

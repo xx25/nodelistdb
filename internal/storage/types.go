@@ -55,7 +55,7 @@ type BatchInsertConfig struct {
 // DefaultBatchInsertConfig returns the default configuration for batch inserts
 func DefaultBatchInsertConfig() BatchInsertConfig {
 	return BatchInsertConfig{
-		ChunkSize:       100,
+		ChunkSize:       5000, // Increased from 100 for much better bulk insert performance
 		UseTransactions: true,
 	}
 }
@@ -93,6 +93,7 @@ type QueryBuilderInterface interface {
 	InsertNodeSQL() string
 	NodeSelectSQL() string
 	BuildBatchInsertSQL(batchSize int) string
+	BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string
 	BuildNodesQuery(filter database.NodeFilter) (string, []interface{})
 	BuildFTSQuery(filter database.NodeFilter) (string, []interface{}, bool)
 

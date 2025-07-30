@@ -25,7 +25,7 @@ func (qb *QueryBuilder) InsertNodeSQL() string {
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
 		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-		json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::INTEGER[], json(?)::VARCHAR[],
+		?, ?, ?, ?, ?, ?,
 		?, ?, ?, ?, ?)`
 }
 
@@ -35,8 +35,8 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 		return qb.InsertNodeSQL()
 	}
 
-	// Create placeholder for one row with JSON casting for array fields
-	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::VARCHAR[], json(?)::INTEGER[], json(?)::VARCHAR[], ?, ?, ?, ?, ?)"
+	// Create placeholder for one row with direct array binding (no JSON casting)
+	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 	// Build batch values
 	values := make([]string, batchSize)
@@ -54,6 +54,93 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 		) VALUES %s
 		ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
 		DO NOTHING`, strings.Join(values, ","))
+}
+
+// BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT for maximum performance
+func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
+	if len(nodes) == 0 {
+		return ""
+	}
+
+	var buf strings.Builder
+	buf.WriteString(`INSERT INTO nodes (
+		zone, net, node, nodelist_date, day_number,
+		system_name, location, sysop_name, phone, node_type, region, max_speed,
+		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
+		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+	) VALUES `)
+	
+	for i, node := range nodes {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		
+		// Compute FTS ID if not set
+		if node.FtsId == "" {
+			node.ComputeFtsId()
+		}
+		
+		// Build direct VALUES clause
+		buf.WriteByte('(')
+		
+		// Core fields
+		buf.WriteString(fmt.Sprintf("%d,%d,%d,'%s',%d,", 
+			node.Zone, node.Net, node.Node, 
+			node.NodelistDate.Format("2006-01-02"), node.DayNumber))
+		
+		// String fields (escaped)
+		buf.WriteString(fmt.Sprintf("'%s','%s','%s','%s','%s',", 
+			qb.escapeSQL(node.SystemName), qb.escapeSQL(node.Location), 
+			qb.escapeSQL(node.SysopName), qb.escapeSQL(node.Phone), 
+			qb.escapeSQL(node.NodeType)))
+		
+		// Region (nullable)
+		if node.Region != nil {
+			buf.WriteString(fmt.Sprintf("%d,", *node.Region))
+		} else {
+			buf.WriteString("NULL,")
+		}
+		
+		// Max speed
+		buf.WriteString(fmt.Sprintf("'%s',", qb.escapeSQL(node.MaxSpeed)))
+		
+		// Boolean flags
+		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,", 
+			node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
+			node.IsDown, node.IsHold, node.IsPvt, node.IsActive))
+		
+		// Arrays (optimized format)
+		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,", 
+			rp.formatArrayForDB(node.Flags),
+			rp.formatArrayForDB(node.ModemFlags),
+			rp.formatArrayForDB(node.InternetProtocols),
+			rp.formatArrayForDB(node.InternetHostnames),
+			rp.formatIntArrayForDB(node.InternetPorts),
+			rp.formatArrayForDB(node.InternetEmails)))
+		
+		// Final fields
+		buf.WriteString(fmt.Sprintf("%d,%t,%t,", 
+			node.ConflictSequence, node.HasConflict, node.HasInet))
+		
+		// Internet config JSON
+		if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
+			buf.WriteString(fmt.Sprintf("'%s',", qb.escapeSQL(string(node.InternetConfig))))
+		} else {
+			buf.WriteString("NULL,")
+		}
+		
+		// FTS ID
+		buf.WriteString(fmt.Sprintf("'%s')", qb.escapeSQL(node.FtsId)))
+	}
+	
+	buf.WriteString(" ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) DO NOTHING")
+	return buf.String()
+}
+
+// escapeSQL escapes single quotes for SQL string literals
+func (qb *QueryBuilder) escapeSQL(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
 }
 
 // NodeSelectSQL returns the base SELECT statement for nodes

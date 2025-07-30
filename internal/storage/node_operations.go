@@ -59,23 +59,16 @@ func (no *NodeOperations) InsertNodes(nodes []database.Node) error {
 	return tx.Commit()
 }
 
-// insertChunkSafely inserts a chunk of nodes using parameterized queries for safety
+// insertChunkSafely inserts a chunk of nodes using direct SQL generation for performance
 func (no *NodeOperations) insertChunkSafely(tx *sql.Tx, chunk []database.Node) error {
 	if len(chunk) == 0 {
 		return nil
 	}
 
-	// Build parameterized query
-	insertSQL := no.queryBuilder.BuildBatchInsertSQL(len(chunk))
+	// Use direct SQL generation for bulk imports (much faster than parameterized queries)
+	insertSQL := no.queryBuilder.BuildDirectBatchInsertSQL(chunk, no.resultParser)
 
-	// Flatten all node arguments into a single slice
-	var args []interface{}
-	for _, node := range chunk {
-		nodeArgs := no.resultParser.NodeToInsertArgs(node)
-		args = append(args, nodeArgs...)
-	}
-
-	_, err := tx.Exec(insertSQL, args...)
+	_, err := tx.Exec(insertSQL)
 	if err != nil {
 		return fmt.Errorf("failed to execute batch insert: %w", err)
 	}

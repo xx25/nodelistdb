@@ -17,8 +17,8 @@ type DB struct {
 
 // New creates a new DuckDB connection
 func New(path string) (*DB, error) {
-	// Configure DuckDB connection string with optimizations
-	dsn := fmt.Sprintf("%s?memory_limit=8GB&threads=4", path)
+	// Configure DuckDB connection string with aggressive bulk import optimizations
+	dsn := fmt.Sprintf("%s?memory_limit=16GB&threads=8", path)
 
 	conn, err := sql.Open("duckdb", dsn)
 	if err != nil {
@@ -41,7 +41,7 @@ func New(path string) (*DB, error) {
 // NewReadOnly creates a new read-only DuckDB connection
 func NewReadOnly(path string) (*DB, error) {
 	// Configure DuckDB connection string with read-only access
-	dsn := fmt.Sprintf("%s?access_mode=read_only&memory_limit=8GB&threads=4", path)
+	dsn := fmt.Sprintf("%s?access_mode=read_only&memory_limit=16GB&threads=8", path)
 
 	conn, err := sql.Open("duckdb", dsn)
 	if err != nil {
