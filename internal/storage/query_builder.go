@@ -595,16 +595,12 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 	conditions = append(conditions, nonFTSConditions...)
 	args = append(args, nonFTSArgs...)
 	
-	// Latest only logic
-	if filter.LatestOnly != nil && *filter.LatestOnly {
+	// When LatestOnly is false, we still want to show only the latest entry for each address
+	// but search through all historical data
+	if filter.LatestOnly == nil || !*filter.LatestOnly {
+		// Apply grouping to show only latest entry per address
 		if hasFTSConditions {
-			// With FTS, we need to wrap in a subquery for latest only
-			baseSQL = fmt.Sprintf(`
-			SELECT * FROM (
-				%s
-			) ranked_nodes WHERE ranked_nodes.fts_score > 0`, baseSQL)
-		} else {
-			// Use the standard latest only approach
+			// For FTS queries, fallback to LIKE-based query with grouping
 			query, args := qb.BuildNodesQuery(filter)
 			return query, args, false
 		}
