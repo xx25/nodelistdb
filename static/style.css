@@ -79,19 +79,19 @@ nav {
     display: flex;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 0.25rem;
-    padding: 0 1rem;
+    gap: 0.05rem;
+    padding: 0 0.25rem;
 }
 
 nav a {
     display: inline-flex;
     align-items: center;
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem 0.4rem;
     color: var(--text-secondary);
     text-decoration: none;
     border-radius: var(--radius);
     font-weight: 500;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     transition: all 0.2s ease;
     border: 1px solid transparent;
     white-space: nowrap;
@@ -502,13 +502,14 @@ table a:hover {
     }
     
     .nav-container {
-        gap: 0.1rem;
+        gap: 0.05rem;
         justify-content: space-around;
+        padding: 0 0.25rem;
     }
     
     nav a {
-        padding: 0.4rem 0.5rem;
-        font-size: 0.8rem;
+        padding: 0.4rem 0.3rem;
+        font-size: 0.75rem;
     }
     
     .search-form {
