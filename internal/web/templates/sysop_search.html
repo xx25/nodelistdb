@@ -56,8 +56,13 @@
                     <h2 style="color: var(--text-primary); margin-bottom: 1rem;">
                         Search Results 
                         <span class="badge badge-info" style="font-size: 0.8rem; margin-left: 0.5rem;">
-                            {{.Count}} nodes found{{if eq .Count 100}} (limited to 100 results){{end}}
+                            {{.Count}} nodes found
                         </span>
+                        {{if eq .Count 100}}
+                            <span style="font-size: 0.7rem; color: var(--text-secondary); font-weight: normal; margin-left: 0.5rem;">
+                                (limited to 100 results)
+                            </span>
+                        {{end}}
                     </h2>
                     
                     <div class="table-container">
