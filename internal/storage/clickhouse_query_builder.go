@@ -118,6 +118,14 @@ func (cqb *ClickHouseQueryBuilder) BuildClickHouseFTSQuery(filter database.NodeF
 	var args []interface{}
 	usedFTS := false
 
+	// When doing text searches with LatestOnly=false, use the proper grouping query
+	if (filter.Location != nil || filter.SystemName != nil || filter.SysopName != nil) &&
+		(filter.LatestOnly == nil || !*filter.LatestOnly) {
+		// Use the main BuildNodesQuery which has proper grouping logic
+		query, queryArgs := cqb.BuildNodesQuery(filter)
+		return query, queryArgs, true
+	}
+
 	baseQuery := cqb.NodeSelectSQL()
 
 	// Text search using materialized lowercase columns with bloom filter indexes
