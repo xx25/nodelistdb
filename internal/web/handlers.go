@@ -485,6 +485,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		CurrentlyActive  bool
 		FlagDescriptions map[string]flags.FlagInfo
 		Version          string
+		ActivePage       string
 	}{
 		Title:            "Node History",
 		Address:          fmt.Sprintf("%d:%d/%d", zone, net, node),
@@ -496,6 +497,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		CurrentlyActive:  activityInfo.CurrentlyActive,
 		FlagDescriptions: flags.GetFlagDescriptions(),
 		Version:          version.GetVersionInfo(),
+		ActivePage:       "",
 	}
 
 	if err := s.templates["node_history"].Execute(w, data); err != nil {
