@@ -443,31 +443,32 @@ func (cqb *ClickHouseQueryBuilder) NodeDateRangeSQL() string {
 }
 
 func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
-	// ClickHouse-compatible sysop search query without correlated subqueries
+	// ClickHouse-optimized sysop search query without JOINs
 	return `
-	WITH node_ranges AS (
+	WITH 
+	max_date AS (
+		SELECT MAX(nodelist_date) as latest_date FROM nodes
+	),
+	sysop_nodes AS (
 		SELECT 
 			zone, net, node,
 			MIN(nodelist_date) as first_date,
 			MAX(nodelist_date) as last_date,
 			argMax(system_name, nodelist_date) as system_name,
 			argMax(location, nodelist_date) as location,
-			argMax(sysop_name, nodelist_date) as sysop_name
+			argMax(sysop_name, nodelist_date) as sysop_name,
+			-- Check if this sysop is still on this address in latest nodelist
+			MAX(CASE WHEN nodelist_date = (SELECT latest_date FROM max_date) THEN 1 ELSE 0 END) as is_in_latest
 		FROM nodes
-		WHERE replace(sysop_name_lower, '_', ' ') LIKE concat('%', lower(replace(?, '_', ' ')), '%')
+		WHERE lower(sysop_name) LIKE concat('%', lower(?), '%')
 		GROUP BY zone, net, node
-	),
-	max_date AS (
-		SELECT MAX(nodelist_date) as latest_date FROM nodes
 	)
 	SELECT 
-		nr.zone, nr.net, nr.node, nr.system_name, nr.location, nr.sysop_name,
-		nr.first_date, nr.last_date,
-		CASE WHEN n.nodelist_date IS NOT NULL THEN true ELSE false END as currently_active
-	FROM node_ranges nr
-	CROSS JOIN max_date md
-	LEFT JOIN nodes n ON (n.zone = nr.zone AND n.net = nr.net AND n.node = nr.node AND n.nodelist_date = md.latest_date)
-	ORDER BY nr.first_date DESC
+		zone, net, node, system_name, location, sysop_name,
+		first_date, last_date,
+		CASE WHEN is_in_latest = 1 THEN true ELSE false END as currently_active
+	FROM sysop_nodes
+	ORDER BY first_date DESC
 	LIMIT ?`
 }
 
