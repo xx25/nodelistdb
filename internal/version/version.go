@@ -11,7 +11,7 @@ var Version = "dev"
 // BuildTime will be set during build time via ldflags
 var BuildTime = "unknown"
 
-// GitCommit will be set during build time via ldflags  
+// GitCommit will be set during build time via ldflags
 var GitCommit = "unknown"
 
 // GetVersionInfo returns formatted version information
@@ -48,7 +48,7 @@ func getGitVersion() string {
 			return strings.TrimPrefix(version, "v")
 		}
 	}
-	
+
 	// Fallback: try to get current commit hash
 	cmd = exec.Command("git", "rev-parse", "--short", "HEAD")
 	if output, err := cmd.Output(); err == nil {
@@ -57,6 +57,6 @@ func getGitVersion() string {
 			return "dev-" + commit
 		}
 	}
-	
+
 	return "dev-unknown"
 }

@@ -61,7 +61,7 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	filter := database.NodeFilter{}
 	query := r.URL.Query()
-	
+
 	// Track if we have any specific constraints to prevent overly broad searches
 	hasSpecificConstraint := false
 
@@ -150,13 +150,13 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 			hasSpecificConstraint = true
 		}
 	}
-	
+
 	// Latest only filter (default: false, includes historical data)
 	if latestOnly := query.Get("latest_only"); latestOnly != "" {
 		latest := strings.ToLower(latestOnly) == "true"
 		filter.LatestOnly = &latest
 	}
-	
+
 	// Prevent overly broad searches that can cause memory exhaustion
 	if !hasSpecificConstraint {
 		http.Error(w, "Search requires at least one specific constraint (zone, net, node, system_name, location, sysop_name, node_type, is_active, is_cm, or date range)", http.StatusBadRequest)
@@ -421,7 +421,7 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse filter options
 	query := r.URL.Query()
 	filter := storage.ChangeFilter{}
-	
+
 	// Check for new exclude parameter format
 	if excludeStr := query.Get("exclude"); excludeStr != "" {
 		// Parse comma-separated list of fields to exclude
@@ -574,7 +574,6 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
-
 
 // GetAvailableDatesHandler returns all available dates for stats
 // GET /api/stats/dates
@@ -836,7 +835,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/sysops/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		pathParts := strings.Split(strings.TrimPrefix(path, "/api/sysops/"), "/")
-		
+
 		// Check if this is /api/sysops/{name}/nodes pattern
 		if len(pathParts) >= 2 && pathParts[1] == "nodes" {
 			s.SysopNodesHandler(w, r)

@@ -935,7 +935,7 @@ func (p *Parser) extractDateFromFile(filePath string) (time.Time, int, error) {
 	}
 	defer file.Close()
 
-	// Create reader that handles both regular and gzipped files  
+	// Create reader that handles both regular and gzipped files
 	var reader io.Reader = file
 	if strings.HasSuffix(strings.ToLower(filePath), ".gz") {
 		gzipReader, err := gzip.NewReader(file)

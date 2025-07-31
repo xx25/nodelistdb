@@ -64,12 +64,12 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 	// Checkbox sends "1" when checked, empty string when unchecked
 	includeHistorical := r.FormValue("include_historical") == "1"
 	latestOnly := !includeHistorical
-	
+
 	filter := database.NodeFilter{
 		LatestOnly: &latestOnly,
 		Limit:      100, // Default limit
 	}
-	
+
 	// Track if we have any specific constraints to prevent overly broad searches
 	hasSpecificConstraint := false
 

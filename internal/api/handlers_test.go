@@ -419,7 +419,7 @@ func createNodeChangesHandler(mockStorage *MockStorage) http.HandlerFunc {
 		// Parse filter options
 		query := r.URL.Query()
 		filter := storage.ChangeFilter{}
-		
+
 		// Check for new exclude parameter format
 		if excludeStr := query.Get("exclude"); excludeStr != "" {
 			excludeFields := strings.Split(excludeStr, ",")
@@ -712,7 +712,7 @@ func TestSysopNodesHandler_Success(t *testing.T) {
 		SysopName:  "Test_Sysop",
 		IsActive:   true,
 	})
-	
+
 	handler := createSysopNodesHandler(mockStorage)
 
 	req := httptest.NewRequest("GET", "/api/sysops/Test_Sysop/nodes", nil)

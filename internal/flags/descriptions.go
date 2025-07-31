@@ -135,14 +135,14 @@ func GetTFlagInfo(flag string) (FlagInfo, bool) {
 	if len(flag) != 3 || flag[0] != 'T' {
 		return FlagInfo{}, false
 	}
-	
+
 	startTime, startOk := timeLetterToUTC[flag[1]]
 	endTime, endOk := timeLetterToUTC[flag[2]]
-	
+
 	if !startOk || !endOk {
 		return FlagInfo{}, false
 	}
-	
+
 	return FlagInfo{
 		Category:    "schedule",
 		HasValue:    false,

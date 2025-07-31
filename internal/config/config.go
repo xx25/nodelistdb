@@ -20,8 +20,8 @@ const (
 
 // DatabaseConfig holds database connection configuration
 type DatabaseConfig struct {
-	Type     DatabaseType `json:"type"`
-	DuckDB   *DuckDBConfig `json:"duckdb,omitempty"`
+	Type       DatabaseType      `json:"type"`
+	DuckDB     *DuckDBConfig     `json:"duckdb,omitempty"`
 	ClickHouse *ClickHouseConfig `json:"clickhouse,omitempty"`
 }
 
@@ -31,13 +31,13 @@ type DuckDBConfig struct {
 	MemoryLimit string `json:"memory_limit,omitempty"`
 	Threads     int    `json:"threads,omitempty"`
 	ReadOnly    bool   `json:"read_only,omitempty"`
-	
+
 	// Performance settings for bulk loading
-	BulkMode             bool   `json:"bulk_mode,omitempty"`              // Enable bulk loading optimizations
-	DisableWAL           bool   `json:"disable_wal,omitempty"`            // Disable Write-Ahead Logging
-	CheckpointThreshold  string `json:"checkpoint_threshold,omitempty"`   // Memory threshold before checkpoint
-	WALAutoCheckpoint    int    `json:"wal_auto_checkpoint,omitempty"`    // Pages before auto checkpoint (0 = disabled)
-	TempDirectory        string `json:"temp_directory,omitempty"`         // Temporary files directory
+	BulkMode            bool   `json:"bulk_mode,omitempty"`            // Enable bulk loading optimizations
+	DisableWAL          bool   `json:"disable_wal,omitempty"`          // Disable Write-Ahead Logging
+	CheckpointThreshold string `json:"checkpoint_threshold,omitempty"` // Memory threshold before checkpoint
+	WALAutoCheckpoint   int    `json:"wal_auto_checkpoint,omitempty"`  // Pages before auto checkpoint (0 = disabled)
+	TempDirectory       string `json:"temp_directory,omitempty"`       // Temporary files directory
 }
 
 // ClickHouseConfig holds ClickHouse-specific configuration
@@ -48,14 +48,14 @@ type ClickHouseConfig struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	UseSSL   bool   `json:"use_ssl,omitempty"`
-	
+
 	// Connection settings
-	MaxOpenConns    int    `json:"max_open_conns,omitempty"`
-	MaxIdleConns    int    `json:"max_idle_conns,omitempty"`
-	DialTimeout     string `json:"dial_timeout,omitempty"`
-	ReadTimeout     string `json:"read_timeout,omitempty"`
-	WriteTimeout    string `json:"write_timeout,omitempty"`
-	Compression     string `json:"compression,omitempty"` // none, zstd, lz4, gzip
+	MaxOpenConns int    `json:"max_open_conns,omitempty"`
+	MaxIdleConns int    `json:"max_idle_conns,omitempty"`
+	DialTimeout  string `json:"dial_timeout,omitempty"`
+	ReadTimeout  string `json:"read_timeout,omitempty"`
+	WriteTimeout string `json:"write_timeout,omitempty"`
+	Compression  string `json:"compression,omitempty"` // none, zstd, lz4, gzip
 }
 
 // Config represents the complete application configuration
@@ -208,23 +208,23 @@ func (c *Config) GetDSN() (string, error) {
 	switch c.Database.Type {
 	case DatabaseTypeDuckDB:
 		dsn := c.Database.DuckDB.Path + "?"
-		
+
 		// Basic settings
 		if c.Database.DuckDB.ReadOnly {
 			dsn += "access_mode=read_only&"
 		}
-		dsn += fmt.Sprintf("memory_limit=%s&threads=%d", 
+		dsn += fmt.Sprintf("memory_limit=%s&threads=%d",
 			c.Database.DuckDB.MemoryLimit, c.Database.DuckDB.Threads)
-		
+
 		// Performance settings for bulk mode (only valid connection string options)
 		if c.Database.DuckDB.BulkMode || c.Database.DuckDB.DisableWAL {
 			// Note: checkpoint_threshold and wal_autocheckpoint must be set via PRAGMA after connection
 		}
-		
+
 		if c.Database.DuckDB.TempDirectory != "" {
 			dsn += fmt.Sprintf("&temp_directory=%s", c.Database.DuckDB.TempDirectory)
 		}
-		
+
 		return dsn, nil
 	case DatabaseTypeClickHouse:
 		// ClickHouse DSN will be handled by the ClickHouse adapter
@@ -269,12 +269,12 @@ func (c *ClickHouseConfig) ToClickHouseDatabaseConfig() (*database.ClickHouseCon
 	if err != nil {
 		return nil, fmt.Errorf("invalid dial_timeout: %w", err)
 	}
-	
+
 	readTimeout, err := time.ParseDuration(c.ReadTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("invalid read_timeout: %w", err)
 	}
-	
+
 	writeTimeout, err := time.ParseDuration(c.WriteTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("invalid write_timeout: %w", err)

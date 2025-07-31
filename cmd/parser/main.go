@@ -89,7 +89,7 @@ func main() {
 		case config.DatabaseTypeDuckDB:
 			fmt.Printf("Database: %s (DuckDB)\n", cfg.Database.DuckDB.Path)
 		case config.DatabaseTypeClickHouse:
-			fmt.Printf("Database: %s:%d/%s (ClickHouse)\n", 
+			fmt.Printf("Database: %s:%d/%s (ClickHouse)\n",
 				cfg.Database.ClickHouse.Host, cfg.Database.ClickHouse.Port, cfg.Database.ClickHouse.Database)
 		}
 		fmt.Printf("Path: %s\n", *path)
@@ -131,7 +131,7 @@ func main() {
 			MaxOpenConns: cfg.Database.ClickHouse.MaxOpenConns,
 			MaxIdleConns: cfg.Database.ClickHouse.MaxIdleConns,
 		}
-		
+
 		// Parse timeout strings
 		if cfg.Database.ClickHouse.DialTimeout != "" {
 			if chConfig.DialTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.DialTimeout); err != nil {
@@ -140,7 +140,7 @@ func main() {
 		} else {
 			chConfig.DialTimeout = 30 * time.Second
 		}
-		
+
 		if cfg.Database.ClickHouse.ReadTimeout != "" {
 			if chConfig.ReadTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.ReadTimeout); err != nil {
 				log.Fatalf("Invalid read timeout: %v", err)
@@ -148,7 +148,7 @@ func main() {
 		} else {
 			chConfig.ReadTimeout = 5 * time.Minute
 		}
-		
+
 		if cfg.Database.ClickHouse.WriteTimeout != "" {
 			if chConfig.WriteTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.WriteTimeout); err != nil {
 				log.Fatalf("Invalid write timeout: %v", err)
@@ -156,14 +156,14 @@ func main() {
 		} else {
 			chConfig.WriteTimeout = 1 * time.Minute
 		}
-		
+
 		chConfig.Compression = cfg.Database.ClickHouse.Compression
-		
+
 		db, err = database.NewClickHouse(chConfig)
 	default:
 		log.Fatalf("Unsupported database type: %s", cfg.Database.Type)
 	}
-	
+
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -213,17 +213,17 @@ func main() {
 		if !*quiet {
 			fmt.Println("Rebuilding Full-Text Search indexes...")
 		}
-		
+
 		// Drop existing FTS indexes
 		if err := db.DropFTSIndexes(); err != nil {
 			log.Printf("Warning: Could not drop existing FTS indexes: %v", err)
 		}
-		
+
 		// Create new FTS indexes
 		if err := db.CreateFTSIndexes(); err != nil {
 			log.Fatalf("Failed to create FTS indexes: %v", err)
 		}
-		
+
 		if !*quiet {
 			fmt.Println("FTS indexes rebuilt successfully!")
 		}
@@ -445,7 +445,7 @@ func findNodelistFiles(path string, recursive bool) ([]string, error) {
 // isNodelistFile checks if a file is a nodelist file based on naming patterns
 func isNodelistFile(filePath string) bool {
 	filename := strings.ToLower(filepath.Base(filePath))
-	
+
 	// Remove .gz extension for pattern matching
 	if strings.HasSuffix(filename, ".gz") {
 		filename = strings.TrimSuffix(filename, ".gz")

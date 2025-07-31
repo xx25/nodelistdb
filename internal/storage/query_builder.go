@@ -70,70 +70,70 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
 		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	) VALUES `)
-	
+
 	for i, node := range nodes {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		
+
 		// Compute FTS ID if not set
 		if node.FtsId == "" {
 			node.ComputeFtsId()
 		}
-		
+
 		// Build direct VALUES clause
 		buf.WriteByte('(')
-		
+
 		// Core fields
-		buf.WriteString(fmt.Sprintf("%d,%d,%d,'%s',%d,", 
-			node.Zone, node.Net, node.Node, 
+		buf.WriteString(fmt.Sprintf("%d,%d,%d,'%s',%d,",
+			node.Zone, node.Net, node.Node,
 			node.NodelistDate.Format("2006-01-02"), node.DayNumber))
-		
+
 		// String fields (escaped)
-		buf.WriteString(fmt.Sprintf("'%s','%s','%s','%s','%s',", 
-			qb.escapeSQL(node.SystemName), qb.escapeSQL(node.Location), 
-			qb.escapeSQL(node.SysopName), qb.escapeSQL(node.Phone), 
+		buf.WriteString(fmt.Sprintf("'%s','%s','%s','%s','%s',",
+			qb.escapeSQL(node.SystemName), qb.escapeSQL(node.Location),
+			qb.escapeSQL(node.SysopName), qb.escapeSQL(node.Phone),
 			qb.escapeSQL(node.NodeType)))
-		
+
 		// Region (nullable)
 		if node.Region != nil {
 			buf.WriteString(fmt.Sprintf("%d,", *node.Region))
 		} else {
 			buf.WriteString("NULL,")
 		}
-		
+
 		// Max speed
 		buf.WriteString(fmt.Sprintf("%d,", node.MaxSpeed))
-		
+
 		// Boolean flags
-		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,", 
+		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,",
 			node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
 			node.IsDown, node.IsHold, node.IsPvt, node.IsActive))
-		
+
 		// Arrays (optimized format)
-		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,", 
+		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,",
 			rp.formatArrayForDB(node.Flags),
 			rp.formatArrayForDB(node.ModemFlags),
 			rp.formatArrayForDB(node.InternetProtocols),
 			rp.formatArrayForDB(node.InternetHostnames),
 			rp.formatIntArrayForDB(node.InternetPorts),
 			rp.formatArrayForDB(node.InternetEmails)))
-		
+
 		// Final fields
-		buf.WriteString(fmt.Sprintf("%d,%t,%t,", 
+		buf.WriteString(fmt.Sprintf("%d,%t,%t,",
 			node.ConflictSequence, node.HasConflict, node.HasInet))
-		
+
 		// Internet config JSON
 		if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
 			buf.WriteString(fmt.Sprintf("'%s',", qb.escapeSQL(string(node.InternetConfig))))
 		} else {
 			buf.WriteString("NULL,")
 		}
-		
+
 		// FTS ID
 		buf.WriteString(fmt.Sprintf("'%s')", qb.escapeSQL(node.FtsId)))
 	}
-	
+
 	buf.WriteString(" ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) DO NOTHING")
 	return buf.String()
 }
@@ -181,12 +181,12 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 		// Historical search - find nodes that have ever matched criteria, show most recent info
 		conditions, conditionArgs := qb.buildWhereConditions(filter)
 		args = append(args, conditionArgs...)
-		
+
 		var whereClause string
 		if len(conditions) > 0 {
 			whereClause = " WHERE " + strings.Join(conditions, " AND ")
 		}
-		
+
 		baseSQL = `
 		WITH matching_nodes AS (
 			SELECT DISTINCT zone, net, node
@@ -419,6 +419,40 @@ func (qb *QueryBuilder) SysopSearchSQL() string {
 	LIMIT ?`
 }
 
+// NodeSummarySearchSQL returns SQL for searching nodes with lifetime information
+func (qb *QueryBuilder) NodeSummarySearchSQL() string {
+	return `
+	WITH node_ranges AS (
+		SELECT 
+			zone, net, node,
+			MIN(nodelist_date) as first_date,
+			MAX(nodelist_date) as last_date,
+			FIRST(system_name ORDER BY nodelist_date DESC) as system_name,
+			FIRST(location ORDER BY nodelist_date DESC) as location,
+			FIRST(sysop_name ORDER BY nodelist_date DESC) as sysop_name
+		FROM nodes
+		WHERE 1=1
+			AND (? IS NULL OR zone = ?)
+			AND (? IS NULL OR net = ?)
+			AND (? IS NULL OR node = ?)
+			AND (? IS NULL OR system_name ILIKE ?)
+			AND (? IS NULL OR location ILIKE ?)
+			AND (? IS NULL OR sysop_name ILIKE ?)
+		GROUP BY zone, net, node
+	)
+	SELECT 
+		nr.zone, nr.net, nr.node, nr.system_name, nr.location, nr.sysop_name,
+		nr.first_date, nr.last_date,
+		CASE WHEN EXISTS (
+			SELECT 1 FROM nodes n 
+			WHERE n.zone = nr.zone AND n.net = nr.net AND n.node = nr.node 
+			AND n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
+		) THEN true ELSE false END as currently_active
+	FROM node_ranges nr
+	ORDER BY nr.last_date DESC, nr.zone, nr.net, nr.node
+	LIMIT ?`
+}
+
 // ConflictCheckSQL returns SQL for checking if a node already exists for a date
 func (qb *QueryBuilder) ConflictCheckSQL() string {
 	return `SELECT COUNT(*) FROM nodes 
@@ -536,7 +570,7 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 	var conditions []string
 	var args []interface{}
 	var hasFTSConditions bool
-	
+
 	baseSQL := `
 	SELECT n.zone, n.net, n.node, n.nodelist_date, n.day_number,
 		   n.system_name, n.location, n.sysop_name, n.phone, n.node_type, n.region, n.max_speed,
@@ -545,11 +579,11 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 		   n.conflict_sequence, n.has_conflict, n.has_inet, n.internet_config,
 		   COALESCE(fts.score, 0) as fts_score
 	FROM nodes n`
-	
+
 	// Build FTS join for text search fields
 	var ftsJoin string
 	var ftsFields []string
-	
+
 	if filter.Location != nil && len(strings.TrimSpace(*filter.Location)) >= 2 {
 		ftsFields = append(ftsFields, "location")
 		hasFTSConditions = true
@@ -562,7 +596,7 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 		ftsFields = append(ftsFields, "system_name")
 		hasFTSConditions = true
 	}
-	
+
 	if hasFTSConditions {
 		// Build combined search term
 		var searchTerms []string
@@ -575,9 +609,9 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 		if filter.SystemName != nil {
 			searchTerms = append(searchTerms, strings.TrimSpace(*filter.SystemName))
 		}
-		
+
 		searchTerm := strings.Join(searchTerms, " ")
-		
+
 		ftsJoin = fmt.Sprintf(`
 		LEFT JOIN (
 			SELECT fts_id, 
@@ -585,16 +619,16 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 			FROM nodes
 		) fts ON n.fts_id = fts.fts_id AND fts.score IS NOT NULL`,
 			strings.Join(ftsFields, ","))
-		
+
 		baseSQL += ftsJoin
 		args = append(args, searchTerm)
 	}
-	
+
 	// Add other non-FTS conditions
 	nonFTSConditions, nonFTSArgs := qb.buildNonTextConditions(filter)
 	conditions = append(conditions, nonFTSConditions...)
 	args = append(args, nonFTSArgs...)
-	
+
 	// When LatestOnly is false, we still want to show only the latest entry for each address
 	// but search through all historical data
 	if filter.LatestOnly == nil || !*filter.LatestOnly {
@@ -605,23 +639,23 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 			return query, args, false
 		}
 	}
-	
+
 	if len(conditions) > 0 {
 		baseSQL += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	
+
 	// Order by FTS score if we have FTS conditions
 	if hasFTSConditions {
 		baseSQL += " ORDER BY fts_score DESC, n.nodelist_date DESC"
 	} else {
 		baseSQL += " ORDER BY n.nodelist_date DESC"
 	}
-	
+
 	// Add limit
 	if filter.Limit > 0 {
 		baseSQL += fmt.Sprintf(" LIMIT %d", filter.Limit)
 	}
-	
+
 	return baseSQL, args, hasFTSConditions
 }
 
@@ -629,7 +663,7 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 func (qb *QueryBuilder) buildNonTextConditions(filter database.NodeFilter) ([]string, []interface{}) {
 	var conditions []string
 	var args []interface{}
-	
+
 	if filter.Zone != nil {
 		conditions = append(conditions, "n.zone = ?")
 		args = append(args, *filter.Zone)
@@ -666,6 +700,6 @@ func (qb *QueryBuilder) buildNonTextConditions(filter database.NodeFilter) ([]st
 		conditions = append(conditions, "n.has_binkp = ?")
 		args = append(args, *filter.HasBinkp)
 	}
-	
+
 	return conditions, args
 }

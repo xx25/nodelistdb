@@ -21,12 +21,12 @@ type NodeSummary struct {
 
 // SysopInfo represents information about a sysop
 type SysopInfo struct {
-	Name         string    `json:"name"`
-	NodeCount    int       `json:"node_count"`
-	ActiveNodes  int       `json:"active_nodes"`
-	FirstSeen    time.Time `json:"first_seen"`
-	LastSeen     time.Time `json:"last_seen"`
-	Zones        []int     `json:"zones"`
+	Name        string    `json:"name"`
+	NodeCount   int       `json:"node_count"`
+	ActiveNodes int       `json:"active_nodes"`
+	FirstSeen   time.Time `json:"first_seen"`
+	LastSeen    time.Time `json:"last_seen"`
+	Zones       []int     `json:"zones"`
 }
 
 // ChangeFilter allows filtering out specific types of changes when analyzing node history
@@ -110,6 +110,7 @@ type QueryBuilderInterface interface {
 	NodeHistorySQL() string
 	NodeDateRangeSQL() string
 	SysopSearchSQL() string
+	NodeSummarySearchSQL() string
 
 	// Utility queries
 	ConflictCheckSQL() string
@@ -122,7 +123,7 @@ type QueryBuilderInterface interface {
 	NearestDateAfterSQL() string
 	ConsecutiveNodelistCheckSQL() string
 	NextNodelistDateSQL() string
-	
+
 	// Sysop queries
 	UniqueSysopsWithFilterSQL() string
 	UniqueSysopsSQL() string

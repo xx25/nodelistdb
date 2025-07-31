@@ -16,7 +16,7 @@ import (
 // ClickHouseDB wraps a ClickHouse connection with thread-safety
 type ClickHouseDB struct {
 	conn   driver.Conn
-	sqlDB  *sql.DB  // For compatibility with existing code
+	sqlDB  *sql.DB // For compatibility with existing code
 	mu     sync.RWMutex
 	config *ClickHouseConfig
 }
@@ -69,7 +69,7 @@ func NewClickHouse(config *ClickHouseConfig) (*ClickHouseDB, error) {
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := conn.Ping(ctx); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to ping ClickHouse: %w", err)
@@ -77,13 +77,13 @@ func NewClickHouse(config *ClickHouseConfig) (*ClickHouseDB, error) {
 
 	// Create SQL DB for compatibility
 	sqlDB := clickhouse.OpenDB(options)
-	
+
 	// CRITICAL: Set pool settings AFTER OpenDB due to driver bug
 	// If MaxOpenConns/MaxIdleConns are in Options, the driver fails with "invalid settings"
 	sqlDB.SetMaxOpenConns(config.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(config.MaxIdleConns)
 	sqlDB.SetConnMaxLifetime(time.Hour)
-	
+
 	db := &ClickHouseDB{
 		conn:   conn,
 		sqlDB:  sqlDB,
@@ -120,13 +120,13 @@ func (db *ClickHouseDB) Close() error {
 			err = sqlErr
 		}
 	}
-	
+
 	if db.conn != nil {
 		if connErr := db.conn.Close(); connErr != nil && err == nil {
 			err = connErr
 		}
 	}
-	
+
 	return err
 }
 
@@ -150,7 +150,7 @@ func (db *ClickHouseDB) CreateSchema() error {
 	defer db.mu.Unlock()
 
 	ctx := context.Background()
-	
+
 	// Create nodes table optimized for ClickHouse
 	createSQL := `
 	CREATE TABLE IF NOT EXISTS nodes (
@@ -240,7 +240,7 @@ func (db *ClickHouseDB) GetVersion() (string, error) {
 
 	ctx := context.Background()
 	var version string
-	
+
 	row := db.conn.QueryRow(ctx, "SELECT version()")
 	if err := row.Scan(&version); err != nil {
 		return "", fmt.Errorf("failed to get ClickHouse version: %w", err)
@@ -260,7 +260,7 @@ func (db *ClickHouseDB) Ping() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	return db.conn.Ping(ctx)
 }
 
@@ -270,8 +270,8 @@ func (db *ClickHouseDB) CreateFTSIndexes() error {
 	defer db.mu.Unlock()
 
 	ctx := context.Background()
-	
-	// ClickHouse doesn't have FTS like DuckDB, but we can create bloom filter indexes 
+
+	// ClickHouse doesn't have FTS like DuckDB, but we can create bloom filter indexes
 	// for text search functionality, including optimized materialized columns
 	ftsIndexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_fts_location ON nodes(location) TYPE bloom_filter GRANULARITY 1",
@@ -282,7 +282,7 @@ func (db *ClickHouseDB) CreateFTSIndexes() error {
 		"CREATE INDEX IF NOT EXISTS idx_fts_sysop_lower ON nodes(sysop_name_lower) TYPE bloom_filter GRANULARITY 1",
 		"CREATE INDEX IF NOT EXISTS idx_fts_system_lower ON nodes(system_name_lower) TYPE bloom_filter GRANULARITY 1",
 	}
-	
+
 	for _, indexSQL := range ftsIndexes {
 		if err := db.conn.Exec(ctx, indexSQL); err != nil {
 			// If index already exists or is not supported, continue
@@ -291,7 +291,7 @@ func (db *ClickHouseDB) CreateFTSIndexes() error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -301,24 +301,24 @@ func (db *ClickHouseDB) DropFTSIndexes() error {
 	defer db.mu.Unlock()
 
 	ctx := context.Background()
-	
+
 	// Drop FTS-related indexes
 	dropIndexes := []string{
 		"DROP INDEX IF EXISTS idx_fts_location ON nodes",
-		"DROP INDEX IF EXISTS idx_fts_sysop ON nodes", 
+		"DROP INDEX IF EXISTS idx_fts_sysop ON nodes",
 		"DROP INDEX IF EXISTS idx_fts_system ON nodes",
 		// Drop optimized lowercase column indexes
 		"DROP INDEX IF EXISTS idx_fts_location_lower ON nodes",
 		"DROP INDEX IF EXISTS idx_fts_sysop_lower ON nodes",
 		"DROP INDEX IF EXISTS idx_fts_system_lower ON nodes",
 	}
-	
+
 	for _, dropSQL := range dropIndexes {
 		if err := db.conn.Exec(ctx, dropSQL); err != nil {
 			fmt.Printf("Warning: Could not drop FTS index: %v\n", err)
 		}
 	}
-	
+
 	return nil
 }
 

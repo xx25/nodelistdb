@@ -62,12 +62,12 @@ func NewWithDSN(dsn string) (*DB, error) {
 func NewWithPerfSettings(path, memoryLimit, tempDir string, threads int, readOnly, bulkMode bool, checkpointThreshold string, walAutoCheckpoint int) (*DB, error) {
 	// Build basic DSN
 	dsn := path + "?"
-	
+
 	if readOnly {
 		dsn += "access_mode=read_only&"
 	}
 	dsn += fmt.Sprintf("memory_limit=%s&threads=%d", memoryLimit, threads)
-	
+
 	if tempDir != "" {
 		dsn += fmt.Sprintf("&temp_directory=%s", tempDir)
 	}
@@ -250,12 +250,12 @@ func (db *DB) initializeFTSExtension() error {
 	if _, err := db.conn.Exec("INSTALL fts"); err != nil {
 		return fmt.Errorf("failed to install FTS extension: %w", err)
 	}
-	
+
 	// Load FTS extension
 	if _, err := db.conn.Exec("LOAD fts"); err != nil {
 		return fmt.Errorf("failed to load FTS extension: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -263,14 +263,14 @@ func (db *DB) initializeFTSExtension() error {
 func (db *DB) CreateFTSIndexes() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	
+
 	// Create FTS index for text searches using correct DuckDB syntax
 	ftsSQL := `PRAGMA create_fts_index('nodes', 'fts_id', 'location', 'sysop_name', 'system_name')`
-	
+
 	if _, err := db.conn.Exec(ftsSQL); err != nil {
 		return fmt.Errorf("failed to create FTS index: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -278,11 +278,11 @@ func (db *DB) CreateFTSIndexes() error {
 func (db *DB) DropFTSIndexes() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	
+
 	// Drop FTS schema if it exists
 	if _, err := db.conn.Exec("DROP SCHEMA IF EXISTS fts_main_nodes CASCADE"); err != nil {
 		return fmt.Errorf("failed to drop FTS indexes: %w", err)
 	}
-	
+
 	return nil
 }

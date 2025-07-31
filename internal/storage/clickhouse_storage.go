@@ -13,26 +13,26 @@ import (
 
 // ClickHouseStorage provides ClickHouse-specific database operations
 type ClickHouseStorage struct {
-	db                database.DatabaseInterface
-	nodeOps          *ClickHouseNodeOperations
-	statsOps         *StatisticsOperations
-	searchOps        *SearchOperations
-	queryBuilder     *ClickHouseQueryBuilder
-	resultParser     *ClickHouseResultParser
-	mu               sync.RWMutex
+	db           database.DatabaseInterface
+	nodeOps      *ClickHouseNodeOperations
+	statsOps     *StatisticsOperations
+	searchOps    *SearchOperations
+	queryBuilder *ClickHouseQueryBuilder
+	resultParser *ClickHouseResultParser
+	mu           sync.RWMutex
 }
 
 // NewClickHouseStorage creates a new ClickHouse-specific storage instance
 func NewClickHouseStorage(db database.DatabaseInterface) *ClickHouseStorage {
 	queryBuilder := NewClickHouseQueryBuilder()
 	resultParser := NewClickHouseResultParser()
-	
+
 	storage := &ClickHouseStorage{
 		db:           db,
 		queryBuilder: queryBuilder,
 		resultParser: resultParser,
 	}
-	
+
 	// Create specialized operations with ClickHouse components
 	storage.nodeOps = NewClickHouseNodeOperations(db, queryBuilder, resultParser)
 	storage.statsOps = NewStatisticsOperations(db, queryBuilder, resultParser.ResultParser)
@@ -43,7 +43,7 @@ func NewClickHouseStorage(db database.DatabaseInterface) *ClickHouseStorage {
 		resultParser: resultParser.ResultParser,
 	}
 	storage.searchOps = NewSearchOperations(db, queryBuilder, resultParser.ResultParser, nodeOpsAdapter)
-	
+
 	return storage
 }
 

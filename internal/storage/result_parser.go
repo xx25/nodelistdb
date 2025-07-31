@@ -326,7 +326,7 @@ func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
 		nodeCopy.ComputeFtsId()
 		node = nodeCopy
 	}
-	
+
 	// Handle internet_config JSON
 	var configJSON interface{}
 	if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
@@ -357,11 +357,11 @@ func (rp *ResultParser) formatArrayForDB(arr []string) interface{} {
 	if len(arr) == 0 {
 		return "ARRAY[]::TEXT[]"
 	}
-	
+
 	// Pre-allocate buffer for better performance
 	var buf strings.Builder
 	buf.WriteString("ARRAY[")
-	
+
 	for i, s := range arr {
 		if i > 0 {
 			buf.WriteByte(',')
@@ -371,29 +371,29 @@ func (rp *ResultParser) formatArrayForDB(arr []string) interface{} {
 		buf.WriteString(strings.ReplaceAll(s, "'", "''"))
 		buf.WriteByte('\'')
 	}
-	
+
 	buf.WriteByte(']')
 	return buf.String()
 }
 
-// formatIntArrayForDB formats an int array for database storage  
+// formatIntArrayForDB formats an int array for database storage
 // Returns optimized DuckDB ARRAY[] literal (faster than JSON casting)
 func (rp *ResultParser) formatIntArrayForDB(arr []int) interface{} {
 	if len(arr) == 0 {
 		return "ARRAY[]::INTEGER[]"
 	}
-	
+
 	// Pre-allocate buffer for better performance
 	var buf strings.Builder
 	buf.WriteString("ARRAY[")
-	
+
 	for i, n := range arr {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
 		buf.WriteString(strconv.Itoa(n))
 	}
-	
+
 	buf.WriteByte(']')
 	return buf.String()
 }

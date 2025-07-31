@@ -10,15 +10,15 @@ type DatabaseInterface interface {
 	// Connection management
 	Close() error
 	Conn() *sql.DB
-	
+
 	// Schema management
 	CreateSchema() error
 	GetVersion() (string, error)
-	
+
 	// Full-Text Search
 	CreateFTSIndexes() error
 	DropFTSIndexes() error
-	
+
 	// Health check
 	Ping() error
 }
@@ -48,7 +48,7 @@ func CreateDatabase(dbType string, config interface{}) (DatabaseInterface, error
 	if !exists {
 		return nil, fmt.Errorf("unsupported database type: %s", dbType)
 	}
-	
+
 	return factory(config)
 }
 
@@ -59,10 +59,10 @@ var _ DatabaseInterface = (*DB)(nil)
 func (db *DB) Ping() error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	
+
 	if db.conn == nil {
 		return fmt.Errorf("database connection is nil")
 	}
-	
+
 	return db.conn.Ping()
 }

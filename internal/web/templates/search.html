@@ -116,8 +116,8 @@
                                     <th>System Name</th>
                                     <th>Location</th>
                                     <th>Sysop</th>
-                                    <th>Type</th>
-                                    <th>Date</th>
+                                    <th>Active Period</th>
+                                    <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -132,18 +132,15 @@
                                     <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
                                     <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
                                     <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
-                                    <td>
-                                        {{if eq .NodeType "Zone"}}<span class="badge badge-error">Zone</span>
-                                        {{else if eq .NodeType "Region"}}<span class="badge badge-warning">Region</span>
-                                        {{else if eq .NodeType "Host"}}<span class="badge badge-info">Host</span>
-                                        {{else if eq .NodeType "Hub"}}<span class="badge badge-success">Hub</span>
-                                        {{else if eq .NodeType "Pvt"}}<span class="badge badge-warning">Pvt</span>
-                                        {{else if eq .NodeType "Down"}}<span class="badge badge-error">Down</span>
-                                        {{else if eq .NodeType "Hold"}}<span class="badge badge-warning">Hold</span>
-                                        {{else}}{{.NodeType}}{{end}}
-                                    </td>
                                     <td style="font-size: 0.9rem; color: var(--text-secondary);">
-                                        {{.NodelistDate.Format "2006-01-02"}}
+                                        {{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}
+                                    </td>
+                                    <td>
+                                        {{if .CurrentlyActive}}
+                                            <span class="badge badge-success">Active</span>
+                                        {{else}}
+                                            <span class="badge badge-warning">Inactive</span>
+                                        {{end}}
                                     </td>
                                     <td>
                                         <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">

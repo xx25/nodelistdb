@@ -22,12 +22,12 @@ import (
 func main() {
 	// Command line flags
 	var (
-		configPath    = flag.String("config", "config.json", "Path to configuration file")
-		dbPath        = flag.String("db", "", "Path to database file (overrides config)")
-		port          = flag.String("port", "8080", "HTTP server port")
-		host          = flag.String("host", "localhost", "HTTP server host")
-		showVersion   = flag.Bool("version", false, "Show version information")
-		debugSQL      = flag.Bool("debug-sql", false, "Enable SQL query debugging")
+		configPath  = flag.String("config", "config.json", "Path to configuration file")
+		dbPath      = flag.String("db", "", "Path to database file (overrides config)")
+		port        = flag.String("port", "8080", "HTTP server port")
+		host        = flag.String("host", "localhost", "HTTP server host")
+		showVersion = flag.Bool("version", false, "Show version information")
+		debugSQL    = flag.Bool("debug-sql", false, "Enable SQL query debugging")
 	)
 	flag.Parse()
 
@@ -83,7 +83,7 @@ func main() {
 			MaxOpenConns: cfg.Database.ClickHouse.MaxOpenConns,
 			MaxIdleConns: cfg.Database.ClickHouse.MaxIdleConns,
 		}
-		
+
 		// Parse timeout strings
 		if cfg.Database.ClickHouse.DialTimeout != "" {
 			if chConfig.DialTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.DialTimeout); err != nil {
@@ -92,7 +92,7 @@ func main() {
 		} else {
 			chConfig.DialTimeout = 30 * time.Second
 		}
-		
+
 		if cfg.Database.ClickHouse.ReadTimeout != "" {
 			if chConfig.ReadTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.ReadTimeout); err != nil {
 				log.Fatalf("Invalid read timeout: %v", err)
@@ -100,7 +100,7 @@ func main() {
 		} else {
 			chConfig.ReadTimeout = 5 * time.Minute
 		}
-		
+
 		if cfg.Database.ClickHouse.WriteTimeout != "" {
 			if chConfig.WriteTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.WriteTimeout); err != nil {
 				log.Fatalf("Invalid write timeout: %v", err)
@@ -108,14 +108,14 @@ func main() {
 		} else {
 			chConfig.WriteTimeout = 1 * time.Minute
 		}
-		
+
 		chConfig.Compression = cfg.Database.ClickHouse.Compression
-		
+
 		db, err = database.NewClickHouseReadOnly(chConfig)
 	default:
 		log.Fatalf("Unsupported database type: %s", cfg.Database.Type)
 	}
-	
+
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}

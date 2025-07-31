@@ -123,11 +123,11 @@ func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 
 // SearchHandler handles node search
 func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
-	nodes, count, searchErr := s.performNodeSearch(r)
+	nodes, count, searchErr := s.performNodeSearchWithLifetime(r)
 
 	data := struct {
 		Title   string
-		Nodes   []database.Node
+		Nodes   []storage.NodeSummary
 		Count   int
 		Error   error
 		Version string
@@ -164,7 +164,7 @@ func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error
 	} else {
 		// Build filter from individual fields
 		filter = buildNodeFilterFromForm(r)
-		
+
 		// Check if search would be too resource-intensive
 		if filter.Limit == 0 {
 			return nil, 0, fmt.Errorf("Search requires more specific criteria. Please specify zone or net along with node number, or search by system name/location (minimum 2 characters)")
@@ -172,6 +172,41 @@ func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error
 	}
 
 	nodes, err := s.storage.GetNodes(filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return nodes, len(nodes), nil
+}
+
+// performNodeSearchWithLifetime handles the actual node search logic and returns NodeSummary with lifetime info
+func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeSummary, int, error) {
+	if r.Method != "POST" {
+		return nil, 0, nil
+	}
+
+	r.ParseForm()
+
+	var filter database.NodeFilter
+	var err error
+
+	// Check if full address was provided
+	if fullAddress := r.FormValue("full_address"); fullAddress != "" {
+		filter, err = buildNodeFilterFromAddress(fullAddress)
+		if err != nil {
+			return nil, 0, fmt.Errorf("Invalid address format: %v", err)
+		}
+	} else {
+		// Build filter from individual fields
+		filter = buildNodeFilterFromForm(r)
+
+		// Check if search would be too resource-intensive
+		if filter.Limit == 0 {
+			return nil, 0, fmt.Errorf("Search requires more specific criteria. Please specify zone or net along with node number, or search by system name/location (minimum 2 characters)")
+		}
+	}
+
+	nodes, err := s.storage.SearchNodesWithLifetime(filter)
 	if err != nil {
 		return nil, 0, err
 	}

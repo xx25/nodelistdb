@@ -426,13 +426,13 @@ func (so *SearchOperations) equalIntSlices(a, b []int) bool {
 func (so *SearchOperations) getAllNodelistDates() ([]time.Time, error) {
 	conn := so.db.Conn()
 	query := "SELECT DISTINCT nodelist_date FROM nodes ORDER BY nodelist_date"
-	
+
 	rows, err := conn.Query(query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var dates []time.Time
 	for rows.Next() {
 		var date time.Time
@@ -441,7 +441,7 @@ func (so *SearchOperations) getAllNodelistDates() ([]time.Time, error) {
 		}
 		dates = append(dates, date)
 	}
-	
+
 	return dates, rows.Err()
 }
 
@@ -585,11 +585,11 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 	}
 
 	conn := so.db.Conn()
-	
+
 	// Build query - if nameFilter is provided, filter by it
 	var query string
 	var args []interface{}
-	
+
 	if nameFilter != "" {
 		// Sanitize the filter
 		nameFilter = so.resultParser.SanitizeStringInput(nameFilter)
@@ -610,7 +610,7 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 	for rows.Next() {
 		var info SysopInfo
 		var zonesInterface interface{}
-		
+
 		err := rows.Scan(
 			&info.Name,
 			&info.NodeCount,
@@ -622,7 +622,7 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan sysop row: %w", err)
 		}
-		
+
 		// Convert zones to []int - handle both []int and []int32 from different databases
 		switch zones := zonesInterface.(type) {
 		case []int:
@@ -650,7 +650,7 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 			// Fallback to empty zones if type is unexpected
 			info.Zones = []int{}
 		}
-		
+
 		sysops = append(sysops, info)
 	}
 
@@ -669,7 +669,7 @@ func (so *SearchOperations) GetNodesBySysop(sysopName string, limit int) ([]data
 
 	// Convert spaces to underscores as that's how data is stored
 	sysopName = strings.ReplaceAll(sysopName, " ", "_")
-	
+
 	if limit <= 0 {
 		limit = DefaultSearchLimit
 	} else if limit > MaxSearchLimit {
@@ -683,4 +683,98 @@ func (so *SearchOperations) GetNodesBySysop(sysopName string, limit int) ([]data
 	}
 
 	return so.nodeOps.GetNodes(filter)
+}
+
+// SearchNodesWithLifetime finds nodes based on filter criteria and returns them with lifetime information
+func (so *SearchOperations) SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error) {
+	// Validate filter
+	if err := so.resultParser.ValidateNodeFilter(filter); err != nil {
+		return nil, fmt.Errorf("invalid filter: %w", err)
+	}
+
+	if filter.Limit <= 0 {
+		filter.Limit = DefaultSearchLimit
+	} else if filter.Limit > MaxSearchLimit {
+		filter.Limit = MaxSearchLimit
+	}
+
+	so.mu.RLock()
+	defer so.mu.RUnlock()
+
+	conn := so.db.Conn()
+
+	// Build a modified query that returns summary information with lifetime data
+	query := so.queryBuilder.NodeSummarySearchSQL()
+	args := so.buildNodeSummaryArgs(filter)
+
+	rows, err := conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search nodes with lifetime: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeSummary
+	for rows.Next() {
+		ns, err := so.resultParser.ParseNodeSummaryRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse node summary row: %w", err)
+		}
+		results = append(results, ns)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating node summary rows: %w", err)
+	}
+
+	return results, nil
+}
+
+// buildNodeSummaryArgs builds arguments for the node summary search query
+func (so *SearchOperations) buildNodeSummaryArgs(filter database.NodeFilter) []interface{} {
+	var args []interface{}
+
+	// Add WHERE clause arguments based on filter - each condition uses 2 parameters for NULL checks
+	if filter.Zone != nil {
+		args = append(args, *filter.Zone, *filter.Zone)
+	} else {
+		args = append(args, nil, nil)
+	}
+
+	if filter.Net != nil {
+		args = append(args, *filter.Net, *filter.Net)
+	} else {
+		args = append(args, nil, nil)
+	}
+
+	if filter.Node != nil {
+		args = append(args, *filter.Node, *filter.Node)
+	} else {
+		args = append(args, nil, nil)
+	}
+
+	if filter.SystemName != nil {
+		pattern := "%" + *filter.SystemName + "%"
+		args = append(args, pattern, pattern)
+	} else {
+		args = append(args, nil, nil)
+	}
+
+	if filter.Location != nil {
+		pattern := "%" + *filter.Location + "%"
+		args = append(args, pattern, pattern)
+	} else {
+		args = append(args, nil, nil)
+	}
+
+	if filter.SysopName != nil {
+		pattern := "%" + *filter.SysopName + "%"
+		args = append(args, pattern, pattern)
+	} else {
+		args = append(args, nil, nil)
+	}
+
+	// Add LIMIT argument
+	args = append(args, filter.Limit)
+
+	return args
 }

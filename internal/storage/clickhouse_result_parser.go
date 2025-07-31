@@ -194,11 +194,11 @@ func (crp *ClickHouseResultParser) formatArrayForDB(arr []string) interface{} {
 	if len(arr) == 0 {
 		return "[]"
 	}
-	
+
 	// Pre-allocate buffer for better performance
 	var buf strings.Builder
 	buf.WriteByte('[')
-	
+
 	for i, s := range arr {
 		if i > 0 {
 			buf.WriteByte(',')
@@ -208,7 +208,7 @@ func (crp *ClickHouseResultParser) formatArrayForDB(arr []string) interface{} {
 		buf.WriteString(strings.ReplaceAll(s, "'", "\\'"))
 		buf.WriteByte('\'')
 	}
-	
+
 	buf.WriteByte(']')
 	return buf.String()
 }
@@ -219,18 +219,18 @@ func (crp *ClickHouseResultParser) formatIntArrayForDB(arr []int) interface{} {
 	if len(arr) == 0 {
 		return "[]"
 	}
-	
+
 	// Pre-allocate buffer for better performance
 	var buf strings.Builder
 	buf.WriteByte('[')
-	
+
 	for i, n := range arr {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
 		buf.WriteString(strconv.Itoa(n))
 	}
-	
+
 	buf.WriteByte(']')
 	return buf.String()
 }
@@ -261,12 +261,12 @@ func (crp *ClickHouseResultParser) NodeToArgsClickHouse(node database.Node) []in
 		node.NodeType, regionVal, node.MaxSpeed,
 		node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
 		node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
-		node.Flags,                 // Pass as Go slice for ClickHouse native batch
-		node.ModemFlags,           // Pass as Go slice for ClickHouse native batch
-		node.InternetProtocols,    // Pass as Go slice for ClickHouse native batch
-		node.InternetHostnames,    // Pass as Go slice for ClickHouse native batch
-		node.InternetPorts,        // Pass as Go slice for ClickHouse native batch
-		node.InternetEmails,       // Pass as Go slice for ClickHouse native batch
+		node.Flags,             // Pass as Go slice for ClickHouse native batch
+		node.ModemFlags,        // Pass as Go slice for ClickHouse native batch
+		node.InternetProtocols, // Pass as Go slice for ClickHouse native batch
+		node.InternetHostnames, // Pass as Go slice for ClickHouse native batch
+		node.InternetPorts,     // Pass as Go slice for ClickHouse native batch
+		node.InternetEmails,    // Pass as Go slice for ClickHouse native batch
 		node.ConflictSequence, node.HasConflict,
 		node.HasInet, configJSON, node.FtsId,
 	}

@@ -18,12 +18,12 @@ type Storage struct {
 	nodeOperations   *NodeOperations
 	searchOperations *SearchOperations
 	statsOperations  *StatisticsOperations
-	
+
 	// Bulk mode transaction state
-	bulkTx           *sql.Tx
-	bulkMode         bool
-	bulkNodesCount   int // Track total nodes processed in bulk mode
-	mu               sync.RWMutex
+	bulkTx         *sql.Tx
+	bulkMode       bool
+	bulkNodesCount int // Track total nodes processed in bulk mode
+	mu             sync.RWMutex
 }
 
 // New creates a new Storage instance with all specialized components
@@ -87,7 +87,7 @@ func (s *Storage) insertNodesWithTransaction(tx *sql.Tx, nodes []database.Node) 
 
 	chunkSize := 10000 // Use smaller chunks for bulk mode to avoid memory issues
 	totalChunks := (len(nodes) + chunkSize - 1) / chunkSize
-	
+
 	for i := 0; i < len(nodes); i += chunkSize {
 		end := i + chunkSize
 		if end > len(nodes) {
@@ -98,13 +98,13 @@ func (s *Storage) insertNodesWithTransaction(tx *sql.Tx, nodes []database.Node) 
 
 		fmt.Printf("  Bulk inserting chunk %d/%d: %d nodes...\n", chunkNum, totalChunks, len(chunk))
 		start := time.Now()
-		
+
 		// Use direct SQL generation for bulk imports
 		insertSQL := s.queryBuilder.BuildDirectBatchInsertSQL(chunk, s.resultParser)
 		if _, err := tx.Exec(insertSQL); err != nil {
 			return fmt.Errorf("failed to insert chunk of %d nodes: %w", len(chunk), err)
 		}
-		
+
 		duration := time.Since(start)
 		speed := float64(len(chunk)) / duration.Seconds()
 		s.bulkNodesCount += len(chunk)
@@ -149,6 +149,11 @@ func (s *Storage) GetMaxNodelistDate() (time.Time, error) {
 // SearchNodesBySysop finds all nodes associated with a sysop name
 func (s *Storage) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error) {
 	return s.searchOperations.SearchNodesBySysop(sysopName, limit)
+}
+
+// SearchNodesWithLifetime finds nodes based on filter criteria and returns them with lifetime information
+func (s *Storage) SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error) {
+	return s.searchOperations.SearchNodesWithLifetime(filter)
 }
 
 // GetUniqueSysops returns a list of unique sysops with their node counts
@@ -294,28 +299,28 @@ func (s *Storage) GetSearchOperations() *SearchOperations {
 func (s *Storage) BeginBulkMode() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	if s.bulkMode {
 		return fmt.Errorf("bulk mode already active")
 	}
-	
+
 	conn := s.db.Conn()
 	tx, err := conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin bulk transaction: %w", err)
 	}
-	
+
 	s.bulkTx = tx
 	s.bulkMode = true
 	s.bulkNodesCount = 0 // Reset counter
-	
+
 	// Apply DuckDB-specific performance settings if it's DuckDB
 	if _, isDuckDB := s.db.(*database.DB); isDuckDB {
 		// Try to set performance optimizations, but don't fail if they don't work
 		tx.Exec("PRAGMA wal_autocheckpoint=0")
 		tx.Exec("PRAGMA enable_object_cache")
 	}
-	
+
 	return nil
 }
 
@@ -323,24 +328,24 @@ func (s *Storage) BeginBulkMode() error {
 func (s *Storage) EndBulkMode() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	if !s.bulkMode {
 		return fmt.Errorf("bulk mode not active")
 	}
-	
+
 	var err error
 	if s.bulkTx != nil {
 		err = s.bulkTx.Commit()
 		s.bulkTx = nil
 	}
-	
+
 	s.bulkMode = false
-	
+
 	// Report final bulk mode statistics
 	if s.bulkNodesCount > 0 {
 		fmt.Printf("Bulk mode completed: %d total nodes processed\n", s.bulkNodesCount)
 	}
-	
+
 	// Re-enable WAL checkpointing if it's DuckDB
 	if _, isDuckDB := s.db.(*database.DB); isDuckDB {
 		conn := s.db.Conn()
@@ -348,11 +353,11 @@ func (s *Storage) EndBulkMode() error {
 			// Log but don't fail - this is non-critical
 		}
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to commit bulk transaction: %w", err)
 	}
-	
+
 	return nil
 }
 

@@ -36,70 +36,70 @@ func (cqb *ClickHouseQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.No
 		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
 		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	) VALUES `)
-	
+
 	for i, node := range nodes {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		
+
 		// Compute FTS ID if not set
 		if node.FtsId == "" {
 			node.ComputeFtsId()
 		}
-		
+
 		// Build direct VALUES clause for ClickHouse
 		buf.WriteByte('(')
-		
+
 		// Core fields
-		buf.WriteString(fmt.Sprintf("%d,%d,%d,'%s',%d,", 
-			node.Zone, node.Net, node.Node, 
+		buf.WriteString(fmt.Sprintf("%d,%d,%d,'%s',%d,",
+			node.Zone, node.Net, node.Node,
 			node.NodelistDate.Format("2006-01-02"), node.DayNumber))
-		
+
 		// String fields (escaped)
-		buf.WriteString(fmt.Sprintf("'%s','%s','%s','%s','%s',", 
-			cqb.escapeClickHouseSQL(node.SystemName), cqb.escapeClickHouseSQL(node.Location), 
-			cqb.escapeClickHouseSQL(node.SysopName), cqb.escapeClickHouseSQL(node.Phone), 
+		buf.WriteString(fmt.Sprintf("'%s','%s','%s','%s','%s',",
+			cqb.escapeClickHouseSQL(node.SystemName), cqb.escapeClickHouseSQL(node.Location),
+			cqb.escapeClickHouseSQL(node.SysopName), cqb.escapeClickHouseSQL(node.Phone),
 			cqb.escapeClickHouseSQL(node.NodeType)))
-		
+
 		// Region (nullable)
 		if node.Region != nil {
 			buf.WriteString(fmt.Sprintf("%d,", *node.Region))
 		} else {
 			buf.WriteString("NULL,")
 		}
-		
+
 		// Max speed
 		buf.WriteString(fmt.Sprintf("%d,", node.MaxSpeed))
-		
+
 		// Boolean flags
-		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,", 
+		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,",
 			node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
 			node.IsDown, node.IsHold, node.IsPvt, node.IsActive))
-		
+
 		// Arrays (ClickHouse format)
-		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,", 
+		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,",
 			crp.formatArrayForDB(node.Flags),
 			crp.formatArrayForDB(node.ModemFlags),
 			crp.formatArrayForDB(node.InternetProtocols),
 			crp.formatArrayForDB(node.InternetHostnames),
 			crp.formatIntArrayForDB(node.InternetPorts),
 			crp.formatArrayForDB(node.InternetEmails)))
-		
+
 		// Final fields
-		buf.WriteString(fmt.Sprintf("%d,%t,%t,", 
+		buf.WriteString(fmt.Sprintf("%d,%t,%t,",
 			node.ConflictSequence, node.HasConflict, node.HasInet))
-		
+
 		// Internet config JSON
 		if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
 			buf.WriteString(fmt.Sprintf("'%s',", cqb.escapeClickHouseSQL(string(node.InternetConfig))))
 		} else {
 			buf.WriteString("'{}',")
 		}
-		
+
 		// FTS ID
 		buf.WriteString(fmt.Sprintf("'%s')", cqb.escapeClickHouseSQL(node.FtsId)))
 	}
-	
+
 	return buf.String()
 }
 
@@ -280,12 +280,12 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 		// Historical search - ClickHouse optimized version without JOINs
 		conditions, conditionArgs := cqb.buildClickHouseWhereConditions(filter)
 		args = append(args, conditionArgs...)
-		
+
 		var whereClause string
 		if len(conditions) > 0 {
 			whereClause = " WHERE " + strings.Join(conditions, " AND ")
 		}
-		
+
 		// For historical search: get latest entry for each node that matches criteria
 		// Use window function approach - more reliable in ClickHouse
 		baseSQL = `
@@ -469,6 +469,42 @@ func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
 		CASE WHEN nodelist_date = global_max_date THEN true ELSE false END as currently_active
 	FROM latest_per_node
 	ORDER BY first_date DESC
+	LIMIT ?`
+}
+
+// NodeSummarySearchSQL returns SQL for searching nodes with lifetime information
+func (cqb *ClickHouseQueryBuilder) NodeSummarySearchSQL() string {
+	return `
+	WITH 
+	ranked_nodes AS (
+		SELECT 
+			zone, net, node, nodelist_date, system_name, location, sysop_name,
+			row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC) as rn,
+			MIN(nodelist_date) OVER (PARTITION BY zone, net, node) as first_date,
+			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date,
+			MAX(nodelist_date) OVER () as global_max_date
+		FROM nodes
+		WHERE 1=1
+			AND (? IS NULL OR zone = ?)
+			AND (? IS NULL OR net = ?)
+			AND (? IS NULL OR node = ?)
+			AND (? IS NULL OR lower(system_name) LIKE lower(?))
+			AND (? IS NULL OR lower(location) LIKE lower(?))
+			AND (? IS NULL OR lower(sysop_name) LIKE lower(?))
+	),
+	latest_per_node AS (
+		SELECT 
+			zone, net, node, system_name, location, sysop_name,
+			first_date, last_date, nodelist_date, global_max_date
+		FROM ranked_nodes
+		WHERE rn = 1
+	)
+	SELECT 
+		zone, net, node, system_name, location, sysop_name,
+		first_date, last_date,
+		CASE WHEN nodelist_date = global_max_date THEN true ELSE false END as currently_active
+	FROM latest_per_node
+	ORDER BY last_date DESC, zone, net, node
 	LIMIT ?`
 }
 
