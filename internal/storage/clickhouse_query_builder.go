@@ -611,7 +611,7 @@ func (cqb *ClickHouseQueryBuilder) FlagFirstAppearanceSQL() string {
 				zone, net, node, nodelist_date, system_name, location, sysop_name,
 				row_number() OVER (ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
 			FROM nodes
-			WHERE has(flags, ?)
+			WHERE has(flags, ?) OR has(internet_protocols, ?) OR has(modem_flags, ?)
 		)
 		SELECT zone, net, node, nodelist_date, system_name, location, sysop_name
 		FROM first_appearances
@@ -634,7 +634,7 @@ func (cqb *ClickHouseQueryBuilder) FlagUsageByYearSQL() string {
 				toYear(nodelist_date) as year,
 				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as nodes_with_flag
 			FROM nodes
-			WHERE has(flags, ?)
+			WHERE has(flags, ?) OR has(internet_protocols, ?) OR has(modem_flags, ?)
 			GROUP BY year
 		)
 		SELECT 

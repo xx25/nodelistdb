@@ -712,7 +712,7 @@ func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
 				zone, net, node, nodelist_date, system_name, location, sysop_name,
 				ROW_NUMBER() OVER (ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
 			FROM nodes
-			WHERE ? = ANY(flags)
+			WHERE ? = ANY(flags) OR ? = ANY(internet_protocols) OR ? = ANY(modem_flags)
 		)
 		SELECT zone, net, node, nodelist_date, system_name, location, sysop_name
 		FROM first_appearances
@@ -735,7 +735,7 @@ func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 				EXTRACT(YEAR FROM nodelist_date) as year,
 				COUNT(DISTINCT (zone || ':' || net || '/' || node)) as nodes_with_flag
 			FROM nodes
-			WHERE ? = ANY(flags)
+			WHERE ? = ANY(flags) OR ? = ANY(internet_protocols) OR ? = ANY(modem_flags)
 			GROUP BY year
 		)
 		SELECT 
