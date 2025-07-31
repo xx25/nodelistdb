@@ -155,14 +155,23 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 		tmpl = tmpl.Funcs(funcMap)
 	}
 
-	// For main templates (not nav), also load the nav template
-	if name != "nav" {
+	// For main templates (not nav or footer), also load the nav and footer templates
+	if name != "nav" && name != "footer" {
 		navContent, err := s.templatesFS.ReadFile("templates/nav.html")
 		if err == nil {
 			// Parse nav template first
 			tmpl, err = tmpl.Parse(string(navContent))
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse nav template: %v", err)
+			}
+		}
+		
+		footerContent, err := s.templatesFS.ReadFile("templates/footer.html")
+		if err == nil {
+			// Parse footer template 
+			tmpl, err = tmpl.Parse(string(footerContent))
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse footer template: %v", err)
 			}
 		}
 	}

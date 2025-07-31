@@ -239,6 +239,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			SelectedDate   string
 			ActualDate     string
 			DateAdjusted   bool
+			Version        string
 		}{
 			Title:          "Network Statistics",
 			ActivePage:     "stats",
@@ -249,6 +250,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			SelectedDate:   "",
 			ActualDate:     "",
 			DateAdjusted:   false,
+			Version:        version.GetVersionInfo(),
 		}
 
 		if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -275,6 +277,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					SelectedDate   string
 					ActualDate     string
 					DateAdjusted   bool
+			Version        string
 				}{
 					Title:          "Network Statistics",
 			ActivePage:     "stats",
@@ -285,6 +288,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					SelectedDate:   dateStr,
 					ActualDate:     "",
 					DateAdjusted:   false,
+			Version:        version.GetVersionInfo(),
 				}
 
 				if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -307,6 +311,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					SelectedDate   string
 					ActualDate     string
 					DateAdjusted   bool
+			Version        string
 				}{
 					Title:          "Network Statistics",
 			ActivePage:     "stats",
@@ -317,6 +322,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					SelectedDate:   dateStr,
 					ActualDate:     "",
 					DateAdjusted:   false,
+			Version:        version.GetVersionInfo(),
 				}
 
 				if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -340,6 +346,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 				SelectedDate   string
 				ActualDate     string
 				DateAdjusted   bool
+			Version        string
 			}{
 				Title:          "Network Statistics",
 			ActivePage:     "stats",
@@ -350,6 +357,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 				SelectedDate:   "",
 				ActualDate:     "",
 				DateAdjusted:   false,
+			Version:        version.GetVersionInfo(),
 			}
 
 			if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -372,6 +380,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		SelectedDate   string
 		ActualDate     string
 		DateAdjusted   bool
+		Version        string
 	}{
 		Title:          "Network Statistics",
 		ActivePage:     "stats",
@@ -382,6 +391,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		SelectedDate:   dateStr,
 		ActualDate:     actualDate.Format("2006-01-02"),
 		DateAdjusted:   dateAdjusted,
+		Version:        version.GetVersionInfo(),
 	}
 
 	if data.NoData && err == nil {
@@ -474,6 +484,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		LastDate         time.Time
 		CurrentlyActive  bool
 		FlagDescriptions map[string]flags.FlagInfo
+		Version          string
 	}{
 		Title:            "Node History",
 		Address:          fmt.Sprintf("%d:%d/%d", zone, net, node),
@@ -484,6 +495,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		LastDate:         activityInfo.LastDate,
 		CurrentlyActive:  activityInfo.CurrentlyActive,
 		FlagDescriptions: flags.GetFlagDescriptions(),
+		Version:          version.GetVersionInfo(),
 	}
 
 	if err := s.templates["node_history"].Execute(w, data); err != nil {
@@ -541,9 +553,11 @@ func (s *Server) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 		FirstAppearance *storage.FlagFirstAppearance
 		YearlyUsage     []storage.FlagUsageByYear
 		Error           error
+		Version         string
 	}{
 		Title:      "Analytics",
 		ActivePage: "analytics",
+		Version:    version.GetVersionInfo(),
 	}
 
 	if err := s.templates["analytics"].Execute(w, data); err != nil {
@@ -567,10 +581,12 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 		FirstAppearance *storage.FlagFirstAppearance
 		YearlyUsage     []storage.FlagUsageByYear
 		Error           error
+		Version         string
 	}{
 		Title:      "Analytics",
 		ActivePage: "analytics",
 		Flag:       flag,
+		Version:    version.GetVersionInfo(),
 	}
 
 	if flag == "" {

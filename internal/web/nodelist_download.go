@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"nodelistdb/internal/version"
 )
 
 // NodelistFile represents a nodelist file with metadata
@@ -196,12 +198,14 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 		Error      error
 		Latest     *NodelistFile
 		BaseURL    string
+		Version    string
 	}{
 		Title:      "Download Nodelists",
 		ActivePage: "nodelists",
 		Years:      years,
 		Error:      err,
 		BaseURL:    baseURL,
+		Version:    version.GetVersionInfo(),
 	}
 
 	// Find latest nodelist
