@@ -12,7 +12,7 @@ import (
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
-	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download"}
+	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download", "analytics"}
 
 	// Create function map for template functions
 	funcMap := template.FuncMap{
@@ -149,8 +149,26 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 		return nil, fmt.Errorf("template file %s not found in embedded filesystem: %v", templateFile, err)
 	}
 
-	// Parse template content with the correct template name
-	tmpl, err := template.New(name + ".html").Funcs(funcMap).Parse(string(content))
+	// Create template with function map
+	tmpl := template.New(name + ".html")
+	if funcMap != nil {
+		tmpl = tmpl.Funcs(funcMap)
+	}
+
+	// For main templates (not nav), also load the nav template
+	if name != "nav" {
+		navContent, err := s.templatesFS.ReadFile("templates/nav.html")
+		if err == nil {
+			// Parse nav template first
+			tmpl, err = tmpl.Parse(string(navContent))
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse nav template: %v", err)
+			}
+		}
+	}
+	
+	// Parse the main template content
+	tmpl, err = tmpl.Parse(string(content))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template %s: %v", templateFile, err)
 	}

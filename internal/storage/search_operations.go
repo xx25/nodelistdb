@@ -594,7 +594,7 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 		// Sanitize the filter
 		nameFilter = so.resultParser.SanitizeStringInput(nameFilter)
 		query = so.queryBuilder.UniqueSysopsWithFilterSQL()
-		args = []interface{}{"%" + nameFilter + "%", limit, offset}
+		args = []interface{}{nameFilter, limit, offset}
 	} else {
 		query = so.queryBuilder.UniqueSysopsSQL()
 		args = []interface{}{limit, offset}

@@ -15,6 +15,8 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/download/urls.txt", s.URLListHandler)
 	mux.HandleFunc("/api/help", s.APIHelpHandler)
 	mux.HandleFunc("/node/", s.NodeHistoryHandler)
+	mux.HandleFunc("/analytics", s.AnalyticsHandler)
+	mux.HandleFunc("/analytics/flag", s.AnalyticsFlagHandler)
 
 	// Serve static files
 	mux.HandleFunc("/static/", s.StaticHandler)

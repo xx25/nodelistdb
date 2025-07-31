@@ -703,3 +703,52 @@ func (qb *QueryBuilder) buildNonTextConditions(filter database.NodeFilter) ([]st
 
 	return conditions, args
 }
+
+// FlagFirstAppearanceSQL returns SQL for finding the first appearance of a flag
+func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
+	return `
+		WITH first_appearances AS (
+			SELECT 
+				zone, net, node, nodelist_date, system_name, location, sysop_name,
+				ROW_NUMBER() OVER (ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
+			FROM nodes
+			WHERE ? = ANY(flags)
+		)
+		SELECT zone, net, node, nodelist_date, system_name, location, sysop_name
+		FROM first_appearances
+		WHERE rn = 1
+	`
+}
+
+// FlagUsageByYearSQL returns SQL for counting flag usage by year
+func (qb *QueryBuilder) FlagUsageByYearSQL() string {
+	return `
+		WITH yearly_stats AS (
+			SELECT 
+				EXTRACT(YEAR FROM nodelist_date) as year,
+				COUNT(DISTINCT (zone || ':' || net || '/' || node)) as total_nodes
+			FROM nodes
+			GROUP BY year
+		),
+		flag_stats AS (
+			SELECT 
+				EXTRACT(YEAR FROM nodelist_date) as year,
+				COUNT(DISTINCT (zone || ':' || net || '/' || node)) as nodes_with_flag
+			FROM nodes
+			WHERE ? = ANY(flags)
+			GROUP BY year
+		)
+		SELECT 
+			ys.year,
+			COALESCE(fs.nodes_with_flag, 0) as node_count,
+			ys.total_nodes,
+			CASE 
+				WHEN ys.total_nodes > 0 
+				THEN ROUND((COALESCE(fs.nodes_with_flag, 0)::NUMERIC / ys.total_nodes) * 100, 2)
+				ELSE 0 
+			END as percentage
+		FROM yearly_stats ys
+		LEFT JOIN flag_stats fs ON ys.year = fs.year
+		ORDER BY ys.year
+	`
+}

@@ -190,16 +190,18 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
 
 	data := struct {
-		Title   string
-		Years   []NodelistYear
-		Error   error
-		Latest  *NodelistFile
-		BaseURL string
+		Title      string
+		ActivePage string
+		Years      []NodelistYear
+		Error      error
+		Latest     *NodelistFile
+		BaseURL    string
 	}{
-		Title:   "Download Nodelists",
-		Years:   years,
-		Error:   err,
-		BaseURL: baseURL,
+		Title:      "Download Nodelists",
+		ActivePage: "nodelists",
+		Years:      years,
+		Error:      err,
+		BaseURL:    baseURL,
 	}
 
 	// Find latest nodelist

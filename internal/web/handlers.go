@@ -109,11 +109,13 @@ func New(storage *storage.Storage, templatesFS embed.FS, staticFS embed.FS) *Ser
 // IndexHandler handles the home page
 func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 	data := struct {
-		Title   string
-		Version string
+		Title      string
+		ActivePage string
+		Version    string
 	}{
-		Title:   "FidoNet Nodelist Database",
-		Version: version.GetVersionInfo(),
+		Title:      "FidoNet Nodelist Database",
+		ActivePage: "home",
+		Version:    version.GetVersionInfo(),
 	}
 
 	if err := s.templates["index"].Execute(w, data); err != nil {
@@ -126,17 +128,19 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	nodes, count, searchErr := s.performNodeSearchWithLifetime(r)
 
 	data := struct {
-		Title   string
-		Nodes   []storage.NodeSummary
-		Count   int
-		Error   error
-		Version string
+		Title      string
+		ActivePage string
+		Nodes      []storage.NodeSummary
+		Count      int
+		Error      error
+		Version    string
 	}{
-		Title:   "Search Nodes",
-		Nodes:   nodes,
-		Count:   count,
-		Error:   searchErr,
-		Version: version.GetVersionInfo(),
+		Title:      "Search Nodes",
+		ActivePage: "search",
+		Nodes:      nodes,
+		Count:      count,
+		Error:      searchErr,
+		Version:    version.GetVersionInfo(),
 	}
 
 	if err := s.templates["search"].Execute(w, data); err != nil {
@@ -227,6 +231,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data := struct {
 			Title          string
+			ActivePage     string
 			Stats          *database.NetworkStats
 			Error          error
 			NoData         bool
@@ -236,6 +241,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			DateAdjusted   bool
 		}{
 			Title:          "Network Statistics",
+			ActivePage:     "stats",
 			Stats:          nil,
 			Error:          fmt.Errorf("Failed to get available dates: %v", err),
 			NoData:         true,
@@ -261,6 +267,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				data := struct {
 					Title          string
+					ActivePage     string
 					Stats          *database.NetworkStats
 					Error          error
 					NoData         bool
@@ -270,6 +277,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					DateAdjusted   bool
 				}{
 					Title:          "Network Statistics",
+			ActivePage:     "stats",
 					Stats:          nil,
 					Error:          fmt.Errorf("Invalid date format and failed to get latest date: %v", err),
 					NoData:         true,
@@ -291,6 +299,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				data := struct {
 					Title          string
+					ActivePage     string
 					Stats          *database.NetworkStats
 					Error          error
 					NoData         bool
@@ -300,6 +309,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					DateAdjusted   bool
 				}{
 					Title:          "Network Statistics",
+			ActivePage:     "stats",
 					Stats:          nil,
 					Error:          fmt.Errorf("Failed to find available date: %v", err),
 					NoData:         true,
@@ -322,6 +332,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			data := struct {
 				Title          string
+				ActivePage     string
 				Stats          *database.NetworkStats
 				Error          error
 				NoData         bool
@@ -331,6 +342,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 				DateAdjusted   bool
 			}{
 				Title:          "Network Statistics",
+			ActivePage:     "stats",
 				Stats:          nil,
 				Error:          fmt.Errorf("Failed to find latest nodelist date: %v", err),
 				NoData:         true,
@@ -352,6 +364,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		Title          string
+		ActivePage     string
 		Stats          *database.NetworkStats
 		Error          error
 		NoData         bool
@@ -361,6 +374,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		DateAdjusted   bool
 	}{
 		Title:          "Network Statistics",
+		ActivePage:     "stats",
 		Stats:          stats,
 		Error:          err,
 		NoData:         stats == nil || stats.TotalNodes == 0,
@@ -397,19 +411,21 @@ func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		Title     string
-		Nodes     []storage.NodeSummary
-		Count     int
-		Error     error
-		SysopName string
-		Version   string
+		Title      string
+		ActivePage string
+		Nodes      []storage.NodeSummary
+		Count      int
+		Error      error
+		SysopName  string
+		Version    string
 	}{
-		Title:     "Search by Sysop",
-		Nodes:     nodes,
-		Count:     count,
-		Error:     searchErr,
-		SysopName: sysopName,
-		Version:   version.GetVersionInfo(),
+		Title:      "Search by Sysop",
+		ActivePage: "sysop",
+		Nodes:      nodes,
+		Count:      count,
+		Error:      searchErr,
+		SysopName:  sysopName,
+		Version:    version.GetVersionInfo(),
 	}
 
 	if err := s.templates["sysop_search"].Execute(w, data); err != nil {
@@ -498,18 +514,88 @@ func (s *Server) APIHelpHandler(w http.ResponseWriter, r *http.Request) {
 	siteURL := fmt.Sprintf("%s://%s", scheme, host)
 
 	data := struct {
-		Title   string
-		BaseURL string
-		SiteURL string
-		Version string
+		Title      string
+		ActivePage string
+		BaseURL    string
+		SiteURL    string
+		Version    string
 	}{
-		Title:   "API Documentation",
-		BaseURL: apiURL,
-		SiteURL: siteURL,
-		Version: version.GetVersionInfo(),
+		Title:      "API Documentation",
+		ActivePage: "api",
+		BaseURL:    apiURL,
+		SiteURL:    siteURL,
+		Version:    version.GetVersionInfo(),
 	}
 
 	if err := s.templates["api_help"].Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// AnalyticsHandler shows the analytics page
+func (s *Server) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	data := struct {
+		Title           string
+		ActivePage      string
+		Flag            string
+		FirstAppearance *storage.FlagFirstAppearance
+		YearlyUsage     []storage.FlagUsageByYear
+		Error           error
+	}{
+		Title:      "Analytics",
+		ActivePage: "analytics",
+	}
+
+	if err := s.templates["analytics"].Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// AnalyticsFlagHandler handles flag analytics requests
+func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/analytics", http.StatusSeeOther)
+		return
+	}
+
+	flag := r.FormValue("flag")
+	
+	data := struct {
+		Title           string
+		ActivePage      string
+		Flag            string
+		FirstAppearance *storage.FlagFirstAppearance
+		YearlyUsage     []storage.FlagUsageByYear
+		Error           error
+	}{
+		Title:      "Analytics",
+		ActivePage: "analytics",
+		Flag:       flag,
+	}
+
+	if flag == "" {
+		data.Error = fmt.Errorf("Flag cannot be empty")
+	} else {
+		// Get first appearance
+		firstAppearance, err := s.storage.GetFlagFirstAppearance(flag)
+		if err != nil {
+			data.Error = fmt.Errorf("Failed to get first appearance: %v", err)
+		} else {
+			data.FirstAppearance = firstAppearance
+		}
+
+		// Get yearly usage
+		if data.Error == nil {
+			yearlyUsage, err := s.storage.GetFlagUsageByYear(flag)
+			if err != nil {
+				data.Error = fmt.Errorf("Failed to get yearly usage: %v", err)
+			} else {
+				data.YearlyUsage = yearlyUsage
+			}
+		}
+	}
+
+	if err := s.templates["analytics"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

@@ -12,12 +12,13 @@ import (
 
 // Storage provides thread-safe database operations using specialized components
 type Storage struct {
-	db               database.DatabaseInterface
-	queryBuilder     QueryBuilderInterface
-	resultParser     *ResultParser
-	nodeOperations   *NodeOperations
-	searchOperations *SearchOperations
-	statsOperations  *StatisticsOperations
+	db                  database.DatabaseInterface
+	queryBuilder        QueryBuilderInterface
+	resultParser        *ResultParser
+	nodeOperations      *NodeOperations
+	searchOperations    *SearchOperations
+	statsOperations     *StatisticsOperations
+	analyticsOperations *AnalyticsOperations
 
 	// Bulk mode transaction state
 	bulkTx         *sql.Tx
@@ -54,6 +55,7 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 	storage.nodeOperations = NewNodeOperations(db, queryBuilder, resultParser)
 	storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
 	storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
+	storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
 
 	return storage, nil
 }
@@ -433,4 +435,16 @@ func (s *Storage) MigrateFromLegacyStorage() error {
 
 	// For now, just perform a health check
 	return s.HealthCheck()
+}
+
+// --- Analytics Operations (delegated to AnalyticsOperations) ---
+
+// GetFlagFirstAppearance finds the first node that used a specific flag
+func (s *Storage) GetFlagFirstAppearance(flag string) (*FlagFirstAppearance, error) {
+	return s.analyticsOperations.GetFlagFirstAppearance(flag)
+}
+
+// GetFlagUsageByYear returns the usage statistics of a flag by year
+func (s *Storage) GetFlagUsageByYear(flag string) ([]FlagUsageByYear, error) {
+	return s.analyticsOperations.GetFlagUsageByYear(flag)
 }

@@ -127,6 +127,10 @@ type QueryBuilderInterface interface {
 	// Sysop queries
 	UniqueSysopsWithFilterSQL() string
 	UniqueSysopsSQL() string
+
+	// Analytics queries
+	FlagFirstAppearanceSQL() string
+	FlagUsageByYearSQL() string
 }
 
 // ResultParserInterface defines the contract for parsing database results

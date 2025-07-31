@@ -454,7 +454,7 @@ func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
 			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date,
 			MAX(nodelist_date) OVER () as global_max_date
 		FROM nodes
-		WHERE lower(sysop_name) LIKE concat('%', lower(?), '%')
+		WHERE replaceAll(lower(sysop_name), '_', ' ') LIKE concat('%', replaceAll(lower(?), '_', ' '), '%')
 	),
 	latest_per_node AS (
 		SELECT 
@@ -490,7 +490,7 @@ func (cqb *ClickHouseQueryBuilder) NodeSummarySearchSQL() string {
 			AND (? IS NULL OR node = ?)
 			AND (? IS NULL OR lower(system_name) LIKE lower(?))
 			AND (? IS NULL OR lower(location) LIKE lower(?))
-			AND (? IS NULL OR lower(sysop_name) LIKE lower(?))
+			AND (? IS NULL OR replaceAll(lower(sysop_name), '_', ' ') LIKE replaceAll(lower(?), '_', ' '))
 	),
 	latest_per_node AS (
 		SELECT 
@@ -560,7 +560,7 @@ func (cqb *ClickHouseQueryBuilder) UniqueSysopsWithFilterSQL() string {
 				MAX(nodelist_date) as last_seen,
 				arraySort(arrayDistinct(groupArray(zone))) as zones
 			FROM nodes
-			WHERE lower(sysop_name) LIKE lower(?)
+			WHERE replaceAll(lower(sysop_name), '_', ' ') LIKE concat('%', replaceAll(lower(?), '_', ' '), '%')
 			GROUP BY sysop_name
 		)
 		SELECT 
@@ -600,5 +600,54 @@ func (cqb *ClickHouseQueryBuilder) UniqueSysopsSQL() string {
 		FROM sysop_stats
 		ORDER BY node_count DESC, sysop_name
 		LIMIT ? OFFSET ?
+	`
+}
+
+// FlagFirstAppearanceSQL returns SQL for finding the first appearance of a flag in ClickHouse
+func (cqb *ClickHouseQueryBuilder) FlagFirstAppearanceSQL() string {
+	return `
+		WITH first_appearances AS (
+			SELECT 
+				zone, net, node, nodelist_date, system_name, location, sysop_name,
+				row_number() OVER (ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
+			FROM nodes
+			WHERE has(flags, ?)
+		)
+		SELECT zone, net, node, nodelist_date, system_name, location, sysop_name
+		FROM first_appearances
+		WHERE rn = 1
+	`
+}
+
+// FlagUsageByYearSQL returns SQL for counting flag usage by year in ClickHouse
+func (cqb *ClickHouseQueryBuilder) FlagUsageByYearSQL() string {
+	return `
+		WITH yearly_stats AS (
+			SELECT 
+				toYear(nodelist_date) as year,
+				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as total_nodes
+			FROM nodes
+			GROUP BY year
+		),
+		flag_stats AS (
+			SELECT 
+				toYear(nodelist_date) as year,
+				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as nodes_with_flag
+			FROM nodes
+			WHERE has(flags, ?)
+			GROUP BY year
+		)
+		SELECT 
+			ys.year,
+			COALESCE(fs.nodes_with_flag, 0) as node_count,
+			ys.total_nodes,
+			CASE 
+				WHEN ys.total_nodes > 0 
+				THEN round((COALESCE(fs.nodes_with_flag, 0) / ys.total_nodes) * 100, 2)
+				ELSE 0 
+			END as percentage
+		FROM yearly_stats ys
+		LEFT JOIN flag_stats fs ON ys.year = fs.year
+		ORDER BY ys.year
 	`
 }

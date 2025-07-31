@@ -4,7 +4,7 @@
     "clickhouse": {
       "host": "localhost",
       "port": 9000,
-      "database": "default",
+      "database": "nodelistdb",
       "username": "default",
       "password": "",
       "use_ssl": false,
