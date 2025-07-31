@@ -287,7 +287,7 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 		}
 		
 		// For historical search: get latest entry for each node that matches criteria
-		// Using argMax to avoid JOINs - much faster in ClickHouse
+		// First find matching addresses, then get latest data for each
 		baseSQL = `
 		SELECT 
 			zone, net, node,
@@ -319,7 +319,11 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 			argMax(has_inet, nodelist_date) as has_inet,
 			argMax(internet_config, nodelist_date) as internet_config,
 			argMax(fts_id, nodelist_date) as fts_id
-		FROM nodes` + whereClause + `
+		FROM nodes
+		WHERE (zone, net, node) IN (
+			SELECT DISTINCT zone, net, node
+			FROM nodes` + whereClause + `
+		)
 		GROUP BY zone, net, node`
 	}
 
