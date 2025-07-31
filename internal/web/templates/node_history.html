@@ -129,15 +129,15 @@
                             <div class="node-info">
                                 <div class="info-item">
                                     <strong>System Name</strong>
-                                    {{if .NewNode.SystemName}}{{.NewNode.SystemName}}{{else}}<em>-</em>{{end}}
+                                    {{if .NewNode.SystemName}}{{replaceUnderscores .NewNode.SystemName}}{{else}}<em>-</em>{{end}}
                                 </div>
                                 <div class="info-item">
                                     <strong>Location</strong>
-                                    {{if .NewNode.Location}}{{.NewNode.Location}}{{else}}<em>-</em>{{end}}
+                                    {{if .NewNode.Location}}{{replaceUnderscores .NewNode.Location}}{{else}}<em>-</em>{{end}}
                                 </div>
                                 <div class="info-item">
                                     <strong>Sysop</strong>
-                                    {{if .NewNode.SysopName}}{{.NewNode.SysopName}}{{else}}<em>-</em>{{end}}
+                                    {{if .NewNode.SysopName}}{{replaceUnderscores .NewNode.SysopName}}{{else}}<em>-</em>{{end}}
                                 </div>
                                 <div class="info-item">
                                     <strong>Phone</strong>

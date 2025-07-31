@@ -125,6 +125,9 @@ func (s *Server) loadTemplates() {
 				return fmt.Sprintf("%d B", size)
 			}
 		},
+		"replaceUnderscores": func(s string) string {
+			return strings.ReplaceAll(s, "_", " ")
+		},
 	}
 
 	for _, tmplName := range templates {

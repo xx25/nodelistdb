@@ -124,9 +124,9 @@
                                             <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a>
                                         </strong>
                                     </td>
-                                    <td>{{if .SystemName}}{{.SystemName}}{{else}}<em>-</em>{{end}}</td>
-                                    <td>{{if .Location}}{{.Location}}{{else}}<em>-</em>{{end}}</td>
-                                    <td>{{if .SysopName}}{{.SysopName}}{{else}}<em>-</em>{{end}}</td>
+                                    <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
+                                    <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
+                                    <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
                                     <td>
                                         {{if eq .NodeType "Zone"}}<span class="badge badge-error">Zone</span>
                                         {{else if eq .NodeType "Region"}}<span class="badge badge-warning">Region</span>
