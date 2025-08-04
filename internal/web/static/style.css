@@ -90,7 +90,7 @@ nav a {
     color: var(--text-secondary);
     text-decoration: none;
     border-radius: var(--radius);
-    font-weight: 500;
+    font-weight: 400;
     font-size: 1.3rem;
     transition: all 0.2s ease;
     border: 1px solid transparent;
@@ -580,6 +580,12 @@ table a:hover {
 .badge-info {
     background: #dbeafe;
     color: #1e40af;
+}
+
+.badge-historical {
+    background: #2d2d2d;
+    color: #e5e5e5;
+    border: 1px solid #4a4a4a;
 }
 
 /* Date Picker Styles */
