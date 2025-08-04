@@ -446,27 +446,29 @@ func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
 	// ClickHouse-optimized sysop search using window functions to avoid aggregation issues
 	return `
 	WITH 
+	global_max AS (
+		SELECT MAX(nodelist_date) as max_date FROM nodes
+	),
 	ranked_nodes AS (
 		SELECT 
 			zone, net, node, nodelist_date, system_name, location, sysop_name,
 			row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC) as rn,
 			MIN(nodelist_date) OVER (PARTITION BY zone, net, node) as first_date,
-			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date,
-			MAX(nodelist_date) OVER () as global_max_date
+			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date
 		FROM nodes
 		WHERE replaceAll(lower(sysop_name), '_', ' ') LIKE concat('%', replaceAll(lower(?), '_', ' '), '%')
 	),
 	latest_per_node AS (
 		SELECT 
 			zone, net, node, system_name, location, sysop_name,
-			first_date, last_date, nodelist_date, global_max_date
+			first_date, last_date, nodelist_date
 		FROM ranked_nodes
 		WHERE rn = 1
 	)
 	SELECT 
 		zone, net, node, system_name, location, sysop_name,
 		first_date, last_date,
-		CASE WHEN last_date = global_max_date THEN true ELSE false END as currently_active
+		CASE WHEN last_date = (SELECT max_date FROM global_max) THEN true ELSE false END as currently_active
 	FROM latest_per_node
 	ORDER BY first_date DESC
 	LIMIT ?`
@@ -476,13 +478,15 @@ func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
 func (cqb *ClickHouseQueryBuilder) NodeSummarySearchSQL() string {
 	return `
 	WITH 
+	global_max AS (
+		SELECT MAX(nodelist_date) as max_date FROM nodes
+	),
 	ranked_nodes AS (
 		SELECT 
 			zone, net, node, nodelist_date, system_name, location, sysop_name,
 			row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC) as rn,
 			MIN(nodelist_date) OVER (PARTITION BY zone, net, node) as first_date,
-			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date,
-			MAX(nodelist_date) OVER () as global_max_date
+			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date
 		FROM nodes
 		WHERE 1=1
 			AND (? IS NULL OR zone = ?)
@@ -495,14 +499,14 @@ func (cqb *ClickHouseQueryBuilder) NodeSummarySearchSQL() string {
 	latest_per_node AS (
 		SELECT 
 			zone, net, node, system_name, location, sysop_name,
-			first_date, last_date, nodelist_date, global_max_date
+			first_date, last_date, nodelist_date
 		FROM ranked_nodes
 		WHERE rn = 1
 	)
 	SELECT 
 		zone, net, node, system_name, location, sysop_name,
 		first_date, last_date,
-		CASE WHEN last_date = global_max_date THEN true ELSE false END as currently_active
+		CASE WHEN last_date = (SELECT max_date FROM global_max) THEN true ELSE false END as currently_active
 	FROM latest_per_node
 	ORDER BY last_date DESC, zone, net, node
 	LIMIT ?`
