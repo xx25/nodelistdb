@@ -48,8 +48,7 @@ func (s *Server) StaticHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set cache headers for static assets
-	w.Header().Set("Cache-Control", "public, max-age=31536000") // 1 year
-	w.Header().Set("Expires", "Wed, 21 Oct 2025 07:28:00 GMT")
+	w.Header().Set("Cache-Control", "public, max-age=604800") // 1 week
 
 	// Serve the file content
 	io.Copy(w, file)
