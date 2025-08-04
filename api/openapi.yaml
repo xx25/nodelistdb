@@ -125,7 +125,7 @@ paths:
             example: true
         - name: is_active
           in: query
-          description: Filter by active/inactive status
+          description: Filter by active status (true=in latest nodelist, false=historical only)
           schema:
             type: boolean
             example: true
@@ -696,7 +696,7 @@ components:
           example: true
         is_active:
           type: boolean
-          description: Node is currently active
+          description: True if node is in latest nodelist, false if historical only
           example: true
         flags:
           type: array
@@ -818,6 +818,7 @@ components:
         is_active:
           type: boolean
           nullable: true
+          description: True if node is in latest nodelist, false if historical only
         date_from:
           type: string
           format: date

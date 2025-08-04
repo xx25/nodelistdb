@@ -35,7 +35,7 @@ type Node struct {
 	IsDown    bool `json:"is_down"`
 	IsHold    bool `json:"is_hold"`
 	IsPvt     bool `json:"is_pvt"`
-	IsActive  bool `json:"is_active"`
+	IsActive  bool `json:"is_active"` // True if node is in latest nodelist, false if historical
 
 	// Raw flag arrays
 	Flags             []string `json:"flags"`

@@ -53,3 +53,52 @@ check_*.go
 CLAUDE.md
 test.db
 sync_nodelists.sh
+
+# Python files and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+.ENV/
+
+# Python package manager
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Python cache files for analytics scripts
+scripts/analytics/ip_geolocation_cache.pkl
+scripts/analytics/*.pkl
+scripts/analytics/.cache/
+
+scripts/

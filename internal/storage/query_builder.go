@@ -194,7 +194,8 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 		)
 		SELECT n.zone, n.net, n.node, n.nodelist_date, n.day_number,
 			   n.system_name, n.location, n.sysop_name, n.phone, n.node_type, n.region, n.max_speed,
-			   n.is_cm, n.is_mo, n.has_binkp, n.has_telnet, n.is_down, n.is_hold, n.is_pvt, n.is_active,
+			   n.is_cm, n.is_mo, n.has_binkp, n.has_telnet, n.is_down, n.is_hold, n.is_pvt, 
+			   (n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)) as is_active,
 			   n.flags, n.modem_flags, n.internet_protocols, n.internet_hostnames, n.internet_ports, n.internet_emails,
 			   n.conflict_sequence, n.has_conflict, n.has_inet, n.internet_config, n.fts_id
 		FROM (
@@ -207,7 +208,7 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 	}
 
 	// Add ORDER BY
-	baseSQL += " ORDER BY zone, net, node, nodelist_date DESC"
+	baseSQL += " ORDER BY n.zone, n.net, n.node, n.nodelist_date DESC"
 
 	// Add LIMIT and OFFSET
 	if filter.Limit > 0 {
@@ -261,8 +262,11 @@ func (qb *QueryBuilder) buildWhereConditions(filter database.NodeFilter) ([]stri
 		args = append(args, *filter.NodeType)
 	}
 	if filter.IsActive != nil {
-		conditions = append(conditions, "is_active = ?")
-		args = append(args, *filter.IsActive)
+		if *filter.IsActive {
+			conditions = append(conditions, "(nodelist_date = (SELECT MAX(nodelist_date) FROM nodes))")
+		} else {
+			conditions = append(conditions, "(nodelist_date < (SELECT MAX(nodelist_date) FROM nodes))")
+		}
 	}
 	if filter.IsCM != nil {
 		conditions = append(conditions, "is_cm = ?")
@@ -574,7 +578,8 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 	baseSQL := `
 	SELECT n.zone, n.net, n.node, n.nodelist_date, n.day_number,
 		   n.system_name, n.location, n.sysop_name, n.phone, n.node_type, n.region, n.max_speed,
-		   n.is_cm, n.is_mo, n.has_binkp, n.has_telnet, n.is_down, n.is_hold, n.is_pvt, n.is_active,
+		   n.is_cm, n.is_mo, n.has_binkp, n.has_telnet, n.is_down, n.is_hold, n.is_pvt, 
+		   (n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)) as is_active,
 		   n.flags, n.modem_flags, n.internet_protocols, n.internet_hostnames, n.internet_ports, n.internet_emails,
 		   n.conflict_sequence, n.has_conflict, n.has_inet, n.internet_config,
 		   COALESCE(fts.score, 0) as fts_score
@@ -689,8 +694,11 @@ func (qb *QueryBuilder) buildNonTextConditions(filter database.NodeFilter) ([]st
 		args = append(args, *filter.NodeType)
 	}
 	if filter.IsActive != nil {
-		conditions = append(conditions, "n.is_active = ?")
-		args = append(args, *filter.IsActive)
+		if *filter.IsActive {
+			conditions = append(conditions, "(n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes))")
+		} else {
+			conditions = append(conditions, "(n.nodelist_date < (SELECT MAX(nodelist_date) FROM nodes))")
+		}
 	}
 	if filter.IsCM != nil {
 		conditions = append(conditions, "n.is_cm = ?")
