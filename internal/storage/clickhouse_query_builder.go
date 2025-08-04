@@ -466,7 +466,7 @@ func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
 	SELECT 
 		zone, net, node, system_name, location, sysop_name,
 		first_date, last_date,
-		CASE WHEN nodelist_date = global_max_date THEN true ELSE false END as currently_active
+		CASE WHEN last_date = global_max_date THEN true ELSE false END as currently_active
 	FROM latest_per_node
 	ORDER BY first_date DESC
 	LIMIT ?`
@@ -502,7 +502,7 @@ func (cqb *ClickHouseQueryBuilder) NodeSummarySearchSQL() string {
 	SELECT 
 		zone, net, node, system_name, location, sysop_name,
 		first_date, last_date,
-		CASE WHEN nodelist_date = global_max_date THEN true ELSE false END as currently_active
+		CASE WHEN last_date = global_max_date THEN true ELSE false END as currently_active
 	FROM latest_per_node
 	ORDER BY last_date DESC, zone, net, node
 	LIMIT ?`

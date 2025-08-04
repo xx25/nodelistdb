@@ -413,11 +413,8 @@ func (qb *QueryBuilder) SysopSearchSQL() string {
 	SELECT 
 		nr.zone, nr.net, nr.node, nr.system_name, nr.location, nr.sysop_name,
 		nr.first_date, nr.last_date,
-		CASE WHEN EXISTS (
-			SELECT 1 FROM nodes n 
-			WHERE n.zone = nr.zone AND n.net = nr.net AND n.node = nr.node 
-			AND n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
-		) THEN true ELSE false END as currently_active
+		CASE WHEN nr.last_date = (SELECT MAX(nodelist_date) FROM nodes)
+		THEN true ELSE false END as currently_active
 	FROM node_ranges nr
 	ORDER BY nr.first_date DESC
 	LIMIT ?`
@@ -447,11 +444,8 @@ func (qb *QueryBuilder) NodeSummarySearchSQL() string {
 	SELECT 
 		nr.zone, nr.net, nr.node, nr.system_name, nr.location, nr.sysop_name,
 		nr.first_date, nr.last_date,
-		CASE WHEN EXISTS (
-			SELECT 1 FROM nodes n 
-			WHERE n.zone = nr.zone AND n.net = nr.net AND n.node = nr.node 
-			AND n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
-		) THEN true ELSE false END as currently_active
+		CASE WHEN nr.last_date = (SELECT MAX(nodelist_date) FROM nodes)
+		THEN true ELSE false END as currently_active
 	FROM node_ranges nr
 	ORDER BY nr.last_date DESC, nr.zone, nr.net, nr.node
 	LIMIT ?`
