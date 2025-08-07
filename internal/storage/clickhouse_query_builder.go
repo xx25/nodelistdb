@@ -32,8 +32,8 @@ func (cqb *ClickHouseQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.No
 	buf.WriteString(`INSERT INTO nodes (
 		zone, net, node, nodelist_date, day_number,
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		is_cm, is_mo,
+		flags, modem_flags,
 		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	) VALUES `)
 
@@ -72,18 +72,13 @@ func (cqb *ClickHouseQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.No
 		buf.WriteString(fmt.Sprintf("%d,", node.MaxSpeed))
 
 		// Boolean flags
-		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,",
-			node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
-			node.IsDown, node.IsHold, node.IsPvt, node.IsActive))
+		buf.WriteString(fmt.Sprintf("%t,%t,",
+			node.IsCM, node.IsMO))
 
 		// Arrays (ClickHouse format)
-		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,",
+		buf.WriteString(fmt.Sprintf("%s,%s,",
 			crp.formatArrayForDB(node.Flags),
-			crp.formatArrayForDB(node.ModemFlags),
-			crp.formatArrayForDB(node.InternetProtocols),
-			crp.formatArrayForDB(node.InternetHostnames),
-			crp.formatIntArrayForDB(node.InternetPorts),
-			crp.formatArrayForDB(node.InternetEmails)))
+			crp.formatArrayForDB(node.ModemFlags)))
 
 		// Final fields
 		buf.WriteString(fmt.Sprintf("%d,%t,%t,",
@@ -128,22 +123,22 @@ func (cqb *ClickHouseQueryBuilder) BuildClickHouseFTSQuery(filter database.NodeF
 
 	baseQuery := cqb.NodeSelectSQL()
 
-	// Text search using materialized lowercase columns with bloom filter indexes
+	// Text search using ILIKE for optimal performance
 	if filter.SystemName != nil && *filter.SystemName != "" {
-		conditions = append(conditions, "lower(system_name) LIKE ?")
-		args = append(args, "%"+strings.ToLower(*filter.SystemName)+"%")
+		conditions = append(conditions, "system_name ILIKE ?")
+		args = append(args, "%"+*filter.SystemName+"%")
 		usedFTS = true
 	}
 
 	if filter.Location != nil && *filter.Location != "" {
-		conditions = append(conditions, "lower(location) LIKE ?")
-		args = append(args, "%"+strings.ToLower(*filter.Location)+"%")
+		conditions = append(conditions, "location ILIKE ?")
+		args = append(args, "%"+*filter.Location+"%")
 		usedFTS = true
 	}
 
 	if filter.SysopName != nil && *filter.SysopName != "" {
-		conditions = append(conditions, "lower(sysop_name) LIKE ?")
-		args = append(args, "%"+strings.ToLower(*filter.SysopName)+"%")
+		conditions = append(conditions, "sysop_name ILIKE ?")
+		args = append(args, "%"+*filter.SysopName+"%")
 		usedFTS = true
 	}
 
@@ -180,18 +175,9 @@ func (cqb *ClickHouseQueryBuilder) BuildClickHouseFTSQuery(filter database.NodeF
 	}
 
 	if filter.HasBinkp != nil {
-		conditions = append(conditions, "has_binkp = ?")
+		// HasBinkp is now determined from JSON: check for IBN or BND protocols
+		conditions = append(conditions, "(JSONHas(internet_config, 'protocols', 'IBN') OR JSONHas(internet_config, 'protocols', 'BND')) = ?")
 		args = append(args, *filter.HasBinkp)
-	}
-
-	if filter.HasTelnet != nil {
-		conditions = append(conditions, "has_telnet = ?")
-		args = append(args, *filter.HasTelnet)
-	}
-
-	if filter.IsActive != nil {
-		conditions = append(conditions, "is_active = ?")
-		args = append(args, *filter.IsActive)
 	}
 
 	// Date filters
@@ -235,8 +221,8 @@ func (cqb *ClickHouseQueryBuilder) NodeSelectSQL() string {
 	return `
 	SELECT zone, net, node, nodelist_date, day_number,
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		is_cm, is_mo,
+		flags, modem_flags,
 		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	FROM nodes`
 }
@@ -261,8 +247,8 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 		baseSQL = `
 		SELECT zone, net, node, nodelist_date, day_number,
 			   system_name, location, sysop_name, phone, node_type, region, max_speed,
-			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			   is_cm, is_mo,
+			   flags, modem_flags,
 			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 		FROM nodes
 		WHERE (zone, net, node, nodelist_date) IN (
@@ -292,8 +278,8 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 		SELECT 
 			zone, net, node, nodelist_date, day_number,
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
-			is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-			flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			is_cm, is_mo,
+			flags, modem_flags,
 			conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 		FROM (
 			SELECT *,
@@ -347,34 +333,31 @@ func (cqb *ClickHouseQueryBuilder) buildClickHouseWhereConditions(filter databas
 		args = append(args, *filter.DateTo)
 	}
 	if filter.SystemName != nil {
-		// Use inline lower() function since materialized columns don't exist
-		conditions = append(conditions, "lower(system_name) LIKE ?")
-		args = append(args, "%"+strings.ToLower(*filter.SystemName)+"%")
+		// Use ILIKE for case-insensitive matching - performs as well as materialized columns
+		conditions = append(conditions, "system_name ILIKE ?")
+		args = append(args, "%"+*filter.SystemName+"%")
 	}
 	if filter.Location != nil {
-		// Use inline lower() function since materialized columns don't exist
-		conditions = append(conditions, "lower(location) LIKE ?")
-		args = append(args, "%"+strings.ToLower(*filter.Location)+"%")
+		// Use ILIKE for case-insensitive matching - performs as well as materialized columns
+		conditions = append(conditions, "location ILIKE ?")
+		args = append(args, "%"+*filter.Location+"%")
 	}
 	if filter.SysopName != nil {
-		// Use inline lower() function since materialized columns don't exist
-		conditions = append(conditions, "lower(sysop_name) LIKE ?")
-		args = append(args, "%"+strings.ToLower(*filter.SysopName)+"%")
+		// Use ILIKE for case-insensitive matching - performs as well as materialized columns
+		conditions = append(conditions, "sysop_name ILIKE ?")
+		args = append(args, "%"+*filter.SysopName+"%")
 	}
 	if filter.NodeType != nil {
 		conditions = append(conditions, "node_type = ?")
 		args = append(args, *filter.NodeType)
-	}
-	if filter.IsActive != nil {
-		conditions = append(conditions, "is_active = ?")
-		args = append(args, *filter.IsActive)
 	}
 	if filter.IsCM != nil {
 		conditions = append(conditions, "is_cm = ?")
 		args = append(args, *filter.IsCM)
 	}
 	if filter.HasBinkp != nil {
-		conditions = append(conditions, "has_binkp = ?")
+		// HasBinkp is now determined from JSON: check for IBN or BND protocols
+		conditions = append(conditions, "(JSONHas(internet_config, 'protocols', 'IBN') OR JSONHas(internet_config, 'protocols', 'BND')) = ?")
 		args = append(args, *filter.HasBinkp)
 	}
 
@@ -392,15 +375,15 @@ func (cqb *ClickHouseQueryBuilder) StatsSQL() string {
 	SELECT 
 		nodelist_date,
 		COUNT(*) as total_nodes,
-		countIf(is_active AND NOT is_down AND NOT is_hold) as active_nodes,
+		countIf(node_type NOT IN ('Down', 'Hold')) as active_nodes,
 		countIf(is_cm) as cm_nodes,
 		countIf(is_mo) as mo_nodes,
-		countIf(has_binkp) as binkp_nodes,
-		countIf(has_telnet) as telnet_nodes,
-		countIf(is_pvt) as pvt_nodes,
-		countIf(is_down) as down_nodes,
-		countIf(is_hold) as hold_nodes,
-		countIf(length(internet_protocols) > 0) as internet_nodes
+		countIf(JSONHas(internet_config, 'protocols', 'IBN') OR JSONHas(internet_config, 'protocols', 'BND')) as binkp_nodes,
+		countIf(JSONHas(internet_config, 'protocols', 'ITN')) as telnet_nodes,
+		countIf(node_type = 'Pvt') as pvt_nodes,
+		countIf(node_type = 'Down') as down_nodes,
+		countIf(node_type = 'Hold') as hold_nodes,
+		countIf(has_inet = true) as internet_nodes
 	FROM nodes 
 	WHERE nodelist_date = ?
 	GROUP BY nodelist_date`
@@ -456,7 +439,7 @@ func (cqb *ClickHouseQueryBuilder) SysopSearchSQL() string {
 			MIN(nodelist_date) OVER (PARTITION BY zone, net, node) as first_date,
 			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date
 		FROM nodes
-		WHERE replaceAll(lower(sysop_name), '_', ' ') LIKE concat('%', replaceAll(lower(?), '_', ' '), '%')
+		WHERE replaceAll(sysop_name, '_', ' ') ILIKE concat('%', replaceAll(?, '_', ' '), '%')
 	),
 	latest_per_node AS (
 		SELECT 
@@ -492,9 +475,9 @@ func (cqb *ClickHouseQueryBuilder) NodeSummarySearchSQL() string {
 			AND (? IS NULL OR zone = ?)
 			AND (? IS NULL OR net = ?)
 			AND (? IS NULL OR node = ?)
-			AND (? IS NULL OR lower(system_name) LIKE lower(?))
-			AND (? IS NULL OR lower(location) LIKE lower(?))
-			AND (? IS NULL OR replaceAll(lower(sysop_name), '_', ' ') LIKE replaceAll(lower(?), '_', ' '))
+			AND (? IS NULL OR system_name ILIKE ?)
+			AND (? IS NULL OR location ILIKE ?)
+			AND (? IS NULL OR replaceAll(sysop_name, '_', ' ') ILIKE replaceAll(?, '_', ' '))
 	),
 	latest_per_node AS (
 		SELECT 
@@ -559,12 +542,12 @@ func (cqb *ClickHouseQueryBuilder) UniqueSysopsWithFilterSQL() string {
 			SELECT 
 				sysop_name,
 				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as node_count,
-				COUNT(DISTINCT CASE WHEN is_active = true THEN concat(toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
+				COUNT(DISTINCT CASE WHEN nodelist_date = (SELECT MAX(nodelist_date) FROM nodes) THEN concat(toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
 				MIN(nodelist_date) as first_seen,
 				MAX(nodelist_date) as last_seen,
 				arraySort(arrayDistinct(groupArray(zone))) as zones
 			FROM nodes
-			WHERE replaceAll(lower(sysop_name), '_', ' ') LIKE concat('%', replaceAll(lower(?), '_', ' '), '%')
+			WHERE replaceAll(sysop_name, '_', ' ') ILIKE concat('%', replaceAll(?, '_', ' '), '%')
 			GROUP BY sysop_name
 		)
 		SELECT 
@@ -587,7 +570,7 @@ func (cqb *ClickHouseQueryBuilder) UniqueSysopsSQL() string {
 			SELECT 
 				sysop_name,
 				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as node_count,
-				COUNT(DISTINCT CASE WHEN is_active = true THEN concat(toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
+				COUNT(DISTINCT CASE WHEN nodelist_date = (SELECT MAX(nodelist_date) FROM nodes) THEN concat(toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
 				MIN(nodelist_date) as first_seen,
 				MAX(nodelist_date) as last_seen,
 				arraySort(arrayDistinct(groupArray(zone))) as zones
@@ -615,7 +598,8 @@ func (cqb *ClickHouseQueryBuilder) FlagFirstAppearanceSQL() string {
 				zone, net, node, nodelist_date, system_name, location, sysop_name,
 				row_number() OVER (ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
 			FROM nodes
-			WHERE has(flags, ?) OR has(internet_protocols, ?) OR has(modem_flags, ?)
+			WHERE has(flags, ?) OR has(modem_flags, ?) 
+		   OR JSONHas(internet_config, concat('protocols.', ?))
 		)
 		SELECT zone, net, node, nodelist_date, system_name, location, sysop_name
 		FROM first_appearances
@@ -638,7 +622,8 @@ func (cqb *ClickHouseQueryBuilder) FlagUsageByYearSQL() string {
 				toYear(nodelist_date) as year,
 				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as nodes_with_flag
 			FROM nodes
-			WHERE has(flags, ?) OR has(internet_protocols, ?) OR has(modem_flags, ?)
+			WHERE has(flags, ?) OR has(modem_flags, ?) 
+		   OR JSONHas(internet_config, concat('protocols.', ?))
 			GROUP BY year
 		)
 		SELECT 

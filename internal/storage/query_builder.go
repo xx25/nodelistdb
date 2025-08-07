@@ -21,11 +21,11 @@ func (qb *QueryBuilder) InsertNodeSQL() string {
 	INSERT INTO nodes (
 		zone, net, node, nodelist_date, day_number,
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		is_cm, is_mo,
+		flags, modem_flags,
 		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-		?, ?, ?, ?, ?, ?,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+		?, ?,
 		?, ?, ?, ?, ?)`
 }
 
@@ -36,7 +36,7 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 	}
 
 	// Create placeholder for one row with direct array binding (no JSON casting)
-	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 	// Build batch values
 	values := make([]string, batchSize)
@@ -48,8 +48,8 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 		INSERT INTO nodes (
 			zone, net, node, nodelist_date, day_number,
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
-			is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-			flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			is_cm, is_mo,
+			flags, modem_flags,
 			conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 		) VALUES %s
 		ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
@@ -66,8 +66,8 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 	buf.WriteString(`INSERT INTO nodes (
 		zone, net, node, nodelist_date, day_number,
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		is_cm, is_mo,
+		flags, modem_flags,
 		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	) VALUES `)
 
@@ -106,18 +106,13 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 		buf.WriteString(fmt.Sprintf("%d,", node.MaxSpeed))
 
 		// Boolean flags
-		buf.WriteString(fmt.Sprintf("%t,%t,%t,%t,%t,%t,%t,%t,",
-			node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
-			node.IsDown, node.IsHold, node.IsPvt, node.IsActive))
+		buf.WriteString(fmt.Sprintf("%t,%t,",
+			node.IsCM, node.IsMO))
 
 		// Arrays (optimized format)
-		buf.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,",
+		buf.WriteString(fmt.Sprintf("%s,%s,",
 			rp.formatArrayForDB(node.Flags),
-			rp.formatArrayForDB(node.ModemFlags),
-			rp.formatArrayForDB(node.InternetProtocols),
-			rp.formatArrayForDB(node.InternetHostnames),
-			rp.formatIntArrayForDB(node.InternetPorts),
-			rp.formatArrayForDB(node.InternetEmails)))
+			rp.formatArrayForDB(node.ModemFlags)))
 
 		// Final fields
 		buf.WriteString(fmt.Sprintf("%d,%t,%t,",
@@ -148,8 +143,8 @@ func (qb *QueryBuilder) NodeSelectSQL() string {
 	return `
 	SELECT zone, net, node, nodelist_date, day_number,
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
-		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		   is_cm, is_mo,
+		   flags, modem_flags,
 		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	FROM nodes`
 }
@@ -163,8 +158,8 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 		baseSQL = `
 		SELECT zone, net, node, nodelist_date, day_number,
 			   system_name, location, sysop_name, phone, node_type, region, max_speed,
-			   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-			   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			   is_cm, is_mo,
+			   flags, modem_flags,
 			   conflict_sequence, has_conflict, has_inet, internet_config
 		FROM (
 			SELECT *, 
@@ -194,9 +189,8 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 		)
 		SELECT n.zone, n.net, n.node, n.nodelist_date, n.day_number,
 			   n.system_name, n.location, n.sysop_name, n.phone, n.node_type, n.region, n.max_speed,
-			   n.is_cm, n.is_mo, n.has_binkp, n.has_telnet, n.is_down, n.is_hold, n.is_pvt, 
-			   (n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)) as is_active,
-			   n.flags, n.modem_flags, n.internet_protocols, n.internet_hostnames, n.internet_ports, n.internet_emails,
+			   n.is_cm, n.is_mo,
+			   n.flags, n.modem_flags,
 			   n.conflict_sequence, n.has_conflict, n.has_inet, n.internet_config, n.fts_id
 		FROM (
 			SELECT *, 
@@ -261,19 +255,13 @@ func (qb *QueryBuilder) buildWhereConditions(filter database.NodeFilter) ([]stri
 		conditions = append(conditions, "node_type = ?")
 		args = append(args, *filter.NodeType)
 	}
-	if filter.IsActive != nil {
-		if *filter.IsActive {
-			conditions = append(conditions, "(nodelist_date = (SELECT MAX(nodelist_date) FROM nodes))")
-		} else {
-			conditions = append(conditions, "(nodelist_date < (SELECT MAX(nodelist_date) FROM nodes))")
-		}
-	}
 	if filter.IsCM != nil {
 		conditions = append(conditions, "is_cm = ?")
 		args = append(args, *filter.IsCM)
 	}
 	if filter.HasBinkp != nil {
-		conditions = append(conditions, "has_binkp = ?")
+		// HasBinkp is now determined from JSON: check for IBN or BND protocols
+		conditions = append(conditions, "(json_extract(internet_config, '$.protocols.IBN') IS NOT NULL OR json_extract(internet_config, '$.protocols.BND') IS NOT NULL) = ?")
 		args = append(args, *filter.HasBinkp)
 	}
 
@@ -286,15 +274,15 @@ func (qb *QueryBuilder) StatsSQL() string {
 	SELECT 
 		nodelist_date,
 		COUNT(*) as total_nodes,
-		COUNT(*) FILTER (WHERE is_active AND NOT is_down AND NOT is_hold) as active_nodes,
+		COUNT(*) FILTER (WHERE node_type NOT IN ('Down', 'Hold')) as active_nodes,
 		COUNT(*) FILTER (WHERE is_cm) as cm_nodes,
 		COUNT(*) FILTER (WHERE is_mo) as mo_nodes,
-		COUNT(*) FILTER (WHERE has_binkp) as binkp_nodes,
-		COUNT(*) FILTER (WHERE has_telnet) as telnet_nodes,
-		COUNT(*) FILTER (WHERE is_pvt) as pvt_nodes,
-		COUNT(*) FILTER (WHERE is_down) as down_nodes,
-		COUNT(*) FILTER (WHERE is_hold) as hold_nodes,
-		COUNT(*) FILTER (WHERE array_length(internet_protocols) > 0) as internet_nodes
+		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.protocols.IBN') IS NOT NULL OR json_extract(internet_config, '$.protocols.BND') IS NOT NULL) as binkp_nodes,
+		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.protocols.ITN') IS NOT NULL) as telnet_nodes,
+		COUNT(*) FILTER (WHERE node_type = 'Pvt') as pvt_nodes,
+		COUNT(*) FILTER (WHERE node_type = 'Down') as down_nodes,
+		COUNT(*) FILTER (WHERE node_type = 'Hold') as hold_nodes,
+		COUNT(*) FILTER (WHERE has_inet = true) as internet_nodes
 	FROM nodes 
 	WHERE nodelist_date = ?
 	GROUP BY nodelist_date`
@@ -379,8 +367,8 @@ func (qb *QueryBuilder) NodeHistorySQL() string {
 	return `
 	SELECT zone, net, node, nodelist_date, day_number,
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
-		   is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		   flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		   is_cm, is_mo,
+		   flags, modem_flags,
 		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
 	FROM nodes
 	WHERE zone = ? AND net = ? AND node = ?
@@ -572,10 +560,9 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 	baseSQL := `
 	SELECT n.zone, n.net, n.node, n.nodelist_date, n.day_number,
 		   n.system_name, n.location, n.sysop_name, n.phone, n.node_type, n.region, n.max_speed,
-		   n.is_cm, n.is_mo, n.has_binkp, n.has_telnet, n.is_down, n.is_hold, n.is_pvt, 
-		   (n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)) as is_active,
-		   n.flags, n.modem_flags, n.internet_protocols, n.internet_hostnames, n.internet_ports, n.internet_emails,
-		   n.conflict_sequence, n.has_conflict, n.has_inet, n.internet_config,
+		   n.is_cm, n.is_mo,
+		   n.flags, n.modem_flags,
+		   n.conflict_sequence, n.has_conflict, n.has_inet, n.internet_config, n.fts_id,
 		   COALESCE(fts.score, 0) as fts_score
 	FROM nodes n`
 
@@ -687,19 +674,13 @@ func (qb *QueryBuilder) buildNonTextConditions(filter database.NodeFilter) ([]st
 		conditions = append(conditions, "n.node_type = ?")
 		args = append(args, *filter.NodeType)
 	}
-	if filter.IsActive != nil {
-		if *filter.IsActive {
-			conditions = append(conditions, "(n.nodelist_date = (SELECT MAX(nodelist_date) FROM nodes))")
-		} else {
-			conditions = append(conditions, "(n.nodelist_date < (SELECT MAX(nodelist_date) FROM nodes))")
-		}
-	}
 	if filter.IsCM != nil {
 		conditions = append(conditions, "n.is_cm = ?")
 		args = append(args, *filter.IsCM)
 	}
 	if filter.HasBinkp != nil {
-		conditions = append(conditions, "n.has_binkp = ?")
+		// HasBinkp is now determined from JSON: check for IBN or BND protocols
+		conditions = append(conditions, "(json_extract(n.internet_config, '$.protocols.IBN') IS NOT NULL OR json_extract(n.internet_config, '$.protocols.BND') IS NOT NULL) = ?")
 		args = append(args, *filter.HasBinkp)
 	}
 
@@ -714,7 +695,8 @@ func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
 				zone, net, node, nodelist_date, system_name, location, sysop_name,
 				ROW_NUMBER() OVER (ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
 			FROM nodes
-			WHERE ? = ANY(flags) OR ? = ANY(internet_protocols) OR ? = ANY(modem_flags)
+			WHERE ? = ANY(flags) OR ? = ANY(modem_flags) 
+		   OR json_extract(internet_config, '$.protocols.' || ?) IS NOT NULL
 		)
 		SELECT zone, net, node, nodelist_date, system_name, location, sysop_name
 		FROM first_appearances
@@ -737,7 +719,8 @@ func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 				EXTRACT(YEAR FROM nodelist_date) as year,
 				COUNT(DISTINCT (zone || ':' || net || '/' || node)) as nodes_with_flag
 			FROM nodes
-			WHERE ? = ANY(flags) OR ? = ANY(internet_protocols) OR ? = ANY(modem_flags)
+			WHERE ? = ANY(flags) OR ? = ANY(modem_flags) 
+		   OR json_extract(internet_config, '$.protocols.' || ?) IS NOT NULL
 			GROUP BY year
 		)
 		SELECT 

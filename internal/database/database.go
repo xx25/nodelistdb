@@ -147,6 +147,16 @@ func (db *DB) CreateSchema() error {
 	}
 
 	// Create nodes table optimized for DuckDB
+	// Create node_type enum first (DuckDB doesn't support IF NOT EXISTS for TYPE)
+	createEnumSQL := `CREATE TYPE node_type_enum AS ENUM ('Zone', 'Region', 'Host', 'Hub', 'Node', 'Down', 'Hold', 'Pvt')`
+	_, err := db.conn.Exec(createEnumSQL)
+	if err != nil {
+		// Check if it's a "already exists" error and ignore it
+		if !strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("failed to create node_type enum: %w", err)
+		}
+	}
+
 	createSQL := `
 	CREATE TABLE nodes (
 		zone INTEGER NOT NULL,
@@ -158,27 +168,17 @@ func (db *DB) CreateSchema() error {
 		location TEXT NOT NULL,
 		sysop_name TEXT NOT NULL,
 		phone TEXT NOT NULL,
-		node_type TEXT NOT NULL,
+		node_type node_type_enum NOT NULL,
 		region INTEGER,
 		max_speed INTEGER NOT NULL DEFAULT 0,
 		
 		-- Boolean flags (computed from raw flags)
 		is_cm BOOLEAN DEFAULT FALSE,
 		is_mo BOOLEAN DEFAULT FALSE,
-		has_binkp BOOLEAN DEFAULT FALSE,
-		has_telnet BOOLEAN DEFAULT FALSE,
-		is_down BOOLEAN DEFAULT FALSE,
-		is_hold BOOLEAN DEFAULT FALSE,
-		is_pvt BOOLEAN DEFAULT FALSE,
-		is_active BOOLEAN DEFAULT TRUE,
 		
 		-- Arrays for flexibility (DuckDB native arrays)
 		flags TEXT[] DEFAULT [],
 		modem_flags TEXT[] DEFAULT [],
-		internet_protocols TEXT[] DEFAULT [],
-		internet_hostnames TEXT[] DEFAULT [],
-		internet_ports INTEGER[] DEFAULT [],
-		internet_emails TEXT[] DEFAULT [],
 		
 		-- Internet connectivity analysis
 		has_inet BOOLEAN DEFAULT FALSE,       -- Any internet connectivity
@@ -209,13 +209,13 @@ func (db *DB) CreateSchema() error {
 		"CREATE INDEX IF NOT EXISTS idx_nodes_location ON nodes(location)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_sysop ON nodes(sysop_name)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type)",
-		"CREATE INDEX IF NOT EXISTS idx_nodes_flags ON nodes(is_cm, is_mo, has_binkp, has_telnet, has_inet)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_flags ON nodes(is_cm, is_mo, has_inet)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_fts_id ON nodes(fts_id)",
 		// Performance optimizations for stats queries
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_zone ON nodes(nodelist_date, zone)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_region ON nodes(nodelist_date, zone, region)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_net_type ON nodes(nodelist_date, zone, net, node_type)",
-		"CREATE INDEX IF NOT EXISTS idx_nodes_stats_flags ON nodes(nodelist_date, is_active, is_down, is_hold, is_cm, is_mo, has_binkp, has_telnet, is_pvt)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_stats_flags ON nodes(nodelist_date, is_cm, is_mo, has_inet)",
 	}
 
 	for _, indexSQL := range indexes {

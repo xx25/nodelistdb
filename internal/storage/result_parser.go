@@ -21,17 +21,15 @@ func NewResultParser() *ResultParser {
 // ParseNodeRow parses a database row into a Node struct (supports both DuckDB and ClickHouse)
 func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) {
 	var node database.Node
-	var flags, modemFlags, protocols, hosts, emails interface{}
-	var ports interface{}
+	var flags, modemFlags interface{}
 	var internetConfig interface{} // Use interface{} to support both DuckDB and ClickHouse JSON types
 
 	err := scanner.Scan(
 		&node.Zone, &node.Net, &node.Node, &node.NodelistDate, &node.DayNumber,
 		&node.SystemName, &node.Location, &node.SysopName, &node.Phone,
 		&node.NodeType, &node.Region, &node.MaxSpeed,
-		&node.IsCM, &node.IsMO, &node.HasBinkp, &node.HasTelnet,
-		&node.IsDown, &node.IsHold, &node.IsPvt, &node.IsActive,
-		&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
+		&node.IsCM, &node.IsMO,
+		&flags, &modemFlags,
 		&node.ConflictSequence, &node.HasConflict,
 		&node.HasInet, &internetConfig, &node.FtsId,
 	)
@@ -42,10 +40,6 @@ func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) 
 	// Parse arrays (compatible with both DuckDB and ClickHouse)
 	node.Flags = rp.parseInterfaceToStringArray(flags)
 	node.ModemFlags = rp.parseInterfaceToStringArray(modemFlags)
-	node.InternetProtocols = rp.parseInterfaceToStringArray(protocols)
-	node.InternetHostnames = rp.parseInterfaceToStringArray(hosts)
-	node.InternetPorts = rp.parseInterfaceToIntArray(ports)
-	node.InternetEmails = rp.parseInterfaceToStringArray(emails)
 
 	// Handle JSON field (support both DuckDB sql.NullString and ClickHouse JSON types)
 	rp.parseInternetConfig(&node, internetConfig)
@@ -338,14 +332,9 @@ func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
 		node.NodelistDate, node.DayNumber,
 		node.SystemName, node.Location, node.SysopName, node.Phone,
 		node.NodeType, node.Region, node.MaxSpeed,
-		node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
-		node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
+		node.IsCM, node.IsMO,
 		rp.formatArrayForDB(node.Flags),
 		rp.formatArrayForDB(node.ModemFlags),
-		rp.formatArrayForDB(node.InternetProtocols),
-		rp.formatArrayForDB(node.InternetHostnames),
-		rp.formatIntArrayForDB(node.InternetPorts),
-		rp.formatArrayForDB(node.InternetEmails),
 		node.ConflictSequence, node.HasConflict,
 		node.HasInet, configJSON, node.FtsId,
 	}

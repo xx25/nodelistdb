@@ -350,11 +350,11 @@ func (so *StatisticsOperations) GetConnectivityStats(date time.Time) (*Connectiv
 
 	query := `SELECT 
 		COUNT(*) as total_nodes,
-		COUNT(*) FILTER (WHERE has_binkp) as binkp_nodes,
-		COUNT(*) FILTER (WHERE has_telnet) as telnet_nodes,
+		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.protocols.IBN') IS NOT NULL OR json_extract(internet_config, '$.protocols.BND') IS NOT NULL) as binkp_nodes,
+		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.protocols.ITN') IS NOT NULL) as telnet_nodes,
 		COUNT(*) FILTER (WHERE has_inet) as inet_nodes,
-		COUNT(*) FILTER (WHERE array_length(internet_protocols) > 0) as protocol_nodes,
-		COUNT(*) FILTER (WHERE array_length(internet_emails) > 0) as email_nodes
+		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.protocols') IS NOT NULL) as protocol_nodes,
+		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.email_protocols') IS NOT NULL) as email_nodes
 	FROM nodes 
 	WHERE nodelist_date = ?`
 

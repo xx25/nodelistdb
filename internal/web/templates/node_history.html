@@ -94,10 +94,7 @@
                     <label><input type="checkbox" name="nosysop" value="1" {{if .Filter.IgnoreSysop}}checked{{end}}> Ignore sysop changes</label>
                     <label><input type="checkbox" name="noconnectivity" value="1" {{if .Filter.IgnoreConnectivity}}checked{{end}}> Ignore connectivity changes (Binkp/Telnet)</label>
                     <label><input type="checkbox" name="nomodemflags" value="1" {{if .Filter.IgnoreModemFlags}}checked{{end}}> Ignore modem flag changes</label>
-                    <label><input type="checkbox" name="nointernetprotocols" value="1" {{if .Filter.IgnoreInternetProtocols}}checked{{end}}> Ignore internet protocol changes</label>
-                    <label><input type="checkbox" name="nointernethostnames" value="1" {{if .Filter.IgnoreInternetHostnames}}checked{{end}}> Ignore internet hostname changes</label>
-                    <label><input type="checkbox" name="nointernetports" value="1" {{if .Filter.IgnoreInternetPorts}}checked{{end}}> Ignore internet port changes</label>
-                    <label><input type="checkbox" name="nointernetemails" value="1" {{if .Filter.IgnoreInternetEmails}}checked{{end}}> Ignore internet email changes</label>
+                    <!-- Internet array fields are no longer available - these filters have been removed -->
                 </div>
                 <button type="submit" class="btn">Apply Filters</button>
             </form>
@@ -161,11 +158,10 @@
                                         {{if .NewNode.IsCM}}<span class="badge badge-success">CM</span>{{end}}
                                         {{if .NewNode.IsMO}}<span class="badge badge-success">MO</span>{{end}}
                                         {{if .NewNode.HasBinkp}}<span class="badge badge-info">Binkp</span>{{end}}
-                                        {{if .NewNode.HasTelnet}}<span class="badge badge-info">Telnet</span>{{end}}
-                                        {{if .NewNode.IsDown}}<span class="badge badge-error">Down</span>{{end}}
-                                        {{if .NewNode.IsHold}}<span class="badge badge-warning">Hold</span>{{end}}
-                                        {{if .NewNode.IsPvt}}<span class="badge badge-warning">Private</span>{{end}}
-                                        {{if not (or .NewNode.IsCM .NewNode.IsMO .NewNode.HasBinkp .NewNode.HasTelnet .NewNode.IsDown .NewNode.IsHold .NewNode.IsPvt)}}<em>None specified</em>{{end}}
+                                        {{if eq .NewNode.NodeType "Down"}}<span class="badge badge-error">Down</span>{{end}}
+                                        {{if eq .NewNode.NodeType "Hold"}}<span class="badge badge-warning">Hold</span>{{end}}
+                                        {{if eq .NewNode.NodeType "Pvt"}}<span class="badge badge-warning">Private</span>{{end}}
+                                        {{if not (or .NewNode.IsCM .NewNode.IsMO .NewNode.HasBinkp (eq .NewNode.NodeType "Down") (eq .NewNode.NodeType "Hold") (eq .NewNode.NodeType "Pvt"))}}<em>None specified</em>{{end}}
                                     </div>
                                 </div>
                                 {{if .NewNode.Flags}}
@@ -204,48 +200,12 @@
                                     </div>
                                 </div>
                                 {{end}}
-                                {{if .NewNode.InternetProtocols}}
-                                <div class="info-item" style="grid-column: span 2;">
-                                    <strong>Internet Protocols</strong>
-                                    <div style="margin-top: 0.5rem;">
-                                        {{range .NewNode.InternetProtocols}}
-                                            {{$desc := getFlagDescription $.FlagDescriptions .}}
-                                            {{if $desc}}
-                                                <span class="flag-tooltip">
-                                                    <span class="badge badge-success" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                                                    <span class="tooltip-text">{{$desc}}</span>
-                                                </span>
-                                            {{else}}
-                                                <span class="badge badge-success" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                                            {{end}}
-                                        {{end}}
-                                    </div>
-                                </div>
-                                {{end}}
-                                {{if .NewNode.InternetHostnames}}
-                                <div class="info-item" style="grid-column: span 2;">
-                                    <strong>Internet Hostnames</strong>
-                                    <div style="margin-top: 0.5rem;">
-                                        {{range .NewNode.InternetHostnames}}<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9rem; margin-right: 0.5rem;">{{.}}</code>{{end}}
-                                    </div>
-                                </div>
-                                {{end}}
-                                {{if .NewNode.InternetPorts}}
-                                <div class="info-item">
-                                    <strong>Internet Ports</strong>
-                                    <div style="margin-top: 0.5rem;">
-                                        {{range .NewNode.InternetPorts}}<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9rem; margin-right: 0.5rem;">{{.}}</code>{{end}}
-                                    </div>
-                                </div>
-                                {{end}}
-                                {{if .NewNode.InternetEmails}}
-                                <div class="info-item" style="grid-column: span 2;">
-                                    <strong>Internet Emails</strong>
-                                    <div style="margin-top: 0.5rem;">
-                                        {{range .NewNode.InternetEmails}}<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.9rem; margin-right: 0.5rem;">{{.}}</code>{{end}}
-                                    </div>
-                                </div>
-                                {{end}}
+                                <!-- Internet protocols are now in InternetConfig JSON field - template helpers needed to extract -->
+                                <!-- TODO: Add template helper to extract protocols from InternetConfig JSON -->
+                                <!-- Internet hostnames and ports are now in InternetConfig JSON field - template helpers needed to extract -->
+                                <!-- TODO: Add template helpers to extract hostnames and ports from InternetConfig JSON -->
+                                <!-- Internet emails are now in InternetConfig JSON field - template helpers needed to extract -->
+                                <!-- TODO: Add template helper to extract emails from InternetConfig JSON -->
                             </div>
                             {{end}}
                         {{else if eq .ChangeType "removed"}}

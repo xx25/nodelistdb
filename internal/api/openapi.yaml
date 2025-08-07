@@ -349,8 +349,9 @@ paths:
             Comma-separated list of fields to exclude from change detection.
             
             Supported values: flags, phone, speed, status, location, name, sysop,
-            connectivity, internet_protocols, internet_hostnames, internet_ports,
-            internet_emails, modem_flags
+            connectivity, modem_flags
+            
+            Note: internet_* array fields have been removed - data is now in internet_config JSON
           schema:
             type: string
             example: "flags,phone,speed"
@@ -754,30 +755,7 @@ components:
             type: string
           description: Modem-related flags
           example: ["V32B", "V42B"]
-        internet_protocols:
-          type: array
-          items:
-            type: string
-          description: Supported internet protocols
-          example: ["IBN", "ITN"]
-        internet_hostnames:
-          type: array
-          items:
-            type: string
-          description: Internet hostnames
-          example: ["fidonet.example.com"]
-        internet_ports:
-          type: array
-          items:
-            type: integer
-          description: Internet port numbers
-          example: [24554, 23]
-        internet_emails:
-          type: array
-          items:
-            type: string
-          description: Internet email addresses
-          example: ["sysop@example.com"]
+        # Internet array fields have been removed - data is now in internet_config JSON field
         internet_config:
           type: object
           description: Parsed internet configuration

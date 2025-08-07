@@ -188,13 +188,12 @@ func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter
 		fieldChanges["flags"] = fmt.Sprintf("%v → %v", prev.Flags, curr.Flags)
 	}
 
-	// Internet connectivity changes
+	// Internet connectivity changes  
 	if !filter.IgnoreConnectivity {
-		if prev.HasBinkp != curr.HasBinkp {
-			fieldChanges["binkp"] = fmt.Sprintf("%t → %t", prev.HasBinkp, curr.HasBinkp)
-		}
-		if prev.HasTelnet != curr.HasTelnet {
-			fieldChanges["telnet"] = fmt.Sprintf("%t → %t", prev.HasTelnet, curr.HasTelnet)
+		prevBinkp := so.hasBinkpFromJSON(prev.InternetConfig)
+		currBinkp := so.hasBinkpFromJSON(curr.InternetConfig)
+		if prevBinkp != currBinkp {
+			fieldChanges["binkp"] = fmt.Sprintf("%t → %t", prevBinkp, currBinkp)
 		}
 	}
 
@@ -202,20 +201,10 @@ func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter
 		fieldChanges["modem_flags"] = fmt.Sprintf("%v → %v", prev.ModemFlags, curr.ModemFlags)
 	}
 
-	if !filter.IgnoreInternetProtocols && !so.equalStringSlices(prev.InternetProtocols, curr.InternetProtocols) {
-		fieldChanges["internet_protocols"] = fmt.Sprintf("%v → %v", prev.InternetProtocols, curr.InternetProtocols)
-	}
-
-	if !filter.IgnoreInternetHostnames && !so.equalStringSlices(prev.InternetHostnames, curr.InternetHostnames) {
-		fieldChanges["internet_hostnames"] = fmt.Sprintf("%v → %v", prev.InternetHostnames, curr.InternetHostnames)
-	}
-
-	if !filter.IgnoreInternetPorts && !so.equalIntSlices(prev.InternetPorts, curr.InternetPorts) {
-		fieldChanges["internet_ports"] = fmt.Sprintf("%v → %v", prev.InternetPorts, curr.InternetPorts)
-	}
-
-	if !filter.IgnoreInternetEmails && !so.equalStringSlices(prev.InternetEmails, curr.InternetEmails) {
-		fieldChanges["internet_emails"] = fmt.Sprintf("%v → %v", prev.InternetEmails, curr.InternetEmails)
+	// Detect internet configuration changes from JSON
+	internetChanges := so.detectInternetConfigChanges(prev.InternetConfig, curr.InternetConfig)
+	for key, change := range internetChanges {
+		fieldChanges[key] = change
 	}
 
 	// Check has_inet changes
@@ -223,13 +212,6 @@ func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter
 		fieldChanges["has_inet"] = fmt.Sprintf("%t → %t", prev.HasInet, curr.HasInet)
 	}
 
-	// Detect internet config changes using JSON-based detection
-	if !filter.IgnoreConnectivity || !filter.IgnoreInternetProtocols || !filter.IgnoreInternetHostnames {
-		configChanges := so.detectInternetConfigChanges(prev.InternetConfig, curr.InternetConfig)
-		for key, value := range configChanges {
-			fieldChanges[key] = value
-		}
-	}
 
 	return fieldChanges
 }
@@ -528,9 +510,9 @@ func (so *SearchOperations) SearchNodesByLocation(location string, limit int) ([
 
 // SearchActiveNodes finds currently active nodes with optional filters
 func (so *SearchOperations) SearchActiveNodes(filter database.NodeFilter) ([]database.Node, error) {
-	// Force active filter
-	active := true
-	filter.IsActive = &active
+	// Force active filter by using latest_only
+	latest := true
+	filter.LatestOnly = &latest
 
 	// Set default limit if not specified
 	if filter.Limit == 0 {
@@ -777,4 +759,20 @@ func (so *SearchOperations) buildNodeSummaryArgs(filter database.NodeFilter) []i
 	args = append(args, filter.Limit)
 
 	return args
+}
+
+// hasBinkpFromJSON checks if IBN or BND protocols exist in the JSON config
+func (so *SearchOperations) hasBinkpFromJSON(config json.RawMessage) bool {
+	if len(config) == 0 {
+		return false
+	}
+	
+	var internetConfig database.InternetConfiguration
+	if err := json.Unmarshal(config, &internetConfig); err != nil {
+		return false
+	}
+	
+	_, hasIBN := internetConfig.Protocols["IBN"] 
+	_, hasBND := internetConfig.Protocols["BND"]
+	return hasIBN || hasBND
 }

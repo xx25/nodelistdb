@@ -177,7 +177,6 @@ func newMockServer() (*Server, *MockStorage) {
 				NodeType:     "Pvt",
 				NodelistDate: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 				DayNumber:    15,
-				IsActive:     true,
 				IsCM:         false,
 			},
 		},
@@ -710,7 +709,6 @@ func TestSysopNodesHandler_Success(t *testing.T) {
 		Node:       100,
 		SystemName: "Test Sysop Node",
 		SysopName:  "Test_Sysop",
-		IsActive:   true,
 	})
 
 	handler := createSysopNodesHandler(mockStorage)

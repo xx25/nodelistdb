@@ -102,10 +102,10 @@ func (cno *ClickHouseNodeOperations) insertNodesNative(chDB *database.ClickHouse
 		INSERT INTO nodes (
 			zone, net, node, nodelist_date, day_number,
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
-			is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-			flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+			is_cm, is_mo,
+			flags, modem_flags,
 			conflict_sequence, has_conflict, has_inet, internet_config, fts_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
 	}

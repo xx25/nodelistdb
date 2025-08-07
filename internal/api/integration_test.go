@@ -186,7 +186,6 @@ func TestAPIIntegration_LargeResponses(t *testing.T) {
 			Node:         1,
 			SystemName:   "Test System",
 			NodelistDate: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-			IsActive:     true,
 		}
 	}
 

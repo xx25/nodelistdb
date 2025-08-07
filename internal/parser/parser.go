@@ -433,7 +433,7 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 	}
 
 	// Parse flags into structured format with full categorization AND build JSON config
-	flags, internetProtocols, internetHostnames, internetPorts, internetEmails, internetConfig := p.parseFlagsWithConfig(flagsStr)
+	flags, internetConfig := p.parseFlagsWithConfig(flagsStr)
 
 	// Get modem flags separately (not included in parseFlagsWithConfig yet)
 	_, _, _, _, _, modemFlags := p.parseAdvancedFlags(flagsStr)
@@ -441,13 +441,9 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 	// Compute boolean flags based on comprehensive flag analysis
 	isCM := p.hasFlag(flags, "CM")
 	isMO := p.hasFlag(flags, "MO")
-	hasBinkp := p.hasProtocol(internetProtocols, "IBN") || p.hasProtocol(internetProtocols, "BND") || p.hasFlag(flags, "IBN") || p.hasFlag(flags, "BND")
-	hasTelnet := p.hasProtocol(internetProtocols, "ITN") || p.hasProtocol(internetProtocols, "TEL") || p.hasFlag(flags, "ITN") || p.hasFlag(flags, "TEL")
-	hasInet := len(internetProtocols) > 0 || len(internetEmails) > 0 || hasBinkp || hasTelnet
-	isDown := nodeType == "Down"
-	isHold := nodeType == "Hold"
-	isPvt := nodeType == "Pvt"
-	isActive := !isDown && !isHold
+	
+	// Determine internet connectivity from JSON config
+	hasInet := len(internetConfig) > 0 && string(internetConfig) != "null"
 
 	// Create node with all enhanced data
 	dbNode := database.Node{
@@ -463,22 +459,12 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 		NodeType:          nodeType,
 		Region:            region,
 		MaxSpeed:          maxSpeed,
-		IsCM:              isCM,
-		IsMO:              isMO,
-		HasBinkp:          hasBinkp,
-		HasInet:           hasInet,
-		HasTelnet:         hasTelnet,
-		IsDown:            isDown,
-		IsHold:            isHold,
-		IsPvt:             isPvt,
-		IsActive:          isActive,
-		Flags:             flags,
-		ModemFlags:        modemFlags,
-		InternetProtocols: internetProtocols,
-		InternetHostnames: internetHostnames,
-		InternetPorts:     internetPorts,
-		InternetEmails:    internetEmails,
-		InternetConfig:    internetConfig,
+		IsCM:     isCM,
+		IsMO:     isMO,
+		HasInet:  hasInet,
+		Flags:          flags,
+		ModemFlags:     modemFlags,
+		InternetConfig: internetConfig,
 		ConflictSequence:  0,     // Default to 0 (original entry)
 		HasConflict:       false, // Default to false
 	}
@@ -547,12 +533,8 @@ func (p *Parser) buildInternetConfig(protocols map[string]database.InternetProto
 }
 
 // parseFlagsWithConfig extracts flags and builds structured internet configuration
-func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []string, []int, []string, []byte) {
+func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 	var flags []string
-	var internetProtocols []string
-	var internetHostnames []string
-	var internetPorts []int
-	var internetEmails []string
 
 	// For building structured config
 	protocols := make(map[string]database.InternetProtocolDetail)
@@ -569,7 +551,7 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 	}
 
 	if flagsStr == "" {
-		return flags, internetProtocols, internetHostnames, internetPorts, internetEmails, nil
+		return flags, nil
 	}
 
 	// Parse comma-separated flags
@@ -588,18 +570,14 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 			switch flagName {
 			// Connection protocols
 			case "IBN", "IFC", "ITN", "IVM", "IFT":
-				internetProtocols = append(internetProtocols, flagName)
-
 				detail := database.InternetProtocolDetail{}
 				if flagValue != "" {
 					addr, port := p.parseProtocolValue(flagValue)
 					if addr != "" {
 						detail.Address = addr
-						internetHostnames = append(internetHostnames, addr)
 					}
 					if port > 0 {
 						detail.Port = port
-						internetPorts = append(internetPorts, port)
 					} else if defaultPort, ok := defaultPorts[flagName]; ok && addr != "" {
 						detail.Port = defaultPort
 					}
@@ -610,40 +588,33 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 
 			// Default internet address
 			case "INA":
-				internetProtocols = append(internetProtocols, flagName)
 				if flagValue != "" {
 					defaults["INA"] = flagValue
-					internetHostnames = append(internetHostnames, flagValue)
 				}
 
 			// Email protocols
 			case "IEM":
 				if flagValue != "" {
 					defaults["IEM"] = flagValue // Default email
-					internetEmails = append(internetEmails, flagValue)
 				}
 
 			case "IMI", "ITX", "ISE":
 				emailDetail := database.EmailProtocolDetail{}
 				if flagValue != "" {
 					emailDetail.Email = flagValue
-					internetEmails = append(internetEmails, flagValue)
 				}
 				emailProtocols[flagName] = emailDetail
 
 			// General IP flag
 			case "IP":
-				internetProtocols = append(internetProtocols, flagName)
 				if flagValue != "" {
 					addr, port := p.parseProtocolValue(flagValue)
 					detail := database.InternetProtocolDetail{}
 					if addr != "" {
 						detail.Address = addr
-						internetHostnames = append(internetHostnames, addr)
 					}
 					if port > 0 {
 						detail.Port = port
-						internetPorts = append(internetPorts, port)
 					}
 					if detail.Address != "" || detail.Port > 0 {
 						protocols[flagName] = detail
@@ -663,7 +634,6 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 			switch part {
 			// Connection protocol flags without values
 			case "IBN", "IFC", "ITN", "IVM", "IFT", "INA", "IP":
-				internetProtocols = append(internetProtocols, part)
 				// Add to protocols map with default port if applicable
 				if defaultPort, ok := defaultPorts[part]; ok {
 					protocols[part] = database.InternetProtocolDetail{Port: defaultPort}
@@ -681,13 +651,11 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 
 			// Alternative protocol names
 			case "BND": // Alternative name for IBN
-				internetProtocols = append(internetProtocols, "IBN")
 				if _, exists := protocols["IBN"]; !exists {
 					protocols["IBN"] = database.InternetProtocolDetail{Port: 24554}
 				}
 
 			case "TEL": // Alternative name for ITN
-				internetProtocols = append(internetProtocols, "ITN")
 				if _, exists := protocols["ITN"]; !exists {
 					protocols["ITN"] = database.InternetProtocolDetail{Port: 23}
 				}
@@ -702,7 +670,7 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []string, []st
 	// Build JSON config
 	internetConfig := p.buildInternetConfig(protocols, defaults, emailProtocols, infoFlags)
 
-	return flags, internetProtocols, internetHostnames, internetPorts, internetEmails, internetConfig
+	return flags, internetConfig
 }
 
 // parseAdvancedFlags parses flags with full categorization (kept for modem flags)

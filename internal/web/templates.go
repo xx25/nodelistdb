@@ -165,17 +165,17 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 				return nil, fmt.Errorf("failed to parse nav template: %v", err)
 			}
 		}
-		
+
 		footerContent, err := s.templatesFS.ReadFile("templates/footer.html")
 		if err == nil {
-			// Parse footer template 
+			// Parse footer template
 			tmpl, err = tmpl.Parse(string(footerContent))
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse footer template: %v", err)
 			}
 		}
 	}
-	
+
 	// Parse the main template content
 	tmpl, err = tmpl.Parse(string(content))
 	if err != nil {

@@ -121,16 +121,6 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 		hasSpecificConstraint = true
 	}
 
-	if isActive := query.Get("is_active"); isActive != "" {
-		if active := strings.ToLower(isActive) == "true"; active {
-			filter.IsActive = &active
-		} else {
-			inactive := false
-			filter.IsActive = &inactive
-		}
-		hasSpecificConstraint = true
-	}
-
 	if isCM := query.Get("is_cm"); isCM != "" {
 		cm := strings.ToLower(isCM) == "true"
 		filter.IsCM = &cm
@@ -159,7 +149,7 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Prevent overly broad searches that can cause memory exhaustion
 	if !hasSpecificConstraint {
-		http.Error(w, "Search requires at least one specific constraint (zone, net, node, system_name, location, sysop_name, node_type, is_active, is_cm, or date range)", http.StatusBadRequest)
+		http.Error(w, "Search requires at least one specific constraint (zone, net, node, system_name, location, sysop_name, node_type, is_cm, or date range)", http.StatusBadRequest)
 		return
 	}
 
@@ -200,7 +190,6 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 			"system_name": filter.SystemName,
 			"location":    filter.Location,
 			"node_type":   filter.NodeType,
-			"is_active":   filter.IsActive,
 			"is_cm":       filter.IsCM,
 			"date_from":   filter.DateFrom,
 			"date_to":     filter.DateTo,
@@ -445,14 +434,9 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 				filter.IgnoreSysop = true
 			case "connectivity":
 				filter.IgnoreConnectivity = true
-			case "internetprotocols", "internet_protocols":
-				filter.IgnoreInternetProtocols = true
-			case "internethostnames", "internet_hostnames":
-				filter.IgnoreInternetHostnames = true
-			case "internetports", "internet_ports":
-				filter.IgnoreInternetPorts = true
-			case "internetemails", "internet_emails":
-				filter.IgnoreInternetEmails = true
+			case "internetprotocols", "internet_protocols", "internethostnames", "internet_hostnames", "internetports", "internet_ports", "internetemails", "internet_emails":
+				// These fields are now handled through internet_config JSON - ignore them
+				continue
 			case "modemflags", "modem_flags":
 				filter.IgnoreModemFlags = true
 			}
@@ -467,10 +451,7 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 		filter.IgnoreName = query.Get("noname") == "1"
 		filter.IgnoreSysop = query.Get("nosysop") == "1"
 		filter.IgnoreConnectivity = query.Get("noconnectivity") == "1"
-		filter.IgnoreInternetProtocols = query.Get("nointernetprotocols") == "1"
-		filter.IgnoreInternetHostnames = query.Get("nointernethostnames") == "1"
-		filter.IgnoreInternetPorts = query.Get("nointernetports") == "1"
-		filter.IgnoreInternetEmails = query.Get("nointernetemails") == "1"
+		// Internet array fields are no longer available - these options are ignored
 		filter.IgnoreModemFlags = query.Get("nomodemflags") == "1"
 	}
 

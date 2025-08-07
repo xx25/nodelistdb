@@ -170,20 +170,10 @@ func (db *ClickHouseDB) CreateSchema() error {
 		-- Boolean flags (computed from raw flags)
 		is_cm Bool DEFAULT false,
 		is_mo Bool DEFAULT false,
-		has_binkp Bool DEFAULT false,
-		has_telnet Bool DEFAULT false,
-		is_down Bool DEFAULT false,
-		is_hold Bool DEFAULT false,
-		is_pvt Bool DEFAULT false,
-		is_active Bool DEFAULT true,
 		
 		-- Arrays for flexibility (ClickHouse native arrays)
 		flags Array(String) DEFAULT [],
 		modem_flags Array(String) DEFAULT [],
-		internet_protocols Array(String) DEFAULT [],
-		internet_hostnames Array(String) DEFAULT [],
-		internet_ports Array(Int32) DEFAULT [],
-		internet_emails Array(String) DEFAULT [],
 		
 		-- Internet connectivity analysis
 		has_inet Bool DEFAULT false,
@@ -194,12 +184,7 @@ func (db *ClickHouseDB) CreateSchema() error {
 		has_conflict Bool DEFAULT false,
 		
 		-- FTS unique identifier
-		fts_id String,
-		
-		-- Materialized columns for optimized case-insensitive searches
-		location_lower String MATERIALIZED lower(location),
-		sysop_name_lower String MATERIALIZED lower(sysop_name),
-		system_name_lower String MATERIALIZED lower(system_name)
+		fts_id String
 	) ENGINE = MergeTree()
 	ORDER BY (zone, net, node, nodelist_date, conflict_sequence)
 	PARTITION BY toYYYYMM(nodelist_date)
@@ -217,10 +202,6 @@ func (db *ClickHouseDB) CreateSchema() error {
 		"CREATE INDEX IF NOT EXISTS idx_nodes_sysop ON nodes(sysop_name) TYPE bloom_filter GRANULARITY 1",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(node_type) TYPE set(100) GRANULARITY 1",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_fts_id ON nodes(fts_id) TYPE bloom_filter GRANULARITY 1",
-		// Optimized indexes for materialized lowercase columns
-		"CREATE INDEX IF NOT EXISTS idx_location_lower_bloom ON nodes(location_lower) TYPE bloom_filter GRANULARITY 1",
-		"CREATE INDEX IF NOT EXISTS idx_sysop_lower_bloom ON nodes(sysop_name_lower) TYPE bloom_filter GRANULARITY 1",
-		"CREATE INDEX IF NOT EXISTS idx_system_lower_bloom ON nodes(system_name_lower) TYPE bloom_filter GRANULARITY 1",
 	}
 
 	for _, indexSQL := range indexes {
@@ -277,10 +258,6 @@ func (db *ClickHouseDB) CreateFTSIndexes() error {
 		"CREATE INDEX IF NOT EXISTS idx_fts_location ON nodes(location) TYPE bloom_filter GRANULARITY 1",
 		"CREATE INDEX IF NOT EXISTS idx_fts_sysop ON nodes(sysop_name) TYPE bloom_filter GRANULARITY 1",
 		"CREATE INDEX IF NOT EXISTS idx_fts_system ON nodes(system_name) TYPE bloom_filter GRANULARITY 1",
-		// Additional indexes for materialized lowercase columns
-		"CREATE INDEX IF NOT EXISTS idx_fts_location_lower ON nodes(location_lower) TYPE bloom_filter GRANULARITY 1",
-		"CREATE INDEX IF NOT EXISTS idx_fts_sysop_lower ON nodes(sysop_name_lower) TYPE bloom_filter GRANULARITY 1",
-		"CREATE INDEX IF NOT EXISTS idx_fts_system_lower ON nodes(system_name_lower) TYPE bloom_filter GRANULARITY 1",
 	}
 
 	for _, indexSQL := range ftsIndexes {
@@ -307,10 +284,6 @@ func (db *ClickHouseDB) DropFTSIndexes() error {
 		"DROP INDEX IF EXISTS idx_fts_location ON nodes",
 		"DROP INDEX IF EXISTS idx_fts_sysop ON nodes",
 		"DROP INDEX IF EXISTS idx_fts_system ON nodes",
-		// Drop optimized lowercase column indexes
-		"DROP INDEX IF EXISTS idx_fts_location_lower ON nodes",
-		"DROP INDEX IF EXISTS idx_fts_sysop_lower ON nodes",
-		"DROP INDEX IF EXISTS idx_fts_system_lower ON nodes",
 	}
 
 	for _, dropSQL := range dropIndexes {

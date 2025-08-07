@@ -63,10 +63,7 @@ func buildChangeFilter(query url.Values) storage.ChangeFilter {
 		IgnoreSysop:             query.Get("nosysop") == "1",
 		IgnoreConnectivity:      query.Get("noconnectivity") == "1",
 		IgnoreModemFlags:        query.Get("nomodemflags") == "1",
-		IgnoreInternetProtocols: query.Get("nointernetprotocols") == "1",
-		IgnoreInternetHostnames: query.Get("nointernethostnames") == "1",
-		IgnoreInternetPorts:     query.Get("nointernetports") == "1",
-		IgnoreInternetEmails:    query.Get("nointernetemails") == "1",
+		// Internet array fields are no longer available - these options are ignored
 	}
 }
 
@@ -277,10 +274,10 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					SelectedDate   string
 					ActualDate     string
 					DateAdjusted   bool
-			Version        string
+					Version        string
 				}{
 					Title:          "Network Statistics",
-			ActivePage:     "stats",
+					ActivePage:     "stats",
 					Stats:          nil,
 					Error:          fmt.Errorf("Invalid date format and failed to get latest date: %v", err),
 					NoData:         true,
@@ -288,7 +285,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					SelectedDate:   dateStr,
 					ActualDate:     "",
 					DateAdjusted:   false,
-			Version:        version.GetVersionInfo(),
+					Version:        version.GetVersionInfo(),
 				}
 
 				if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -311,10 +308,10 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					SelectedDate   string
 					ActualDate     string
 					DateAdjusted   bool
-			Version        string
+					Version        string
 				}{
 					Title:          "Network Statistics",
-			ActivePage:     "stats",
+					ActivePage:     "stats",
 					Stats:          nil,
 					Error:          fmt.Errorf("Failed to find available date: %v", err),
 					NoData:         true,
@@ -322,7 +319,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					SelectedDate:   dateStr,
 					ActualDate:     "",
 					DateAdjusted:   false,
-			Version:        version.GetVersionInfo(),
+					Version:        version.GetVersionInfo(),
 				}
 
 				if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -346,10 +343,10 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 				SelectedDate   string
 				ActualDate     string
 				DateAdjusted   bool
-			Version        string
+				Version        string
 			}{
 				Title:          "Network Statistics",
-			ActivePage:     "stats",
+				ActivePage:     "stats",
 				Stats:          nil,
 				Error:          fmt.Errorf("Failed to find latest nodelist date: %v", err),
 				NoData:         true,
@@ -357,7 +354,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 				SelectedDate:   "",
 				ActualDate:     "",
 				DateAdjusted:   false,
-			Version:        version.GetVersionInfo(),
+				Version:        version.GetVersionInfo(),
 			}
 
 			if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -575,7 +572,7 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	flag := r.FormValue("flag")
-	
+
 	data := struct {
 		Title           string
 		ActivePage      string

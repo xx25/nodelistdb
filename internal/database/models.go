@@ -27,23 +27,13 @@ type Node struct {
 	MaxSpeed   uint32 `json:"max_speed"`
 
 	// Boolean flags (computed from raw flags)
-	IsCM      bool `json:"is_cm"`
-	IsMO      bool `json:"is_mo"`
-	HasBinkp  bool `json:"has_binkp"`
-	HasInet   bool `json:"has_inet"` // Any internet connectivity
-	HasTelnet bool `json:"has_telnet"`
-	IsDown    bool `json:"is_down"`
-	IsHold    bool `json:"is_hold"`
-	IsPvt     bool `json:"is_pvt"`
-	IsActive  bool `json:"is_active"` // True if node is in latest nodelist, false if historical
+	IsCM    bool `json:"is_cm"`
+	IsMO    bool `json:"is_mo"`
+	HasInet bool `json:"has_inet"` // Any internet connectivity
 
 	// Raw flag arrays
-	Flags             []string `json:"flags"`
-	ModemFlags        []string `json:"modem_flags"`
-	InternetProtocols []string `json:"internet_protocols"`
-	InternetHostnames []string `json:"internet_hostnames"`
-	InternetPorts     []int    `json:"internet_ports"`
-	InternetEmails    []string `json:"internet_emails"`
+	Flags      []string `json:"flags"`
+	ModemFlags []string `json:"modem_flags"`
 
 	// Internet configuration JSON
 	InternetConfig json.RawMessage `json:"internet_config,omitempty"`
@@ -101,11 +91,9 @@ type NodeFilter struct {
 	NodeType   *string `json:"node_type,omitempty"`
 
 	// Flag filters
-	IsCM      *bool `json:"is_cm,omitempty"`
-	IsMO      *bool `json:"is_mo,omitempty"`
-	HasBinkp  *bool `json:"has_binkp,omitempty"`
-	HasTelnet *bool `json:"has_telnet,omitempty"`
-	IsActive  *bool `json:"is_active,omitempty"`
+	IsCM     *bool `json:"is_cm,omitempty"`
+	IsMO     *bool `json:"is_mo,omitempty"`
+	HasBinkp *bool `json:"has_binkp,omitempty"` // Determined from JSON: protocols.IBN or protocols.BND exist
 
 	// Result options
 	LatestOnly *bool `json:"latest_only,omitempty"`

@@ -29,10 +29,10 @@ type FlagUsageByYear struct {
 
 // AnalyticsOperations handles analytics-related database operations
 type AnalyticsOperations struct {
-	db            database.DatabaseInterface
-	queryBuilder  QueryBuilderInterface
-	resultParser  ResultParserInterface
-	mu            sync.RWMutex
+	db           database.DatabaseInterface
+	queryBuilder QueryBuilderInterface
+	resultParser ResultParserInterface
+	mu           sync.RWMutex
 }
 
 // NewAnalyticsOperations creates a new AnalyticsOperations instance
@@ -55,9 +55,9 @@ func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string) (*FlagFirstAp
 
 	conn := ao.db.Conn()
 	query := ao.queryBuilder.FlagFirstAppearanceSQL()
-	
+
 	row := conn.QueryRow(query, flag, flag, flag)
-	
+
 	var fa FlagFirstAppearance
 	err := row.Scan(
 		&fa.Zone,
@@ -68,7 +68,7 @@ func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string) (*FlagFirstAp
 		&fa.Location,
 		&fa.SysopName,
 	)
-	
+
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			return nil, nil // No results found
@@ -90,7 +90,7 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string) ([]FlagUsageByYea
 
 	conn := ao.db.Conn()
 	query := ao.queryBuilder.FlagUsageByYearSQL()
-	
+
 	rows, err := conn.Query(query, flag, flag, flag)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query flag usage by year: %w", err)

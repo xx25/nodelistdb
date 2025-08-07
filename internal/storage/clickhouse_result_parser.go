@@ -25,17 +25,15 @@ func NewClickHouseResultParser() *ClickHouseResultParser {
 // ParseNodeRow parses a ClickHouse database row into a Node struct
 func (crp *ClickHouseResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) {
 	var node database.Node
-	var flags, modemFlags, protocols, hosts, emails interface{}
-	var ports interface{}
+	var flags, modemFlags interface{}
 	var internetConfig interface{} // ClickHouse JSON type is different
 
 	err := scanner.Scan(
 		&node.Zone, &node.Net, &node.Node, &node.NodelistDate, &node.DayNumber,
 		&node.SystemName, &node.Location, &node.SysopName, &node.Phone,
 		&node.NodeType, &node.Region, &node.MaxSpeed,
-		&node.IsCM, &node.IsMO, &node.HasBinkp, &node.HasTelnet,
-		&node.IsDown, &node.IsHold, &node.IsPvt, &node.IsActive,
-		&flags, &modemFlags, &protocols, &hosts, &ports, &emails,
+		&node.IsCM, &node.IsMO,
+		&flags, &modemFlags,
 		&node.ConflictSequence, &node.HasConflict,
 		&node.HasInet, &internetConfig, &node.FtsId,
 	)
@@ -46,10 +44,6 @@ func (crp *ClickHouseResultParser) ParseNodeRow(scanner RowScanner) (database.No
 	// Parse arrays from ClickHouse native format
 	node.Flags = crp.parseClickHouseInterfaceToStringArray(flags)
 	node.ModemFlags = crp.parseClickHouseInterfaceToStringArray(modemFlags)
-	node.InternetProtocols = crp.parseClickHouseInterfaceToStringArray(protocols)
-	node.InternetHostnames = crp.parseClickHouseInterfaceToStringArray(hosts)
-	node.InternetPorts = crp.parseClickHouseInterfaceToIntArray(ports)
-	node.InternetEmails = crp.parseClickHouseInterfaceToStringArray(emails)
 
 	// Handle JSON field (ClickHouse JSON type)
 	if internetConfig != nil {
@@ -259,14 +253,9 @@ func (crp *ClickHouseResultParser) NodeToArgsClickHouse(node database.Node) []in
 		node.NodelistDate, node.DayNumber,
 		node.SystemName, node.Location, node.SysopName, node.Phone,
 		node.NodeType, regionVal, node.MaxSpeed,
-		node.IsCM, node.IsMO, node.HasBinkp, node.HasTelnet,
-		node.IsDown, node.IsHold, node.IsPvt, node.IsActive,
-		node.Flags,             // Pass as Go slice for ClickHouse native batch
-		node.ModemFlags,        // Pass as Go slice for ClickHouse native batch
-		node.InternetProtocols, // Pass as Go slice for ClickHouse native batch
-		node.InternetHostnames, // Pass as Go slice for ClickHouse native batch
-		node.InternetPorts,     // Pass as Go slice for ClickHouse native batch
-		node.InternetEmails,    // Pass as Go slice for ClickHouse native batch
+		node.IsCM, node.IsMO,
+		node.Flags,      // Pass as Go slice for ClickHouse native batch
+		node.ModemFlags, // Pass as Go slice for ClickHouse native batch
 		node.ConflictSequence, node.HasConflict,
 		node.HasInet, configJSON, node.FtsId,
 	}

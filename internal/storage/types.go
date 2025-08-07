@@ -39,10 +39,7 @@ type ChangeFilter struct {
 	IgnoreName              bool // Ignore system name changes
 	IgnoreSysop             bool // Ignore sysop name changes
 	IgnoreConnectivity      bool // Ignore Binkp, Telnet capability changes
-	IgnoreInternetProtocols bool // Ignore internet protocol changes
-	IgnoreInternetHostnames bool // Ignore internet hostname changes
-	IgnoreInternetPorts     bool // Ignore internet port changes
-	IgnoreInternetEmails    bool // Ignore internet email changes
+	// Internet array fields have been removed - these options are no longer available
 	IgnoreModemFlags        bool // Ignore modem flag changes
 }
 
@@ -163,17 +160,17 @@ const (
 const (
 	NodeSelectFields = `zone, net, node, nodelist_date, day_number,
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		is_cm, is_mo,
+		flags, modem_flags,
 		conflict_sequence, has_conflict, has_inet, internet_config`
 
 	NodeInsertFields = `zone, net, node, nodelist_date, day_number,
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo, has_binkp, has_telnet, is_down, is_hold, is_pvt, is_active,
-		flags, modem_flags, internet_protocols, internet_hostnames, internet_ports, internet_emails,
+		is_cm, is_mo,
+		flags, modem_flags,
 		conflict_sequence, has_conflict, has_inet, internet_config`
 
-	NodeInsertPlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
+	NodeInsertPlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
 )
 
 // Error messages for consistent error handling
