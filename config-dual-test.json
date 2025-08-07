@@ -1,0 +1,37 @@
+{
+  "database": {
+    "type": "duckdb",
+    "databases": [
+      {
+        "name": "duckdb",
+        "type": "duckdb",
+        "duckdb": {
+          "path": "test_dual.duckdb",
+          "memory_limit": "16GB",
+          "threads": 8,
+          "read_only": false,
+          "bulk_mode": false,
+          "disable_wal": false,
+          "checkpoint_threshold": "1GB",
+          "wal_auto_checkpoint": 1000,
+          "temp_directory": "/tmp"
+        }
+      },
+      {
+        "name": "duckdb2",
+        "type": "duckdb",
+        "duckdb": {
+          "path": "test_dual2.duckdb",
+          "memory_limit": "16GB",
+          "threads": 8,
+          "read_only": false,
+          "bulk_mode": false,
+          "disable_wal": false,
+          "checkpoint_threshold": "1GB",
+          "wal_auto_checkpoint": 1000,
+          "temp_directory": "/tmp"
+        }
+      }
+    ]
+  }
+}

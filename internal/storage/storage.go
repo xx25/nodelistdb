@@ -27,6 +27,11 @@ type Storage struct {
 	mu             sync.RWMutex
 }
 
+// GetDatabase returns the underlying database interface
+func (s *Storage) GetDatabase() database.DatabaseInterface {
+	return s.db
+}
+
 // New creates a new Storage instance with all specialized components
 func New(db database.DatabaseInterface) (*Storage, error) {
 	var queryBuilder QueryBuilderInterface

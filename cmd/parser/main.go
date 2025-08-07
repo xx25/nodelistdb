@@ -23,20 +23,26 @@ import (
 func main() {
 	// Command line flags
 	var (
-		configPath       = flag.String("config", "config.json", "Path to configuration file")
-		dbPath           = flag.String("db", "", "Path to database file (overrides config)")
-		dbType           = flag.String("dbtype", "", "Database type: 'duckdb' or 'clickhouse' (overrides config)")
-		path             = flag.String("path", "", "Path to nodelist file or directory (required)")
-		recursive        = flag.Bool("recursive", false, "Scan directories recursively")
-		verbose          = flag.Bool("verbose", false, "Verbose output")
-		quiet            = flag.Bool("quiet", false, "Quiet mode - only print errors (useful for cron)")
-		batchSize        = flag.Int("batch", 1000, "Batch size for bulk inserts")
-		workers          = flag.Int("workers", 4, "Number of concurrent workers")
-		enableConcurrent = flag.Bool("concurrent", false, "Enable concurrent processing")
-		enableBulkMode   = flag.Bool("bulk", false, "Enable bulk transaction mode for better DuckDB performance")
-		createFTSIndexes = flag.Bool("create-fts", true, "Create Full-Text Search indexes after import")
-		rebuildFTSOnly   = flag.Bool("rebuild-fts", false, "Only rebuild FTS indexes (no data import)")
-		showVersion      = flag.Bool("version", false, "Show version information")
+		configPath         = flag.String("config", "config.json", "Path to configuration file")
+		dbPath             = flag.String("db", "", "Path to database file (overrides config)")
+		dbType             = flag.String("dbtype", "", "Database type: 'duckdb' or 'clickhouse' (overrides config)")
+		enableDual         = flag.Bool("dual", false, "Enable dual database mode (both DuckDB and ClickHouse)")
+		clickhouseHost     = flag.String("ch-host", "localhost", "ClickHouse host (for dual mode)")
+		clickhousePort     = flag.Int("ch-port", 9000, "ClickHouse port (for dual mode)")
+		clickhouseDatabase = flag.String("ch-db", "nodelist", "ClickHouse database name (for dual mode)")
+		clickhouseUser     = flag.String("ch-user", "default", "ClickHouse username (for dual mode)")
+		clickhousePassword = flag.String("ch-password", "", "ClickHouse password (for dual mode)")
+		path               = flag.String("path", "", "Path to nodelist file or directory (required)")
+		recursive          = flag.Bool("recursive", false, "Scan directories recursively")
+		verbose            = flag.Bool("verbose", false, "Verbose output")
+		quiet              = flag.Bool("quiet", false, "Quiet mode - only print errors (useful for cron)")
+		batchSize          = flag.Int("batch", 1000, "Batch size for bulk inserts")
+		workers            = flag.Int("workers", 4, "Number of concurrent workers")
+		enableConcurrent   = flag.Bool("concurrent", false, "Enable concurrent processing")
+		enableBulkMode     = flag.Bool("bulk", false, "Enable bulk transaction mode for better DuckDB performance")
+		createFTSIndexes   = flag.Bool("create-fts", true, "Create Full-Text Search indexes after import")
+		rebuildFTSOnly     = flag.Bool("rebuild-fts", false, "Only rebuild FTS indexes (no data import)")
+		showVersion        = flag.Bool("version", false, "Show version information")
 	)
 	flag.Parse()
 
@@ -58,39 +64,92 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Override database type if specified via command line
-	if *dbType != "" {
-		switch *dbType {
-		case "duckdb":
-			cfg.Database.Type = config.DatabaseTypeDuckDB
-		case "clickhouse":
-			cfg.Database.Type = config.DatabaseTypeClickHouse
-		default:
-			log.Fatalf("Invalid database type: %s (must be 'duckdb' or 'clickhouse')", *dbType)
+	// Handle dual database mode
+	if *enableDual {
+		duckdbPath := "./nodelist.duckdb"
+		if *dbPath != "" {
+			duckdbPath = *dbPath
+		}
+		cfg = config.CreateDualDatabaseConfig(duckdbPath, *clickhouseHost, *clickhousePort, *clickhouseDatabase)
+		// Override ClickHouse credentials if provided
+		if cfg.Database.Databases != nil && len(cfg.Database.Databases) > 1 {
+			cfg.Database.Databases[1].ClickHouse.Username = *clickhouseUser
+			cfg.Database.Databases[1].ClickHouse.Password = *clickhousePassword
+		}
+	} else {
+		// Override database type if specified via command line
+		if *dbType != "" {
+			switch *dbType {
+			case "duckdb":
+				cfg.Database.Type = config.DatabaseTypeDuckDB
+			case "clickhouse":
+				cfg.Database.Type = config.DatabaseTypeClickHouse
+			default:
+				log.Fatalf("Invalid database type: %s (must be 'duckdb' or 'clickhouse')", *dbType)
+			}
 		}
 	}
 
-	// Override database path if specified via command line
-	if *dbPath != "" && cfg.Database.Type == config.DatabaseTypeDuckDB {
-		cfg.Database.DuckDB.Path = *dbPath
+	// Override database path if specified via command line (handle both single and multi-database configs)
+	if *dbPath != "" {
+		if cfg.IsMultiDatabase() {
+			// Update DuckDB path in multi-database config
+			databases := cfg.GetAllDatabases()
+			for i, db := range databases {
+				if db.Type == config.DatabaseTypeDuckDB && db.DuckDB != nil {
+					cfg.Database.Databases[i].DuckDB.Path = *dbPath
+					break
+				}
+			}
+		} else if cfg.Database.Type == config.DatabaseTypeDuckDB && cfg.Database.DuckDB != nil {
+			cfg.Database.DuckDB.Path = *dbPath
+		}
 	}
 
 	// Enable bulk mode if specified via command line
-	if *enableBulkMode && cfg.Database.Type == config.DatabaseTypeDuckDB {
-		cfg.Database.DuckDB.BulkMode = true
-		cfg.Database.DuckDB.DisableWAL = true
-		cfg.Database.DuckDB.WALAutoCheckpoint = 0 // Disable auto checkpointing
+	if *enableBulkMode {
+		if cfg.IsMultiDatabase() {
+			// Enable bulk mode for DuckDB in multi-database config
+			databases := cfg.GetAllDatabases()
+			for i, db := range databases {
+				if db.Type == config.DatabaseTypeDuckDB && db.DuckDB != nil {
+					cfg.Database.Databases[i].DuckDB.BulkMode = true
+					cfg.Database.Databases[i].DuckDB.DisableWAL = true
+					cfg.Database.Databases[i].DuckDB.WALAutoCheckpoint = 0
+					break
+				}
+			}
+		} else if cfg.Database.Type == config.DatabaseTypeDuckDB && cfg.Database.DuckDB != nil {
+			cfg.Database.DuckDB.BulkMode = true
+			cfg.Database.DuckDB.DisableWAL = true
+			cfg.Database.DuckDB.WALAutoCheckpoint = 0 // Disable auto checkpointing
+		}
 	}
 
 	if !*quiet {
-		fmt.Printf("FidoNet Nodelist Parser (%s)\n", cfg.Database.Type)
-		fmt.Println("================================")
-		switch cfg.Database.Type {
-		case config.DatabaseTypeDuckDB:
-			fmt.Printf("Database: %s (DuckDB)\n", cfg.Database.DuckDB.Path)
-		case config.DatabaseTypeClickHouse:
-			fmt.Printf("Database: %s:%d/%s (ClickHouse)\n",
-				cfg.Database.ClickHouse.Host, cfg.Database.ClickHouse.Port, cfg.Database.ClickHouse.Database)
+		if cfg.IsMultiDatabase() {
+			fmt.Println("FidoNet Nodelist Parser (Multi-Database Mode)")
+			fmt.Println("============================================")
+			databases := cfg.GetAllDatabases()
+			for i, db := range databases {
+				switch db.Type {
+				case config.DatabaseTypeDuckDB:
+					fmt.Printf("Database %d (%s): %s (DuckDB)\n", i+1, db.Name, db.DuckDB.Path)
+				case config.DatabaseTypeClickHouse:
+					fmt.Printf("Database %d (%s): %s:%d/%s (ClickHouse)\n", i+1, db.Name,
+						db.ClickHouse.Host, db.ClickHouse.Port, db.ClickHouse.Database)
+				}
+			}
+		} else {
+			fmt.Printf("FidoNet Nodelist Parser (%s)\n", cfg.Database.Type)
+			fmt.Println("================================")
+			switch cfg.Database.Type {
+			case config.DatabaseTypeDuckDB:
+				fmt.Printf("Database: %s (DuckDB)\n", cfg.Database.DuckDB.Path)
+			case config.DatabaseTypeClickHouse:
+				fmt.Printf("Database: %s:%d/%s (ClickHouse)\n",
+					cfg.Database.ClickHouse.Host, cfg.Database.ClickHouse.Port, cfg.Database.ClickHouse.Database)
+			}
 		}
 		fmt.Printf("Path: %s\n", *path)
 		fmt.Printf("Batch size: %d\n", *batchSize)
@@ -101,94 +160,201 @@ func main() {
 		fmt.Println()
 	}
 
-	// Initialize database based on configuration
-	if *verbose {
-		log.Printf("Initializing %s database...", cfg.Database.Type)
+	// Initialize database(s) based on configuration
+	var storageLayer interface {
+		InsertNodes([]database.Node) error
+		IsNodelistProcessed(time.Time) (bool, error)
+		FindConflictingNode(int, int, int, time.Time) (bool, error)
+		BeginBulkMode() error
+		EndBulkMode() error
+		Close() error
 	}
 
-	var db database.DatabaseInterface
-	switch cfg.Database.Type {
-	case config.DatabaseTypeDuckDB:
-		db, err = database.NewWithPerfSettings(
-			cfg.Database.DuckDB.Path,
-			cfg.Database.DuckDB.MemoryLimit,
-			cfg.Database.DuckDB.TempDirectory,
-			cfg.Database.DuckDB.Threads,
-			cfg.Database.DuckDB.ReadOnly,
-			cfg.Database.DuckDB.BulkMode,
-			cfg.Database.DuckDB.CheckpointThreshold,
-			cfg.Database.DuckDB.WALAutoCheckpoint,
-		)
-	case config.DatabaseTypeClickHouse:
-		// Convert config to ClickHouse config and create connection
-		chConfig := &database.ClickHouseConfig{
-			Host:         cfg.Database.ClickHouse.Host,
-			Port:         cfg.Database.ClickHouse.Port,
-			Database:     cfg.Database.ClickHouse.Database,
-			Username:     cfg.Database.ClickHouse.Username,
-			Password:     cfg.Database.ClickHouse.Password,
-			UseSSL:       cfg.Database.ClickHouse.UseSSL,
-			MaxOpenConns: cfg.Database.ClickHouse.MaxOpenConns,
-			MaxIdleConns: cfg.Database.ClickHouse.MaxIdleConns,
+	if cfg.IsMultiDatabase() {
+		// Multi-database mode
+		if *verbose {
+			log.Println("Initializing multiple databases...")
 		}
 
-		// Parse timeout strings
-		if cfg.Database.ClickHouse.DialTimeout != "" {
-			if chConfig.DialTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.DialTimeout); err != nil {
-				log.Fatalf("Invalid dial timeout: %v", err)
+		databases := make(map[string]database.DatabaseInterface)
+		dbNames := cfg.GetAllDatabases()
+
+		for _, dbConfig := range dbNames {
+			var db database.DatabaseInterface
+
+			switch dbConfig.Type {
+			case config.DatabaseTypeDuckDB:
+				db, err = database.NewWithPerfSettings(
+					dbConfig.DuckDB.Path,
+					dbConfig.DuckDB.MemoryLimit,
+					dbConfig.DuckDB.TempDirectory,
+					dbConfig.DuckDB.Threads,
+					dbConfig.DuckDB.ReadOnly,
+					dbConfig.DuckDB.BulkMode,
+					dbConfig.DuckDB.CheckpointThreshold,
+					dbConfig.DuckDB.WALAutoCheckpoint,
+				)
+			case config.DatabaseTypeClickHouse:
+				chConfig := &database.ClickHouseConfig{
+					Host:         dbConfig.ClickHouse.Host,
+					Port:         dbConfig.ClickHouse.Port,
+					Database:     dbConfig.ClickHouse.Database,
+					Username:     dbConfig.ClickHouse.Username,
+					Password:     dbConfig.ClickHouse.Password,
+					UseSSL:       dbConfig.ClickHouse.UseSSL,
+					MaxOpenConns: dbConfig.ClickHouse.MaxOpenConns,
+					MaxIdleConns: dbConfig.ClickHouse.MaxIdleConns,
+				}
+
+				// Parse timeout strings
+				if dbConfig.ClickHouse.DialTimeout != "" {
+					if chConfig.DialTimeout, err = time.ParseDuration(dbConfig.ClickHouse.DialTimeout); err != nil {
+						log.Fatalf("Invalid dial timeout for %s: %v", dbConfig.Name, err)
+					}
+				} else {
+					chConfig.DialTimeout = 30 * time.Second
+				}
+
+				if dbConfig.ClickHouse.ReadTimeout != "" {
+					if chConfig.ReadTimeout, err = time.ParseDuration(dbConfig.ClickHouse.ReadTimeout); err != nil {
+						log.Fatalf("Invalid read timeout for %s: %v", dbConfig.Name, err)
+					}
+				} else {
+					chConfig.ReadTimeout = 5 * time.Minute
+				}
+
+				if dbConfig.ClickHouse.WriteTimeout != "" {
+					if chConfig.WriteTimeout, err = time.ParseDuration(dbConfig.ClickHouse.WriteTimeout); err != nil {
+						log.Fatalf("Invalid write timeout for %s: %v", dbConfig.Name, err)
+					}
+				} else {
+					chConfig.WriteTimeout = 1 * time.Minute
+				}
+
+				chConfig.Compression = dbConfig.ClickHouse.Compression
+				db, err = database.NewClickHouse(chConfig)
+			default:
+				log.Fatalf("Unsupported database type for %s: %s", dbConfig.Name, dbConfig.Type)
 			}
-		} else {
-			chConfig.DialTimeout = 30 * time.Second
-		}
 
-		if cfg.Database.ClickHouse.ReadTimeout != "" {
-			if chConfig.ReadTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.ReadTimeout); err != nil {
-				log.Fatalf("Invalid read timeout: %v", err)
+			if err != nil {
+				log.Fatalf("Failed to initialize %s database: %v", dbConfig.Name, err)
 			}
-		} else {
-			chConfig.ReadTimeout = 5 * time.Minute
-		}
 
-		if cfg.Database.ClickHouse.WriteTimeout != "" {
-			if chConfig.WriteTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.WriteTimeout); err != nil {
-				log.Fatalf("Invalid write timeout: %v", err)
+			// Get database version
+			if version, err := db.GetVersion(); err == nil && !*quiet {
+				fmt.Printf("%s (%s) version: %s\n", dbConfig.Name, dbConfig.Type, version)
 			}
-		} else {
-			chConfig.WriteTimeout = 1 * time.Minute
+
+			// Create schema
+			if err := db.CreateSchema(); err != nil {
+				log.Fatalf("Failed to create schema for %s: %v", dbConfig.Name, err)
+			}
+
+			databases[dbConfig.Name] = db
 		}
 
-		chConfig.Compression = cfg.Database.ClickHouse.Compression
+		if *verbose {
+			log.Println("All databases initialized successfully")
+		}
 
-		db, err = database.NewClickHouse(chConfig)
-	default:
-		log.Fatalf("Unsupported database type: %s", cfg.Database.Type)
-	}
+		// Initialize multi-storage layer
+		multiStorage, err := storage.NewMultiStorage(databases)
+		if err != nil {
+			log.Fatalf("Failed to initialize multi-storage: %v", err)
+		}
+		storageLayer = multiStorage
+		defer multiStorage.Close()
 
-	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
-	}
-	defer db.Close()
+	} else {
+		// Single database mode (legacy)
+		if *verbose {
+			log.Printf("Initializing %s database...", cfg.Database.Type)
+		}
 
-	// Get database version
-	if version, err := db.GetVersion(); err == nil {
-		fmt.Printf("%s version: %s\n", cfg.Database.Type, version)
-	}
+		var db database.DatabaseInterface
+		switch cfg.Database.Type {
+		case config.DatabaseTypeDuckDB:
+			db, err = database.NewWithPerfSettings(
+				cfg.Database.DuckDB.Path,
+				cfg.Database.DuckDB.MemoryLimit,
+				cfg.Database.DuckDB.TempDirectory,
+				cfg.Database.DuckDB.Threads,
+				cfg.Database.DuckDB.ReadOnly,
+				cfg.Database.DuckDB.BulkMode,
+				cfg.Database.DuckDB.CheckpointThreshold,
+				cfg.Database.DuckDB.WALAutoCheckpoint,
+			)
+		case config.DatabaseTypeClickHouse:
+			chConfig := &database.ClickHouseConfig{
+				Host:         cfg.Database.ClickHouse.Host,
+				Port:         cfg.Database.ClickHouse.Port,
+				Database:     cfg.Database.ClickHouse.Database,
+				Username:     cfg.Database.ClickHouse.Username,
+				Password:     cfg.Database.ClickHouse.Password,
+				UseSSL:       cfg.Database.ClickHouse.UseSSL,
+				MaxOpenConns: cfg.Database.ClickHouse.MaxOpenConns,
+				MaxIdleConns: cfg.Database.ClickHouse.MaxIdleConns,
+			}
 
-	// Create schema
-	if err := db.CreateSchema(); err != nil {
-		log.Fatalf("Failed to create schema: %v", err)
-	}
+			// Parse timeout strings
+			if cfg.Database.ClickHouse.DialTimeout != "" {
+				if chConfig.DialTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.DialTimeout); err != nil {
+					log.Fatalf("Invalid dial timeout: %v", err)
+				}
+			} else {
+				chConfig.DialTimeout = 30 * time.Second
+			}
 
-	if *verbose {
-		log.Println("Database initialized successfully")
-	}
+			if cfg.Database.ClickHouse.ReadTimeout != "" {
+				if chConfig.ReadTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.ReadTimeout); err != nil {
+					log.Fatalf("Invalid read timeout: %v", err)
+				}
+			} else {
+				chConfig.ReadTimeout = 5 * time.Minute
+			}
 
-	// Initialize storage layer
-	storageLayer, err := storage.New(db)
-	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+			if cfg.Database.ClickHouse.WriteTimeout != "" {
+				if chConfig.WriteTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.WriteTimeout); err != nil {
+					log.Fatalf("Invalid write timeout: %v", err)
+				}
+			} else {
+				chConfig.WriteTimeout = 1 * time.Minute
+			}
+
+			chConfig.Compression = cfg.Database.ClickHouse.Compression
+			db, err = database.NewClickHouse(chConfig)
+		default:
+			log.Fatalf("Unsupported database type: %s", cfg.Database.Type)
+		}
+
+		if err != nil {
+			log.Fatalf("Failed to initialize database: %v", err)
+		}
+		defer db.Close()
+
+		// Get database version
+		if version, err := db.GetVersion(); err == nil && !*quiet {
+			fmt.Printf("%s version: %s\n", cfg.Database.Type, version)
+		}
+
+		// Create schema
+		if err := db.CreateSchema(); err != nil {
+			log.Fatalf("Failed to create schema: %v", err)
+		}
+
+		if *verbose {
+			log.Println("Database initialized successfully")
+		}
+
+		// Initialize single storage layer
+		singleStorage, err := storage.New(db)
+		if err != nil {
+			log.Fatalf("Failed to initialize storage: %v", err)
+		}
+		storageLayer = singleStorage
+		defer singleStorage.Close()
 	}
-	defer storageLayer.Close()
 
 	// Enable bulk mode if requested and supported
 	if *enableBulkMode && cfg.Database.Type == config.DatabaseTypeDuckDB {
@@ -214,14 +380,88 @@ func main() {
 			fmt.Println("Rebuilding Full-Text Search indexes...")
 		}
 
-		// Drop existing FTS indexes
-		if err := db.DropFTSIndexes(); err != nil {
-			log.Printf("Warning: Could not drop existing FTS indexes: %v", err)
-		}
+		if cfg.IsMultiDatabase() {
+			// Handle FTS rebuild for multiple databases
+			databases := cfg.GetAllDatabases()
+			for _, dbConfig := range databases {
+				if !*quiet {
+					fmt.Printf("Rebuilding FTS indexes for %s...\n", dbConfig.Name)
+				}
+				
+				var db database.DatabaseInterface
+				switch dbConfig.Type {
+				case config.DatabaseTypeDuckDB:
+					db, err = database.NewWithPerfSettings(
+						dbConfig.DuckDB.Path,
+						dbConfig.DuckDB.MemoryLimit,
+						dbConfig.DuckDB.TempDirectory,
+						dbConfig.DuckDB.Threads,
+						dbConfig.DuckDB.ReadOnly,
+						dbConfig.DuckDB.BulkMode,
+						dbConfig.DuckDB.CheckpointThreshold,
+						dbConfig.DuckDB.WALAutoCheckpoint,
+					)
+				case config.DatabaseTypeClickHouse:
+					chConfig, configErr := dbConfig.ClickHouse.ToClickHouseDatabaseConfig()
+					if configErr != nil {
+						log.Fatalf("Invalid ClickHouse config for %s: %v", dbConfig.Name, configErr)
+					}
+					db, err = database.NewClickHouse(chConfig)
+				}
+				
+				if err != nil {
+					log.Fatalf("Failed to connect to %s for FTS rebuild: %v", dbConfig.Name, err)
+				}
+				
+				// Drop existing FTS indexes
+				if err := db.DropFTSIndexes(); err != nil {
+					log.Printf("Warning: Could not drop existing FTS indexes for %s: %v", dbConfig.Name, err)
+				}
 
-		// Create new FTS indexes
-		if err := db.CreateFTSIndexes(); err != nil {
-			log.Fatalf("Failed to create FTS indexes: %v", err)
+				// Create new FTS indexes
+				if err := db.CreateFTSIndexes(); err != nil {
+					log.Fatalf("Failed to create FTS indexes for %s: %v", dbConfig.Name, err)
+				}
+				
+				db.Close()
+			}
+		} else {
+			// Handle FTS rebuild for single database (already initialized above)
+			var db database.DatabaseInterface
+			switch cfg.Database.Type {
+			case config.DatabaseTypeDuckDB:
+				db, err = database.NewWithPerfSettings(
+					cfg.Database.DuckDB.Path,
+					cfg.Database.DuckDB.MemoryLimit,
+					cfg.Database.DuckDB.TempDirectory,
+					cfg.Database.DuckDB.Threads,
+					cfg.Database.DuckDB.ReadOnly,
+					cfg.Database.DuckDB.BulkMode,
+					cfg.Database.DuckDB.CheckpointThreshold,
+					cfg.Database.DuckDB.WALAutoCheckpoint,
+				)
+			case config.DatabaseTypeClickHouse:
+				chConfig, configErr := cfg.Database.ClickHouse.ToClickHouseDatabaseConfig()
+				if configErr != nil {
+					log.Fatalf("Invalid ClickHouse config: %v", configErr)
+				}
+				db, err = database.NewClickHouse(chConfig)
+			}
+			
+			if err != nil {
+				log.Fatalf("Failed to connect to database for FTS rebuild: %v", err)
+			}
+			defer db.Close()
+			
+			// Drop existing FTS indexes
+			if err := db.DropFTSIndexes(); err != nil {
+				log.Printf("Warning: Could not drop existing FTS indexes: %v", err)
+			}
+
+			// Create new FTS indexes
+			if err := db.CreateFTSIndexes(); err != nil {
+				log.Fatalf("Failed to create FTS indexes: %v", err)
+			}
 		}
 
 		if !*quiet {
@@ -268,7 +508,7 @@ func main() {
 		if !*quiet {
 			fmt.Printf("Using concurrent processing with %d workers\n", *workers)
 		}
-		processor := concurrent.New(storageLayer, nodelistParser, *workers, *batchSize, *verbose, *quiet)
+		processor := concurrent.NewMultiProcessor(storageLayer, nodelistParser, *workers, *batchSize, *verbose, *quiet)
 
 		err := processor.ProcessFiles(ctx, files)
 		if err != nil {
@@ -376,13 +616,43 @@ func main() {
 		if !*quiet {
 			fmt.Println("\nCreating Full-Text Search indexes...")
 		}
-		if err := db.CreateFTSIndexes(); err != nil {
-			if !*quiet {
-				fmt.Printf("Warning: Could not create FTS indexes: %v\n", err)
-				fmt.Println("Text search will use slower ILIKE queries")
+
+		if cfg.IsMultiDatabase() {
+			// Create FTS indexes for multiple databases
+			if multiStorage, ok := storageLayer.(*storage.MultiStorage); ok {
+				for _, dbName := range multiStorage.GetStorageNames() {
+					if singleStorage, exists := multiStorage.GetStorage(dbName); exists {
+						if !*quiet {
+							fmt.Printf("Creating FTS indexes for %s...\n", dbName)
+						}
+						// Get the underlying database from the storage
+						// We'll need to add a method to access the database interface
+						if db := singleStorage.GetDatabase(); db != nil {
+							if err := db.CreateFTSIndexes(); err != nil {
+								if !*quiet {
+									fmt.Printf("Warning: Could not create FTS indexes for %s: %v\n", dbName, err)
+								}
+							} else if !*quiet {
+								fmt.Printf("FTS indexes created successfully for %s!\n", dbName)
+							}
+						}
+					}
+				}
 			}
-		} else if !*quiet {
-			fmt.Println("FTS indexes created successfully!")
+		} else {
+			// Single database mode - need to get the database interface
+			if singleStorage, ok := storageLayer.(*storage.Storage); ok {
+				if db := singleStorage.GetDatabase(); db != nil {
+					if err := db.CreateFTSIndexes(); err != nil {
+						if !*quiet {
+							fmt.Printf("Warning: Could not create FTS indexes: %v\n", err)
+							fmt.Println("Text search will use slower ILIKE queries")
+						}
+					} else if !*quiet {
+						fmt.Println("FTS indexes created successfully!")
+					}
+				}
+			}
 		}
 	}
 
@@ -497,13 +767,16 @@ func parseConflictKey(errorMsg string) (int, int, int, string, bool) {
 }
 
 // insertBatch inserts a batch of nodes into storage
-func insertBatch(storage *storage.Storage, batch []database.Node, verbose bool, quiet bool) error {
+func insertBatch(storageLayer interface {
+	InsertNodes([]database.Node) error
+	FindConflictingNode(int, int, int, time.Time) (bool, error)
+}, batch []database.Node, verbose bool, quiet bool) error {
 	if verbose {
 		fmt.Printf("  Inserting batch of %d nodes...\n", len(batch))
 	}
 
 	start := time.Now()
-	if err := storage.InsertNodes(batch); err != nil {
+	if err := storageLayer.InsertNodes(batch); err != nil {
 		// Check if this is a primary key constraint error
 		if strings.Contains(err.Error(), "PRIMARY KEY or UNIQUE constraint violated") && strings.Contains(err.Error(), "duplicate key") {
 			fmt.Printf("  DATABASE CONFLICT DETECTED: %v\n", err)
@@ -514,7 +787,7 @@ func insertBatch(storage *storage.Storage, batch []database.Node, verbose bool, 
 				// Parse the date
 				conflictDate, parseErr := time.Parse("2006-01-02", dateStr)
 				if parseErr == nil {
-					conflictExists, checkErr := storage.FindConflictingNode(zone, net, node, conflictDate)
+					conflictExists, checkErr := storageLayer.FindConflictingNode(zone, net, node, conflictDate)
 					if checkErr == nil && conflictExists {
 						fmt.Printf("    CONFLICT ANALYSIS for node %d:%d/%d on %s:\n",
 							zone, net, node, dateStr)

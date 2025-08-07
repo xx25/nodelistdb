@@ -23,6 +23,16 @@ type DatabaseConfig struct {
 	Type       DatabaseType      `json:"type"`
 	DuckDB     *DuckDBConfig     `json:"duckdb,omitempty"`
 	ClickHouse *ClickHouseConfig `json:"clickhouse,omitempty"`
+	// Support for multiple databases
+	Databases  []SingleDatabaseConfig `json:"databases,omitempty"`
+}
+
+// SingleDatabaseConfig represents a single database configuration
+type SingleDatabaseConfig struct {
+	Name       string            `json:"name"`
+	Type       DatabaseType      `json:"type"`
+	DuckDB     *DuckDBConfig     `json:"duckdb,omitempty"`
+	ClickHouse *ClickHouseConfig `json:"clickhouse,omitempty"`
 }
 
 // DuckDBConfig holds DuckDB-specific configuration
@@ -261,6 +271,72 @@ func CreateExampleConfigs(dir string) error {
 	}
 
 	return nil
+}
+
+// IsMultiDatabase returns true if multiple databases are configured
+func (c *Config) IsMultiDatabase() bool {
+	return len(c.Database.Databases) > 0
+}
+
+// GetAllDatabases returns all database configurations, including legacy single config
+func (c *Config) GetAllDatabases() []SingleDatabaseConfig {
+	if len(c.Database.Databases) > 0 {
+		return c.Database.Databases
+	}
+	
+	// Fallback to legacy single database config
+	return []SingleDatabaseConfig{
+		{
+			Name:       "default",
+			Type:       c.Database.Type,
+			DuckDB:     c.Database.DuckDB,
+			ClickHouse: c.Database.ClickHouse,
+		},
+	}
+}
+
+// CreateDualDatabaseConfig creates a config with both DuckDB and ClickHouse
+func CreateDualDatabaseConfig(duckdbPath string, clickhouseHost string, clickhousePort int, clickhouseDB string) *Config {
+	return &Config{
+		Database: DatabaseConfig{
+			Type: DatabaseTypeDuckDB, // Legacy field for backward compatibility
+			Databases: []SingleDatabaseConfig{
+				{
+					Name:   "duckdb",
+					Type:   DatabaseTypeDuckDB,
+					DuckDB: &DuckDBConfig{
+						Path:                duckdbPath,
+						MemoryLimit:         "16GB",
+						Threads:             8,
+						ReadOnly:            false,
+						BulkMode:            false,
+						DisableWAL:          false,
+						CheckpointThreshold: "1GB",
+						WALAutoCheckpoint:   1000,
+						TempDirectory:       "/tmp",
+					},
+				},
+				{
+					Name: "clickhouse",
+					Type: DatabaseTypeClickHouse,
+					ClickHouse: &ClickHouseConfig{
+						Host:         clickhouseHost,
+						Port:         clickhousePort,
+						Database:     clickhouseDB,
+						Username:     "default",
+						Password:     "",
+						UseSSL:       false,
+						MaxOpenConns: 10,
+						MaxIdleConns: 5,
+						DialTimeout:  "30s",
+						ReadTimeout:  "5m",
+						WriteTimeout: "1m",
+						Compression:  "lz4",
+					},
+				},
+			},
+		},
+	}
 }
 
 // ToClickHouseDatabaseConfig converts config ClickHouseConfig to database ClickHouseConfig
