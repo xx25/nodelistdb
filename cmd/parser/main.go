@@ -39,7 +39,6 @@ func main() {
 		batchSize          = flag.Int("batch", 1000, "Batch size for bulk inserts")
 		workers            = flag.Int("workers", 4, "Number of concurrent workers")
 		enableConcurrent   = flag.Bool("concurrent", false, "Enable concurrent processing")
-		enableBulkMode     = flag.Bool("bulk", false, "Enable bulk transaction mode for better DuckDB performance")
 		createFTSIndexes   = flag.Bool("create-fts", true, "Create Full-Text Search indexes after import")
 		rebuildFTSOnly     = flag.Bool("rebuild-fts", false, "Only rebuild FTS indexes (no data import)")
 		showVersion        = flag.Bool("version", false, "Show version information")
@@ -106,25 +105,6 @@ func main() {
 		}
 	}
 
-	// Enable bulk mode if specified via command line
-	if *enableBulkMode {
-		if cfg.IsMultiDatabase() {
-			// Enable bulk mode for DuckDB in multi-database config
-			databases := cfg.GetAllDatabases()
-			for i, db := range databases {
-				if db.Type == config.DatabaseTypeDuckDB && db.DuckDB != nil {
-					cfg.Database.Databases[i].DuckDB.BulkMode = true
-					cfg.Database.Databases[i].DuckDB.DisableWAL = true
-					cfg.Database.Databases[i].DuckDB.WALAutoCheckpoint = 0
-					break
-				}
-			}
-		} else if cfg.Database.Type == config.DatabaseTypeDuckDB && cfg.Database.DuckDB != nil {
-			cfg.Database.DuckDB.BulkMode = true
-			cfg.Database.DuckDB.DisableWAL = true
-			cfg.Database.DuckDB.WALAutoCheckpoint = 0 // Disable auto checkpointing
-		}
-	}
 
 	if !*quiet {
 		if cfg.IsMultiDatabase() {
@@ -155,7 +135,6 @@ func main() {
 		fmt.Printf("Batch size: %d\n", *batchSize)
 		fmt.Printf("Workers: %d\n", *workers)
 		fmt.Printf("Concurrent: %t\n", *enableConcurrent)
-		fmt.Printf("Bulk mode: %t\n", *enableBulkMode)
 		fmt.Printf("Verbose: %t\n", *verbose)
 		fmt.Println()
 	}
@@ -165,8 +144,6 @@ func main() {
 		InsertNodes([]database.Node) error
 		IsNodelistProcessed(time.Time) (bool, error)
 		FindConflictingNode(int, int, int, time.Time) (bool, error)
-		BeginBulkMode() error
-		EndBulkMode() error
 		Close() error
 	}
 
@@ -356,23 +333,6 @@ func main() {
 		defer singleStorage.Close()
 	}
 
-	// Enable bulk mode if requested and supported
-	if *enableBulkMode && cfg.Database.Type == config.DatabaseTypeDuckDB {
-		if !*quiet {
-			fmt.Println("Starting bulk transaction mode...")
-		}
-		if err := storageLayer.BeginBulkMode(); err != nil {
-			log.Fatalf("Failed to start bulk mode: %v", err)
-		}
-		defer func() {
-			if !*quiet {
-				fmt.Println("Committing bulk transaction...")
-			}
-			if err := storageLayer.EndBulkMode(); err != nil {
-				log.Printf("Warning: Failed to end bulk mode cleanly: %v", err)
-			}
-		}()
-	}
 
 	// Handle FTS rebuild mode
 	if *rebuildFTSOnly {

@@ -704,36 +704,32 @@ func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
 	`
 }
 
-// FlagUsageByYearSQL returns SQL for counting flag usage by year
+// FlagUsageByYearSQL returns SQL for counting flag usage by year (DuckDB optimized)
 func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 	return `
-		WITH yearly_stats AS (
-			SELECT 
-				EXTRACT(YEAR FROM nodelist_date) as year,
-				COUNT(DISTINCT (zone || ':' || net || '/' || node)) as total_nodes
-			FROM nodes
-			GROUP BY year
-		),
-		flag_stats AS (
-			SELECT 
-				EXTRACT(YEAR FROM nodelist_date) as year,
-				COUNT(DISTINCT (zone || ':' || net || '/' || node)) as nodes_with_flag
-			FROM nodes
-			WHERE ? = ANY(flags) OR ? = ANY(modem_flags) 
-		   OR json_extract(internet_config, '$.protocols.' || ?) IS NOT NULL
-			GROUP BY year
-		)
 		SELECT 
-			ys.year,
-			COALESCE(fs.nodes_with_flag, 0) as node_count,
-			ys.total_nodes,
+			EXTRACT(YEAR FROM nodelist_date) as year,
+			COUNT(DISTINCT STRUCT_PACK(zone := zone, net := net, node := node)) as total_nodes,
+			COUNT(DISTINCT CASE 
+				WHEN (? = ANY(flags) OR ? = ANY(modem_flags) 
+				      OR json_extract(internet_config, '$.protocols.' || ?) IS NOT NULL)
+				THEN STRUCT_PACK(zone := zone, net := net, node := node)
+				ELSE NULL 
+			END) as node_count,
 			CASE 
-				WHEN ys.total_nodes > 0 
-				THEN ROUND((COALESCE(fs.nodes_with_flag, 0)::NUMERIC / ys.total_nodes) * 100, 2)
+				WHEN COUNT(DISTINCT STRUCT_PACK(zone := zone, net := net, node := node)) > 0 
+				THEN ROUND(
+					(COUNT(DISTINCT CASE 
+						WHEN (? = ANY(flags) OR ? = ANY(modem_flags) 
+						      OR json_extract(internet_config, '$.protocols.' || ?) IS NOT NULL)
+						THEN STRUCT_PACK(zone := zone, net := net, node := node)
+						ELSE NULL 
+					END)::NUMERIC / COUNT(DISTINCT STRUCT_PACK(zone := zone, net := net, node := node))) * 100, 2
+				)
 				ELSE 0 
 			END as percentage
-		FROM yearly_stats ys
-		LEFT JOIN flag_stats fs ON ys.year = fs.year
-		ORDER BY ys.year
+		FROM nodes
+		GROUP BY EXTRACT(YEAR FROM nodelist_date)
+		ORDER BY year
 	`
 }

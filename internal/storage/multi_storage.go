@@ -92,43 +92,6 @@ func (ms *MultiStorage) FindConflictingNode(zone, net, node int, nodelistDate ti
 	return false, fmt.Errorf("no databases configured")
 }
 
-// BeginBulkMode starts bulk mode on all databases that support it
-func (ms *MultiStorage) BeginBulkMode() error {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-	
-	var errors []string
-	for name, storage := range ms.storages {
-		if err := storage.BeginBulkMode(); err != nil {
-			errors = append(errors, fmt.Sprintf("database %s: %v", name, err))
-		}
-	}
-	
-	if len(errors) > 0 {
-		return fmt.Errorf("bulk mode errors: %s", errors[0])
-	}
-	
-	return nil
-}
-
-// EndBulkMode ends bulk mode on all databases
-func (ms *MultiStorage) EndBulkMode() error {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-	
-	var errors []string
-	for name, storage := range ms.storages {
-		if err := storage.EndBulkMode(); err != nil {
-			errors = append(errors, fmt.Sprintf("database %s: %v", name, err))
-		}
-	}
-	
-	if len(errors) > 0 {
-		return fmt.Errorf("end bulk mode errors: %s", errors[0])
-	}
-	
-	return nil
-}
 
 // Close closes all database connections
 func (ms *MultiStorage) Close() error {

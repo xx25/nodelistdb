@@ -91,12 +91,21 @@ func (p *MultiProcessor) ProcessFiles(ctx context.Context, files []string) error
 		totalNodes += result.NodesCount
 		processedFiles++
 
+		// Calculate ETA
+		elapsed := time.Since(startTime)
+		var etaStr string
+		if processedFiles > 0 {
+			avgTimePerFile := elapsed / time.Duration(processedFiles)
+			remaining := time.Duration(len(files)-processedFiles) * avgTimePerFile
+			etaStr = fmt.Sprintf(" (ETA: %v)", remaining.Round(time.Second))
+		}
+
 		if p.verbose {
-			fmt.Printf("  ✓ [%d] %s: %d nodes in %v\n", 
-				result.JobID, result.FilePath, result.NodesCount, result.Duration)
+			fmt.Printf("  ✓ [%d/%d] %s: %d nodes in %v%s\n", 
+				processedFiles, len(files), result.FilePath, result.NodesCount, result.Duration, etaStr)
 		} else if !p.quiet {
-			fmt.Printf("  ✓ [%d/%d] %s: %d nodes\n", 
-				processedFiles, len(files), result.FilePath, result.NodesCount)
+			fmt.Printf("  ✓ [%d/%d] %s: %d nodes%s\n", 
+				processedFiles, len(files), result.FilePath, result.NodesCount, etaStr)
 		}
 	}
 

@@ -176,7 +176,7 @@ func (cqb *ClickHouseQueryBuilder) BuildClickHouseFTSQuery(filter database.NodeF
 
 	if filter.HasBinkp != nil {
 		// HasBinkp is now determined from JSON: check for IBN or BND protocols
-		conditions = append(conditions, "(JSONHas(internet_config, 'protocols', 'IBN') OR JSONHas(internet_config, 'protocols', 'BND')) = ?")
+		conditions = append(conditions, "(JSON_EXISTS(toString(internet_config), '$.protocols.IBN') OR JSON_EXISTS(toString(internet_config), '$.protocols.BND')) = ?")
 		args = append(args, *filter.HasBinkp)
 	}
 
@@ -357,7 +357,7 @@ func (cqb *ClickHouseQueryBuilder) buildClickHouseWhereConditions(filter databas
 	}
 	if filter.HasBinkp != nil {
 		// HasBinkp is now determined from JSON: check for IBN or BND protocols
-		conditions = append(conditions, "(JSONHas(internet_config, 'protocols', 'IBN') OR JSONHas(internet_config, 'protocols', 'BND')) = ?")
+		conditions = append(conditions, "(JSON_EXISTS(toString(internet_config), '$.protocols.IBN') OR JSON_EXISTS(toString(internet_config), '$.protocols.BND')) = ?")
 		args = append(args, *filter.HasBinkp)
 	}
 
@@ -378,8 +378,8 @@ func (cqb *ClickHouseQueryBuilder) StatsSQL() string {
 		countIf(node_type NOT IN ('Down', 'Hold')) as active_nodes,
 		countIf(is_cm) as cm_nodes,
 		countIf(is_mo) as mo_nodes,
-		countIf(JSONHas(internet_config, 'protocols', 'IBN') OR JSONHas(internet_config, 'protocols', 'BND')) as binkp_nodes,
-		countIf(JSONHas(internet_config, 'protocols', 'ITN')) as telnet_nodes,
+		countIf(JSON_EXISTS(toString(internet_config), '$.protocols.IBN') OR JSON_EXISTS(toString(internet_config), '$.protocols.BND')) as binkp_nodes,
+		countIf(JSON_EXISTS(toString(internet_config), '$.protocols.ITN')) as telnet_nodes,
 		countIf(node_type = 'Pvt') as pvt_nodes,
 		countIf(node_type = 'Down') as down_nodes,
 		countIf(node_type = 'Hold') as hold_nodes,
@@ -593,50 +593,40 @@ func (cqb *ClickHouseQueryBuilder) UniqueSysopsSQL() string {
 // FlagFirstAppearanceSQL returns SQL for finding the first appearance of a flag in ClickHouse
 func (cqb *ClickHouseQueryBuilder) FlagFirstAppearanceSQL() string {
 	return `
-		WITH first_appearances AS (
-			SELECT 
-				zone, net, node, nodelist_date, system_name, location, sysop_name,
-				row_number() OVER (ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
-			FROM nodes
-			WHERE has(flags, ?) OR has(modem_flags, ?) 
-		   OR JSONHas(internet_config, concat('protocols.', ?))
-		)
-		SELECT zone, net, node, nodelist_date, system_name, location, sysop_name
-		FROM first_appearances
-		WHERE rn = 1
+		SELECT 
+			zone, net, node, nodelist_date, system_name, location, sysop_name
+		FROM nodes
+		WHERE (has(flags, ?) OR has(modem_flags, ?) 
+		   OR (has_inet = 1 AND JSON_EXISTS(toString(internet_config), concat('$.protocols.', ?))))
+		ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC
+		LIMIT 1
 	`
 }
 
 // FlagUsageByYearSQL returns SQL for counting flag usage by year in ClickHouse
 func (cqb *ClickHouseQueryBuilder) FlagUsageByYearSQL() string {
 	return `
-		WITH yearly_stats AS (
+		WITH node_years AS (
 			SELECT 
 				toYear(nodelist_date) as year,
-				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as total_nodes
+				zone, net, node,
+				MAX(CASE WHEN has(flags, ?) OR has(modem_flags, ?) 
+					OR (has_inet = 1 AND JSON_EXISTS(toString(internet_config), concat('$.protocols.', ?)))
+					THEN 1 ELSE 0 END) as has_flag
 			FROM nodes
-			GROUP BY year
-		),
-		flag_stats AS (
-			SELECT 
-				toYear(nodelist_date) as year,
-				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as nodes_with_flag
-			FROM nodes
-			WHERE has(flags, ?) OR has(modem_flags, ?) 
-		   OR JSONHas(internet_config, concat('protocols.', ?))
-			GROUP BY year
+			GROUP BY year, zone, net, node
 		)
 		SELECT 
-			ys.year,
-			COALESCE(fs.nodes_with_flag, 0) as node_count,
-			ys.total_nodes,
+			year,
+			COUNT(*) as total_nodes,
+			SUM(has_flag) as node_count,
 			CASE 
-				WHEN ys.total_nodes > 0 
-				THEN round((COALESCE(fs.nodes_with_flag, 0) / ys.total_nodes) * 100, 2)
+				WHEN COUNT(*) > 0 
+				THEN round((SUM(has_flag) / COUNT(*)) * 100, 2)
 				ELSE 0 
 			END as percentage
-		FROM yearly_stats ys
-		LEFT JOIN flag_stats fs ON ys.year = fs.year
-		ORDER BY ys.year
+		FROM node_years
+		GROUP BY year
+		ORDER BY year
 	`
 }

@@ -2,7 +2,7 @@
   "database": {
     "type": "duckdb",
     "duckdb": {
-      "path": "./nodelist.duckdb",
+      "path": "/home/dp/nodelists/nodelistdb.duckdb",
       "memory_limit": "16GB",
       "threads": 8,
       "read_only": false

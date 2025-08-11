@@ -157,11 +157,11 @@
                                     <div style="margin-top: 0.5rem;">
                                         {{if .NewNode.IsCM}}<span class="badge badge-success">CM</span>{{end}}
                                         {{if .NewNode.IsMO}}<span class="badge badge-success">MO</span>{{end}}
-                                        {{if .NewNode.HasBinkp}}<span class="badge badge-info">Binkp</span>{{end}}
+                                        {{if hasBinkp .NewNode.InternetConfig}}<span class="badge badge-info">Binkp</span>{{end}}
                                         {{if eq .NewNode.NodeType "Down"}}<span class="badge badge-error">Down</span>{{end}}
                                         {{if eq .NewNode.NodeType "Hold"}}<span class="badge badge-warning">Hold</span>{{end}}
                                         {{if eq .NewNode.NodeType "Pvt"}}<span class="badge badge-warning">Private</span>{{end}}
-                                        {{if not (or .NewNode.IsCM .NewNode.IsMO .NewNode.HasBinkp (eq .NewNode.NodeType "Down") (eq .NewNode.NodeType "Hold") (eq .NewNode.NodeType "Pvt"))}}<em>None specified</em>{{end}}
+                                        {{if not (or .NewNode.IsCM .NewNode.IsMO (hasBinkp .NewNode.InternetConfig) (eq .NewNode.NodeType "Down") (eq .NewNode.NodeType "Hold") (eq .NewNode.NodeType "Pvt"))}}<em>None specified</em>{{end}}
                                     </div>
                                 </div>
                                 {{if .NewNode.Flags}}

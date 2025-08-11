@@ -1,12 +1,14 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"path/filepath"
 	"strings"
 
+	"nodelistdb/internal/database"
 	"nodelistdb/internal/flags"
 )
 
@@ -127,6 +129,20 @@ func (s *Server) loadTemplates() {
 		},
 		"replaceUnderscores": func(s string) string {
 			return strings.ReplaceAll(s, "_", " ")
+		},
+		"hasBinkp": func(config json.RawMessage) bool {
+			if len(config) == 0 {
+				return false
+			}
+			
+			var internetConfig database.InternetConfiguration
+			if err := json.Unmarshal(config, &internetConfig); err != nil {
+				return false
+			}
+			
+			_, hasIBN := internetConfig.Protocols["IBN"]
+			_, hasBND := internetConfig.Protocols["BND"]
+			return hasIBN || hasBND
 		},
 	}
 

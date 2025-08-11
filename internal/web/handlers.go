@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -498,7 +499,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.templates["node_history"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Error executing node_history template: %v", err)
 	}
 }
 

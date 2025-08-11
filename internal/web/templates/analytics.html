@@ -147,11 +147,12 @@
                             labels: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}'{{$y.Year}}'{{end}}],
                             datasets: [{
                                 label: 'Nodes with Flag',
-                                data: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}{{$y.NodeCount}}{{end}}],
+                                data: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}{{if gt $y.NodeCount 0}}{{$y.NodeCount}}{{else}}null{{end}}{{end}}],
                                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
                                 borderColor: 'rgba(54, 162, 235, 1)',
                                 borderWidth: 2,
                                 tension: 0.1,
+                                spanGaps: false,
                                 yAxisID: 'y'
                             }, {
                                 label: 'Percentage of Total Nodes',

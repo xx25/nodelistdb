@@ -91,7 +91,7 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string) ([]FlagUsageByYea
 	conn := ao.db.Conn()
 	query := ao.queryBuilder.FlagUsageByYearSQL()
 
-	rows, err := conn.Query(query, flag, flag, flag)
+	rows, err := conn.Query(query, flag, flag, flag, flag, flag, flag)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query flag usage by year: %w", err)
 	}
@@ -100,7 +100,7 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string) ([]FlagUsageByYea
 	var results []FlagUsageByYear
 	for rows.Next() {
 		var fu FlagUsageByYear
-		err := rows.Scan(&fu.Year, &fu.NodeCount, &fu.TotalNodes, &fu.Percentage)
+		err := rows.Scan(&fu.Year, &fu.TotalNodes, &fu.NodeCount, &fu.Percentage)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan flag usage row: %w", err)
 		}

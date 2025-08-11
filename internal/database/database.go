@@ -216,6 +216,9 @@ func (db *DB) CreateSchema() error {
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_region ON nodes(nodelist_date, zone, region)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date_net_type ON nodes(nodelist_date, zone, net, node_type)",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_stats_flags ON nodes(nodelist_date, is_cm, is_mo, has_inet)",
+		// Flag array optimization indexes for analytics queries
+		"CREATE INDEX IF NOT EXISTS idx_nodes_year_flags ON nodes(EXTRACT(YEAR FROM nodelist_date), zone, net, node)",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_year ON nodes(EXTRACT(YEAR FROM nodelist_date))",
 	}
 
 	for _, indexSQL := range indexes {
