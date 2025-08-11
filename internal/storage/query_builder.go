@@ -704,32 +704,30 @@ func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
 	`
 }
 
-// FlagUsageByYearSQL returns SQL for counting flag usage by year (DuckDB optimized)
+// FlagUsageByYearSQL returns SQL for counting flag usage by year (DuckDB optimized, matches ClickHouse logic)
 func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 	return `
+		WITH node_years AS (
+			SELECT 
+				EXTRACT(YEAR FROM nodelist_date) as year,
+				zone, net, node,
+				MAX(CASE WHEN (? = ANY(flags) OR ? = ANY(modem_flags) 
+				              OR json_extract(internet_config, '$.protocols.' || ?) IS NOT NULL)
+				         THEN 1 ELSE 0 END) as has_flag
+			FROM nodes
+			GROUP BY year, zone, net, node
+		)
 		SELECT 
-			EXTRACT(YEAR FROM nodelist_date) as year,
-			COUNT(DISTINCT STRUCT_PACK(zone := zone, net := net, node := node)) as total_nodes,
-			COUNT(DISTINCT CASE 
-				WHEN (? = ANY(flags) OR ? = ANY(modem_flags) 
-				      OR json_extract(internet_config, '$.protocols.' || ?) IS NOT NULL)
-				THEN STRUCT_PACK(zone := zone, net := net, node := node)
-				ELSE NULL 
-			END) as node_count,
+			year,
+			COUNT(*) as total_nodes,
+			SUM(has_flag) as node_count,
 			CASE 
-				WHEN COUNT(DISTINCT STRUCT_PACK(zone := zone, net := net, node := node)) > 0 
-				THEN ROUND(
-					(COUNT(DISTINCT CASE 
-						WHEN (? = ANY(flags) OR ? = ANY(modem_flags) 
-						      OR json_extract(internet_config, '$.protocols.' || ?) IS NOT NULL)
-						THEN STRUCT_PACK(zone := zone, net := net, node := node)
-						ELSE NULL 
-					END)::NUMERIC / COUNT(DISTINCT STRUCT_PACK(zone := zone, net := net, node := node))) * 100, 2
-				)
+				WHEN COUNT(*) > 0 
+				THEN ROUND((SUM(has_flag)::NUMERIC / COUNT(*)) * 100, 2)
 				ELSE 0 
 			END as percentage
-		FROM nodes
-		GROUP BY EXTRACT(YEAR FROM nodelist_date)
+		FROM node_years
+		GROUP BY year
 		ORDER BY year
 	`
 }
