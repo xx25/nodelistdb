@@ -91,6 +91,7 @@ type QueryBuilderInterface interface {
 	NodeSelectSQL() string
 	BuildBatchInsertSQL(batchSize int) string
 	BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string
+	InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error
 	BuildNodesQuery(filter database.NodeFilter) (string, []interface{})
 	BuildFTSQuery(filter database.NodeFilter) (string, []interface{}, bool)
 

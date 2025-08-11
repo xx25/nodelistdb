@@ -9,14 +9,21 @@ import (
 	"nodelistdb/internal/database"
 )
 
+// CacheEntry represents a cached statistics entry with TTL information
+type CacheEntry struct {
+	Stats     *database.NetworkStats
+	CachedAt  time.Time
+	TTL       time.Duration
+}
+
 // StatisticsOperations handles all statistics-related database operations
 type StatisticsOperations struct {
 	db           database.DatabaseInterface
 	queryBuilder QueryBuilderInterface
 	resultParser *ResultParser
 	mu           sync.RWMutex
-	// Cache for stats results to improve performance for distant dates
-	statsCache map[string]*database.NetworkStats
+	// Enhanced cache with TTL support for better performance
+	statsCache map[string]*CacheEntry
 	cacheMu    sync.RWMutex
 }
 
@@ -26,22 +33,25 @@ func NewStatisticsOperations(db database.DatabaseInterface, queryBuilder QueryBu
 		db:           db,
 		queryBuilder: queryBuilder,
 		resultParser: resultParser,
-		statsCache:   make(map[string]*database.NetworkStats),
+		statsCache:   make(map[string]*CacheEntry),
 	}
 }
 
-// GetStats retrieves network statistics for a specific date with caching
+// GetStats retrieves network statistics for a specific date with smart TTL-based caching
 func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats, error) {
-	// Check cache first for distant dates (older than 30 days) to improve performance
 	cacheKey := date.Format("2006-01-02")
-	if date.Before(time.Now().AddDate(0, 0, -30)) {
-		so.cacheMu.RLock()
-		if cached, exists := so.statsCache[cacheKey]; exists {
+	
+	// Check cache with TTL validation
+	so.cacheMu.RLock()
+	if entry, exists := so.statsCache[cacheKey]; exists {
+		// Check if cache entry is still valid
+		if time.Since(entry.CachedAt) < entry.TTL {
 			so.cacheMu.RUnlock()
-			return cached, nil
+			return entry.Stats, nil
 		}
-		so.cacheMu.RUnlock()
+		// Cache entry expired, will be replaced
 	}
+	so.cacheMu.RUnlock()
 
 	so.mu.RLock()
 	defer so.mu.RUnlock()
@@ -111,12 +121,32 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 		stats.LargestNets = append(stats.LargestNets, net)
 	}
 
-	// Cache distant dates (older than 30 days) to improve future performance
-	if date.Before(time.Now().AddDate(0, 0, -30)) {
-		so.cacheMu.Lock()
-		so.statsCache[cacheKey] = stats
-		so.cacheMu.Unlock()
+	// Smart caching with TTL based on data recency
+	var ttl time.Duration
+	now := time.Now()
+	
+	if date.Before(now.AddDate(0, 0, -30)) {
+		// Historical data (>30 days old): cache permanently
+		ttl = 24 * time.Hour * 365 // 1 year
+	} else if date.Before(now.AddDate(0, 0, -7)) {
+		// Recent data (7-30 days old): cache for 6 hours
+		ttl = 6 * time.Hour
+	} else if date.Before(now.AddDate(0, 0, -1)) {
+		// Very recent data (1-7 days old): cache for 2 hours
+		ttl = 2 * time.Hour
+	} else {
+		// Today's data: cache for 30 minutes
+		ttl = 30 * time.Minute
 	}
+	
+	// Cache the result with appropriate TTL
+	so.cacheMu.Lock()
+	so.statsCache[cacheKey] = &CacheEntry{
+		Stats:    stats,
+		CachedAt: time.Now(),
+		TTL:      ttl,
+	}
+	so.cacheMu.Unlock()
 
 	return stats, nil
 }
@@ -467,19 +497,38 @@ func (so *StatisticsOperations) GetGrowthStats(startDate, endDate time.Time) (*G
 // ClearStatsCache clears the statistics cache - useful for maintenance or testing
 func (so *StatisticsOperations) ClearStatsCache() {
 	so.cacheMu.Lock()
-	so.statsCache = make(map[string]*database.NetworkStats)
+	so.statsCache = make(map[string]*CacheEntry)
 	so.cacheMu.Unlock()
 }
 
-// GetCacheStats returns information about the stats cache
+// GetCacheStats returns information about the enhanced TTL-based stats cache
 func (so *StatisticsOperations) GetCacheStats() map[string]interface{} {
 	so.cacheMu.RLock()
 	defer so.cacheMu.RUnlock()
 
+	validEntries := 0
+	expiredEntries := 0
+	
+	for _, entry := range so.statsCache {
+		if time.Since(entry.CachedAt) < entry.TTL {
+			validEntries++
+		} else {
+			expiredEntries++
+		}
+	}
+
 	return map[string]interface{}{
-		"cached_entries":       len(so.statsCache),
+		"total_cached_entries": len(so.statsCache),
+		"valid_entries":        validEntries,
+		"expired_entries":      expiredEntries,
 		"cache_enabled":        true,
-		"cache_threshold_days": 30,
+		"cache_strategy":       "TTL-based with smart expiration",
+		"ttl_rules": map[string]string{
+			"historical_data":     "1 year (>30 days old)",
+			"recent_data":         "6 hours (7-30 days old)", 
+			"very_recent_data":    "2 hours (1-7 days old)",
+			"today_data":          "30 minutes",
+		},
 	}
 }
 

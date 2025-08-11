@@ -61,6 +61,15 @@ type Parser struct {
 
 	// Context tracking
 	Context Context
+
+	// Reusable maps to reduce allocations (performance optimization)
+	nodeTracker       map[string][]int // key: "zone:net/node", value: slice of indices
+	protocolsMap      map[string]database.InternetProtocolDetail
+	defaultsMap       map[string]string
+	emailProtocolsMap map[string]database.EmailProtocolDetail
+	
+	// Pre-compiled regex patterns for common operations
+	crcPattern *regexp.Regexp
 }
 
 // New creates a new parser instance
@@ -80,12 +89,82 @@ func New(verbose bool) *Parser {
 			"CM:": "CM", // Continuous Mail
 		},
 		ModernFlagMap: flags.GetParserFlagMap(),
+		
+		// Initialize reusable maps with reasonable starting capacity
+		nodeTracker:       make(map[string][]int, 1000),
+		protocolsMap:      make(map[string]database.InternetProtocolDetail, 10),
+		defaultsMap:       make(map[string]string, 5),
+		emailProtocolsMap: make(map[string]database.EmailProtocolDetail, 3),
+		
+		// Pre-compile commonly used regex patterns
+		crcPattern: regexp.MustCompile(`CRC-?(\w+)`),
 	}
 }
 
 // NewAdvanced creates a new parser (kept for compatibility, just returns New)
 func NewAdvanced(verbose bool) *Parser {
 	return New(verbose)
+}
+
+// clearReusableMaps resets all reusable maps for the next parsing operation
+// This prevents memory allocations by reusing existing map capacity
+func (p *Parser) clearReusableMaps() {
+	// Clear nodeTracker map but keep capacity
+	for k := range p.nodeTracker {
+		delete(p.nodeTracker, k)
+	}
+	
+	// Clear protocol maps but keep capacity
+	for k := range p.protocolsMap {
+		delete(p.protocolsMap, k)
+	}
+	for k := range p.defaultsMap {
+		delete(p.defaultsMap, k)
+	}
+	for k := range p.emailProtocolsMap {
+		delete(p.emailProtocolsMap, k)
+	}
+}
+
+// estimateNodeCount estimates the number of nodes in a file for slice pre-allocation
+// This reduces memory reallocations during parsing by providing a reasonable capacity estimate
+func (p *Parser) estimateNodeCount(filePath string) int {
+	// Get file info for size-based estimation
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		// Default estimate for unknown files
+		return 1000
+	}
+	
+	fileSize := fileInfo.Size()
+	
+	// Handle compressed files (rough estimation)
+	if strings.HasSuffix(strings.ToLower(filePath), ".gz") {
+		// Assume ~3:1 compression ratio for text
+		fileSize *= 3
+	}
+	
+	// Estimate based on average line length
+	// Typical nodelist line is ~80-120 characters
+	// Account for header lines and comments (~10% overhead)
+	avgLineLength := int64(100)
+	estimatedLines := fileSize / avgLineLength
+	
+	// Approximately 90% of lines are actual node entries
+	estimatedNodes := int(float64(estimatedLines) * 0.9)
+	
+	// Reasonable bounds
+	if estimatedNodes < 100 {
+		estimatedNodes = 100
+	} else if estimatedNodes > 100000 {
+		estimatedNodes = 100000
+	}
+	
+	if p.verbose {
+		fmt.Printf("  Estimated %d nodes (file size: %d bytes)\n", estimatedNodes, fileInfo.Size())
+	}
+	
+	return estimatedNodes
 }
 
 // ParseFile parses a single nodelist file and returns nodes
@@ -99,9 +178,15 @@ func (p *Parser) ParseFile(filePath string) ([]database.Node, error) {
 
 // ParseFileWithCRC parses a single nodelist file and returns nodes with file CRC
 func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
+	// Clear reusable maps at start of parsing to reuse capacity
+	p.clearReusableMaps()
+	
 	if p.verbose {
 		fmt.Printf("Parsing file: %s\n", filepath.Base(filePath))
 	}
+	
+	// Estimate node count for slice pre-allocation
+	estimatedNodes := p.estimateNodeCount(filePath)
 
 	// Extract year from path to determine default zone
 	year := p.extractYearFromPath(filePath)
@@ -117,7 +202,7 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	// Read file (with gzip support)
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
+		return nil, NewFileError(filePath, "open", "failed to open file", err)
 	}
 	defer file.Close()
 
@@ -126,13 +211,14 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	if strings.HasSuffix(strings.ToLower(filePath), ".gz") {
 		gzipReader, err := gzip.NewReader(file)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create gzip reader for %s: %w", filePath, err)
+			return nil, NewFileError(filePath, "gzip", "failed to create gzip reader", err)
 		}
 		defer gzipReader.Close()
 		reader = gzipReader
 	}
 
-	var nodes []database.Node
+	// Pre-allocate nodes slice with estimated capacity for better performance
+	nodes := make([]database.Node, 0, estimatedNodes)
 	scanner := bufio.NewScanner(reader)
 	lineNum := 0
 	var nodelistDate time.Time
@@ -141,8 +227,8 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	var firstNodeLine string
 	headerParsed := false
 
-	// Track duplicates within this file
-	nodeTracker := make(map[string][]int) // key: "zone:net/node", value: slice of indices in nodes array
+	// Track duplicates within this file (reusing parser's nodeTracker map)
+	nodeTracker := p.nodeTracker
 	duplicateStats := struct {
 		totalDuplicates int
 		conflictGroups  int
@@ -178,8 +264,8 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 					}
 				}
 			}
-			// Extract CRC if present
-			if crcMatch := regexp.MustCompile(`CRC-?(\w+)`).FindStringSubmatch(line); len(crcMatch) > 1 {
+			// Extract CRC if present (using pre-compiled regex)
+			if crcMatch := p.crcPattern.FindStringSubmatch(line); len(crcMatch) > 1 {
 				if crc, err := strconv.ParseUint(crcMatch[1], 16, 16); err == nil {
 					fileCRC = uint16(crc)
 				}
@@ -250,7 +336,7 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading file %s: %w", filePath, err)
+		return nil, NewFileError(filePath, "read", "error reading file", err)
 	}
 
 	// Fallback: extract date from filename if not found in header
@@ -363,46 +449,46 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 		nodeType = "Node"
 		zone = p.Context.CurrentZone
 		net = p.Context.CurrentNet
-		if nodeNum, err := strconv.Atoi(nodeNumStr); err == nil {
+		if nodeNum, err := ParseInt("node", nodeNumStr); err == nil {
 			node = nodeNum
 		} else {
-			return nil, fmt.Errorf("invalid node number: %s", nodeNumStr)
+			return nil, err
 		}
 	} else {
 		// Handle special node types
 		switch strings.Title(strings.ToLower(nodeTypeStr)) {
 		case "Zone":
 			nodeType = "Zone"
-			if z, err := strconv.Atoi(nodeNumStr); err == nil {
+			if z, err := ParseInt("zone", nodeNumStr); err == nil {
 				zone = z
 				net = z                   // Zone nodes have net = zone
 				node = 0                  // Zone coordinator
 				p.Context.CurrentZone = z // Update context
 				p.Context.CurrentNet = z
 			} else {
-				return nil, fmt.Errorf("invalid zone number: %s", nodeNumStr)
+				return nil, err
 			}
 		case "Region":
 			nodeType = "Region"
 			zone = p.Context.CurrentZone
-			if r, err := strconv.Atoi(nodeNumStr); err == nil {
+			if r, err := ParseInt("region", nodeNumStr); err == nil {
 				net = r
 				node = 0 // Region coordinator
 				p.Context.CurrentNet = r
 				regionNum := r
 				p.Context.CurrentRegion = &regionNum
 			} else {
-				return nil, fmt.Errorf("invalid region number: %s", nodeNumStr)
+				return nil, err
 			}
 		case "Host":
 			nodeType = "Host"
 			zone = p.Context.CurrentZone
-			if n, err := strconv.Atoi(nodeNumStr); err == nil {
+			if n, err := ParseInt("net", nodeNumStr); err == nil {
 				net = n
 				node = 0 // Host = Net/0
 				p.Context.CurrentNet = n
 			} else {
-				return nil, fmt.Errorf("invalid host net number: %s", nodeNumStr)
+				return nil, err
 			}
 		case "Hub":
 			nodeType = "Hub"
@@ -534,13 +620,14 @@ func (p *Parser) buildInternetConfig(protocols map[string]database.InternetProto
 
 // parseFlagsWithConfig extracts flags and builds structured internet configuration
 func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
-	var flags []string
+	// Pre-allocate flags slice with typical capacity
+	flags := make([]string, 0, 10)
 
-	// For building structured config
-	protocols := make(map[string]database.InternetProtocolDetail)
-	defaults := make(map[string]string)
-	emailProtocols := make(map[string]database.EmailProtocolDetail)
-	var infoFlags []string
+	// For building structured config (reusing parser's maps)
+	protocols := p.protocolsMap
+	defaults := p.defaultsMap
+	emailProtocols := p.emailProtocolsMap
+	infoFlags := make([]string, 0, 3) // Pre-allocate with typical capacity
 
 	// Default ports for protocols
 	defaultPorts := map[string]int{

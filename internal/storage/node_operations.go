@@ -27,7 +27,7 @@ func NewNodeOperations(db database.DatabaseInterface, queryBuilder QueryBuilderI
 	}
 }
 
-// InsertNodes inserts a batch of nodes using optimized prepared statements with safe parameterization
+// InsertNodes inserts a batch of nodes using optimized chunked inserts with smaller memory footprint
 func (no *NodeOperations) InsertNodes(nodes []database.Node) error {
 	if len(nodes) == 0 {
 		return nil
@@ -36,28 +36,8 @@ func (no *NodeOperations) InsertNodes(nodes []database.Node) error {
 	no.mu.Lock()
 	defer no.mu.Unlock()
 
-	conn := no.db.Conn()
-
-	tx, err := conn.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	chunkSize := DefaultBatchInsertConfig().ChunkSize
-	for i := 0; i < len(nodes); i += chunkSize {
-		end := i + chunkSize
-		if end > len(nodes) {
-			end = len(nodes)
-		}
-		chunk := nodes[i:end]
-
-		if err := no.insertChunkSafely(tx, chunk); err != nil {
-			return fmt.Errorf("failed to insert chunk: %w", err)
-		}
-	}
-
-	return tx.Commit()
+	// Use optimized chunked inserts that avoid large memory allocations
+	return no.queryBuilder.InsertNodesInChunks(no.db, nodes)
 }
 
 // insertChunkSafely inserts a chunk of nodes using direct SQL generation for performance

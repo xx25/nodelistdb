@@ -15,6 +15,9 @@ func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{}
 }
 
+// Optimal batch size for database inserts - balance between memory usage and performance
+const OPTIMAL_BATCH_SIZE = 1000
+
 // InsertNodeSQL builds a parameterized INSERT statement for nodes
 func (qb *QueryBuilder) InsertNodeSQL() string {
 	return `
@@ -136,6 +139,47 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 // escapeSQL escapes single quotes for SQL string literals
 func (qb *QueryBuilder) escapeSQL(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
+}
+
+// InsertNodesInChunks performs optimized batch inserts with chunking to avoid
+// large memory allocations and improve database performance
+func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	conn := db.Conn()
+	
+	// Start a transaction for better performance
+	tx, err := conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	
+	// Create a result parser for direct SQL building (needed for array handling)
+	resultParser := NewResultParser()
+	
+	// Process nodes in optimal-sized chunks
+	for i := 0; i < len(nodes); i += OPTIMAL_BATCH_SIZE {
+		end := i + OPTIMAL_BATCH_SIZE
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+		
+		chunk := nodes[i:end]
+		
+		// Use direct SQL building for proper array handling in DuckDB
+		// This is necessary because DuckDB doesn't support []string parameters in prepared statements
+		insertSQL := qb.BuildDirectBatchInsertSQL(chunk, resultParser)
+		
+		// Execute the chunk insert
+		if _, err := tx.Exec(insertSQL); err != nil {
+			return fmt.Errorf("failed to insert chunk %d-%d: %w", i, end-1, err)
+		}
+	}
+	
+	return tx.Commit()
 }
 
 // NodeSelectSQL returns the base SELECT statement for nodes
