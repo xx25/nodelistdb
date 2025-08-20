@@ -1,0 +1,65 @@
+daemon:
+  test_interval: 3600s
+  workers: 4
+  batch_size: 10
+
+database:
+  type: duckdb
+  duckdb:
+    nodes_path: nodelist.duckdb
+    results_path: test_results.duckdb
+
+protocols:
+  binkp:
+    enabled: true
+    port: 24554
+    timeout: 10s
+    our_address: "2:5001/5001"  # Test address
+  ifcico:
+    enabled: true
+    port: 60179
+    timeout: 10s
+    our_address: "2:5001/5001"  # Test address
+  telnet:
+    enabled: false
+    port: 23
+    timeout: 10s
+  ftp:
+    enabled: false
+    port: 21
+    timeout: 10s
+  vmodem:
+    enabled: false
+    port: 3141
+    timeout: 10s
+
+services:
+  geolocation:
+    provider: ipgeolocation
+    api_key: ""
+    cache_ttl: 86400s
+    rate_limit: 100
+  dns:
+    workers: 5
+    timeout: 5s
+    cache_ttl: 3600s
+
+cache:
+  type: badger
+  path: ./cache
+
+logging:
+  level: info
+  file: testdaemon.log
+  max_size: 100
+  max_backups: 3
+  max_age: 7
+
+cli:
+  enabled: true
+  host: 127.0.0.1
+  port: 2323
+  max_clients: 5
+  timeout: 300s
+  prompt: "> "
+  welcome_message: "NodelistDB Test Daemon CLI v1.0.0\nType 'help' for available commands.\n"

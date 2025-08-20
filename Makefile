@@ -1,7 +1,28 @@
-# NodelistDB Makefile
-# Clean DuckDB-only FidoNet Nodelist System
+# NodelistDB and Testing Daemon Makefile
 
-.PHONY: help build clean test run-parser deps
+# Variables
+BINARY_NAME_PARSER=parser
+BINARY_NAME_SERVER=server
+BINARY_NAME_DAEMON=testdaemon
+BUILD_DIR=bin
+CMD_PARSER=cmd/parser
+CMD_SERVER=cmd/server
+CMD_DAEMON=cmd/testdaemon
+VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)"
+
+# Go commands
+GO=go
+GOFMT=gofmt
+GOVET=$(GO) vet
+GOTEST=$(GO) test
+GOBUILD=$(GO) build
+GOCLEAN=$(GO) clean
+GOMOD=$(GO) mod
+
+.PHONY: help build clean test run-parser deps build-daemon run-daemon
 
 # Default target
 help: ## Show this help message
@@ -29,7 +50,7 @@ LDFLAGS := -X 'nodelistdb/internal/version.Version=$(VERSION)' \
            -X 'nodelistdb/internal/version.BuildTime=$(BUILD_TIME)'
 
 # Build targets
-build: build-parser build-server ## Build all binaries
+build: build-parser build-server build-daemon ## Build all binaries
 
 build-parser: ## Build parser binary
 	@echo "Building parser..."
@@ -40,6 +61,11 @@ build-server: ## Build server binary
 	@echo "Building server..."
 	go build -ldflags "$(LDFLAGS)" -o bin/server ./cmd/server
 	@echo "✓ Server built successfully"
+
+build-daemon: ## Build testing daemon binary
+	@echo "Building testing daemon..."
+	go build -ldflags "$(LDFLAGS)" -o bin/testdaemon ./cmd/testdaemon
+	@echo "✓ Testing daemon built successfully"
 
 # Development targets  
 test: ## Run tests
@@ -58,6 +84,15 @@ run-parser: ## Run parser (requires NODELIST_PATH)
 
 run-server: build-server ## Run web server
 	./bin/server -db ./nodelist.duckdb -host localhost -port 8080
+
+run-daemon: build-daemon ## Run testing daemon
+	./bin/testdaemon -config config.yaml
+
+run-daemon-debug: build-daemon ## Run testing daemon in debug mode
+	./bin/testdaemon -config config.yaml -debug
+
+run-daemon-once: build-daemon ## Run testing daemon single cycle
+	./bin/testdaemon -config config.yaml -once
 
 # Cross-compilation for deployment
 build-linux: ## Build for Linux x64

@@ -1,0 +1,80 @@
+# NodeTest Daemon Configuration
+
+daemon:
+  test_interval: 3600  # Run tests every hour (in seconds)
+  workers: 10          # Number of concurrent test workers
+  batch_size: 100      # Number of nodes to test per batch
+
+# Database configuration
+# Choose either DuckDB or ClickHouse
+database:
+  type: "duckdb"  # or "clickhouse"
+  
+  # DuckDB configuration (when type is "duckdb")
+  duckdb:
+    nodes_path: "./nodelist.duckdb"       # Path to nodes database (read-only)
+    results_path: "./test_results.duckdb" # Path to test results database
+  
+  # ClickHouse configuration (when type is "clickhouse")
+  # clickhouse:
+  #   host: "localhost"
+  #   port: 9000
+  #   database: "nodetest"
+  #   username: "default"
+  #   password: ""
+  #   batch_size: 1000
+  #   flush_interval: 30  # seconds
+
+# Protocol testing configuration
+protocols:
+  binkp:
+    enabled: true
+    port: 24554
+    timeout: 10  # seconds
+    our_address: "2:5001/5001"  # Your FidoNet address for testing
+  
+  ifcico:
+    enabled: true
+    port: 60179
+    timeout: 10
+  
+  telnet:
+    enabled: false
+    port: 23
+    timeout: 5
+  
+  ftp:
+    enabled: false
+    port: 21
+    timeout: 10
+  
+  vmodem:
+    enabled: false
+    port: 3141
+    timeout: 10
+
+# External services configuration
+services:
+  geolocation:
+    provider: "ip-api"  # Options: ip-api, ipinfo, ipgeolocation
+    api_key: ""         # Required for some providers
+    cache_ttl: 604800   # 7 days in seconds
+    rate_limit: 150     # Requests per minute
+  
+  dns:
+    workers: 20
+    timeout: 5          # seconds
+    cache_ttl: 86400    # 24 hours in seconds
+
+# Local cache configuration
+cache:
+  type: "badger"  # Options: badger, bolt
+  path: "/var/cache/nodetest"
+
+# Logging configuration
+logging:
+  level: "info"  # Options: debug, info, warn, error
+  file: "/var/log/nodetest-daemon.log"
+  max_size: 100     # MB
+  max_backups: 7
+  max_age: 30       # days
