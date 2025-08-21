@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"nodelistdb/internal/version"
+	"github.com/nodelistdb/internal/version"
 )
 
 // NodelistFile represents a nodelist file with metadata

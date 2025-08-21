@@ -11,18 +11,18 @@ import (
 	"syscall"
 	"time"
 
-	"nodelistdb/internal/api"
-	"nodelistdb/internal/config"
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/storage"
-	"nodelistdb/internal/version"
-	"nodelistdb/internal/web"
+	"github.com/nodelistdb/internal/api"
+	"github.com/nodelistdb/internal/config"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/storage"
+	"github.com/nodelistdb/internal/version"
+	"github.com/nodelistdb/internal/web"
 )
 
 func main() {
 	// Command line flags
 	var (
-		configPath  = flag.String("config", "config.json", "Path to configuration file")
+		configPath  = flag.String("config", "config.yaml", "Path to configuration file")
 		dbPath      = flag.String("db", "", "Path to database file (overrides config)")
 		port        = flag.String("port", "8080", "HTTP server port")
 		host        = flag.String("host", "localhost", "HTTP server host")

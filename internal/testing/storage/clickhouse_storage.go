@@ -123,6 +123,9 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 			ifcico_success Bool,
 			ifcico_response_ms UInt32,
 			ifcico_mailer_info String,
+			ifcico_system_name String,
+			ifcico_addresses Array(String),
+			ifcico_response_type String,
 			ifcico_error String,
 			
 			telnet_tested Bool,
@@ -500,7 +503,8 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 	// Similar extraction for other protocols
 	var ifcicoTested, ifcicoSuccess bool
 	var ifcicoResponseMs uint32
-	var ifcicoMailerInfo, ifcicoError string
+	var ifcicoMailerInfo, ifcicoSystemName, ifcicoResponseType, ifcicoError string
+	var ifcicoAddresses []string
 	
 	if r.IfcicoResult != nil {
 		ifcicoTested = r.IfcicoResult.Tested
@@ -509,6 +513,15 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		ifcicoError = r.IfcicoResult.Error
 		if mailer, ok := r.IfcicoResult.Details["mailer_info"].(string); ok {
 			ifcicoMailerInfo = mailer
+		}
+		if sysName, ok := r.IfcicoResult.Details["system_name"].(string); ok {
+			ifcicoSystemName = sysName
+		}
+		if addrs, ok := r.IfcicoResult.Details["addresses"].([]string); ok {
+			ifcicoAddresses = addrs
+		}
+		if respType, ok := r.IfcicoResult.Details["response_type"].(string); ok {
+			ifcicoResponseType = respType
 		}
 	}
 	
@@ -545,7 +558,8 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		binkpTested, binkpSuccess, binkpResponseMs, binkpSystemName,
 		binkpSysop, binkpLocation, binkpVersion, binkpAddresses,
 		binkpCapabilities, binkpError,
-		ifcicoTested, ifcicoSuccess, ifcicoResponseMs, ifcicoMailerInfo, ifcicoError,
+		ifcicoTested, ifcicoSuccess, ifcicoResponseMs, ifcicoMailerInfo, 
+		ifcicoSystemName, ifcicoAddresses, ifcicoResponseType, ifcicoError,
 		telnetTested, telnetSuccess, telnetResponseMs, telnetError,
 		ftpTested, ftpSuccess, ftpResponseMs, ftpError,
 		vmodemTested, vmodemSuccess, vmodemResponseMs, vmodemError,

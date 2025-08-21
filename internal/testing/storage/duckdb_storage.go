@@ -103,6 +103,9 @@ func (s *DuckDBStorage) initResultsSchema() error {
 			ifcico_success BOOLEAN,
 			ifcico_response_ms INTEGER,
 			ifcico_mailer_info VARCHAR,
+			ifcico_system_name VARCHAR,
+			ifcico_addresses VARCHAR[],
+			ifcico_response_type VARCHAR,
 			ifcico_error VARCHAR,
 			
 			-- Telnet Test
@@ -324,14 +327,15 @@ func (s *DuckDBStorage) StoreTestResults(ctx context.Context, results []*models.
 			binkp_tested, binkp_success, binkp_response_ms, binkp_system_name,
 			binkp_sysop, binkp_location, binkp_version, binkp_addresses,
 			binkp_capabilities, binkp_error,
-			ifcico_tested, ifcico_success, ifcico_response_ms, ifcico_mailer_info, ifcico_error,
+			ifcico_tested, ifcico_success, ifcico_response_ms, ifcico_mailer_info, 
+			ifcico_system_name, ifcico_addresses, ifcico_response_type, ifcico_error,
 			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
 			is_operational, has_connectivity_issues, address_validated
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-				  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-				  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+				  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
@@ -375,27 +379,63 @@ func (s *DuckDBStorage) StoreDailyStats(ctx context.Context, stats *models.TestS
 
 // GetLatestTestResults retrieves the most recent test results
 func (s *DuckDBStorage) GetLatestTestResults(ctx context.Context, limit int) ([]*models.TestResult, error) {
-	_ = `
-		SELECT * FROM node_test_results
+	query := `
+		SELECT 
+			test_time, test_date, zone, net, node, address, hostname,
+			resolved_ipv4, resolved_ipv6, dns_error,
+			country, country_code, city, region, latitude, longitude, isp, org, asn,
+			is_operational, has_connectivity_issues, address_validated,
+			binkp_tested, binkp_success, binkp_response_ms, binkp_system_name,
+			binkp_sysop, binkp_location, binkp_version, binkp_addresses,
+			binkp_capabilities, binkp_error,
+			ifcico_tested, ifcico_success, ifcico_response_ms, ifcico_mailer_info, 
+			ifcico_system_name, ifcico_addresses, ifcico_response_type, ifcico_error,
+			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
+			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
+			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error
+		FROM node_test_results
 		ORDER BY test_time DESC
 		LIMIT ?
 	`
-	// Implementation would parse results back into TestResult structs
-	// Simplified for brevity
-	return nil, fmt.Errorf("not implemented yet")
+	
+	rows, err := s.resultsDB.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query latest test results: %w", err)
+	}
+	defer rows.Close()
+	
+	return s.scanTestResults(rows)
 }
 
 // GetNodeTestHistory retrieves test history for a specific node
 func (s *DuckDBStorage) GetNodeTestHistory(ctx context.Context, zone, net, node int, days int) ([]*models.TestResult, error) {
-	_ = `
-		SELECT * FROM node_test_results
+	query := `
+		SELECT 
+			test_time, test_date, zone, net, node, address, hostname,
+			resolved_ipv4, resolved_ipv6, dns_error,
+			country, country_code, city, region, latitude, longitude, isp, org, asn,
+			is_operational, has_connectivity_issues, address_validated,
+			binkp_tested, binkp_success, binkp_response_ms, binkp_system_name,
+			binkp_sysop, binkp_location, binkp_version, binkp_addresses,
+			binkp_capabilities, binkp_error,
+			ifcico_tested, ifcico_success, ifcico_response_ms, ifcico_mailer_info, 
+			ifcico_system_name, ifcico_addresses, ifcico_response_type, ifcico_error,
+			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
+			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
+			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error
+		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
 			AND test_date >= CURRENT_DATE - INTERVAL ? DAY
 		ORDER BY test_time DESC
 	`
-	// Implementation would parse results back into TestResult structs
-	// Simplified for brevity
-	return nil, fmt.Errorf("not implemented yet")
+	
+	rows, err := s.resultsDB.QueryContext(ctx, query, zone, net, node, days)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query node test history: %w", err)
+	}
+	defer rows.Close()
+	
+	return s.scanTestResults(rows)
 }
 
 // Helper methods
@@ -455,6 +495,164 @@ func (s *DuckDBStorage) scanNodes(rows *sql.Rows) ([]*models.Node, error) {
 	return nodes, nil
 }
 
+// scanTestResults scans rows and converts them to TestResult structs
+func (s *DuckDBStorage) scanTestResults(rows *sql.Rows) ([]*models.TestResult, error) {
+	var results []*models.TestResult
+	
+	for rows.Next() {
+		r := &models.TestResult{}
+		
+		// Variables for nullable fields
+		var dnsError, binkpError, ifcicoError, telnetError, ftpError, vmodemError sql.NullString
+		var resolvedIPv4, resolvedIPv6 sql.NullString
+		var binkpAddresses, binkpCapabilities sql.NullString
+		
+		// BinkP protocol fields
+		var binkpTested, binkpSuccess sql.NullBool
+		var binkpResponseMs sql.NullInt32
+		var binkpSystemName, binkpSysop, binkpLocation, binkpVersion sql.NullString
+		
+		// IFCICO protocol fields
+		var ifcicoTested, ifcicoSuccess sql.NullBool
+		var ifcicoResponseMs sql.NullInt32
+		var ifcicoMailerInfo, ifcicoSystemName, ifcicoResponseType sql.NullString
+		var ifcicoAddresses sql.NullString
+		
+		// Telnet protocol fields
+		var telnetTested, telnetSuccess sql.NullBool
+		var telnetResponseMs sql.NullInt32
+		
+		// FTP protocol fields
+		var ftpTested, ftpSuccess sql.NullBool
+		var ftpResponseMs sql.NullInt32
+		
+		// VModem protocol fields
+		var vmodemTested, vmodemSuccess sql.NullBool
+		var vmodemResponseMs sql.NullInt32
+		
+		err := rows.Scan(
+			&r.TestTime, &r.TestDate, &r.Zone, &r.Net, &r.Node, &r.Address, &r.Hostname,
+			&resolvedIPv4, &resolvedIPv6, &dnsError,
+			&r.Country, &r.CountryCode, &r.City, &r.Region, &r.Latitude, &r.Longitude, 
+			&r.ISP, &r.Org, &r.ASN,
+			&r.IsOperational, &r.HasConnectivityIssues, &r.AddressValidated,
+			&binkpTested, &binkpSuccess, &binkpResponseMs, &binkpSystemName,
+			&binkpSysop, &binkpLocation, &binkpVersion, &binkpAddresses,
+			&binkpCapabilities, &binkpError,
+			&ifcicoTested, &ifcicoSuccess, &ifcicoResponseMs, &ifcicoMailerInfo, 
+			&ifcicoSystemName, &ifcicoAddresses, &ifcicoResponseType, &ifcicoError,
+			&telnetTested, &telnetSuccess, &telnetResponseMs, &telnetError,
+			&ftpTested, &ftpSuccess, &ftpResponseMs, &ftpError,
+			&vmodemTested, &vmodemSuccess, &vmodemResponseMs, &vmodemError,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan test result row: %w", err)
+		}
+		
+		// Parse arrays
+		r.ResolvedIPv4 = parseArray(resolvedIPv4.String)
+		r.ResolvedIPv6 = parseArray(resolvedIPv6.String)
+		
+		// Set errors
+		if dnsError.Valid {
+			r.DNSError = dnsError.String
+		}
+		
+		// Reconstruct BinkP result if tested
+		if binkpTested.Valid && binkpTested.Bool {
+			r.BinkPResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    binkpSuccess.Bool,
+				ResponseMs: uint32(binkpResponseMs.Int32),
+				Error:      binkpError.String,
+				Details:    make(map[string]interface{}),
+			}
+			if binkpSystemName.Valid {
+				r.BinkPResult.Details["system_name"] = binkpSystemName.String
+			}
+			if binkpSysop.Valid {
+				r.BinkPResult.Details["sysop"] = binkpSysop.String
+			}
+			if binkpLocation.Valid {
+				r.BinkPResult.Details["location"] = binkpLocation.String
+			}
+			if binkpVersion.Valid {
+				r.BinkPResult.Details["version"] = binkpVersion.String
+			}
+			if binkpAddresses.Valid {
+				r.BinkPResult.Details["addresses"] = parseArray(binkpAddresses.String)
+			}
+			if binkpCapabilities.Valid {
+				r.BinkPResult.Details["capabilities"] = parseArray(binkpCapabilities.String)
+			}
+		}
+		
+		// Reconstruct IFCICO result if tested
+		if ifcicoTested.Valid && ifcicoTested.Bool {
+			r.IfcicoResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    ifcicoSuccess.Bool,
+				ResponseMs: uint32(ifcicoResponseMs.Int32),
+				Error:      ifcicoError.String,
+				Details:    make(map[string]interface{}),
+			}
+			if ifcicoMailerInfo.Valid {
+				r.IfcicoResult.Details["mailer_info"] = ifcicoMailerInfo.String
+			}
+			if ifcicoSystemName.Valid {
+				r.IfcicoResult.Details["system_name"] = ifcicoSystemName.String
+			}
+			if ifcicoAddresses.Valid {
+				r.IfcicoResult.Details["addresses"] = parseArray(ifcicoAddresses.String)
+			}
+			if ifcicoResponseType.Valid {
+				r.IfcicoResult.Details["response_type"] = ifcicoResponseType.String
+			}
+		}
+		
+		// Reconstruct Telnet result if tested
+		if telnetTested.Valid && telnetTested.Bool {
+			r.TelnetResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    telnetSuccess.Bool,
+				ResponseMs: uint32(telnetResponseMs.Int32),
+				Error:      telnetError.String,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		// Reconstruct FTP result if tested
+		if ftpTested.Valid && ftpTested.Bool {
+			r.FTPResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    ftpSuccess.Bool,
+				ResponseMs: uint32(ftpResponseMs.Int32),
+				Error:      ftpError.String,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		// Reconstruct VModem result if tested
+		if vmodemTested.Valid && vmodemTested.Bool {
+			r.VModemResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    vmodemSuccess.Bool,
+				ResponseMs: uint32(vmodemResponseMs.Int32),
+				Error:      vmodemError.String,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		results = append(results, r)
+	}
+	
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+	
+	return results, nil
+}
+
 func (s *DuckDBStorage) resultToArgs(r *models.TestResult) []interface{} {
 	// Extract BinkP details
 	var binkpTested, binkpSuccess bool
@@ -488,10 +686,11 @@ func (s *DuckDBStorage) resultToArgs(r *models.TestResult) []interface{} {
 		}
 	}
 
-	// Similar extraction for other protocols (simplified)
+	// Extract IFCICO test details
 	var ifcicoTested, ifcicoSuccess bool
 	var ifcicoResponseMs uint32
-	var ifcicoMailerInfo, ifcicoError string
+	var ifcicoMailerInfo, ifcicoSystemName, ifcicoResponseType, ifcicoError string
+	var ifcicoAddresses []string
 	
 	if r.IfcicoResult != nil {
 		ifcicoTested = r.IfcicoResult.Tested
@@ -501,12 +700,52 @@ func (s *DuckDBStorage) resultToArgs(r *models.TestResult) []interface{} {
 		if details, ok := r.IfcicoResult.Details["mailer_info"].(string); ok {
 			ifcicoMailerInfo = details
 		}
+		if details, ok := r.IfcicoResult.Details["system_name"].(string); ok {
+			ifcicoSystemName = details
+		}
+		if details, ok := r.IfcicoResult.Details["addresses"].([]string); ok {
+			ifcicoAddresses = details
+		}
+		if details, ok := r.IfcicoResult.Details["response_type"].(string); ok {
+			ifcicoResponseType = details
+		}
 	}
 
-	// Default values for other protocols
-	var telnetTested, telnetSuccess, ftpTested, ftpSuccess, vmodemTested, vmodemSuccess bool
-	var telnetResponseMs, ftpResponseMs, vmodemResponseMs uint32
-	var telnetError, ftpError, vmodemError string
+	// Extract Telnet test results
+	var telnetTested, telnetSuccess bool
+	var telnetResponseMs uint32
+	var telnetError string
+	
+	if r.TelnetResult != nil {
+		telnetTested = r.TelnetResult.Tested
+		telnetSuccess = r.TelnetResult.Success
+		telnetResponseMs = r.TelnetResult.ResponseMs
+		telnetError = r.TelnetResult.Error
+	}
+	
+	// Extract FTP test results
+	var ftpTested, ftpSuccess bool
+	var ftpResponseMs uint32
+	var ftpError string
+	
+	if r.FTPResult != nil {
+		ftpTested = r.FTPResult.Tested
+		ftpSuccess = r.FTPResult.Success
+		ftpResponseMs = r.FTPResult.ResponseMs
+		ftpError = r.FTPResult.Error
+	}
+	
+	// Extract VModem test results
+	var vmodemTested, vmodemSuccess bool
+	var vmodemResponseMs uint32
+	var vmodemError string
+	
+	if r.VModemResult != nil {
+		vmodemTested = r.VModemResult.Tested
+		vmodemSuccess = r.VModemResult.Success
+		vmodemResponseMs = r.VModemResult.ResponseMs
+		vmodemError = r.VModemResult.Error
+	}
 
 	return []interface{}{
 		r.TestTime, r.TestDate, r.Zone, r.Net, r.Node, r.Address,
@@ -515,7 +754,8 @@ func (s *DuckDBStorage) resultToArgs(r *models.TestResult) []interface{} {
 		binkpTested, binkpSuccess, binkpResponseMs, binkpSystemName,
 		binkpSysop, binkpLocation, binkpVersion, binkpAddresses,
 		binkpCapabilities, binkpError,
-		ifcicoTested, ifcicoSuccess, ifcicoResponseMs, ifcicoMailerInfo, ifcicoError,
+		ifcicoTested, ifcicoSuccess, ifcicoResponseMs, ifcicoMailerInfo, 
+		ifcicoSystemName, ifcicoAddresses, ifcicoResponseType, ifcicoError,
 		telnetTested, telnetSuccess, telnetResponseMs, telnetError,
 		ftpTested, ftpSuccess, ftpResponseMs, ftpError,
 		vmodemTested, vmodemSuccess, vmodemResponseMs, vmodemError,

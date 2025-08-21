@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // QueryBuilder provides safe SQL query construction with parameter binding

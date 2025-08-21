@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // ClickHouseQueryBuilder provides ClickHouse-specific SQL query construction

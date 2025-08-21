@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/parser"
-	"nodelistdb/internal/storage"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/parser"
+	"github.com/nodelistdb/internal/storage"
 )
 
 // Job represents a file processing job

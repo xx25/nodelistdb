@@ -3,7 +3,7 @@ package storage
 import (
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // NodeSummary represents a summary of a node for search results

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // ResultParser handles parsing of database query results

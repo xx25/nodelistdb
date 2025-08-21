@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 	
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // createTestNodelistData creates a sample nodelist content for benchmarking

@@ -10,13 +10,14 @@ import (
 
 // Config represents the complete daemon configuration
 type Config struct {
-	Daemon    DaemonConfig    `yaml:"daemon"`
-	Database  DatabaseConfig  `yaml:"database"`
-	Protocols ProtocolsConfig `yaml:"protocols"`
-	Services  ServicesConfig  `yaml:"services"`
-	Cache     CacheConfig     `yaml:"cache"`
-	Logging   LoggingConfig   `yaml:"logging"`
-	CLI       CLIConfig       `yaml:"cli"`
+	Daemon     DaemonConfig    `yaml:"daemon"`
+	Database   DatabaseConfig  `yaml:"database"`
+	Protocols  ProtocolsConfig `yaml:"protocols"`
+	Services   ServicesConfig  `yaml:"services"`
+	Cache      CacheConfig     `yaml:"cache"`
+	Logging    LoggingConfig   `yaml:"logging"`
+	CLI        CLIConfig       `yaml:"cli"`
+	ConfigPath string          `yaml:"-"` // Path to config file, set when loading
 }
 
 // DaemonConfig contains daemon-specific settings
@@ -93,8 +94,9 @@ type DNSConfig struct {
 
 // CacheConfig for local caching
 type CacheConfig struct {
-	Type string `yaml:"type"` // badger or bolt
-	Path string `yaml:"path"`
+	Enabled bool   `yaml:"enabled"`
+	Type    string `yaml:"type"` // badger or bolt
+	Path    string `yaml:"path"`
 }
 
 // LoggingConfig for logging settings
@@ -128,6 +130,9 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
+	
+	// Store the config path for reloading
+	cfg.ConfigPath = path
 
 	// Set defaults
 	if cfg.Daemon.Workers == 0 {

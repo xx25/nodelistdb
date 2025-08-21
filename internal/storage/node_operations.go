@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // NodeOperations handles all node-related database operations

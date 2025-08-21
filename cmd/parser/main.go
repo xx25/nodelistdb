@@ -12,18 +12,18 @@ import (
 	"strings"
 	"time"
 
-	"nodelistdb/internal/concurrent"
-	"nodelistdb/internal/config"
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/parser"
-	"nodelistdb/internal/storage"
-	"nodelistdb/internal/version"
+	"github.com/nodelistdb/internal/concurrent"
+	"github.com/nodelistdb/internal/config"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/parser"
+	"github.com/nodelistdb/internal/storage"
+	"github.com/nodelistdb/internal/version"
 )
 
 func main() {
 	// Command line flags
 	var (
-		configPath         = flag.String("config", "config.json", "Path to configuration file")
+		configPath         = flag.String("config", "config.yaml", "Path to configuration file")
 		dbPath             = flag.String("db", "", "Path to database file (overrides config)")
 		dbType             = flag.String("dbtype", "", "Database type: 'duckdb' or 'clickhouse' (overrides config)")
 		enableDual         = flag.Bool("dual", false, "Enable dual database mode (both DuckDB and ClickHouse)")

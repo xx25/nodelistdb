@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // FlagFirstAppearance represents the first occurrence of a flag

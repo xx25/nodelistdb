@@ -9,15 +9,17 @@ import (
 	"time"
 	
 	"github.com/nodelistdb/internal/testing/models"
+	"github.com/nodelistdb/internal/testing/storage"
 )
 
 // Geolocation service for IP geolocation
 type Geolocation struct {
-	provider  string
-	apiKey    string
-	cache     *GeoCache
-	rateLimit *RateLimiter
-	client    *http.Client
+	provider        string
+	apiKey          string
+	cache           *GeoCache
+	persistentCache *storage.GeolocationCache // Optional persistent cache
+	rateLimit       *RateLimiter
+	client          *http.Client
 }
 
 // GeoCache stores geolocation results
@@ -61,11 +63,46 @@ func NewGeolocation(provider, apiKey string) *Geolocation {
 	}
 }
 
+// SetPersistentCache sets an optional persistent cache
+func (g *Geolocation) SetPersistentCache(cache *storage.GeolocationCache) {
+	g.persistentCache = cache
+}
+
+// NewGeolocationWithConfig creates a new geolocation service with custom config
+func NewGeolocationWithConfig(provider, apiKey string, cacheTTL time.Duration, rateLimit int) *Geolocation {
+	return &Geolocation{
+		provider: provider,
+		apiKey:   apiKey,
+		cache: &GeoCache{
+			entries: make(map[string]*GeoCacheEntry),
+			ttl:     cacheTTL,
+		},
+		rateLimit: &RateLimiter{
+			maxRequests:  rateLimit,
+			window:       time.Minute,
+			requestTimes: make([]time.Time, 0),
+		},
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
+}
+
 // GetLocation gets geolocation for an IP address
 func (g *Geolocation) GetLocation(ctx context.Context, ip string) *models.GeolocationResult {
-	// Check cache first
+	// Check in-memory cache first
 	if cached := g.cache.Get(ip); cached != nil {
 		return cached
+	}
+	
+	// Check persistent cache if available
+	if g.persistentCache != nil {
+		var result models.GeolocationResult
+		if err := g.persistentCache.Get(ip, &result); err == nil {
+			// Update in-memory cache and return
+			g.cache.Set(ip, &result)
+			return &result
+		}
 	}
 	
 	// Check rate limit
@@ -91,8 +128,13 @@ func (g *Geolocation) GetLocation(ctx context.Context, ip string) *models.Geoloc
 		return nil
 	}
 	
-	// Cache the result
+	// Cache the result in memory
 	g.cache.Set(ip, result)
+	
+	// Cache in persistent storage if available
+	if g.persistentCache != nil {
+		g.persistentCache.Set(ip, result)
+	}
 	
 	return result
 }

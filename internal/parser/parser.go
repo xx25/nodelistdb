@@ -14,8 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/flags"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/flags"
 )
 
 // NodelistFormat represents different historical nodelist formats

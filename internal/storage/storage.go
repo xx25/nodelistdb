@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // Storage provides thread-safe database operations using specialized components

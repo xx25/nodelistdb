@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // MultiStorage manages multiple database connections for concurrent writes

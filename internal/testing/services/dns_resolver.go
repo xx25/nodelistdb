@@ -7,13 +7,15 @@ import (
 	"time"
 	
 	"github.com/nodelistdb/internal/testing/models"
+	"github.com/nodelistdb/internal/testing/storage"
 )
 
 // DNSResolver handles DNS resolution with caching
 type DNSResolver struct {
-	workers int
-	timeout time.Duration
-	cache   *DNSCache
+	workers        int
+	timeout        time.Duration
+	cache          *DNSCache
+	persistentCache *storage.DNSCache // Optional persistent cache
 }
 
 // DNSCache stores DNS resolution results
@@ -41,11 +43,38 @@ func NewDNSResolver(workers int, timeout time.Duration) *DNSResolver {
 	}
 }
 
+// SetPersistentCache sets an optional persistent cache
+func (r *DNSResolver) SetPersistentCache(cache *storage.DNSCache) {
+	r.persistentCache = cache
+}
+
+// NewDNSResolverWithTTL creates a new DNS resolver with custom TTL
+func NewDNSResolverWithTTL(workers int, timeout time.Duration, cacheTTL time.Duration) *DNSResolver {
+	return &DNSResolver{
+		workers: workers,
+		timeout: timeout,
+		cache: &DNSCache{
+			entries: make(map[string]*CacheEntry),
+			ttl:     cacheTTL,
+		},
+	}
+}
+
 // Resolve resolves a hostname to IP addresses
 func (r *DNSResolver) Resolve(ctx context.Context, hostname string) *models.DNSResult {
-	// Check cache first
+	// Check in-memory cache first
 	if cached := r.cache.Get(hostname); cached != nil {
 		return cached
+	}
+	
+	// Check persistent cache if available
+	if r.persistentCache != nil {
+		var result models.DNSResult
+		if err := r.persistentCache.Get(hostname, &result); err == nil {
+			// Update in-memory cache and return
+			r.cache.Set(hostname, &result)
+			return &result
+		}
 	}
 	
 	startTime := time.Now()
@@ -76,8 +105,13 @@ func (r *DNSResolver) Resolve(ctx context.Context, hostname string) *models.DNSR
 	
 	result.ResolutionMs = time.Since(startTime).Milliseconds()
 	
-	// Cache the result
+	// Cache the result in memory
 	r.cache.Set(hostname, result)
+	
+	// Cache in persistent storage if available
+	if r.persistentCache != nil {
+		r.persistentCache.Set(hostname, result)
+	}
 	
 	return result
 }

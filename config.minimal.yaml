@@ -1,0 +1,63 @@
+# NodelistDB Minimal Configuration
+# =================================
+# This is a minimal WORKING configuration.
+# Only ACTUALLY IMPLEMENTED settings are shown here.
+#
+# IMPORTANT: Parser and server use command-line flags for configuration.
+# Most configuration below is ONLY used by the testdaemon.
+
+# ============================================================================
+# DATABASE CONFIGURATION (Used by ALL components)
+# ============================================================================
+database:
+  type: duckdb
+  duckdb:
+    path: ./nodelist.duckdb
+
+# ============================================================================
+# TESTDAEMON-ONLY CONFIGURATION
+# ============================================================================
+# The following sections are ONLY used by the testdaemon application.
+
+# Testing Daemon Configuration
+daemon:
+  test_interval: 3600
+  workers: 10
+  batch_size: 100
+
+# Enable at least one protocol for testing
+protocols:
+  binkp:
+    enabled: true
+    port: 24554
+    timeout: 10
+    our_address: "2:5001/5001"
+
+# Basic services for testdaemon
+services:
+  dns:
+    workers: 20
+    timeout: 5
+    cache_ttl: 86400
+  geolocation:
+    provider: ip-api  # Options: ip-api, ipinfo, ipgeolocation
+    api_key: ""       # Required for ipgeolocation
+    cache_ttl: 604800
+    rate_limit: 150
+
+# Cache for testdaemon
+cache:
+  enabled: true
+  type: badger
+  path: /tmp/nodetest-cache
+
+# Logging for testdaemon
+logging:
+  level: info
+  file: /var/log/nodetest-daemon.log
+
+# CLI interface for testdaemon
+cli:
+  enabled: true
+  host: 127.0.0.1
+  port: 2323

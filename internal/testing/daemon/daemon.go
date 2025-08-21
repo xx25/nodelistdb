@@ -3,10 +3,10 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
+	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
 	"github.com/nodelistdb/internal/testing/protocols"
 	"github.com/nodelistdb/internal/testing/services"
@@ -22,6 +22,9 @@ type Daemon struct {
 	dnsResolver *services.DNSResolver
 	geolocator  *services.Geolocation
 	
+	// Persistent cache (optional)
+	persistentCache *storage.Cache
+	
 	// Protocol testers
 	binkpTester  protocols.Tester
 	ifcicoTester protocols.Tester
@@ -32,9 +35,17 @@ type Daemon struct {
 	// Worker pool
 	workerPool *WorkerPool
 	
+	// Scheduler for intelligent test scheduling
+	scheduler *Scheduler
+	
+	// Control state
+	pauseMu sync.RWMutex
+	paused  bool
+	
 	// Statistics
 	stats struct {
 		sync.Mutex
+		startTime      time.Time
 		cyclesRun      int
 		totalTested    int
 		totalSuccesses int
@@ -48,6 +59,19 @@ func New(cfg *Config) (*Daemon, error) {
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Initialize logging
+	logConfig := &logging.Config{
+		Level:      cfg.Logging.Level,
+		File:       cfg.Logging.File,
+		MaxSize:    cfg.Logging.MaxSize,
+		MaxBackups: cfg.Logging.MaxBackups,
+		MaxAge:     cfg.Logging.MaxAge,
+		Console:    true, // Always log to console as well
+	}
+	if err := logging.Initialize(logConfig); err != nil {
+		return nil, fmt.Errorf("failed to initialize logging: %w", err)
 	}
 
 	// Initialize storage based on database type
@@ -81,16 +105,40 @@ func New(cfg *Config) (*Daemon, error) {
 		storage: store,
 	}
 
-	// Initialize services
-	d.dnsResolver = services.NewDNSResolver(
+	// Initialize persistent cache if configured
+	if cfg.Cache.Enabled && cfg.Cache.Path != "" {
+		pCache, err := storage.NewCache(cfg.Cache.Path)
+		if err != nil {
+			logging.Warnf("Failed to initialize persistent cache: %v", err)
+			logging.Infof("Continuing with in-memory cache only")
+		} else {
+			d.persistentCache = pCache
+			logging.Infof("Persistent cache initialized at %s", cfg.Cache.Path)
+		}
+	}
+
+	// Initialize services with configured TTLs
+	d.dnsResolver = services.NewDNSResolverWithTTL(
 		cfg.Services.DNS.Workers,
 		cfg.Services.DNS.Timeout,
+		cfg.Services.DNS.CacheTTL,
 	)
 	
-	d.geolocator = services.NewGeolocation(
+	d.geolocator = services.NewGeolocationWithConfig(
 		cfg.Services.Geolocation.Provider,
 		cfg.Services.Geolocation.APIKey,
+		cfg.Services.Geolocation.CacheTTL,
+		cfg.Services.Geolocation.RateLimit,
 	)
+	
+	// Wire persistent cache to services if available
+	if d.persistentCache != nil {
+		dnsCache := storage.NewDNSCache(d.persistentCache)
+		d.dnsResolver.SetPersistentCache(dnsCache)
+		
+		geoCache := storage.NewGeolocationCache(d.persistentCache)
+		d.geolocator.SetPersistentCache(geoCache)
+	}
 
 	// Initialize protocol testers
 	if cfg.Protocols.BinkP.Enabled {
@@ -128,12 +176,27 @@ func New(cfg *Config) (*Daemon, error) {
 	// Initialize worker pool
 	d.workerPool = NewWorkerPool(cfg.Daemon.Workers)
 
+	// Initialize scheduler with adaptive strategy by default
+	d.scheduler = NewScheduler(SchedulerConfig{
+		Strategy:          StrategyAdaptive,
+		BaseInterval:      cfg.Daemon.TestInterval,
+		FailureMultiplier: 2.0,
+		MaxInterval:       24 * time.Hour,
+		MaxBackoffLevel:   5,
+		JitterPercent:     0.1,
+	}, store)
+
 	return d, nil
 }
 
 // Run starts the daemon
 func (d *Daemon) Run(ctx context.Context) error {
-	log.Printf("Starting NodeTest Daemon with %d workers", d.config.Daemon.Workers)
+	logging.Infof("Starting NodeTest Daemon with %d workers", d.config.Daemon.Workers)
+	
+	// Record start time for uptime calculation
+	d.stats.Lock()
+	d.stats.startTime = time.Now()
+	d.stats.Unlock()
 	
 	// Start CLI server if enabled
 	if err := d.StartCLIServer(ctx); err != nil {
@@ -144,25 +207,37 @@ func (d *Daemon) Run(ctx context.Context) error {
 	d.workerPool.Start()
 	defer d.workerPool.Stop()
 	
+	// Initialize scheduler with current nodes
+	nodes, err := d.storage.GetNodesWithInternet(ctx, 0)
+	if err != nil {
+		logging.Errorf("Failed to initialize scheduler with nodes: %v", err)
+	} else {
+		if err := d.scheduler.InitializeSchedules(ctx, nodes); err != nil {
+			logging.Errorf("Failed to initialize scheduler schedules: %v", err)
+		} else {
+			logging.Infof("Scheduler initialized with %d nodes", len(nodes))
+		}
+	}
+	
 	// Check if CLI-only mode is enabled
 	if d.config.Daemon.CLIOnly {
-		log.Println("CLI-only mode enabled - automatic testing disabled")
-		log.Println("Use telnet interface on port", d.config.CLI.Port, "to test nodes")
+		logging.Info("CLI-only mode enabled - automatic testing disabled")
+		logging.Infof("Use telnet interface on port %d to test nodes", d.config.CLI.Port)
 		
 		// Just wait for context cancellation
 		<-ctx.Done()
-		log.Println("Daemon stopping due to context cancellation")
+		logging.Info("Daemon stopping due to context cancellation")
 		return ctx.Err()
 	}
 	
 	// Run initial cycle immediately
 	if err := d.runTestCycle(ctx); err != nil {
-		log.Printf("Error in initial test cycle: %v", err)
+		logging.Errorf("Error in initial test cycle: %v", err)
 	}
 	
 	// If run-once mode, exit after first cycle
 	if d.config.Daemon.RunOnce {
-		log.Println("Run-once mode completed")
+		logging.Info("Run-once mode completed")
 		return nil
 	}
 	
@@ -170,17 +245,17 @@ func (d *Daemon) Run(ctx context.Context) error {
 	ticker := time.NewTicker(d.config.Daemon.TestInterval)
 	defer ticker.Stop()
 	
-	log.Printf("Daemon started, will run tests every %v", d.config.Daemon.TestInterval)
+	logging.Infof("Daemon started, will run tests every %v", d.config.Daemon.TestInterval)
 	
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Daemon stopping due to context cancellation")
+			logging.Info("Daemon stopping due to context cancellation")
 			return ctx.Err()
 			
 		case <-ticker.C:
 			if err := d.runTestCycle(ctx); err != nil {
-				log.Printf("Error in test cycle: %v", err)
+				logging.Errorf("Error in test cycle: %v", err)
 			}
 		}
 	}
@@ -188,17 +263,32 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 // runTestCycle runs a complete test cycle
 func (d *Daemon) runTestCycle(ctx context.Context) error {
+	// Check if paused
+	d.pauseMu.RLock()
+	if d.paused {
+		d.pauseMu.RUnlock()
+		logging.Info("Test cycle skipped - daemon is paused")
+		return nil
+	}
+	d.pauseMu.RUnlock()
+	
 	startTime := time.Now()
 	
-	log.Println("Starting test cycle")
+	logging.Info("Starting test cycle")
 	
-	// Get nodes to test
-	nodes, err := d.storage.GetNodesWithInternet(ctx, 0) // 0 = no limit
-	if err != nil {
-		return fmt.Errorf("failed to get nodes: %w", err)
+	// Use scheduler to get nodes that need testing
+	nodes := d.scheduler.GetNodesForTesting(ctx, d.config.Daemon.BatchSize * d.config.Daemon.Workers)
+	if len(nodes) == 0 {
+		// Fallback to getting all nodes if scheduler has no nodes ready
+		logging.Infof("No nodes ready from scheduler, checking all nodes")
+		allNodes, err := d.storage.GetNodesWithInternet(ctx, 0) // 0 = no limit
+		if err != nil {
+			return fmt.Errorf("failed to get nodes: %w", err)
+		}
+		nodes = allNodes
 	}
 	
-	log.Printf("Found %d nodes with internet connectivity", len(nodes))
+	logging.Infof("Scheduler selected %d nodes for testing", len(nodes))
 	
 	// Process nodes in batches
 	batchSize := d.config.Daemon.BatchSize
@@ -212,18 +302,26 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		}
 		
 		batch := nodes[i:end]
-		log.Printf("Processing batch %d-%d of %d nodes", i+1, end, len(nodes))
+		logging.Infof("Processing batch %d-%d of %d nodes", i+1, end, len(nodes))
 		
 		// Create test requests for batch
 		var wg sync.WaitGroup
 		for _, node := range batch {
 			wg.Add(1)
 			
+			// Capture node in closure to avoid race condition
+			nodeToTest := node
+			
 			// Submit test job to worker pool
 			d.workerPool.Submit(func() {
 				defer wg.Done()
 				
-				result := d.testNode(ctx, node)
+				result := d.testNode(ctx, nodeToTest)
+				
+				// Update scheduler immediately with correct pairing
+				if d.scheduler != nil {
+					d.scheduler.UpdateTestResult(ctx, nodeToTest, result)
+				}
 				
 				mu.Lock()
 				allResults = append(allResults, result)
@@ -237,7 +335,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		// Store batch results if not in dry-run mode
 		if !d.config.Daemon.DryRun && len(allResults) > 0 {
 			if err := d.storage.StoreTestResults(ctx, allResults[len(allResults)-len(batch):]); err != nil {
-				log.Printf("Failed to store batch results: %v", err)
+				logging.Infof("Failed to store batch results: %v", err)
 			}
 		}
 	}
@@ -247,7 +345,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	
 	if !d.config.Daemon.DryRun {
 		if err := d.storage.StoreDailyStats(ctx, stats); err != nil {
-			log.Printf("Failed to store daily statistics: %v", err)
+			logging.Infof("Failed to store daily statistics: %v", err)
 		}
 	}
 	
@@ -261,7 +359,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	d.stats.Unlock()
 	
 	duration := time.Since(startTime)
-	log.Printf("Test cycle completed in %v: %d nodes tested, %d operational, %d with issues",
+	logging.Infof("Test cycle completed in %v: %d nodes tested, %d operational, %d with issues",
 		duration, len(allResults), stats.NodesOperational, stats.NodesWithIssues)
 	
 	return nil
@@ -341,6 +439,11 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 			Capabilities: binkpResult.Capabilities,
 		}
 		result.SetBinkPResult(binkpResult.Success, binkpResult.ResponseMs, details, binkpResult.Error)
+		
+		// Use the AddressValid flag from BinkP tester
+		if binkpResult.AddressValid {
+			result.AddressValidated = true
+		}
 	}
 }
 
@@ -380,17 +483,86 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 
 // testTelnet tests Telnet connectivity
 func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *models.TestResult) {
-	// Similar implementation for Telnet
+	if d.telnetTester == nil {
+		return
+	}
+	
+	hostname := node.GetPrimaryHostname()
+	if hostname == "" {
+		return
+	}
+	
+	// Get IP from DNS result
+	var ip string
+	if len(result.ResolvedIPv4) > 0 {
+		ip = result.ResolvedIPv4[0]
+	} else if len(result.ResolvedIPv6) > 0 {
+		ip = result.ResolvedIPv6[0]
+	} else {
+		return
+	}
+	
+	testResult := d.telnetTester.Test(ctx, ip, d.config.Protocols.Telnet.Port, node.Address())
+	
+	if telnetResult, ok := testResult.(*protocols.TelnetTestResult); ok {
+		result.SetTelnetResult(telnetResult.Success, telnetResult.ResponseMs, telnetResult.Banner, telnetResult.Error)
+	}
 }
 
 // testFTP tests FTP connectivity
 func (d *Daemon) testFTP(ctx context.Context, node *models.Node, result *models.TestResult) {
-	// Similar implementation for FTP
+	if d.ftpTester == nil {
+		return
+	}
+	
+	hostname := node.GetPrimaryHostname()
+	if hostname == "" {
+		return
+	}
+	
+	// Get IP from DNS result
+	var ip string
+	if len(result.ResolvedIPv4) > 0 {
+		ip = result.ResolvedIPv4[0]
+	} else if len(result.ResolvedIPv6) > 0 {
+		ip = result.ResolvedIPv6[0]
+	} else {
+		return
+	}
+	
+	testResult := d.ftpTester.Test(ctx, ip, d.config.Protocols.FTP.Port, node.Address())
+	
+	if ftpResult, ok := testResult.(*protocols.FTPTestResult); ok {
+		result.SetFTPResult(ftpResult.Success, ftpResult.ResponseMs, ftpResult.Banner, ftpResult.Error)
+	}
 }
 
 // testVModem tests VModem connectivity
 func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *models.TestResult) {
-	// Similar implementation for VModem
+	if d.vmodemTester == nil {
+		return
+	}
+	
+	hostname := node.GetPrimaryHostname()
+	if hostname == "" {
+		return
+	}
+	
+	// Get IP from DNS result
+	var ip string
+	if len(result.ResolvedIPv4) > 0 {
+		ip = result.ResolvedIPv4[0]
+	} else if len(result.ResolvedIPv6) > 0 {
+		ip = result.ResolvedIPv6[0]
+	} else {
+		return
+	}
+	
+	testResult := d.vmodemTester.Test(ctx, ip, d.config.Protocols.VModem.Port, node.Address())
+	
+	if vmodemResult, ok := testResult.(*protocols.VModemTestResult); ok {
+		result.SetVModemResult(vmodemResult.Success, vmodemResult.ResponseMs, vmodemResult.Error)
+	}
 }
 
 // calculateStatistics calculates statistics from test results
@@ -480,11 +652,173 @@ func (d *Daemon) Close() error {
 		d.workerPool.Stop()
 	}
 	
+	if d.persistentCache != nil {
+		if err := d.persistentCache.Close(); err != nil {
+			logging.Errorf("Error closing persistent cache: %v", err)
+		}
+	}
+	
+	// Close logging to flush any pending writes
+	if err := logging.GetLogger().Close(); err != nil {
+		// Can't log this error since we're closing the logger
+		fmt.Printf("Error closing logger: %v\n", err)
+	}
+	
 	if d.storage != nil {
 		return d.storage.Close()
 	}
 	
 	return nil
+}
+
+// ReloadConfig reloads the configuration from file
+func (d *Daemon) ReloadConfig(configPath string) error {
+	// Load new configuration
+	newCfg, err := LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	
+	// Validate new configuration
+	if err := newCfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	
+	// Update configuration (only safe fields)
+	// Note: We don't change database connections or worker pool size
+	d.config.Daemon.TestInterval = newCfg.Daemon.TestInterval
+	d.config.Daemon.BatchSize = newCfg.Daemon.BatchSize
+	d.config.Daemon.DryRun = newCfg.Daemon.DryRun
+	
+	// Update protocol settings
+	d.config.Protocols = newCfg.Protocols
+	
+	// Update service settings
+	d.config.Services = newCfg.Services
+	
+	// Reinitialize services with new configurations
+	d.dnsResolver = services.NewDNSResolverWithTTL(
+		newCfg.Services.DNS.Workers,
+		newCfg.Services.DNS.Timeout,
+		newCfg.Services.DNS.CacheTTL,
+	)
+	
+	d.geolocator = services.NewGeolocationWithConfig(
+		newCfg.Services.Geolocation.Provider,
+		newCfg.Services.Geolocation.APIKey,
+		newCfg.Services.Geolocation.CacheTTL,
+		newCfg.Services.Geolocation.RateLimit,
+	)
+	
+	// Re-wire persistent cache to new service instances if available
+	if d.persistentCache != nil {
+		dnsCache := storage.NewDNSCache(d.persistentCache)
+		d.dnsResolver.SetPersistentCache(dnsCache)
+		
+		geoCache := storage.NewGeolocationCache(d.persistentCache)
+		d.geolocator.SetPersistentCache(geoCache)
+	}
+	
+	// Reinitialize protocol testers with new timeouts and settings
+	if newCfg.Protocols.BinkP.Enabled {
+		d.binkpTester = protocols.NewBinkPTester(
+			newCfg.Protocols.BinkP.Timeout,
+			newCfg.Protocols.BinkP.OurAddress,
+		)
+	} else {
+		d.binkpTester = nil
+	}
+	
+	if newCfg.Protocols.Ifcico.Enabled {
+		d.ifcicoTester = protocols.NewIfcicoTester(
+			newCfg.Protocols.Ifcico.Timeout,
+			newCfg.Protocols.Ifcico.OurAddress,
+		)
+	} else {
+		d.ifcicoTester = nil
+	}
+	
+	if newCfg.Protocols.Telnet.Enabled {
+		d.telnetTester = protocols.NewTelnetTester(
+			newCfg.Protocols.Telnet.Timeout,
+		)
+	} else {
+		d.telnetTester = nil
+	}
+	
+	if newCfg.Protocols.FTP.Enabled {
+		d.ftpTester = protocols.NewFTPTester(
+			newCfg.Protocols.FTP.Timeout,
+		)
+	} else {
+		d.ftpTester = nil
+	}
+	
+	if newCfg.Protocols.VModem.Enabled {
+		d.vmodemTester = protocols.NewVModemTester(
+			newCfg.Protocols.VModem.Timeout,
+		)
+	} else {
+		d.vmodemTester = nil
+	}
+	
+	// Update scheduler with new interval
+	if d.scheduler != nil {
+		d.scheduler.mu.Lock()
+		d.scheduler.baseInterval = newCfg.Daemon.TestInterval
+		d.scheduler.mu.Unlock()
+	}
+	
+	// Reload logging configuration
+	logConfig := &logging.Config{
+		Level:      newCfg.Logging.Level,
+		File:       newCfg.Logging.File,
+		MaxSize:    newCfg.Logging.MaxSize,
+		MaxBackups: newCfg.Logging.MaxBackups,
+		MaxAge:     newCfg.Logging.MaxAge,
+		Console:    true,
+	}
+	if err := logging.GetLogger().Reload(logConfig); err != nil {
+		logging.Errorf("Failed to reload logging configuration: %v", err)
+	}
+	
+	logging.Info("Configuration reloaded successfully")
+	return nil
+}
+
+// Pause pauses the daemon's automatic testing
+func (d *Daemon) Pause() error {
+	d.pauseMu.Lock()
+	defer d.pauseMu.Unlock()
+	
+	if d.paused {
+		return fmt.Errorf("daemon is already paused")
+	}
+	
+	d.paused = true
+	logging.Info("Daemon paused")
+	return nil
+}
+
+// Resume resumes the daemon's automatic testing
+func (d *Daemon) Resume() error {
+	d.pauseMu.Lock()
+	defer d.pauseMu.Unlock()
+	
+	if !d.paused {
+		return fmt.Errorf("daemon is not paused")
+	}
+	
+	d.paused = false
+	logging.Info("Daemon resumed")
+	return nil
+}
+
+// IsPaused returns whether the daemon is paused
+func (d *Daemon) IsPaused() bool {
+	d.pauseMu.RLock()
+	defer d.pauseMu.RUnlock()
+	return d.paused
 }
 
 // TestNodeDirect tests a specific node directly (for CLI)
@@ -504,7 +838,7 @@ func (d *Daemon) TestNodeDirect(ctx context.Context, zone, net, node uint16, hos
 	// Store result if not in dry-run mode
 	if !d.config.Daemon.DryRun {
 		if err := d.storage.StoreTestResult(ctx, result); err != nil {
-			log.Printf("Failed to store test result: %v", err)
+			logging.Infof("Failed to store test result: %v", err)
 		}
 	}
 	

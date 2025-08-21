@@ -17,7 +17,10 @@ func (d *Daemon) StartCLIServer(ctx context.Context) error {
 	}
 	
 	// Create adapter
-	adapter := &CLIAdapter{daemon: d}
+	adapter := &CLIAdapter{
+		daemon:     d,
+		configPath: d.config.ConfigPath, // We'll need to add this to config
+	}
 	
 	// Create CLI server config
 	cliConfig := cli.Config{
@@ -43,8 +46,8 @@ func (d *Daemon) StartCLIServer(ctx context.Context) error {
 
 // CLIAdapter adapts the daemon to the CLI interface
 type CLIAdapter struct {
-	daemon *Daemon
-	paused bool
+	daemon     *Daemon
+	configPath string
 }
 
 func (a *CLIAdapter) TestNode(ctx context.Context, zone, net, node uint16, hostname string, options cli.TestOptions) (*cli.TestResult, error) {
@@ -62,7 +65,7 @@ func (a *CLIAdapter) GetStatus() cli.DaemonStatus {
 	a.daemon.stats.Lock()
 	defer a.daemon.stats.Unlock()
 	
-	uptime := time.Since(time.Now().Add(-time.Hour)) // Placeholder
+	uptime := time.Since(a.daemon.stats.startTime)
 	successRate := float64(0)
 	if a.daemon.stats.totalTested > 0 {
 		successRate = float64(a.daemon.stats.totalSuccesses) / float64(a.daemon.stats.totalTested) * 100
@@ -71,7 +74,7 @@ func (a *CLIAdapter) GetStatus() cli.DaemonStatus {
 	status := "running"
 	if a.daemon.config.Daemon.CLIOnly {
 		status = "cli-only mode"
-	} else if a.paused {
+	} else if a.daemon.IsPaused() {
 		status = "paused"
 	}
 	
@@ -89,37 +92,42 @@ func (a *CLIAdapter) GetStatus() cli.DaemonStatus {
 func (a *CLIAdapter) GetWorkerStatus() cli.WorkerStatus {
 	active := 0
 	idle := a.daemon.config.Daemon.Workers
+	queueLength := 0
 	
 	if a.daemon.workerPool != nil {
-		// Get actual status from worker pool if available
+		// Get actual status from worker pool
 		active = a.daemon.workerPool.GetActiveCount()
 		idle = a.daemon.config.Daemon.Workers - active
+		queueLength = a.daemon.workerPool.GetQueueSize()
 	}
 	
 	return cli.WorkerStatus{
 		TotalWorkers: a.daemon.config.Daemon.Workers,
 		Active:       active,
 		Idle:         idle,
-		QueueLength:  0, // Placeholder
+		QueueLength:  queueLength,
 		CurrentTasks: []cli.TaskInfo{},
 	}
 }
 
 func (a *CLIAdapter) Pause() error {
-	a.paused = true
-	// TODO: Implement actual pause logic in daemon
-	return nil
+	return a.daemon.Pause()
 }
 
 func (a *CLIAdapter) Resume() error {
-	a.paused = false
-	// TODO: Implement actual resume logic in daemon
-	return nil
+	return a.daemon.Resume()
 }
 
 func (a *CLIAdapter) ReloadConfig() error {
-	// TODO: Implement config reload
-	return nil
+	if a.configPath == "" {
+		return fmt.Errorf("config path not set")
+	}
+	return a.daemon.ReloadConfig(a.configPath)
+}
+
+// SetConfigPath sets the config path for reload
+func (a *CLIAdapter) SetConfigPath(path string) {
+	a.configPath = path
 }
 
 func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {

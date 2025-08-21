@@ -146,15 +146,7 @@ func (tr *TestResult) SetBinkPResult(success bool, responseMs uint32, details *B
 		tr.BinkPResult.Details["addresses"] = details.Addresses
 		tr.BinkPResult.Details["capabilities"] = details.Capabilities
 		
-		// Check address validation
-		if len(details.Addresses) > 0 {
-			for _, addr := range details.Addresses {
-				if addr == tr.Address {
-					tr.AddressValidated = true
-					break
-				}
-			}
-		}
+		// Address validation is now handled by the BinkP tester which sets AddressValid flag
 	}
 	
 	if success {
@@ -214,4 +206,57 @@ func (tr *TestResult) SetGeolocation(geo *GeolocationResult) {
 	tr.ISP = geo.ISP
 	tr.Org = geo.Org
 	tr.ASN = geo.ASN
+}
+
+// SetTelnetResult sets Telnet test result
+func (tr *TestResult) SetTelnetResult(success bool, responseMs uint32, banner string, err string) {
+	tr.TelnetResult = &ProtocolTestResult{
+		Tested:     true,
+		Success:    success,
+		ResponseMs: responseMs,
+		Error:      err,
+		Details:    make(map[string]interface{}),
+	}
+	
+	if banner != "" {
+		tr.TelnetResult.Details["banner"] = banner
+	}
+	
+	if success && !tr.IsOperational {
+		tr.IsOperational = true
+	}
+}
+
+// SetFTPResult sets FTP test result
+func (tr *TestResult) SetFTPResult(success bool, responseMs uint32, welcome string, err string) {
+	tr.FTPResult = &ProtocolTestResult{
+		Tested:     true,
+		Success:    success,
+		ResponseMs: responseMs,
+		Error:      err,
+		Details:    make(map[string]interface{}),
+	}
+	
+	if welcome != "" {
+		tr.FTPResult.Details["welcome"] = welcome
+	}
+	
+	if success && !tr.IsOperational {
+		tr.IsOperational = true
+	}
+}
+
+// SetVModemResult sets VModem test result
+func (tr *TestResult) SetVModemResult(success bool, responseMs uint32, err string) {
+	tr.VModemResult = &ProtocolTestResult{
+		Tested:     true,
+		Success:    success,
+		ResponseMs: responseMs,
+		Error:      err,
+		Details:    make(map[string]interface{}),
+	}
+	
+	if success && !tr.IsOperational {
+		tr.IsOperational = true
+	}
 }

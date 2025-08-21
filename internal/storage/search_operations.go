@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // SearchOperations handles all search-related database operations

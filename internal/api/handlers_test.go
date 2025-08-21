@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/storage"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/storage"
 )
 
 // MockStorage implements the methods the API handlers need for testing

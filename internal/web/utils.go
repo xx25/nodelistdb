@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // parseNodeAddress parses a FidoNet node address like "2:5001/100" or "1:234/56.7"

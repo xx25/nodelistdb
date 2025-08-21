@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // CacheEntry represents a cached statistics entry with TTL information

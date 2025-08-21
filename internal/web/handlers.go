@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/flags"
-	"nodelistdb/internal/storage"
-	"nodelistdb/internal/version"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/flags"
+	"github.com/nodelistdb/internal/storage"
+	"github.com/nodelistdb/internal/version"
 )
 
 // Server represents the web server

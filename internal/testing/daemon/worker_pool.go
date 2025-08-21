@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 // Job represents a work item for the pool
@@ -9,11 +10,12 @@ type Job func()
 
 // WorkerPool manages a pool of worker goroutines
 type WorkerPool struct {
-	workers   int
-	jobQueue  chan Job
-	wg        sync.WaitGroup
-	stopChan  chan struct{}
-	stopOnce  sync.Once
+	workers      int
+	jobQueue     chan Job
+	wg           sync.WaitGroup
+	stopChan     chan struct{}
+	stopOnce     sync.Once
+	activeCount  int32 // Atomic counter for active workers
 }
 
 // NewWorkerPool creates a new worker pool
@@ -69,7 +71,11 @@ func (p *WorkerPool) worker(id int) {
 			}
 			// Execute job
 			if job != nil {
+				// Increment active count before starting job
+				atomic.AddInt32(&p.activeCount, 1)
 				job()
+				// Decrement active count after completing job
+				atomic.AddInt32(&p.activeCount, -1)
 			}
 			
 		case <-p.stopChan:
@@ -93,14 +99,12 @@ func (p *WorkerPool) WaitForCompletion() {
 	}
 }
 
-// GetActiveCount returns the number of active workers (placeholder)
+// GetActiveCount returns the number of active workers
 func (p *WorkerPool) GetActiveCount() int {
-	// In a real implementation, you would track active workers
-	// For now, return 0 if stopping, otherwise return worker count
-	select {
-	case <-p.stopChan:
-		return 0
-	default:
-		return len(p.jobQueue) // Return number of pending jobs as approximation
-	}
+	return int(atomic.LoadInt32(&p.activeCount))
+}
+
+// GetQueueSize returns the number of jobs waiting in the queue
+func (p *WorkerPool) GetQueueSize() int {
+	return len(p.jobQueue)
 }

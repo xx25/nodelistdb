@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/parser"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/parser"
 )
 
 // StorageInterface defines the interface for storage operations

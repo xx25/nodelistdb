@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // ClickHouseResultParser handles parsing of ClickHouse database query results

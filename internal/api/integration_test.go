@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 func TestAPIIntegration_BasicFlow(t *testing.T) {

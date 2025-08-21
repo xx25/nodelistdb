@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/flags"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/flags"
 )
 
 // loadTemplates loads HTML templates from files

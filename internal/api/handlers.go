@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"nodelistdb/internal/database"
-	"nodelistdb/internal/flags"
-	"nodelistdb/internal/storage"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/flags"
+	"github.com/nodelistdb/internal/storage"
 )
 
 // Server represents the API server

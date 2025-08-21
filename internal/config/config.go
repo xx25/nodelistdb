@@ -1,13 +1,13 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
+	"gopkg.in/yaml.v3"
 )
 
 // DatabaseType represents the supported database types
@@ -20,57 +20,57 @@ const (
 
 // DatabaseConfig holds database connection configuration
 type DatabaseConfig struct {
-	Type       DatabaseType      `json:"type"`
-	DuckDB     *DuckDBConfig     `json:"duckdb,omitempty"`
-	ClickHouse *ClickHouseConfig `json:"clickhouse,omitempty"`
+	Type       DatabaseType      `yaml:"type"`
+	DuckDB     *DuckDBConfig     `yaml:"duckdb,omitempty"`
+	ClickHouse *ClickHouseConfig `yaml:"clickhouse,omitempty"`
 	// Support for multiple databases
-	Databases  []SingleDatabaseConfig `json:"databases,omitempty"`
+	Databases  []SingleDatabaseConfig `yaml:"databases,omitempty"`
 }
 
 // SingleDatabaseConfig represents a single database configuration
 type SingleDatabaseConfig struct {
-	Name       string            `json:"name"`
-	Type       DatabaseType      `json:"type"`
-	DuckDB     *DuckDBConfig     `json:"duckdb,omitempty"`
-	ClickHouse *ClickHouseConfig `json:"clickhouse,omitempty"`
+	Name       string            `yaml:"name"`
+	Type       DatabaseType      `yaml:"type"`
+	DuckDB     *DuckDBConfig     `yaml:"duckdb,omitempty"`
+	ClickHouse *ClickHouseConfig `yaml:"clickhouse,omitempty"`
 }
 
 // DuckDBConfig holds DuckDB-specific configuration
 type DuckDBConfig struct {
-	Path        string `json:"path"`
-	MemoryLimit string `json:"memory_limit,omitempty"`
-	Threads     int    `json:"threads,omitempty"`
-	ReadOnly    bool   `json:"read_only,omitempty"`
+	Path        string `yaml:"path"`
+	MemoryLimit string `yaml:"memory_limit,omitempty"`
+	Threads     int    `yaml:"threads,omitempty"`
+	ReadOnly    bool   `yaml:"read_only,omitempty"`
 
 	// Performance settings for bulk loading
-	BulkMode            bool   `json:"bulk_mode,omitempty"`            // Enable bulk loading optimizations
-	DisableWAL          bool   `json:"disable_wal,omitempty"`          // Disable Write-Ahead Logging
-	CheckpointThreshold string `json:"checkpoint_threshold,omitempty"` // Memory threshold before checkpoint
-	WALAutoCheckpoint   int    `json:"wal_auto_checkpoint,omitempty"`  // Pages before auto checkpoint (0 = disabled)
-	TempDirectory       string `json:"temp_directory,omitempty"`       // Temporary files directory
+	BulkMode            bool   `yaml:"bulk_mode,omitempty"`            // Enable bulk loading optimizations
+	DisableWAL          bool   `yaml:"disable_wal,omitempty"`          // Disable Write-Ahead Logging
+	CheckpointThreshold string `yaml:"checkpoint_threshold,omitempty"` // Memory threshold before checkpoint
+	WALAutoCheckpoint   int    `yaml:"wal_auto_checkpoint,omitempty"`  // Pages before auto checkpoint (0 = disabled)
+	TempDirectory       string `yaml:"temp_directory,omitempty"`       // Temporary files directory
 }
 
 // ClickHouseConfig holds ClickHouse-specific configuration
 type ClickHouseConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	UseSSL   bool   `json:"use_ssl,omitempty"`
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Database string `yaml:"database"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	UseSSL   bool   `yaml:"use_ssl,omitempty"`
 
 	// Connection settings
-	MaxOpenConns int    `json:"max_open_conns,omitempty"`
-	MaxIdleConns int    `json:"max_idle_conns,omitempty"`
-	DialTimeout  string `json:"dial_timeout,omitempty"`
-	ReadTimeout  string `json:"read_timeout,omitempty"`
-	WriteTimeout string `json:"write_timeout,omitempty"`
-	Compression  string `json:"compression,omitempty"` // none, zstd, lz4, gzip
+	MaxOpenConns int    `yaml:"max_open_conns,omitempty"`
+	MaxIdleConns int    `yaml:"max_idle_conns,omitempty"`
+	DialTimeout  string `yaml:"dial_timeout,omitempty"`
+	ReadTimeout  string `yaml:"read_timeout,omitempty"`
+	WriteTimeout string `yaml:"write_timeout,omitempty"`
+	Compression  string `yaml:"compression,omitempty"` // none, zstd, lz4, gzip
 }
 
 // Config represents the complete application configuration
 type Config struct {
-	Database DatabaseConfig `json:"database"`
+	Database DatabaseConfig `yaml:"database"`
 }
 
 // Default configurations
@@ -105,7 +105,7 @@ func DefaultClickHouseConfig() *ClickHouseConfig {
 	}
 }
 
-// LoadConfig loads configuration from a JSON file
+// LoadConfig loads configuration from a YAML file
 func LoadConfig(configPath string) (*Config, error) {
 	// If config file doesn't exist, return default DuckDB config
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -123,7 +123,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
@@ -135,7 +135,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	return &config, nil
 }
 
-// SaveConfig saves configuration to a JSON file
+// SaveConfig saves configuration to a YAML file
 func SaveConfig(config *Config, configPath string) error {
 	// Ensure directory exists
 	dir := filepath.Dir(configPath)
@@ -143,7 +143,7 @@ func SaveConfig(config *Config, configPath string) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := yaml.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
@@ -254,7 +254,7 @@ func CreateExampleConfigs(dir string) error {
 		},
 	}
 
-	if err := SaveConfig(duckdbConfig, filepath.Join(dir, "config-duckdb-example.json")); err != nil {
+	if err := SaveConfig(duckdbConfig, filepath.Join(dir, "config-duckdb-example.yaml")); err != nil {
 		return fmt.Errorf("failed to create DuckDB example config: %w", err)
 	}
 
@@ -266,7 +266,7 @@ func CreateExampleConfigs(dir string) error {
 		},
 	}
 
-	if err := SaveConfig(clickhouseConfig, filepath.Join(dir, "config-clickhouse-example.json")); err != nil {
+	if err := SaveConfig(clickhouseConfig, filepath.Join(dir, "config-clickhouse-example.yaml")); err != nil {
 		return fmt.Errorf("failed to create ClickHouse example config: %w", err)
 	}
 

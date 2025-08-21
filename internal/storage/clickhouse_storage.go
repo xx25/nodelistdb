@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/database"
 )
 
 // ClickHouseStorage provides ClickHouse-specific database operations
