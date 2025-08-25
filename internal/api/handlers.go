@@ -20,19 +20,19 @@ import (
 
 // Server represents the API server
 type Server struct {
-	storage    *storage.Storage
+	storage    storage.Operations
 	dbFilePath string
 }
 
 // New creates a new API server
-func New(storage *storage.Storage) *Server {
+func New(storage storage.Operations) *Server {
 	return &Server{
 		storage: storage,
 	}
 }
 
 // NewWithDBPath creates a new API server with database file path
-func NewWithDBPath(storage *storage.Storage, dbFilePath string) *Server {
+func NewWithDBPath(storage storage.Operations, dbFilePath string) *Server {
 	return &Server{
 		storage:    storage,
 		dbFilePath: dbFilePath,

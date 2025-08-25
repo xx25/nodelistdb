@@ -19,7 +19,7 @@ import (
 
 // Server represents the web server
 type Server struct {
-	storage     *storage.Storage
+	storage     storage.Operations
 	templates   map[string]*template.Template
 	templatesFS embed.FS
 	staticFS    embed.FS
@@ -92,7 +92,7 @@ func analyzeNodeActivity(history []database.Node) NodeActivityInfo {
 }
 
 // New creates a new web server
-func New(storage *storage.Storage, templatesFS embed.FS, staticFS embed.FS) *Server {
+func New(storage storage.Operations, templatesFS embed.FS, staticFS embed.FS) *Server {
 	server := &Server{
 		storage:     storage,
 		templates:   make(map[string]*template.Template),

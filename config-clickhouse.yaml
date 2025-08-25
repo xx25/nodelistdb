@@ -1,6 +1,24 @@
 # NodelistDB Configuration - ClickHouse
 # This configuration uses ClickHouse as the database backend
 
+# Cache Configuration
+cache:
+  enabled: true
+  type: badger
+  path: ./cache/badger
+  max_memory_mb: 256
+  value_log_max_mb: 100
+  default_ttl: 5m
+  node_ttl: 15m
+  stats_ttl: 1h
+  search_ttl: 5m
+  max_search_results: 500
+  warmup_on_start: true
+  compact_on_close: true
+  clear_all_on_import: false
+  gc_interval: 10m
+  gc_discard_ratio: 0.5
+
 database:
   type: clickhouse  # Using ClickHouse instead of DuckDB
   

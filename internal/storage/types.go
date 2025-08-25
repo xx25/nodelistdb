@@ -68,6 +68,12 @@ type Operations interface {
 	// Search operations
 	SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error)
 	GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error)
+	GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error)
+	GetNodesBySysop(sysopName string, limit int) ([]database.Node, error)
+	SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error)
+	GetFlagFirstAppearance(flagName string) (*FlagFirstAppearance, error)
+	GetFlagUsageByYear(flagName string) ([]FlagUsageByYear, error)
+	GetNetworkHistory(zone, net int) (*NetworkHistory, error)
 
 	// Statistics operations
 	GetStats(date time.Time) (*database.NetworkStats, error)

@@ -71,6 +71,26 @@ type ClickHouseConfig struct {
 // Config represents the complete application configuration
 type Config struct {
 	Database DatabaseConfig `yaml:"database"`
+	Cache    CacheConfig    `yaml:"cache"`
+}
+
+// CacheConfig holds cache configuration
+type CacheConfig struct {
+	Enabled           bool          `yaml:"enabled"`
+	Type              string        `yaml:"type"` // "badger" or "memory"
+	Path              string        `yaml:"path"`
+	MaxMemoryMB       int           `yaml:"max_memory_mb"`
+	ValueLogMaxMB     int           `yaml:"value_log_max_mb"`
+	DefaultTTL        time.Duration `yaml:"default_ttl"`
+	NodeTTL           time.Duration `yaml:"node_ttl"`
+	StatsTTL          time.Duration `yaml:"stats_ttl"`
+	SearchTTL         time.Duration `yaml:"search_ttl"`
+	MaxSearchResults  int           `yaml:"max_search_results"`
+	WarmupOnStart     bool          `yaml:"warmup_on_start"`
+	CompactOnClose    bool          `yaml:"compact_on_close"`
+	ClearAllOnImport  bool          `yaml:"clear_all_on_import"`
+	GCInterval        time.Duration `yaml:"gc_interval"`
+	GCDiscardRatio    float64       `yaml:"gc_discard_ratio"`
 }
 
 // Default configurations
@@ -102,6 +122,26 @@ func DefaultClickHouseConfig() *ClickHouseConfig {
 		ReadTimeout:  "5m",
 		WriteTimeout: "1m",
 		Compression:  "lz4",
+	}
+}
+
+func DefaultCacheConfig() *CacheConfig {
+	return &CacheConfig{
+		Enabled:           false,
+		Type:              "badger",
+		Path:              "./cache/badger",
+		MaxMemoryMB:       256,
+		ValueLogMaxMB:     100,
+		DefaultTTL:        5 * time.Minute,
+		NodeTTL:           15 * time.Minute,
+		StatsTTL:          1 * time.Hour,
+		SearchTTL:         5 * time.Minute,
+		MaxSearchResults:  500,
+		WarmupOnStart:     false,
+		CompactOnClose:    true,
+		ClearAllOnImport:  false,
+		GCInterval:        10 * time.Minute,
+		GCDiscardRatio:    0.5,
 	}
 }
 
@@ -157,6 +197,32 @@ func SaveConfig(config *Config, configPath string) error {
 
 // validate ensures the configuration is valid and sets defaults where needed
 func (c *Config) validate() error {
+	// Validate cache configuration
+	if c.Cache.Type == "" {
+		c.Cache.Type = "badger"
+	}
+	if c.Cache.Type != "badger" && c.Cache.Type != "memory" {
+		return fmt.Errorf("unsupported cache type: %s", c.Cache.Type)
+	}
+	if c.Cache.Enabled && c.Cache.Path == "" {
+		c.Cache.Path = "./cache/badger"
+	}
+	if c.Cache.MaxMemoryMB == 0 {
+		c.Cache.MaxMemoryMB = 256
+	}
+	if c.Cache.ValueLogMaxMB == 0 {
+		c.Cache.ValueLogMaxMB = 100
+	}
+	if c.Cache.MaxSearchResults == 0 {
+		c.Cache.MaxSearchResults = 500
+	}
+	if c.Cache.GCInterval == 0 {
+		c.Cache.GCInterval = 10 * time.Minute
+	}
+	if c.Cache.GCDiscardRatio == 0 {
+		c.Cache.GCDiscardRatio = 0.5
+	}
+	
 	switch c.Database.Type {
 	case DatabaseTypeDuckDB:
 		if c.Database.DuckDB == nil {
