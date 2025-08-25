@@ -178,7 +178,7 @@ jobs:
         BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
         
         # Build flags with version injection
-        LDFLAGS="-s -w -X 'nodelistdb/internal/version.Version=${VERSION}' -X 'nodelistdb/internal/version.GitCommit=${COMMIT}' -X 'nodelistdb/internal/version.BuildTime=${BUILD_TIME}'"
+        LDFLAGS="-s -w -X 'github.com/nodelistdb/internal/version.Version=${VERSION}' -X 'github.com/nodelistdb/internal/version.GitCommit=${COMMIT}' -X 'github.com/nodelistdb/internal/version.BuildTime=${BUILD_TIME}'"
         
         # Build binaries
         if [ "${{ matrix.goos }}" = "windows" ]; then
