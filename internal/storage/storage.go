@@ -38,6 +38,23 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 		chResultParser := NewClickHouseResultParser()
 		queryBuilder = chQueryBuilder
 		resultParser = chResultParser // Use the ClickHouse parser directly
+		
+		// Create the storage instance with ClickHouse components
+		storage := &Storage{
+			db:           db,
+			queryBuilder: queryBuilder,
+			resultParser: resultParser,
+		}
+		
+		// Create specialized operation components
+		// For ClickHouse, we still use the base NodeOperations but with ClickHouse-specific components
+		// The ClickHouse query builder and result parser will handle array formatting correctly
+		storage.nodeOperations = NewNodeOperations(db, queryBuilder, resultParser)
+		storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
+		storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
+		storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
+		
+		return storage, nil
 	} else {
 		// Default to DuckDB components
 		queryBuilder = NewQueryBuilder()

@@ -19,6 +19,46 @@ func NewClickHouseQueryBuilder() *ClickHouseQueryBuilder {
 	}
 }
 
+// InsertNodesInChunks performs optimized batch inserts for ClickHouse with proper array formatting
+func (cqb *ClickHouseQueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	conn := db.Conn()
+	
+	// Start a transaction for better performance
+	tx, err := conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	
+	// Create a ClickHouse result parser for proper array formatting
+	resultParser := NewClickHouseResultParser()
+	
+	// Process nodes in optimal-sized chunks
+	const OPTIMAL_BATCH_SIZE = 1000
+	for i := 0; i < len(nodes); i += OPTIMAL_BATCH_SIZE {
+		end := i + OPTIMAL_BATCH_SIZE
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+		
+		chunk := nodes[i:end]
+		
+		// Use ClickHouse-specific SQL building with proper array handling
+		insertSQL := cqb.BuildDirectBatchInsertSQL(chunk, resultParser.ResultParser)
+		
+		// Execute the chunk insert
+		if _, err := tx.Exec(insertSQL); err != nil {
+			return fmt.Errorf("failed to insert chunk %d-%d: %w", i, end-1, err)
+		}
+	}
+	
+	return tx.Commit()
+}
+
 // BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT for ClickHouse with proper array handling
 func (cqb *ClickHouseQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
 	if len(nodes) == 0 {
