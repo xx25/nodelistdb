@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
 	"github.com/nodelistdb/internal/testing/storage"
 )
@@ -183,6 +184,7 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 	
 	// Track which nodes are still in database
 	currentNodeKeys := make(map[string]bool)
+	nodesWithChangedConfig := 0
 	
 	for _, node := range nodes {
 		key := s.nodeKey(node)
@@ -203,9 +205,21 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 			}
 			s.schedules[key] = schedule
 		} else {
+			// Check if internet configuration has changed
+			configChanged := s.hasInternetConfigChanged(existingSchedule.Node, node)
+			
 			// Update existing node data (hostname, protocols might have changed)
 			existingSchedule.Node = node
 			existingSchedule.Priority = s.calculatePriority(node)
+			
+			// If internet configuration changed, schedule immediate retest
+			if configChanged {
+				existingSchedule.NextTestTime = time.Now()
+				existingSchedule.BackoffLevel = 0  // Reset backoff since config changed
+				nodesWithChangedConfig++
+				
+				logging.Infof("Internet config changed for %s, scheduling immediate retest", key)
+			}
 		}
 	}
 	
@@ -216,7 +230,60 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 		}
 	}
 	
+	if nodesWithChangedConfig > 0 {
+		logging.Infof("Found %d nodes with changed internet configuration, scheduled for immediate retest", nodesWithChangedConfig)
+	}
+	
 	return nil
+}
+
+// hasInternetConfigChanged checks if the internet configuration has changed between old and new node
+func (s *Scheduler) hasInternetConfigChanged(oldNode, newNode *models.Node) bool {
+	// Check if inet status changed
+	if oldNode.HasInet != newNode.HasInet {
+		return true
+	}
+	
+	// Check if hostnames changed
+	if !stringSlicesEqual(oldNode.InternetHostnames, newNode.InternetHostnames) {
+		return true
+	}
+	
+	// Check if protocols changed
+	if !stringSlicesEqual(oldNode.InternetProtocols, newNode.InternetProtocols) {
+		return true
+	}
+	
+	// Check if protocol ports changed (if available)
+	if oldNode.ProtocolPorts != nil && newNode.ProtocolPorts != nil {
+		if len(oldNode.ProtocolPorts) != len(newNode.ProtocolPorts) {
+			return true
+		}
+		for proto, oldPort := range oldNode.ProtocolPorts {
+			newPort, exists := newNode.ProtocolPorts[proto]
+			if !exists || oldPort != newPort {
+				return true
+			}
+		}
+	} else if (oldNode.ProtocolPorts == nil) != (newNode.ProtocolPorts == nil) {
+		// One has ports, the other doesn't
+		return true
+	}
+	
+	return false
+}
+
+// stringSlicesEqual compares two string slices for equality
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*models.Node {

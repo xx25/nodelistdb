@@ -64,9 +64,6 @@ type Parser struct {
 
 	// Reusable maps to reduce allocations (performance optimization)
 	nodeTracker       map[string][]int // key: "zone:net/node", value: slice of indices
-	protocolsMap      map[string]database.InternetProtocolDetail
-	defaultsMap       map[string]string
-	emailProtocolsMap map[string]database.EmailProtocolDetail
 	
 	// Pre-compiled regex patterns for common operations
 	crcPattern *regexp.Regexp
@@ -92,9 +89,6 @@ func New(verbose bool) *Parser {
 		
 		// Initialize reusable maps with reasonable starting capacity
 		nodeTracker:       make(map[string][]int, 1000),
-		protocolsMap:      make(map[string]database.InternetProtocolDetail, 10),
-		defaultsMap:       make(map[string]string, 5),
-		emailProtocolsMap: make(map[string]database.EmailProtocolDetail, 3),
 		
 		// Pre-compile commonly used regex patterns
 		crcPattern: regexp.MustCompile(`CRC-?(\w+)`),
@@ -112,17 +106,6 @@ func (p *Parser) clearReusableMaps() {
 	// Clear nodeTracker map but keep capacity
 	for k := range p.nodeTracker {
 		delete(p.nodeTracker, k)
-	}
-	
-	// Clear protocol maps but keep capacity
-	for k := range p.protocolsMap {
-		delete(p.protocolsMap, k)
-	}
-	for k := range p.defaultsMap {
-		delete(p.defaultsMap, k)
-	}
-	for k := range p.emailProtocolsMap {
-		delete(p.emailProtocolsMap, k)
 	}
 }
 
@@ -623,10 +606,10 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 	// Pre-allocate flags slice with typical capacity
 	flags := make([]string, 0, 10)
 
-	// For building structured config (reusing parser's maps)
-	protocols := p.protocolsMap
-	defaults := p.defaultsMap
-	emailProtocols := p.emailProtocolsMap
+	// Create new maps for each node to avoid cross-contamination
+	protocols := make(map[string]database.InternetProtocolDetail, 10)
+	defaults := make(map[string]string, 5)
+	emailProtocols := make(map[string]database.EmailProtocolDetail, 3)
 	infoFlags := make([]string, 0, 3) // Pre-allocate with typical capacity
 
 	// Default ports for protocols

@@ -126,15 +126,15 @@ func New(cfg *Config) (*Daemon, error) {
 		storage: store,
 	}
 
-	// Initialize persistent cache if configured
-	if cfg.Cache.Enabled && cfg.Cache.Path != "" {
-		pCache, err := storage.NewCache(cfg.Cache.Path)
+	// Initialize persistent cache using testdaemon_cache configuration
+	if cfg.TestdaemonCache.Enabled && cfg.TestdaemonCache.Path != "" {
+		pCache, err := storage.NewCache(cfg.TestdaemonCache.Path)
 		if err != nil {
 			logging.Warnf("Failed to initialize persistent cache: %v", err)
 			logging.Infof("Continuing with in-memory cache only")
 		} else {
 			d.persistentCache = pCache
-			logging.Infof("Persistent cache initialized at %s", cfg.Cache.Path)
+			logging.Infof("Persistent cache initialized at %s", cfg.TestdaemonCache.Path)
 		}
 	}
 
@@ -321,6 +321,27 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
+// filterNodesByTestLimit filters nodes based on the test limit string
+func (d *Daemon) filterNodesByTestLimit(nodes []*models.Node, testLimit string) []*models.Node {
+	// Parse the test limit address (e.g., "2:5001/100")
+	var zone, net, node int
+	if _, err := fmt.Sscanf(testLimit, "%d:%d/%d", &zone, &net, &node); err != nil {
+		logging.Errorf("Invalid test limit format '%s': %v", testLimit, err)
+		return nodes
+	}
+	
+	// Filter nodes to only include the specified one
+	var filtered []*models.Node
+	for _, n := range nodes {
+		if n.Zone == zone && n.Net == net && n.Node == node {
+			filtered = append(filtered, n)
+			break // Only need one match
+		}
+	}
+	
+	return filtered
+}
+
 // checkAndRefreshNodelist checks if the nodelist has been updated and refreshes if needed
 func (d *Daemon) checkAndRefreshNodelist(ctx context.Context) bool {
 	// Get current nodelist date from database
@@ -342,6 +363,7 @@ func (d *Daemon) checkAndRefreshNodelist(ctx context.Context) bool {
 			lastDate.Format("2006-01-02"))
 		
 		// Refresh the scheduler with new nodes
+		// This will automatically schedule immediate retests for nodes with changed internet config
 		if err := d.scheduler.RefreshNodes(ctx); err != nil {
 			logging.Errorf("Failed to refresh nodes: %v", err)
 			return false
@@ -351,6 +373,8 @@ func (d *Daemon) checkAndRefreshNodelist(ctx context.Context) bool {
 		d.nodelistMu.Lock()
 		d.lastNodelistDate = currentDate
 		d.nodelistMu.Unlock()
+		
+		logging.Infof("Nodelist refresh complete. Nodes with changed internet config will be retested immediately.")
 		
 		return true
 	}
@@ -390,7 +414,17 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		nodes = allNodes
 	}
 	
-	logging.Infof("Scheduler selected %d nodes for testing", len(nodes))
+	// Apply test limit filter if specified
+	if d.config.Daemon.TestLimit != "" {
+		nodes = d.filterNodesByTestLimit(nodes, d.config.Daemon.TestLimit)
+		if len(nodes) == 0 {
+			logging.Warnf("No nodes match test limit filter: %s", d.config.Daemon.TestLimit)
+			return nil
+		}
+		logging.Infof("Applied test limit filter '%s', testing %d node(s)", d.config.Daemon.TestLimit, len(nodes))
+	} else {
+		logging.Infof("Scheduler selected %d nodes for testing", len(nodes))
+	}
 	
 	// Process nodes in batches
 	batchSize := d.config.Daemon.BatchSize

@@ -10,14 +10,15 @@ import (
 
 // Config represents the complete daemon configuration
 type Config struct {
-	Daemon     DaemonConfig    `yaml:"daemon"`
-	Database   DatabaseConfig  `yaml:"database"`
-	Protocols  ProtocolsConfig `yaml:"protocols"`
-	Services   ServicesConfig  `yaml:"services"`
-	Cache      CacheConfig     `yaml:"cache"`
-	Logging    LoggingConfig   `yaml:"logging"`
-	CLI        CLIConfig       `yaml:"cli"`
-	ConfigPath string          `yaml:"-"` // Path to config file, set when loading
+	Daemon          DaemonConfig    `yaml:"daemon"`
+	Database        DatabaseConfig  `yaml:"database"`
+	Protocols       ProtocolsConfig `yaml:"protocols"`
+	Services        ServicesConfig  `yaml:"services"`
+	Cache           CacheConfig     `yaml:"cache"` // Not used by testdaemon
+	TestdaemonCache CacheConfig     `yaml:"testdaemon_cache"` // Required cache config for testdaemon
+	Logging         LoggingConfig   `yaml:"logging"`
+	CLI             CLIConfig       `yaml:"cli"`
+	ConfigPath      string          `yaml:"-"` // Path to config file, set when loading
 }
 
 // DaemonConfig contains daemon-specific settings
@@ -30,6 +31,7 @@ type DaemonConfig struct {
 	RunOnce           bool          `yaml:"-"` // Set from command line
 	DryRun            bool          `yaml:"-"` // Set from command line
 	CLIOnly           bool          `yaml:"-"` // Set from command line - disable automatic testing
+	TestLimit         string        `yaml:"-"` // Set from command line - limit to specific node(s)
 }
 
 // DatabaseConfig contains database connection settings
@@ -181,9 +183,15 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Services.DNS.Timeout == 0 {
 		cfg.Services.DNS.Timeout = 5  // Will be converted to Duration later
 	}
-	if cfg.Cache.Type == "" {
-		cfg.Cache.Type = "badger"
+	
+	// Set defaults for testdaemon_cache
+	if cfg.TestdaemonCache.Type == "" {
+		cfg.TestdaemonCache.Type = "badger"
 	}
+	if cfg.TestdaemonCache.Path == "" {
+		cfg.TestdaemonCache.Path = "./cache/badger-testdaemon"
+	}
+	
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"
 	}

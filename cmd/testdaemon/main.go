@@ -28,6 +28,7 @@ func main() {
 		showVer    = flag.Bool("version", false, "Show version and exit")
 		testNode   = flag.String("test-node", "", "Test specific node (format: address or host:port) and exit")
 		testProto  = flag.String("test-proto", "ifcico", "Protocol to test (binkp, ifcico, telnet)")
+		testLimit  = flag.String("test-limit", "", "Limit testing to specific node(s) during cycles (e.g., '2:5001/100')")
 	)
 
 	flag.Parse()
@@ -50,6 +51,7 @@ func main() {
 	cfg.Daemon.RunOnce = *once
 	cfg.Daemon.DryRun = *dryRun
 	cfg.Daemon.CLIOnly = *cliOnly
+	cfg.Daemon.TestLimit = *testLimit
 
 	// Initialize daemon
 	d, err := daemon.New(cfg)

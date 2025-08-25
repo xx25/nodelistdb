@@ -10,7 +10,7 @@ import (
 	"github.com/nodelistdb/internal/testing/models"
 )
 
-// StartCLIServer starts the CLI telnet server if enabled in config
+// StartCLIServer starts the enhanced readline CLI server if enabled in config
 func (d *Daemon) StartCLIServer(ctx context.Context) error {
 	if !d.config.CLI.Enabled {
 		return nil
@@ -22,22 +22,21 @@ func (d *Daemon) StartCLIServer(ctx context.Context) error {
 		configPath: d.config.ConfigPath, // We'll need to add this to config
 	}
 	
-	// Create CLI server config
-	cliConfig := cli.Config{
-		Host:           d.config.CLI.Host,
-		Port:           d.config.CLI.Port,
-		MaxClients:     d.config.CLI.MaxClients,
-		Timeout:        d.config.CLI.Timeout,
-		Prompt:         d.config.CLI.Prompt,
-		Welcome:        d.config.CLI.WelcomeMessage,
+	// Use enhanced readline server
+	readlineConfig := cli.ReadlineConfig{
+		Host:         d.config.CLI.Host,
+		Port:         d.config.CLI.Port,
+		Prompt:       d.config.CLI.Prompt,
+		HistoryLimit: 100,  // Keep last 100 commands in memory
+		Welcome:      d.config.CLI.WelcomeMessage,
 	}
 	
-	// Create and start CLI server
-	cliServer := cli.NewServer(adapter, cliConfig)
+	// Create and start enhanced readline server
+	readlineServer := cli.NewReadlineServer(adapter, readlineConfig)
 	
 	go func() {
-		if err := cliServer.Start(ctx); err != nil {
-			log.Printf("CLI server error: %v", err)
+		if err := readlineServer.Start(ctx); err != nil {
+			log.Printf("Enhanced CLI server error: %v", err)
 		}
 	}()
 	
