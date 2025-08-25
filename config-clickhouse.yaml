@@ -101,6 +101,5 @@ cli:
   timeout: 300s
   prompt: "testdaemon> "
   welcome_message: |
-    NodelistDB Test Daemon Enhanced CLI
+    NodelistDB Test Daemon CLI
     Type 'help' for available commands.
-    Use arrow keys for history and line editing.

@@ -3,14 +3,13 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/nodelistdb/internal/testing/cli"
 	"github.com/nodelistdb/internal/testing/models"
 )
 
-// StartCLIServer starts the enhanced readline CLI server if enabled in config
+// StartCLIServer starts the telnet CLI server if enabled in config
 func (d *Daemon) StartCLIServer(ctx context.Context) error {
 	if !d.config.CLI.Enabled {
 		return nil
@@ -22,23 +21,24 @@ func (d *Daemon) StartCLIServer(ctx context.Context) error {
 		configPath: d.config.ConfigPath, // We'll need to add this to config
 	}
 	
-	// Use enhanced readline server
-	readlineConfig := cli.ReadlineConfig{
-		Host:         d.config.CLI.Host,
-		Port:         d.config.CLI.Port,
-		Prompt:       d.config.CLI.Prompt,
-		HistoryLimit: 100,  // Keep last 100 commands in memory
-		Welcome:      d.config.CLI.WelcomeMessage,
+	// Use simple telnet server for better compatibility
+	telnetConfig := cli.TelnetConfig{
+		Host:    d.config.CLI.Host,
+		Port:    d.config.CLI.Port,
+		Prompt:  d.config.CLI.Prompt,
+		Welcome: d.config.CLI.WelcomeMessage,
+		Timeout: 30 * time.Minute,
 	}
 	
-	// Create and start enhanced readline server
-	readlineServer := cli.NewReadlineServer(adapter, readlineConfig)
+	// Create and start telnet server
+	telnetServer := cli.NewTelnetServer(adapter, telnetConfig)
 	
-	go func() {
-		if err := readlineServer.Start(ctx); err != nil {
-			log.Printf("Enhanced CLI server error: %v", err)
-		}
-	}()
+	if err := telnetServer.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start telnet server: %w", err)
+	}
+	
+	// Note: telnetServer will run in background goroutine
+	// and will be stopped when context is cancelled
 	
 	return nil
 }
