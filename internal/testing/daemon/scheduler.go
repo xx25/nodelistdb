@@ -39,6 +39,8 @@ type Scheduler struct {
 	failureMultiplier float64
 	maxBackoffLevel   int
 	strategy          ScheduleStrategy
+	staleTestThreshold time.Duration  // Consider test stale after this duration
+	failedRetryInterval time.Duration // Retry failed nodes after this duration
 
 	schedules map[string]*NodeSchedule
 	storage   storage.Storage
@@ -56,6 +58,8 @@ type SchedulerConfig struct {
 	Strategy          ScheduleStrategy
 	JitterPercent     float64
 	PriorityBoost     int
+	StaleTestThreshold time.Duration
+	FailedRetryInterval time.Duration
 }
 
 func NewScheduler(cfg SchedulerConfig, storage storage.Storage) *Scheduler {
@@ -80,6 +84,12 @@ func NewScheduler(cfg SchedulerConfig, storage storage.Storage) *Scheduler {
 	if cfg.PriorityBoost == 0 {
 		cfg.PriorityBoost = 10
 	}
+	if cfg.StaleTestThreshold == 0 {
+		cfg.StaleTestThreshold = cfg.BaseInterval
+	}
+	if cfg.FailedRetryInterval == 0 {
+		cfg.FailedRetryInterval = 24 * time.Hour
+	}
 
 	return &Scheduler{
 		baseInterval:      cfg.BaseInterval,
@@ -88,6 +98,8 @@ func NewScheduler(cfg SchedulerConfig, storage storage.Storage) *Scheduler {
 		failureMultiplier: cfg.FailureMultiplier,
 		maxBackoffLevel:   cfg.MaxBackoffLevel,
 		strategy:          cfg.Strategy,
+		staleTestThreshold: cfg.StaleTestThreshold,
+		failedRetryInterval: cfg.FailedRetryInterval,
 		schedules:         make(map[string]*NodeSchedule),
 		storage:           storage,
 		jitterPercent:     cfg.JitterPercent,
@@ -99,7 +111,12 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, node := range nodes {
+	fmt.Printf("DEBUG InitializeSchedules: Processing %d nodes\n", len(nodes))
+	nodesWithHistory := 0
+	nodesWithoutHistory := 0
+	failedQueries := 0
+
+	for i, node := range nodes {
 		key := s.nodeKey(node)
 		
 		// Get last test result for this node
@@ -107,6 +124,17 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 		var lastResult *models.TestResult
 		if err == nil && len(history) > 0 {
 			lastResult = history[0]
+			nodesWithHistory++
+		} else if err == nil && len(history) == 0 {
+			nodesWithoutHistory++
+		} else {
+			failedQueries++
+		}
+		
+		// Log progress every 100 nodes
+		if (i+1) % 100 == 0 {
+			fmt.Printf("DEBUG InitializeSchedules: Processed %d/%d nodes (with_history=%d, without=%d, failed=%d)\n", 
+				i+1, len(nodes), nodesWithHistory, nodesWithoutHistory, failedQueries)
 		}
 		
 		schedule := &NodeSchedule{
@@ -126,12 +154,68 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 				schedule.ConsecutiveFails = s.getConsecutiveFailCount(ctx, node)
 				schedule.BackoffLevel = s.calculateBackoffLevel(schedule.ConsecutiveFails)
 			}
+		} else if err != nil {
+			// Log error retrieving test history
+			fmt.Printf("DEBUG InitializeSchedules: Failed to get test history for %s: %v\n", key, err)
 		}
 
 		schedule.NextTestTime = s.calculateNextTestTime(schedule)
 		s.schedules[key] = schedule
 	}
 
+	fmt.Printf("DEBUG InitializeSchedules: Final stats - nodes_with_history=%d, without_history=%d, failed_queries=%d\n",
+		nodesWithHistory, nodesWithoutHistory, failedQueries)
+
+	return nil
+}
+
+// RefreshNodes updates the scheduler with fresh node data from the database
+// This should be called periodically to pick up changes made by the parser
+func (s *Scheduler) RefreshNodes(ctx context.Context) error {
+	// Get fresh nodes from database
+	nodes, err := s.storage.GetNodesWithInternet(ctx, 0)
+	if err != nil {
+		return fmt.Errorf("failed to get nodes from database: %w", err)
+	}
+	
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	// Track which nodes are still in database
+	currentNodeKeys := make(map[string]bool)
+	
+	for _, node := range nodes {
+		key := s.nodeKey(node)
+		currentNodeKeys[key] = true
+		
+		// Check if this is a new node or existing one
+		existingSchedule, exists := s.schedules[key]
+		if !exists {
+			// New node - initialize schedule for it
+			schedule := &NodeSchedule{
+				Node:             node,
+				LastTestTime:     time.Time{},
+				LastTestSuccess:  false,
+				ConsecutiveFails: 0,
+				Priority:         s.calculatePriority(node),
+				BackoffLevel:     0,
+				NextTestTime:     time.Now(), // Test new nodes immediately
+			}
+			s.schedules[key] = schedule
+		} else {
+			// Update existing node data (hostname, protocols might have changed)
+			existingSchedule.Node = node
+			existingSchedule.Priority = s.calculatePriority(node)
+		}
+	}
+	
+	// Remove schedules for nodes that no longer exist in database
+	for key := range s.schedules {
+		if !currentNodeKeys[key] {
+			delete(s.schedules, key)
+		}
+	}
+	
 	return nil
 }
 
@@ -141,10 +225,36 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 
 	now := time.Now()
 	var readyNodes []*NodeSchedule
+	futureNodes := 0
+	staleNodes := 0
+	sampleFutureTimes := []time.Time{}
 
 	for _, schedule := range s.schedules {
-		if schedule.NextTestTime.Before(now) || schedule.NextTestTime.Equal(now) {
+		// Check if test is stale (hasn't been tested in staleTestThreshold duration)
+		isStale := !schedule.LastTestTime.IsZero() && now.Sub(schedule.LastTestTime) > s.staleTestThreshold
+		
+		// Check if node is ready based on schedule OR if test is stale
+		if schedule.NextTestTime.Before(now) || schedule.NextTestTime.Equal(now) || isStale {
 			readyNodes = append(readyNodes, schedule)
+			if isStale {
+				staleNodes++
+			}
+		} else {
+			futureNodes++
+			// Collect sample of future times for debugging
+			if len(sampleFutureTimes) < 5 {
+				sampleFutureTimes = append(sampleFutureTimes, schedule.NextTestTime)
+			}
+		}
+	}
+
+	fmt.Printf("DEBUG GetNodesForTesting: now=%v, ready=%d (stale=%d), future=%d, total=%d, staleThreshold=%v\n", 
+		now, len(readyNodes), staleNodes, futureNodes, len(s.schedules), s.staleTestThreshold)
+	
+	if len(sampleFutureTimes) > 0 {
+		fmt.Printf("DEBUG GetNodesForTesting: Sample future NextTestTimes:\n")
+		for i, t := range sampleFutureTimes {
+			fmt.Printf("  [%d] %v (in %v)\n", i, t, t.Sub(now))
 		}
 	}
 
@@ -197,7 +307,15 @@ func (s *Scheduler) UpdateTestResult(ctx context.Context, node *models.Node, res
 
 func (s *Scheduler) calculateNextTestTime(schedule *NodeSchedule) time.Time {
 	if schedule.LastTestTime.IsZero() {
-		return time.Now().Add(s.addJitter(time.Duration(rand.Float64() * float64(s.baseInterval))))
+		// Node has no test history - schedule randomly within base interval
+		randomDelay := s.addJitter(time.Duration(rand.Float64() * float64(s.baseInterval)))
+		nextTime := time.Now().Add(randomDelay)
+		// Debug logging disabled
+		// if schedule.Node.Zone == 1 && schedule.Node.Net < 110 {
+		// 	fmt.Printf("DEBUG calculateNextTestTime: Node %s has no history, scheduling for %v (in %v)\n", 
+		// 		s.nodeKey(schedule.Node), nextTime, randomDelay)
+		// }
+		return nextTime
 	}
 
 	var interval time.Duration
@@ -219,7 +337,15 @@ func (s *Scheduler) calculateNextTestTime(schedule *NodeSchedule) time.Time {
 		interval = s.maxInterval
 	}
 
-	return schedule.LastTestTime.Add(interval)
+	nextTime := schedule.LastTestTime.Add(interval)
+	
+	// Debug logging disabled
+	// if schedule.Node.Zone == 1 && schedule.Node.Net < 110 {
+	// 	fmt.Printf("DEBUG calculateNextTestTime: Node %s last_test=%v, interval=%v, next=%v\n",
+	// 		s.nodeKey(schedule.Node), schedule.LastTestTime, interval, nextTime)
+	// }
+	
+	return nextTime
 }
 
 func (s *Scheduler) calculateRegularInterval(schedule *NodeSchedule) time.Duration {
@@ -227,14 +353,8 @@ func (s *Scheduler) calculateRegularInterval(schedule *NodeSchedule) time.Durati
 		return s.baseInterval
 	}
 
-	failureInterval := time.Duration(float64(s.baseInterval) * s.failureMultiplier)
-	
-	if schedule.BackoffLevel > 0 {
-		backoffFactor := math.Pow(1.5, float64(schedule.BackoffLevel))
-		failureInterval = time.Duration(float64(failureInterval) * backoffFactor)
-	}
-
-	return failureInterval
+	// For failed nodes, use the configured failed retry interval
+	return s.failedRetryInterval
 }
 
 func (s *Scheduler) calculateAdaptiveInterval(schedule *NodeSchedule) time.Duration {

@@ -14,6 +14,11 @@ type Tester interface {
 	GetProtocolName() string
 }
 
+// DebugSetter is an optional interface for testers that support debug mode
+type DebugSetter interface {
+	SetDebug(enabled bool)
+}
+
 // TestResult is the base interface for test results
 type TestResult interface {
 	IsSuccess() bool

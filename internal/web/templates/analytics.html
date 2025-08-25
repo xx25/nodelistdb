@@ -235,6 +235,150 @@
         </div>
         
         <div class="analytics-section">
+            <h2>Network Analysis</h2>
+            <p>Track when networks appeared and disappeared in FidoNet nodelists over time.</p>
+            
+            <form class="flag-search-form" method="post" action="/analytics/network">
+                <input type="text" name="network" placeholder="Enter network (e.g., 2:5000)" value="{{.Network}}" required>
+                <button type="submit">Analyze Network</button>
+            </form>
+            
+            {{if .Network}}
+                {{if .NetworkHistory}}
+                    <div class="first-appearance">
+                        <h3>Network {{.NetworkHistory.Zone}}:{{.NetworkHistory.Net}} - {{.NetworkHistory.NetworkName}}</h3>
+                        <dl class="node-info">
+                            <dt>First Seen:</dt>
+                            <dd>{{.NetworkHistory.FirstSeen.Format "2006-01-02"}} (Day {{with $first := index .NetworkHistory.Appearances 0}}{{$first.StartDayNum}}{{end}})</dd>
+                            
+                            <dt>Last Seen:</dt>
+                            <dd>{{.NetworkHistory.LastSeen.Format "2006-01-02"}} (Day {{with $last := index .NetworkHistory.Appearances (len .NetworkHistory.Appearances | add -1)}}{{$last.EndDayNum}}{{end}})</dd>
+                            
+                            <dt>Total Time Span:</dt>
+                            <dd>{{.NetworkHistory.TotalDays}} days</dd>
+                            
+                            <dt>Active Days:</dt>
+                            <dd>{{.NetworkHistory.ActiveDays}} nodelists</dd>
+                            
+                            <dt>Appearance Periods:</dt>
+                            <dd>{{len .NetworkHistory.Appearances}} period(s)</dd>
+                        </dl>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <h4>Appearance History</h4>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f0f0f0;">
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Period</th>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Start Date</th>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">End Date</th>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Duration</th>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Nodelists</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range $i, $app := .NetworkHistory.Appearances}}
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">{{add $i 1}}</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">{{$app.StartDate.Format "2006-01-02"}} (Day {{$app.StartDayNum}})</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">{{$app.EndDate.Format "2006-01-02"}} (Day {{$app.EndDayNum}})</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">{{$app.DurationDays}} days</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">{{$app.NodelistCount}}</td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {{if gt (len .NetworkHistory.Appearances) 1}}
+                    <div class="chart-container">
+                        <canvas id="networkTimelineChart"></canvas>
+                    </div>
+                    
+                    <script>
+                        const ctx2 = document.getElementById('networkTimelineChart').getContext('2d');
+                        const appearances = [
+                            {{range $i, $app := .NetworkHistory.Appearances}}
+                            {
+                                start: '{{$app.StartDate.Format "2006-01-02"}}',
+                                end: '{{$app.EndDate.Format "2006-01-02"}}',
+                                duration: {{$app.DurationDays}}
+                            }{{if ne $i (add (len $.NetworkHistory.Appearances) -1)}},{{end}}
+                            {{end}}
+                        ];
+                        
+                        // Create data for timeline chart
+                        const labels = [];
+                        const data = [];
+                        
+                        {{range $i, $app := .NetworkHistory.Appearances}}
+                        labels.push('Period {{add $i 1}}');
+                        data.push({
+                            x: ['{{$app.StartDate.Format "2006-01-02"}}', '{{$app.EndDate.Format "2006-01-02"}}'],
+                            y: {{add $i 1}}
+                        });
+                        {{end}}
+                        
+                        new Chart(ctx2, {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Active Periods',
+                                    data: data.map(d => d.x[1]),
+                                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                indexAxis: 'y',
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: 'Network Appearance Timeline',
+                                        font: {
+                                            size: 16
+                                        }
+                                    },
+                                    legend: {
+                                        display: false
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        type: 'time',
+                                        time: {
+                                            unit: 'year'
+                                        },
+                                        title: {
+                                            display: true,
+                                            text: 'Date'
+                                        }
+                                    },
+                                    y: {
+                                        title: {
+                                            display: true,
+                                            text: 'Period'
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    </script>
+                    {{end}}
+                {{else}}
+                    <div class="no-results">
+                        <p>Network "{{.Network}}" not found</p>
+                    </div>
+                {{end}}
+            {{end}}
+        </div>
+        
+        <div class="analytics-section">
             <h2>More Analytics Coming Soon</h2>
             <p>Additional analytics reports will be added here in the future.</p>
         </div>

@@ -58,7 +58,7 @@ database:
   #   
   #   # Batch processing (for testdaemon)
   #   batch_size: 1000
-  #   flush_interval: 30
+  #   flush_interval: 30s
 
 # ============================================================================
 # TESTDAEMON-ONLY CONFIGURATION
@@ -70,7 +70,7 @@ database:
 # ----------------------------
 daemon:
   # Test cycle settings
-  test_interval: 3600  # seconds (1 hour)
+  test_interval: 1h  # Test cycle interval (1 hour)
   workers: 10
   batch_size: 100
   
@@ -82,29 +82,35 @@ protocols:
   binkp:
     enabled: true
     port: 24554
-    timeout: 10  # seconds
+    timeout: 10s
     our_address: "2:5001/5001"  # Your FidoNet address
+    system_name: "NodelistDB Test Daemon"  # SYS field
+    sysop: "Test Operator"  # ZYZ field
+    location: "Test Location"  # LOC field
   
   ifcico:
     enabled: true
     port: 60179
-    timeout: 10
+    timeout: 10s
     our_address: "2:5001/5001"
+    system_name: "NodelistDB Test Daemon"  # System name in EMSI
+    sysop: "Test Operator"  # Sysop name in EMSI
+    location: "Test Location"  # Location in EMSI
   
   telnet:
     enabled: false
     port: 23
-    timeout: 5
+    timeout: 5s
   
   ftp:
     enabled: false
     port: 21
-    timeout: 10
+    timeout: 10s
   
   vmodem:
     enabled: false
     port: 3141
-    timeout: 10
+    timeout: 10s
 
 # External Services Configuration
 # --------------------------------
@@ -112,14 +118,14 @@ services:
   geolocation:
     provider: ip-api  # Options: ip-api, ipinfo, ipgeolocation
     api_key: ""       # Required for ipgeolocation, optional for ipinfo
-    cache_ttl: 604800  # 7 days
+    cache_ttl: 168h  # 7 days (7 * 24 hours)
     rate_limit: 150    # per minute (for external API calls)
   
   # DNS Resolution
   dns:
     workers: 20
-    timeout: 5  # seconds
-    cache_ttl: 86400  # 24 hours
+    timeout: 5s
+    cache_ttl: 24h  # 24 hours
 
 # Cache Configuration
 # -------------------
@@ -146,7 +152,7 @@ cli:
   host: 127.0.0.1
   port: 2323
   max_clients: 5
-  timeout: 300  # seconds
+  timeout: 5m  # 5 minutes
   prompt: "> "
   welcome_message: |
     NodelistDB Test Daemon CLI v1.0.0

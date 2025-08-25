@@ -15,9 +15,12 @@ type DaemonInterface interface {
 	TestNode(ctx context.Context, zone, net, node uint16, hostname string, options TestOptions) (*TestResult, error)
 	GetStatus() DaemonStatus
 	GetWorkerStatus() WorkerStatus
+	GetNodeInfo(ctx context.Context, zone, net, node uint16) (*NodeInfo, error)
 	Pause() error
 	Resume() error
 	ReloadConfig() error
+	SetDebugMode(enabled bool) error
+	GetDebugMode() bool
 }
 
 type CLIServer struct {

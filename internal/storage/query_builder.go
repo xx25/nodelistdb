@@ -303,6 +303,10 @@ func (qb *QueryBuilder) buildWhereConditions(filter database.NodeFilter) ([]stri
 		conditions = append(conditions, "is_cm = ?")
 		args = append(args, *filter.IsCM)
 	}
+	if filter.HasInet != nil {
+		conditions = append(conditions, "has_inet = ?")
+		args = append(args, *filter.HasInet)
+	}
 	if filter.HasBinkp != nil {
 		// HasBinkp is now determined from JSON: check for IBN or BND protocols
 		conditions = append(conditions, "(json_extract(internet_config, '$.protocols.IBN') IS NOT NULL OR json_extract(internet_config, '$.protocols.BND') IS NOT NULL) = ?")
@@ -773,5 +777,57 @@ func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 		FROM node_years
 		GROUP BY year
 		ORDER BY year
+	`
+}
+
+// NetworkNameSQL returns SQL for getting network name from coordinator node
+func (qb *QueryBuilder) NetworkNameSQL() string {
+	return `
+		SELECT system_name 
+		FROM nodes 
+		WHERE zone = ? AND net = ? AND node = 0 
+		ORDER BY nodelist_date DESC 
+		LIMIT 1
+	`
+}
+
+// NetworkHistorySQL returns SQL for getting network appearance periods
+func (qb *QueryBuilder) NetworkHistorySQL() string {
+	return `
+		WITH network_dates AS (
+			SELECT DISTINCT 
+				nodelist_date,
+				day_number,
+				LAG(nodelist_date) OVER (ORDER BY nodelist_date) as prev_date
+			FROM nodes
+			WHERE zone = ? AND net = ?
+			ORDER BY nodelist_date
+		),
+		appearance_groups AS (
+			SELECT 
+				nodelist_date,
+				day_number,
+				CASE 
+					WHEN prev_date IS NULL OR nodelist_date - prev_date > INTERVAL '14 days' THEN 1
+					ELSE 0
+				END as new_group
+			FROM network_dates
+		),
+		appearance_periods AS (
+			SELECT 
+				nodelist_date,
+				day_number,
+				SUM(new_group) OVER (ORDER BY nodelist_date) as group_id
+			FROM appearance_groups
+		)
+		SELECT 
+			MIN(nodelist_date) as start_date,
+			MAX(nodelist_date) as end_date,
+			MIN(day_number) as start_day_num,
+			MAX(day_number) as end_day_num,
+			COUNT(*) as nodelist_count
+		FROM appearance_periods
+		GROUP BY group_id
+		ORDER BY start_date
 	`
 }

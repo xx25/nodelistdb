@@ -16,6 +16,9 @@ import (
 type BinkPTester struct {
 	timeout     time.Duration
 	ourAddress  string
+	systemName  string
+	sysop       string
+	location    string
 	defaultPort int
 	debug       bool
 }
@@ -33,6 +36,25 @@ func NewBinkPTester(timeout time.Duration, ourAddress string) *BinkPTester {
 	return &BinkPTester{
 		timeout:     timeout,
 		ourAddress:  ourAddress,
+		systemName:  "NodelistDB Test Daemon",
+		sysop:       "Test Operator",
+		location:    "Test Location",
+		defaultPort: 24554,
+		debug:       debug,
+	}
+}
+
+// NewBinkPTesterWithInfo creates a new BinkP tester with custom system info
+func NewBinkPTesterWithInfo(timeout time.Duration, ourAddress, systemName, sysop, location string) *BinkPTester {
+	// Enable debug mode if DEBUG_BINKP env var is set
+	debug := os.Getenv("DEBUG_BINKP") != ""
+	
+	return &BinkPTester{
+		timeout:     timeout,
+		ourAddress:  ourAddress,
+		systemName:  systemName,
+		sysop:       sysop,
+		location:    location,
 		defaultPort: 24554,
 		debug:       debug,
 	}
@@ -85,8 +107,8 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 	}
 	defer conn.Close()
 	
-	// Create BinkP session
-	session := binkp.NewSession(conn, t.ourAddress)
+	// Create BinkP session with custom system info
+	session := binkp.NewSessionWithInfo(conn, t.ourAddress, t.systemName, t.sysop, t.location)
 	session.SetTimeout(t.timeout)
 	session.SetDebug(t.debug)
 	
@@ -143,5 +165,10 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 		AddressValid:    addressValid,
 		Port:            port,
 	}
+}
+
+// SetDebug enables or disables debug mode
+func (t *BinkPTester) SetDebug(enabled bool) {
+	t.debug = enabled
 }
 

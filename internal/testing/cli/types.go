@@ -88,3 +88,19 @@ type TestOutput struct {
 	Message string
 	Time    time.Time
 }
+
+type NodeInfo struct {
+	Address           string
+	SystemName        string
+	SysopName         string
+	Location          string
+	NodeType          string
+	HasInternet       bool
+	InternetHostnames []string
+	InternetProtocols []string
+	Flags             []string
+	ModemFlags        []string
+	LastSeen          time.Time
+	Found             bool
+	ErrorMessage      string
+}

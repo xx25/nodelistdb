@@ -14,12 +14,12 @@ import (
 type NodeOperations struct {
 	db           database.DatabaseInterface
 	queryBuilder QueryBuilderInterface
-	resultParser *ResultParser
+	resultParser ResultParserInterface
 	mu           sync.RWMutex
 }
 
 // NewNodeOperations creates a new NodeOperations instance
-func NewNodeOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser *ResultParser) *NodeOperations {
+func NewNodeOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser ResultParserInterface) *NodeOperations {
 	return &NodeOperations{
 		db:           db,
 		queryBuilder: queryBuilder,
@@ -47,7 +47,16 @@ func (no *NodeOperations) insertChunkSafely(tx *sql.Tx, chunk []database.Node) e
 	}
 
 	// Use direct SQL generation for bulk imports (much faster than parameterized queries)
-	insertSQL := no.queryBuilder.BuildDirectBatchInsertSQL(chunk, no.resultParser)
+	// Need to get concrete ResultParser for SQL building
+	var rp *ResultParser
+	if parser, ok := no.resultParser.(*ResultParser); ok {
+		rp = parser
+	} else if chParser, ok := no.resultParser.(*ClickHouseResultParser); ok {
+		rp = chParser.ResultParser
+	} else {
+		return fmt.Errorf("unable to get result parser for SQL building")
+	}
+	insertSQL := no.queryBuilder.BuildDirectBatchInsertSQL(chunk, rp)
 
 	_, err := tx.Exec(insertSQL)
 	if err != nil {

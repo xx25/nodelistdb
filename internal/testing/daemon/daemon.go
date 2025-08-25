@@ -3,9 +3,11 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/nodelistdb/internal/testing/cli"
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
 	"github.com/nodelistdb/internal/testing/protocols"
@@ -41,6 +43,14 @@ type Daemon struct {
 	// Control state
 	pauseMu sync.RWMutex
 	paused  bool
+	
+	// Debug mode
+	debugMu sync.RWMutex
+	debug   bool
+	
+	// Track nodelist updates
+	lastNodelistDate time.Time
+	nodelistMu       sync.RWMutex
 	
 	// Statistics
 	stats struct {
@@ -85,12 +95,23 @@ func New(cfg *Config) (*Daemon, error) {
 			cfg.Database.DuckDB.ResultsPath,
 		)
 	case "clickhouse":
-		store, err = storage.NewClickHouseStorage(
+		chConfig := &storage.ClickHouseConfig{
+			MaxOpenConns:  cfg.Database.ClickHouse.MaxOpenConns,
+			MaxIdleConns:  cfg.Database.ClickHouse.MaxIdleConns,
+			DialTimeout:   cfg.Database.ClickHouse.DialTimeout,
+			ReadTimeout:   cfg.Database.ClickHouse.ReadTimeout,
+			WriteTimeout:  cfg.Database.ClickHouse.WriteTimeout,
+			Compression:   cfg.Database.ClickHouse.Compression,
+			BatchSize:     cfg.Database.ClickHouse.BatchSize,
+			FlushInterval: cfg.Database.ClickHouse.FlushInterval,
+		}
+		store, err = storage.NewClickHouseStorageWithConfig(
 			cfg.Database.ClickHouse.Host,
 			cfg.Database.ClickHouse.Port,
 			cfg.Database.ClickHouse.Database,
 			cfg.Database.ClickHouse.Username,
 			cfg.Database.ClickHouse.Password,
+			chConfig,
 		)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", cfg.Database.Type)
@@ -140,19 +161,37 @@ func New(cfg *Config) (*Daemon, error) {
 		d.geolocator.SetPersistentCache(geoCache)
 	}
 
+	// Set debug mode based on logging level
+	debugMode := cfg.Logging.Level == "debug"
+	d.debug = debugMode
+	
 	// Initialize protocol testers
 	if cfg.Protocols.BinkP.Enabled {
-		d.binkpTester = protocols.NewBinkPTester(
+		d.binkpTester = protocols.NewBinkPTesterWithInfo(
 			cfg.Protocols.BinkP.Timeout,
 			cfg.Protocols.BinkP.OurAddress,
+			cfg.Protocols.BinkP.SystemName,
+			cfg.Protocols.BinkP.Sysop,
+			cfg.Protocols.BinkP.Location,
 		)
+		// Set debug mode if BinkP tester supports it
+		if setter, ok := d.binkpTester.(protocols.DebugSetter); ok {
+			setter.SetDebug(debugMode)
+		}
 	}
 	
 	if cfg.Protocols.Ifcico.Enabled {
-		d.ifcicoTester = protocols.NewIfcicoTester(
+		d.ifcicoTester = protocols.NewIfcicoTesterWithInfo(
 			cfg.Protocols.Ifcico.Timeout,
 			cfg.Protocols.Ifcico.OurAddress,
+			cfg.Protocols.Ifcico.SystemName,
+			cfg.Protocols.Ifcico.Sysop,
+			cfg.Protocols.Ifcico.Location,
 		)
+		// Set debug mode for ifcico tester
+		if setter, ok := d.ifcicoTester.(protocols.DebugSetter); ok {
+			setter.SetDebug(debugMode)
+		}
 	}
 	
 	if cfg.Protocols.Telnet.Enabled {
@@ -184,6 +223,8 @@ func New(cfg *Config) (*Daemon, error) {
 		MaxInterval:       24 * time.Hour,
 		MaxBackoffLevel:   5,
 		JitterPercent:     0.1,
+		StaleTestThreshold: cfg.Daemon.StaleTestThreshold,
+		FailedRetryInterval: cfg.Daemon.FailedRetryInterval,
 	}, store)
 
 	return d, nil
@@ -219,6 +260,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 	}
 	
+	// Get initial nodelist date
+	if nodelistDate, err := d.storage.GetLatestNodelistDate(ctx); err == nil {
+		d.nodelistMu.Lock()
+		d.lastNodelistDate = nodelistDate
+		d.nodelistMu.Unlock()
+		logging.Infof("Current nodelist date: %s", nodelistDate.Format("2006-01-02"))
+	}
+	
 	// Check if CLI-only mode is enabled
 	if d.config.Daemon.CLIOnly {
 		logging.Info("CLI-only mode enabled - automatic testing disabled")
@@ -245,7 +294,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 	ticker := time.NewTicker(d.config.Daemon.TestInterval)
 	defer ticker.Stop()
 	
+	// Create ticker for checking nodelist updates (every 5 minutes)
+	nodelistCheckTicker := time.NewTicker(5 * time.Minute)
+	defer nodelistCheckTicker.Stop()
+	
 	logging.Infof("Daemon started, will run tests every %v", d.config.Daemon.TestInterval)
+	logging.Info("Will check for nodelist updates every 5 minutes")
 	
 	for {
 		select {
@@ -257,8 +311,51 @@ func (d *Daemon) Run(ctx context.Context) error {
 			if err := d.runTestCycle(ctx); err != nil {
 				logging.Errorf("Error in test cycle: %v", err)
 			}
+			
+		case <-nodelistCheckTicker.C:
+			// Check if nodelist has been updated
+			if d.checkAndRefreshNodelist(ctx) {
+				logging.Info("New nodelist detected - nodes refreshed from database")
+			}
 		}
 	}
+}
+
+// checkAndRefreshNodelist checks if the nodelist has been updated and refreshes if needed
+func (d *Daemon) checkAndRefreshNodelist(ctx context.Context) bool {
+	// Get current nodelist date from database
+	currentDate, err := d.storage.GetLatestNodelistDate(ctx)
+	if err != nil {
+		logging.Errorf("Failed to check nodelist date: %v", err)
+		return false
+	}
+	
+	// Check if it's different from our last known date
+	d.nodelistMu.RLock()
+	lastDate := d.lastNodelistDate
+	d.nodelistMu.RUnlock()
+	
+	if currentDate.After(lastDate) {
+		// New nodelist detected!
+		logging.Infof("New nodelist detected: %s (was %s)", 
+			currentDate.Format("2006-01-02"),
+			lastDate.Format("2006-01-02"))
+		
+		// Refresh the scheduler with new nodes
+		if err := d.scheduler.RefreshNodes(ctx); err != nil {
+			logging.Errorf("Failed to refresh nodes: %v", err)
+			return false
+		}
+		
+		// Update our last known date
+		d.nodelistMu.Lock()
+		d.lastNodelistDate = currentDate
+		d.nodelistMu.Unlock()
+		
+		return true
+	}
+	
+	return false
 }
 
 // runTestCycle runs a complete test cycle
@@ -279,8 +376,13 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	// Use scheduler to get nodes that need testing
 	nodes := d.scheduler.GetNodesForTesting(ctx, d.config.Daemon.BatchSize * d.config.Daemon.Workers)
 	if len(nodes) == 0 {
+		// Log scheduler status for debugging
+		schedStatus := d.scheduler.GetScheduleStatus()
+		logging.Infof("Scheduler status: total_nodes=%v, ready=%v, failing=%v", 
+			schedStatus["total_nodes"], schedStatus["ready_for_test"], schedStatus["failing_nodes"])
+		
 		// Fallback to getting all nodes if scheduler has no nodes ready
-		logging.Infof("No nodes ready from scheduler, checking all nodes")
+		logging.Warnf("No nodes ready from scheduler, falling back to testing ALL nodes (this should not happen if tests were done recently)")
 		allNodes, err := d.storage.GetNodesWithInternet(ctx, 0) // 0 = no limit
 		if err != nil {
 			return fmt.Errorf("failed to get nodes: %w", err)
@@ -335,7 +437,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		// Store batch results if not in dry-run mode
 		if !d.config.Daemon.DryRun && len(allResults) > 0 {
 			if err := d.storage.StoreTestResults(ctx, allResults[len(allResults)-len(batch):]); err != nil {
-				logging.Infof("Failed to store batch results: %v", err)
+				logging.Errorf("Failed to store batch results: %v", err)
 			}
 		}
 	}
@@ -345,7 +447,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	
 	if !d.config.Daemon.DryRun {
 		if err := d.storage.StoreDailyStats(ctx, stats); err != nil {
-			logging.Infof("Failed to store daily statistics: %v", err)
+			logging.Errorf("Failed to store daily statistics: %v", err)
 		}
 	}
 	
@@ -406,164 +508,6 @@ func (d *Daemon) testNode(ctx context.Context, node *models.Node) *models.TestRe
 	return result
 }
 
-// testBinkP tests BinkP connectivity
-func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *models.TestResult) {
-	if d.binkpTester == nil {
-		return
-	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
-		return
-	}
-	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
-	testResult := d.binkpTester.Test(ctx, ip, d.config.Protocols.BinkP.Port, node.Address())
-	
-	if binkpResult, ok := testResult.(*protocols.BinkPTestResult); ok {
-		details := &models.BinkPTestDetails{
-			SystemName:   binkpResult.SystemName,
-			Sysop:        binkpResult.Sysop,
-			Location:     binkpResult.Location,
-			Version:      binkpResult.Version,
-			Addresses:    binkpResult.Addresses,
-			Capabilities: binkpResult.Capabilities,
-		}
-		result.SetBinkPResult(binkpResult.Success, binkpResult.ResponseMs, details, binkpResult.Error)
-		
-		// Use the AddressValid flag from BinkP tester
-		if binkpResult.AddressValid {
-			result.AddressValidated = true
-		}
-	}
-}
-
-// testIfcico tests IFCICO connectivity
-func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *models.TestResult) {
-	if d.ifcicoTester == nil {
-		return
-	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
-		return
-	}
-	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
-	testResult := d.ifcicoTester.Test(ctx, ip, d.config.Protocols.Ifcico.Port, node.Address())
-	
-	if ifcicoResult, ok := testResult.(*protocols.IfcicoTestResult); ok {
-		details := &models.IfcicoTestDetails{
-			MailerInfo:   ifcicoResult.MailerInfo,
-			SystemName:   ifcicoResult.SystemName,
-			Addresses:    ifcicoResult.Addresses,
-			ResponseType: ifcicoResult.ResponseType,
-		}
-		result.SetIfcicoResult(ifcicoResult.Success, ifcicoResult.ResponseMs, details, ifcicoResult.Error)
-	}
-}
-
-// testTelnet tests Telnet connectivity
-func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *models.TestResult) {
-	if d.telnetTester == nil {
-		return
-	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
-		return
-	}
-	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
-	testResult := d.telnetTester.Test(ctx, ip, d.config.Protocols.Telnet.Port, node.Address())
-	
-	if telnetResult, ok := testResult.(*protocols.TelnetTestResult); ok {
-		result.SetTelnetResult(telnetResult.Success, telnetResult.ResponseMs, telnetResult.Banner, telnetResult.Error)
-	}
-}
-
-// testFTP tests FTP connectivity
-func (d *Daemon) testFTP(ctx context.Context, node *models.Node, result *models.TestResult) {
-	if d.ftpTester == nil {
-		return
-	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
-		return
-	}
-	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
-	testResult := d.ftpTester.Test(ctx, ip, d.config.Protocols.FTP.Port, node.Address())
-	
-	if ftpResult, ok := testResult.(*protocols.FTPTestResult); ok {
-		result.SetFTPResult(ftpResult.Success, ftpResult.ResponseMs, ftpResult.Banner, ftpResult.Error)
-	}
-}
-
-// testVModem tests VModem connectivity
-func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *models.TestResult) {
-	if d.vmodemTester == nil {
-		return
-	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
-		return
-	}
-	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
-	testResult := d.vmodemTester.Test(ctx, ip, d.config.Protocols.VModem.Port, node.Address())
-	
-	if vmodemResult, ok := testResult.(*protocols.VModemTestResult); ok {
-		result.SetVModemResult(vmodemResult.Success, vmodemResult.ResponseMs, vmodemResult.Error)
-	}
-}
 
 // calculateStatistics calculates statistics from test results
 func (d *Daemon) calculateStatistics(results []*models.TestResult) *models.TestStatistics {
@@ -721,18 +665,24 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 	
 	// Reinitialize protocol testers with new timeouts and settings
 	if newCfg.Protocols.BinkP.Enabled {
-		d.binkpTester = protocols.NewBinkPTester(
+		d.binkpTester = protocols.NewBinkPTesterWithInfo(
 			newCfg.Protocols.BinkP.Timeout,
 			newCfg.Protocols.BinkP.OurAddress,
+			newCfg.Protocols.BinkP.SystemName,
+			newCfg.Protocols.BinkP.Sysop,
+			newCfg.Protocols.BinkP.Location,
 		)
 	} else {
 		d.binkpTester = nil
 	}
 	
 	if newCfg.Protocols.Ifcico.Enabled {
-		d.ifcicoTester = protocols.NewIfcicoTester(
+		d.ifcicoTester = protocols.NewIfcicoTesterWithInfo(
 			newCfg.Protocols.Ifcico.Timeout,
 			newCfg.Protocols.Ifcico.OurAddress,
+			newCfg.Protocols.Ifcico.SystemName,
+			newCfg.Protocols.Ifcico.Sysop,
+			newCfg.Protocols.Ifcico.Location,
 		)
 	} else {
 		d.ifcicoTester = nil
@@ -821,16 +771,74 @@ func (d *Daemon) IsPaused() bool {
 	return d.paused
 }
 
+// GetNodeInfo retrieves detailed information about a node from the database
+func (d *Daemon) GetNodeInfo(ctx context.Context, zone, net, node uint16) (*cli.NodeInfo, error) {
+	// Try to find the node in our storage
+	nodes, err := d.storage.GetNodesByZone(ctx, int(zone))
+	if err != nil {
+		return &cli.NodeInfo{
+			Address:      fmt.Sprintf("%d:%d/%d", zone, net, node),
+			Found:        false,
+			ErrorMessage: fmt.Sprintf("Failed to query database: %v", err),
+		}, nil
+	}
+	
+	// Find the specific node
+	for _, n := range nodes {
+		if n.Zone == int(zone) && n.Net == int(net) && n.Node == int(node) {
+			return &cli.NodeInfo{
+				Address:           fmt.Sprintf("%d:%d/%d", zone, net, node),
+				SystemName:        n.SystemName,
+				SysopName:         n.SysopName,
+				Location:          n.Location,
+				HasInternet:       n.HasInet,
+				InternetHostnames: n.InternetHostnames,
+				InternetProtocols: n.InternetProtocols,
+				Found:             true,
+			}, nil
+		}
+	}
+	
+	return &cli.NodeInfo{
+		Address:      fmt.Sprintf("%d:%d/%d", zone, net, node),
+		Found:        false,
+		ErrorMessage: "Node not found in database",
+	}, nil
+}
+
 // TestNodeDirect tests a specific node directly (for CLI)
 func (d *Daemon) TestNodeDirect(ctx context.Context, zone, net, node uint16, hostname string) (*models.TestResult, error) {
-	testNode := &models.Node{
-		Zone: int(zone),
-		Net:  int(net),
-		Node: int(node),
-		InternetHostnames: []string{hostname},
-		HasInet: true,
-		// Enable all protocols for CLI testing
-		InternetProtocols: []string{"IBN", "IFC", "ITN", "IFT", "IVM"},
+	var testNode *models.Node
+	
+	// If no hostname provided, try to look up the node from database
+	if hostname == "" {
+		// Try to find the node in our storage
+		nodes, err := d.storage.GetNodesByZone(ctx, int(zone))
+		if err == nil {
+			// Find the specific node
+			for _, n := range nodes {
+				if n.Zone == int(zone) && n.Net == int(net) && n.Node == int(node) {
+					testNode = n
+					break
+				}
+			}
+		}
+		
+		if testNode == nil {
+			// Node not found in database, create a minimal node
+			return nil, fmt.Errorf("node %d:%d/%d not found in database and no hostname provided", zone, net, node)
+		}
+	} else {
+		// Hostname was provided, create node with that hostname
+		testNode = &models.Node{
+			Zone: int(zone),
+			Net:  int(net),
+			Node: int(node),
+			InternetHostnames: []string{hostname},
+			HasInet: true,
+			// Enable all protocols for CLI testing when hostname is manually provided
+			InternetProtocols: []string{"IBN", "IFC", "ITN", "IFT", "IVM"},
+		}
 	}
 	
 	result := d.testNode(ctx, testNode)
@@ -843,4 +851,294 @@ func (d *Daemon) TestNodeDirect(ctx context.Context, zone, net, node uint16, hos
 	}
 	
 	return result, nil
+}
+
+// SetDebugMode enables or disables debug mode for protocol testers
+func (d *Daemon) SetDebugMode(enabled bool) error {
+	d.debugMu.Lock()
+	defer d.debugMu.Unlock()
+	
+	d.debug = enabled
+	
+	// Update all protocol testers if they support debug mode
+	if d.binkpTester != nil {
+		if setter, ok := d.binkpTester.(protocols.DebugSetter); ok {
+			setter.SetDebug(enabled)
+		}
+	}
+	if d.ifcicoTester != nil {
+		if setter, ok := d.ifcicoTester.(protocols.DebugSetter); ok {
+			setter.SetDebug(enabled)
+		}
+	}
+	if d.telnetTester != nil {
+		if setter, ok := d.telnetTester.(protocols.DebugSetter); ok {
+			setter.SetDebug(enabled)
+		}
+	}
+	if d.ftpTester != nil {
+		if setter, ok := d.ftpTester.(protocols.DebugSetter); ok {
+			setter.SetDebug(enabled)
+		}
+	}
+	if d.vmodemTester != nil {
+		if setter, ok := d.vmodemTester.(protocols.DebugSetter); ok {
+			setter.SetDebug(enabled)
+		}
+	}
+	
+	if enabled {
+		logging.Info("Debug mode enabled for protocol testers")
+	} else {
+		logging.Info("Debug mode disabled for protocol testers")
+	}
+	
+	return nil
+}
+
+// GetDebugMode returns the current debug mode status
+func (d *Daemon) GetDebugMode() bool {
+	d.debugMu.RLock()
+	defer d.debugMu.RUnlock()
+	return d.debug
+}
+
+// TestSingleNode tests a single node and returns immediately
+// nodeSpec can be in format "zone:net/node" or "host:port" or "host"
+func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) error {
+	// Enable debug mode if configured
+	if d.config.Logging.Level == "debug" {
+		d.SetDebugMode(true)
+	}
+	
+	// Parse the node specification
+	var zone, net, node uint16
+	var hostname string
+	var port int
+	
+	// Try to parse as FTN address first (e.g., "2:5053/56")
+	if _, err := fmt.Sscanf(nodeSpec, "%d:%d/%d", &zone, &net, &node); err == nil {
+		// It's an FTN address - look up node in database
+		nodes, err := d.storage.GetNodesByZone(ctx, int(zone))
+		if err != nil {
+			return fmt.Errorf("failed to query nodes: %w", err)
+		}
+		
+		// Find the specific node
+		var targetNode *models.Node
+		for _, n := range nodes {
+			if n.Zone == int(zone) && n.Net == int(net) && n.Node == int(node) {
+				targetNode = n
+				break
+			}
+		}
+		
+		if targetNode == nil {
+			return fmt.Errorf("node %s not found in database", nodeSpec)
+		}
+		
+		// Get hostname from node data
+		if len(targetNode.InternetHostnames) > 0 {
+			hostname = targetNode.InternetHostnames[0]
+		} else {
+			return fmt.Errorf("node %s has no internet hostname", nodeSpec)
+		}
+	} else {
+		// Try to parse as host:port or just host
+		var parsedHost string
+		if n, err := fmt.Sscanf(nodeSpec, "%[^:]:%d", &parsedHost, &port); n == 2 && err == nil {
+			// Successfully parsed host:port
+			hostname = parsedHost
+		} else {
+			// Just a hostname (no port specified)
+			hostname = nodeSpec
+			port = 0
+		}
+		// We'll need to create a synthetic node for testing
+		zone, net, node = 2, 5001, 5001 // Default testing address
+	}
+	
+	// Determine port based on protocol if not specified
+	if port == 0 {
+		switch protocol {
+		case "binkp":
+			port = 24554
+		case "ifcico":
+			port = 60179
+		case "telnet":
+			port = 23
+		case "ftp":
+			port = 21
+		default:
+			return fmt.Errorf("unsupported protocol: %s", protocol)
+		}
+	}
+	
+	// Build hostname with port only if hostname doesn't already include port
+	if port != 0 && hostname != "" && !containsPort(hostname) {
+		hostname = fmt.Sprintf("%s:%d", hostname, port)
+	}
+	
+	logging.Infof("Testing node %s via %s protocol at %s", nodeSpec, protocol, hostname)
+	
+	// Create test node
+	testNode := &models.Node{
+		Zone: int(zone),
+		Net:  int(net),
+		Node: int(node),
+		InternetHostnames: []string{hostname},
+		HasInet: true,
+		InternetProtocols: []string{},
+	}
+	
+	// Set protocol flag based on requested protocol
+	switch protocol {
+	case "binkp":
+		testNode.InternetProtocols = []string{"IBN"}
+	case "ifcico":
+		testNode.InternetProtocols = []string{"IFC"}
+	case "telnet":
+		testNode.InternetProtocols = []string{"ITN"}
+	case "ftp":
+		testNode.InternetProtocols = []string{"IFT"}
+	}
+	
+	// Run the test - but we need to handle the case where hostname is already an IP
+	// The testNode function expects to do DNS resolution, but we may have an IP directly
+	result := models.NewTestResult(testNode)
+	
+	// Check if hostname is already an IP address
+	isIP := false
+	if parts := strings.Split(hostname, ":"); len(parts) > 0 {
+		// Remove port if present
+		hostOnly := parts[0]
+		// Simple check for IP address (contains dots and all parts are numeric)
+		if strings.Count(hostOnly, ".") == 3 {
+			ipParts := strings.Split(hostOnly, ".")
+			isIP = true
+			for _, part := range ipParts {
+				if part == "" {
+					isIP = false
+					break
+				}
+				for _, ch := range part {
+					if ch < '0' || ch > '9' {
+						isIP = false
+						break
+					}
+				}
+			}
+		}
+	}
+	
+	// If it's an IP, skip DNS resolution and set it directly
+	if isIP {
+		parts := strings.Split(hostname, ":")
+		ip := parts[0]
+		result.ResolvedIPv4 = []string{ip}
+		result.Hostname = hostname
+		
+		// Get geolocation for the IP
+		if geo := d.geolocator.GetLocation(ctx, ip); geo != nil {
+			result.SetGeolocation(geo)
+		}
+	} else {
+		// Do DNS resolution
+		if dnsResult := d.dnsResolver.Resolve(ctx, hostname); dnsResult != nil {
+			result.SetDNSResult(dnsResult)
+			
+			// Get geolocation for first resolved IP
+			if len(dnsResult.IPv4Addresses) > 0 {
+				if geo := d.geolocator.GetLocation(ctx, dnsResult.IPv4Addresses[0]); geo != nil {
+					result.SetGeolocation(geo)
+				}
+			}
+		}
+	}
+	
+	// Test the requested protocol
+	switch protocol {
+	case "binkp":
+		if d.config.Protocols.BinkP.Enabled && d.binkpTester != nil {
+			d.testBinkP(ctx, testNode, result)
+		}
+	case "ifcico":
+		if d.config.Protocols.Ifcico.Enabled && d.ifcicoTester != nil {
+			d.testIfcico(ctx, testNode, result)
+		}
+	case "telnet":
+		if d.config.Protocols.Telnet.Enabled && d.telnetTester != nil {
+			d.testTelnet(ctx, testNode, result)
+		}
+	case "ftp":
+		if d.config.Protocols.FTP.Enabled && d.ftpTester != nil {
+			d.testFTP(ctx, testNode, result)
+		}
+	}
+	
+	// Display results
+	logging.Infof("Test completed for %s", nodeSpec)
+	logging.Infof("  Success: %v", result.IsOperational)
+	
+	if protocol == "binkp" && result.BinkPResult != nil {
+		if result.BinkPResult.Success {
+			logging.Infof("  BinkP: Connected successfully")
+			if result.BinkPResult.Details != nil {
+				if systemName, ok := result.BinkPResult.Details["SystemName"].(string); ok && systemName != "" {
+					logging.Infof("    System: %s", systemName)
+				}
+				if sysop, ok := result.BinkPResult.Details["Sysop"].(string); ok && sysop != "" {
+					logging.Infof("    Sysop: %s", sysop)
+				}
+				if addresses, ok := result.BinkPResult.Details["Addresses"].([]string); ok && len(addresses) > 0 {
+					logging.Infof("    Addresses: %v", addresses)
+				}
+			}
+		} else {
+			logging.Infof("  BinkP: Failed - %s", result.BinkPResult.Error)
+		}
+	}
+	
+	if protocol == "ifcico" && result.IfcicoResult != nil {
+		if result.IfcicoResult.Success {
+			logging.Infof("  IFCICO: Connected successfully")
+			if result.IfcicoResult.Details != nil {
+				if systemName, ok := result.IfcicoResult.Details["SystemName"].(string); ok && systemName != "" {
+					logging.Infof("    System: %s", systemName)
+				}
+				if mailerInfo, ok := result.IfcicoResult.Details["MailerInfo"].(string); ok && mailerInfo != "" {
+					logging.Infof("    Mailer: %s", mailerInfo)
+				}
+				if addresses, ok := result.IfcicoResult.Details["Addresses"].([]string); ok && len(addresses) > 0 {
+					logging.Infof("    Addresses: %v", addresses)
+				}
+			}
+		} else {
+			logging.Infof("  IFCICO: Failed - %s", result.IfcicoResult.Error)
+		}
+	}
+	
+	// Store result if not in dry-run mode
+	if !d.config.Daemon.DryRun {
+		if err := d.storage.StoreTestResult(ctx, result); err != nil {
+			logging.Warnf("Failed to store test result: %v", err)
+		}
+	}
+	
+	return nil
+}
+
+// containsPort checks if a hostname string already contains a port
+func containsPort(hostname string) bool {
+	// Check if the hostname contains a colon followed by digits (port number)
+	// But be careful with IPv6 addresses which also contain colons
+	if strings.Contains(hostname, "[") && strings.Contains(hostname, "]") {
+		// IPv6 address format like [::1]:8080
+		lastColon := strings.LastIndex(hostname, ":")
+		lastBracket := strings.LastIndex(hostname, "]")
+		return lastColon > lastBracket
+	}
+	// For regular hostnames/IPv4, check if there's a colon followed by port
+	parts := strings.Split(hostname, ":")
+	return len(parts) == 2 && parts[1] != ""
 }

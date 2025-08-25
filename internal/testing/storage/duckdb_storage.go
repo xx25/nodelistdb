@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	_ "github.com/marcboeker/go-duckdb"
 	"github.com/nodelistdb/internal/testing/models"
@@ -18,11 +20,15 @@ type DuckDBStorage struct {
 // NewDuckDBStorage creates a new DuckDB storage
 func NewDuckDBStorage(nodesPath, resultsPath string) (*DuckDBStorage, error) {
 	// Open nodes database in read-only mode
-	nodesConnStr := fmt.Sprintf("%s?access_mode=read_only", nodesPath)
-	nodesDB, err := sql.Open("duckdb", nodesConnStr)
+	nodesDB, err := sql.Open("duckdb", nodesPath+"?access_mode=read_only")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open nodes DuckDB: %w", err)
 	}
+
+	// Configure connection pool for nodes DB
+	nodesDB.SetMaxOpenConns(5)
+	nodesDB.SetMaxIdleConns(2)
+	nodesDB.SetConnMaxLifetime(0)
 
 	// Test nodes connection
 	if err := nodesDB.Ping(); err != nil {
@@ -36,6 +42,11 @@ func NewDuckDBStorage(nodesPath, resultsPath string) (*DuckDBStorage, error) {
 		nodesDB.Close()
 		return nil, fmt.Errorf("failed to open results DuckDB: %w", err)
 	}
+
+	// Configure connection pool for results DB
+	resultsDB.SetMaxOpenConns(10)
+	resultsDB.SetMaxIdleConns(5)
+	resultsDB.SetConnMaxLifetime(0) // No max lifetime
 
 	// Test results connection
 	if err := resultsDB.Ping(); err != nil {
@@ -181,125 +192,138 @@ func (s *DuckDBStorage) Close() error {
 // GetNodesWithInternet retrieves all nodes with internet connectivity
 func (s *DuckDBStorage) GetNodesWithInternet(ctx context.Context, limit int) ([]*models.Node, error) {
 	query := `
-		SELECT DISTINCT
-			zone, 
-			net, 
-			node,
-			system_name,
-			sysop_name,
-			location,
-			internet_hostnames,
-			internet_protocols,
-			has_inet
+		SELECT zone, net, node, system_name, sysop_name, location,
+		       internet_hostnames, internet_protocols, has_inet
 		FROM nodes
 		WHERE has_inet = true
-			AND array_length(internet_protocols) > 0
-			AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
+		  AND array_length(internet_protocols) > 0
+		  AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
 		ORDER BY zone, net, node
 	`
-	
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
 
-	return s.queryNodes(ctx, query)
+	rows, err := s.nodesDB.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query nodes: %w", err)
+	}
+	defer rows.Close()
+
+	return scanNodes(rows)
 }
 
 // GetNodesByZone retrieves nodes from a specific zone
 func (s *DuckDBStorage) GetNodesByZone(ctx context.Context, zone int) ([]*models.Node, error) {
 	query := `
-		SELECT DISTINCT
-			zone, 
-			net, 
-			node,
-			system_name,
-			sysop_name,
-			location,
-			internet_hostnames,
-			internet_protocols,
-			has_inet
+		SELECT zone, net, node, system_name, sysop_name, location,
+		       internet_hostnames, internet_protocols, has_inet
 		FROM nodes
-		WHERE zone = ?
-			AND has_inet = true
-			AND array_length(internet_protocols) > 0
-			AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
+		WHERE zone = ? AND has_inet = true
+		  AND array_length(internet_protocols) > 0
+		  AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
 		ORDER BY net, node
 	`
 
-	return s.queryNodesWithArgs(ctx, query, zone)
+	rows, err := s.nodesDB.QueryContext(ctx, query, zone)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query nodes by zone: %w", err)
+	}
+	defer rows.Close()
+
+	return scanNodes(rows)
 }
 
 // GetNodesByProtocol retrieves nodes that support a specific protocol
 func (s *DuckDBStorage) GetNodesByProtocol(ctx context.Context, protocol string, limit int) ([]*models.Node, error) {
 	query := `
-		SELECT DISTINCT
-			zone, 
-			net, 
-			node,
-			system_name,
-			sysop_name,
-			location,
-			internet_hostnames,
-			internet_protocols,
-			has_inet
+		SELECT zone, net, node, system_name, sysop_name, location,
+		       internet_hostnames, internet_protocols, has_inet
 		FROM nodes
 		WHERE has_inet = true
-			AND list_contains(internet_protocols, ?)
-			AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
+		  AND list_contains(internet_protocols, ?)
+		  AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
 		ORDER BY zone, net, node
 	`
-	
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
 
-	return s.queryNodesWithArgs(ctx, query, protocol)
+	rows, err := s.nodesDB.QueryContext(ctx, query, protocol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query nodes by protocol: %w", err)
+	}
+	defer rows.Close()
+
+	return scanNodes(rows)
+}
+
+// GetLatestNodelistDate returns the most recent nodelist date in the database
+func (s *DuckDBStorage) GetLatestNodelistDate(ctx context.Context) (time.Time, error) {
+	var date time.Time
+	query := `SELECT MAX(nodelist_date) FROM nodes`
+	err := s.nodesDB.QueryRowContext(ctx, query).Scan(&date)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get latest nodelist date: %w", err)
+	}
+	return date, nil
 }
 
 // GetStatistics returns basic statistics about nodes
 func (s *DuckDBStorage) GetStatistics(ctx context.Context) (map[string]int, error) {
-	query := `
-		SELECT 
-			COUNT(*) as total_nodes,
-			COUNT(CASE WHEN has_inet THEN 1 END) as nodes_with_inet,
-			COUNT(CASE WHEN list_contains(internet_protocols, 'IBN') THEN 1 END) as nodes_with_binkp,
-			COUNT(CASE WHEN list_contains(internet_protocols, 'IFC') THEN 1 END) as nodes_with_ifcico,
-			COUNT(CASE WHEN list_contains(internet_protocols, 'ITN') THEN 1 END) as nodes_with_telnet,
-			COUNT(CASE WHEN list_contains(internet_protocols, 'IFT') THEN 1 END) as nodes_with_ftp
+	stats := make(map[string]int)
+
+	// Get total nodes count
+	var totalNodes int
+	err := s.nodesDB.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT (zone, net, node))
 		FROM nodes
 		WHERE nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
-	`
-
-	var stats struct {
-		Total      int
-		WithInet   int
-		WithBinkP  int
-		WithIfcico int
-		WithTelnet int
-		WithFTP    int
-	}
-
-	row := s.nodesDB.QueryRowContext(ctx, query)
-	err := row.Scan(
-		&stats.Total,
-		&stats.WithInet,
-		&stats.WithBinkP,
-		&stats.WithIfcico,
-		&stats.WithTelnet,
-		&stats.WithFTP,
-	)
+	`).Scan(&totalNodes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get statistics: %w", err)
+		return nil, fmt.Errorf("failed to get total nodes: %w", err)
+	}
+	stats["total_nodes"] = totalNodes
+
+	// Get nodes with internet
+	var nodesWithInet int
+	err = s.nodesDB.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT (zone, net, node))
+		FROM nodes
+		WHERE has_inet = true
+		  AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
+	`).Scan(&nodesWithInet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nodes with inet: %w", err)
+	}
+	stats["nodes_with_inet"] = nodesWithInet
+
+	// Get protocol-specific counts
+	protocols := []struct {
+		name string
+		key  string
+	}{
+		{"IBN", "nodes_with_binkp"},
+		{"IFC", "nodes_with_ifcico"},
+		{"ITN", "nodes_with_telnet"},
+		{"IFT", "nodes_with_ftp"},
 	}
 
-	return map[string]int{
-		"total_nodes":       stats.Total,
-		"nodes_with_inet":   stats.WithInet,
-		"nodes_with_binkp":  stats.WithBinkP,
-		"nodes_with_ifcico": stats.WithIfcico,
-		"nodes_with_telnet": stats.WithTelnet,
-		"nodes_with_ftp":    stats.WithFTP,
-	}, nil
+	for _, p := range protocols {
+		var count int
+		err = s.nodesDB.QueryRowContext(ctx, `
+			SELECT COUNT(DISTINCT (zone, net, node))
+			FROM nodes
+			WHERE has_inet = true
+			  AND list_contains(internet_protocols, ?)
+			  AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
+		`, p.name).Scan(&count)
+		if err == nil {
+			stats[p.key] = count
+		}
+	}
+
+	return stats, nil
 }
 
 // StoreTestResult stores a single test result
@@ -438,61 +462,59 @@ func (s *DuckDBStorage) GetNodeTestHistory(ctx context.Context, zone, net, node 
 	return s.scanTestResults(rows)
 }
 
-// Helper methods
+// Helper methods for test results
 
-func (s *DuckDBStorage) queryNodes(ctx context.Context, query string) ([]*models.Node, error) {
-	rows, err := s.nodesDB.QueryContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query nodes: %w", err)
+// parseArray parses DuckDB array string format to Go slice
+// Example: ['host1', 'host2'] -> []string{"host1", "host2"}
+func parseArray(s string) []string {
+	if s == "" || s == "[]" || s == "NULL" {
+		return []string{}
 	}
-	defer rows.Close()
 
-	return s.scanNodes(rows)
-}
+	// Remove brackets
+	s = strings.TrimPrefix(s, "[")
+	s = strings.TrimSuffix(s, "]")
 
-func (s *DuckDBStorage) queryNodesWithArgs(ctx context.Context, query string, args ...interface{}) ([]*models.Node, error) {
-	rows, err := s.nodesDB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query nodes: %w", err)
-	}
-	defer rows.Close()
-
-	return s.scanNodes(rows)
-}
-
-func (s *DuckDBStorage) scanNodes(rows *sql.Rows) ([]*models.Node, error) {
-	var nodes []*models.Node
-	for rows.Next() {
-		node := &models.Node{}
-		var hostnames, protocols sql.NullString
-
-		err := rows.Scan(
-			&node.Zone,
-			&node.Net,
-			&node.Node,
-			&node.SystemName,
-			&node.SysopName,
-			&node.Location,
-			&hostnames,
-			&protocols,
-			&node.HasInet,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
+	// Split by comma and clean up
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	
+	for _, part := range parts {
+		// Trim spaces and quotes
+		part = strings.TrimSpace(part)
+		part = strings.Trim(part, "'\"")
+		if part != "" {
+			result = append(result, part)
 		}
-
-		// Parse arrays (DuckDB returns as strings like ['host1', 'host2'])
-		node.InternetHostnames = parseArray(hostnames.String)
-		node.InternetProtocols = parseArray(protocols.String)
-
-		nodes = append(nodes, node)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("row iteration error: %w", err)
+	return result
+}
+
+// parseDuckDBArray parses DuckDB array string representation to string slice
+func parseDuckDBArray(s string) []string {
+	if s == "" || s == "[]" || s == "NULL" {
+		return []string{}
 	}
 
-	return nodes, nil
+	// Remove brackets if present
+	s = strings.TrimPrefix(s, "[")
+	s = strings.TrimSuffix(s, "]")
+
+	// Split by comma and clean up
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	
+	for _, part := range parts {
+		// Trim spaces and quotes
+		part = strings.TrimSpace(part)
+		part = strings.Trim(part, "'\"")
+		if part != "" {
+			result = append(result, part)
+		}
+	}
+	
+	return result
 }
 
 // scanTestResults scans rows and converts them to TestResult structs
@@ -651,6 +673,77 @@ func (s *DuckDBStorage) scanTestResults(rows *sql.Rows) ([]*models.TestResult, e
 	}
 	
 	return results, nil
+}
+
+// scanNodes scans rows and converts them to models.Node
+func scanNodes(rows *sql.Rows) ([]*models.Node, error) {
+	var nodes []*models.Node
+	
+	for rows.Next() {
+		var (
+			zone              int
+			net               int
+			node              int
+			systemName        sql.NullString
+			sysopName         sql.NullString
+			location          sql.NullString
+			internetHostnames string
+			internetProtocols string
+			hasInet           bool
+		)
+		
+		err := rows.Scan(
+			&zone, &net, &node,
+			&systemName, &sysopName, &location,
+			&internetHostnames, &internetProtocols, &hasInet,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan node: %w", err)
+		}
+		
+		n := &models.Node{
+			Zone:       zone,
+			Net:        net,
+			Node:       node,
+			SystemName: systemName.String,
+			SysopName:  sysopName.String,
+			Location:   location.String,
+			HasInet:    hasInet,
+		}
+		
+		// Parse hostnames (DuckDB returns arrays as strings like "[host1,host2]")
+		if internetHostnames != "" && internetHostnames != "[]" {
+			// Remove brackets and split
+			hostnames := strings.Trim(internetHostnames, "[]")
+			if hostnames != "" {
+				n.InternetHostnames = strings.Split(hostnames, ",")
+				// Trim spaces from each hostname
+				for i := range n.InternetHostnames {
+					n.InternetHostnames[i] = strings.TrimSpace(n.InternetHostnames[i])
+				}
+			}
+		}
+		
+		// Parse protocols
+		if internetProtocols != "" && internetProtocols != "[]" {
+			protocols := strings.Trim(internetProtocols, "[]")
+			if protocols != "" {
+				n.InternetProtocols = strings.Split(protocols, ",")
+				// Trim spaces from each protocol
+				for i := range n.InternetProtocols {
+					n.InternetProtocols[i] = strings.TrimSpace(n.InternetProtocols[i])
+				}
+			}
+		}
+		
+		nodes = append(nodes, n)
+	}
+	
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+	
+	return nodes, nil
 }
 
 func (s *DuckDBStorage) resultToArgs(r *models.TestResult) []interface{} {

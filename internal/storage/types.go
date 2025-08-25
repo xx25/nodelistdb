@@ -129,6 +129,8 @@ type QueryBuilderInterface interface {
 	// Analytics queries
 	FlagFirstAppearanceSQL() string
 	FlagUsageByYearSQL() string
+	NetworkNameSQL() string
+	NetworkHistorySQL() string
 }
 
 // ResultParserInterface defines the contract for parsing database results
@@ -138,6 +140,8 @@ type ResultParserInterface interface {
 	ParseNetworkStatsRow(scanner RowScanner) (*database.NetworkStats, error)
 	ParseRegionInfoRow(scanner RowScanner) (database.RegionInfo, error)
 	ParseNetInfoRow(scanner RowScanner) (database.NetInfo, error)
+	ValidateNodeFilter(filter database.NodeFilter) error
+	SanitizeStringInput(input string) string
 }
 
 // RowScanner interface abstracts sql.Rows and sql.Row for easier testing

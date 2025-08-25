@@ -93,6 +93,7 @@ type NodeFilter struct {
 	// Flag filters
 	IsCM     *bool `json:"is_cm,omitempty"`
 	IsMO     *bool `json:"is_mo,omitempty"`
+	HasInet  *bool `json:"has_inet,omitempty"`  // Any internet connectivity
 	HasBinkp *bool `json:"has_binkp,omitempty"` // Determined from JSON: protocols.IBN or protocols.BND exist
 
 	// Result options

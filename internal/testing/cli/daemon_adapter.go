@@ -13,9 +13,12 @@ type DaemonAdapter struct {
 	testNode     func(ctx context.Context, node *models.Node, hostname string) (*models.TestResult, error)
 	getStatus    func() DaemonStatus
 	getWorkers   func() WorkerStatus
+	getNodeInfo  func(ctx context.Context, zone, net, node uint16) (*NodeInfo, error)
 	pause        func() error
 	resume       func() error
 	reloadConfig func() error
+	setDebugMode func(enabled bool) error
+	getDebugMode func() bool
 }
 
 func NewDaemonAdapter() *DaemonAdapter {
@@ -44,6 +47,10 @@ func (a *DaemonAdapter) SetResumeFunc(f func() error) {
 
 func (a *DaemonAdapter) SetReloadConfigFunc(f func() error) {
 	a.reloadConfig = f
+}
+
+func (a *DaemonAdapter) SetGetNodeInfoFunc(f func(ctx context.Context, zone, net, node uint16) (*NodeInfo, error)) {
+	a.getNodeInfo = f
 }
 
 func (a *DaemonAdapter) TestNode(ctx context.Context, zone, net, node uint16, hostname string, options TestOptions) (*TestResult, error) {
@@ -104,6 +111,27 @@ func (a *DaemonAdapter) ReloadConfig() error {
 		return a.reloadConfig()
 	}
 	return fmt.Errorf("reload config function not configured")
+}
+
+func (a *DaemonAdapter) SetDebugMode(enabled bool) error {
+	if a.setDebugMode != nil {
+		return a.setDebugMode(enabled)
+	}
+	return fmt.Errorf("set debug mode function not configured")
+}
+
+func (a *DaemonAdapter) GetDebugMode() bool {
+	if a.getDebugMode != nil {
+		return a.getDebugMode()
+	}
+	return false
+}
+
+func (a *DaemonAdapter) GetNodeInfo(ctx context.Context, zone, net, node uint16) (*NodeInfo, error) {
+	if a.getNodeInfo == nil {
+		return nil, fmt.Errorf("get node info function not configured")
+	}
+	return a.getNodeInfo(ctx, zone, net, node)
 }
 
 func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {

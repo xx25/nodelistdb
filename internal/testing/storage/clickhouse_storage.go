@@ -3,7 +3,9 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +13,18 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/nodelistdb/internal/testing/models"
 )
+
+// ClickHouseConfig holds ClickHouse connection configuration
+type ClickHouseConfig struct {
+	MaxOpenConns  int
+	MaxIdleConns  int
+	DialTimeout   time.Duration
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+	Compression   string
+	BatchSize     int
+	FlushInterval time.Duration
+}
 
 // ClickHouseStorage implements Storage interface for ClickHouse
 type ClickHouseStorage struct {
@@ -26,7 +40,56 @@ type ClickHouseStorage struct {
 
 // NewClickHouseStorage creates a new ClickHouse storage
 func NewClickHouseStorage(host string, port int, database, username, password string) (*ClickHouseStorage, error) {
+	return NewClickHouseStorageWithConfig(host, port, database, username, password, nil)
+}
+
+// NewClickHouseStorageWithConfig creates a new ClickHouse storage with custom config
+func NewClickHouseStorageWithConfig(host string, port int, database, username, password string, cfg *ClickHouseConfig) (*ClickHouseStorage, error) {
+	// Set defaults
+	maxOpenConns := 10
+	maxIdleConns := 5
+	dialTimeout := 10 * time.Second
+	readTimeout := 5 * time.Minute
+	compression := clickhouse.CompressionLZ4
+	batchSize := 1000
+	flushInterval := 30 * time.Second
+	
+	// Override with config if provided
+	if cfg != nil {
+		if cfg.MaxOpenConns > 0 {
+			maxOpenConns = cfg.MaxOpenConns
+		}
+		if cfg.MaxIdleConns > 0 {
+			maxIdleConns = cfg.MaxIdleConns
+		}
+		if cfg.DialTimeout > 0 {
+			dialTimeout = cfg.DialTimeout
+		}
+		if cfg.ReadTimeout > 0 {
+			readTimeout = cfg.ReadTimeout
+		}
+		if cfg.BatchSize > 0 {
+			batchSize = cfg.BatchSize
+		}
+		if cfg.FlushInterval > 0 {
+			flushInterval = cfg.FlushInterval
+		}
+		// Handle compression
+		switch strings.ToLower(cfg.Compression) {
+		case "lz4":
+			compression = clickhouse.CompressionLZ4
+		case "zstd":
+			compression = clickhouse.CompressionZSTD
+		case "gzip":
+			compression = clickhouse.CompressionGZIP
+		case "none", "":
+			compression = clickhouse.CompressionNone
+		}
+	}
+
 	// Create connection options
+	// IMPORTANT: Do NOT set MaxOpenConns/MaxIdleConns in Options due to driver bug
+	// They must be set on the sql.DB after OpenDB
 	options := &clickhouse.Options{
 		Addr: []string{fmt.Sprintf("%s:%d", host, port)},
 		Auth: clickhouse.Auth{
@@ -38,12 +101,11 @@ func NewClickHouseStorage(host string, port int, database, username, password st
 			"max_execution_time": 60,
 		},
 		Compression: &clickhouse.Compression{
-			Method: clickhouse.CompressionLZ4,
+			Method: compression,
 		},
-		DialTimeout:     10 * time.Second,
-		MaxOpenConns:    10,
-		MaxIdleConns:    5,
-		ConnMaxLifetime: time.Hour,
+		DialTimeout: dialTimeout,
+		ReadTimeout: readTimeout,
+		// DO NOT SET MaxOpenConns/MaxIdleConns here - driver bug!
 	}
 
 	// Create native connection
@@ -64,13 +126,22 @@ func NewClickHouseStorage(host string, port int, database, username, password st
 	// Create SQL DB for compatibility
 	sqlDB := clickhouse.OpenDB(options)
 	
+	// CRITICAL: Set pool settings AFTER OpenDB due to driver bug
+	// If MaxOpenConns/MaxIdleConns are in Options, the driver fails with "invalid settings"
+	sqlDB.SetMaxOpenConns(maxOpenConns)
+	sqlDB.SetMaxIdleConns(maxIdleConns)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+	
+	// Note: We don't ping the SQL DB here as it can cause issues.
+	// The native connection ping above is sufficient.
+	
 	storage := &ClickHouseStorage{
 		conn:          conn,
 		db:            sqlDB,
-		batchSize:     1000,
-		resultsBatch:  make([]*models.TestResult, 0, 1000),
+		batchSize:     batchSize,
+		resultsBatch:  make([]*models.TestResult, 0, batchSize),
 		lastFlush:     time.Now(),
-		flushInterval: 30 * time.Second,
+		flushInterval: flushInterval,
 	}
 
 	// Initialize schema
@@ -170,19 +241,6 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 			error_types Map(String, UInt32)
 		) ENGINE = SummingMergeTree()
 		ORDER BY date`,
-		
-		`CREATE MATERIALIZED VIEW IF NOT EXISTS node_current_status
-		ENGINE = ReplacingMergeTree()
-		ORDER BY (zone, net, node)
-		AS SELECT
-			zone, net, node, address,
-			argMax(test_time, test_time) as last_test_time,
-			argMax(is_operational, test_time) as is_operational,
-			argMax(binkp_success, test_time) as binkp_works,
-			argMax(country, test_time) as country,
-			argMax(isp, test_time) as isp
-		FROM node_test_results
-		GROUP BY zone, net, node, address`,
 	}
 
 	for _, schema := range schemas {
@@ -222,10 +280,14 @@ func (s *ClickHouseStorage) GetNodesWithInternet(ctx context.Context, limit int)
 	query := `
 		SELECT 
 			zone, net, node, system_name, sysop_name, location,
-			internet_hostnames, internet_protocols, has_inet
+			coalesce(JSONExtractString(toString(internet_config), 'defaults', 'INA'), '') as internet_hostnames,
+			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
+			has_inet,
+			toString(internet_config) as config_json
 		FROM nodes
-		WHERE has_inet = 1
-			AND length(internet_protocols) > 0
+		WHERE has_inet = true
+			AND JSONLength(toString(internet_config), 'protocols') > 0
+			AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
 		ORDER BY zone, net, node
 	`
 	
@@ -233,13 +295,14 @@ func (s *ClickHouseStorage) GetNodesWithInternet(ctx context.Context, limit int)
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
 
-	rows, err := s.db.QueryContext(ctx, query)
+	// Use native connection to avoid SQL DB issues
+	rows, err := s.conn.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query nodes: %w", err)
 	}
 	defer rows.Close()
 
-	return s.scanNodes(rows)
+	return s.scanNodesNative(rows)
 }
 
 // GetNodesByZone retrieves nodes from a specific zone
@@ -247,20 +310,25 @@ func (s *ClickHouseStorage) GetNodesByZone(ctx context.Context, zone int) ([]*mo
 	query := `
 		SELECT 
 			zone, net, node, system_name, sysop_name, location,
-			internet_hostnames, internet_protocols, has_inet
+			coalesce(JSONExtractString(toString(internet_config), 'defaults', 'INA'), '') as internet_hostnames,
+			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
+			has_inet,
+			toString(internet_config) as config_json
 		FROM nodes
-		WHERE zone = ? AND has_inet = 1
-			AND length(internet_protocols) > 0
+		WHERE zone = ? AND has_inet = true
+			AND JSONLength(toString(internet_config), 'protocols') > 0
+			AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
 		ORDER BY net, node
 	`
 
-	rows, err := s.db.QueryContext(ctx, query, zone)
+	// Use native connection with positional parameters
+	rows, err := s.conn.Query(ctx, query, zone)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query nodes by zone: %w", err)
 	}
 	defer rows.Close()
 
-	return s.scanNodes(rows)
+	return s.scanNodesNative(rows)
 }
 
 // GetNodesByProtocol retrieves nodes that support a specific protocol
@@ -268,10 +336,14 @@ func (s *ClickHouseStorage) GetNodesByProtocol(ctx context.Context, protocol str
 	query := `
 		SELECT 
 			zone, net, node, system_name, sysop_name, location,
-			internet_hostnames, internet_protocols, has_inet
+			coalesce(JSONExtractString(toString(internet_config), 'defaults', 'INA'), '') as internet_hostnames,
+			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
+			has_inet,
+			toString(internet_config) as config_json
 		FROM nodes
-		WHERE has_inet = 1
-			AND has(internet_protocols, ?)
+		WHERE has_inet = true
+			AND JSONHas(toString(internet_config), 'protocols', ?)
+			AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)
 		ORDER BY zone, net, node
 	`
 	
@@ -279,13 +351,28 @@ func (s *ClickHouseStorage) GetNodesByProtocol(ctx context.Context, protocol str
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
 
-	rows, err := s.db.QueryContext(ctx, query, protocol)
+	// Use native connection with positional parameters
+	rows, err := s.conn.Query(ctx, query, protocol)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query nodes by protocol: %w", err)
 	}
 	defer rows.Close()
 
-	return s.scanNodes(rows)
+	return s.scanNodesNative(rows)
+}
+
+// GetLatestNodelistDate returns the most recent nodelist date in the database
+func (s *ClickHouseStorage) GetLatestNodelistDate(ctx context.Context) (time.Time, error) {
+	query := `SELECT MAX(nodelist_date) FROM nodes`
+	
+	var maxDate time.Time
+	row := s.conn.QueryRow(ctx, query)
+	err := row.Scan(&maxDate)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get latest nodelist date: %w", err)
+	}
+	
+	return maxDate, nil
 }
 
 // GetStatistics returns basic statistics about nodes
@@ -351,12 +438,9 @@ func (s *ClickHouseStorage) StoreTestResults(ctx context.Context, results []*mod
 	// Add all to batch
 	s.resultsBatch = append(s.resultsBatch, results...)
 	
-	// Flush if batch is large enough
-	if len(s.resultsBatch) >= s.batchSize {
-		return s.flushBatch(ctx)
-	}
-	
-	return nil
+	// Always flush to ensure data is persisted
+	// This is called after each batch from the daemon, so we want to persist immediately
+	return s.flushBatch(ctx)
 }
 
 // flushBatch flushes the current batch to ClickHouse
@@ -390,16 +474,35 @@ func (s *ClickHouseStorage) flushBatch(ctx context.Context) error {
 
 // StoreDailyStats stores daily statistics
 func (s *ClickHouseStorage) StoreDailyStats(ctx context.Context, stats *models.TestStatistics) error {
-	query := `
-		INSERT INTO node_test_daily_stats (
-			date, total_nodes_tested, nodes_with_binkp, nodes_with_ifcico,
-			nodes_operational, nodes_with_issues, nodes_dns_failed,
-			avg_binkp_response_ms, avg_ifcico_response_ms,
-			countries, isps, protocol_stats, error_types
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
+	// Use batch insert for proper Map type handling
+	batch, err := s.conn.PrepareBatch(ctx, `INSERT INTO node_test_daily_stats`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare batch: %w", err)
+	}
 
-	return s.conn.Exec(ctx, query,
+	// Convert nil maps to empty maps to avoid ClickHouse parsing errors
+	countries := stats.Countries
+	if countries == nil {
+		countries = make(map[string]uint32)
+	}
+	
+	isps := stats.ISPs
+	if isps == nil {
+		isps = make(map[string]uint32)
+	}
+	
+	protocolStats := stats.ProtocolStats
+	if protocolStats == nil {
+		protocolStats = make(map[string]uint32)
+	}
+	
+	errorTypes := stats.ErrorTypes
+	if errorTypes == nil {
+		errorTypes = make(map[string]uint32)
+	}
+
+	// Append the row to batch
+	err = batch.Append(
 		stats.Date,
 		stats.TotalNodesTested,
 		stats.NodesWithBinkP,
@@ -409,44 +512,477 @@ func (s *ClickHouseStorage) StoreDailyStats(ctx context.Context, stats *models.T
 		stats.NodesDNSFailed,
 		stats.AvgBinkPResponseMs,
 		stats.AvgIfcicoResponseMs,
-		stats.Countries,
-		stats.ISPs,
-		stats.ProtocolStats,
-		stats.ErrorTypes,
+		countries,
+		isps,
+		protocolStats,
+		errorTypes,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to append to batch: %w", err)
+	}
+
+	// Send the batch
+	if err := batch.Send(); err != nil {
+		return fmt.Errorf("failed to send batch: %w", err)
+	}
+
+	return nil
 }
 
 // GetLatestTestResults retrieves the most recent test results
 func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int) ([]*models.TestResult, error) {
-	_ = `
-		SELECT * FROM node_test_results
+	query := `
+		SELECT 
+			test_time, test_date,
+			zone, net, node, address,
+			hostname, resolved_ipv4, resolved_ipv6, dns_error,
+			country, country_code, city, region, 
+			latitude, longitude, isp, org, asn,
+			binkp_tested, binkp_success, binkp_response_ms,
+			binkp_system_name, binkp_sysop, binkp_location, 
+			binkp_version, binkp_addresses, binkp_capabilities, binkp_error,
+			ifcico_tested, ifcico_success, ifcico_response_ms,
+			ifcico_mailer_info, ifcico_system_name, ifcico_addresses, 
+			ifcico_response_type, ifcico_error,
+			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
+			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
+			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
+			is_operational, has_connectivity_issues, address_validated
+		FROM node_test_results
 		ORDER BY test_time DESC
 		LIMIT ?
 	`
-	// Implementation would parse results back into TestResult structs
-	// Simplified for brevity
-	return nil, fmt.Errorf("not fully implemented yet")
+	
+	rows, err := s.conn.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query latest test results: %w", err)
+	}
+	defer rows.Close()
+	
+	var results []*models.TestResult
+	for rows.Next() {
+		r := &models.TestResult{}
+		var testDate time.Time
+		var zone, net, node uint16  // ClickHouse uses UInt16 for these columns
+		var dnsError, binkpError, ifcicoError, telnetError, ftpError, vmodemError string
+		var binkpTested, binkpSuccess, ifcicoTested, ifcicoSuccess bool
+		var telnetTested, telnetSuccess, ftpTested, ftpSuccess bool 
+		var vmodemTested, vmodemSuccess bool
+		var binkpResponseMs, ifcicoResponseMs, telnetResponseMs uint32
+		var ftpResponseMs, vmodemResponseMs uint32
+		var binkpSystemName, binkpSysop, binkpLocation, binkpVersion string
+		var binkpAddresses, binkpCapabilities []string
+		var ifcicoMailerInfo, ifcicoSystemName, ifcicoResponseType string
+		var ifcicoAddresses []string
+		
+		err := rows.Scan(
+			&r.TestTime, &testDate,
+			&zone, &net, &node, &r.Address,
+			&r.Hostname, &r.ResolvedIPv4, &r.ResolvedIPv6, &dnsError,
+			&r.Country, &r.CountryCode, &r.City, &r.Region,
+			&r.Latitude, &r.Longitude, &r.ISP, &r.Org, &r.ASN,
+			&binkpTested, &binkpSuccess, &binkpResponseMs,
+			&binkpSystemName, &binkpSysop, &binkpLocation,
+			&binkpVersion, &binkpAddresses, &binkpCapabilities, &binkpError,
+			&ifcicoTested, &ifcicoSuccess, &ifcicoResponseMs,
+			&ifcicoMailerInfo, &ifcicoSystemName, &ifcicoAddresses,
+			&ifcicoResponseType, &ifcicoError,
+			&telnetTested, &telnetSuccess, &telnetResponseMs, &telnetError,
+			&ftpTested, &ftpSuccess, &ftpResponseMs, &ftpError,
+			&vmodemTested, &vmodemSuccess, &vmodemResponseMs, &vmodemError,
+			&r.IsOperational, &r.HasConnectivityIssues, &r.AddressValidated,
+		)
+		if err != nil {
+			// Log error but continue to process remaining rows
+			fmt.Printf("Warning: failed to scan row in GetLatestTestResults: %v\n", err)
+			continue
+		}
+		
+		// Convert UInt16 to int
+		r.Zone = int(zone)
+		r.Net = int(net)
+		r.Node = int(node)
+		r.TestDate = testDate
+		r.DNSError = dnsError
+		
+		// Populate BinkP result if tested
+		if binkpTested {
+			r.BinkPResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    binkpSuccess,
+				ResponseMs: binkpResponseMs,
+				Error:      binkpError,
+				Details:    make(map[string]interface{}),
+			}
+			if binkpSystemName != "" || binkpSysop != "" {
+				r.BinkPResult.Details["system_name"] = binkpSystemName
+				r.BinkPResult.Details["sysop"] = binkpSysop
+				r.BinkPResult.Details["location"] = binkpLocation
+				r.BinkPResult.Details["version"] = binkpVersion
+				r.BinkPResult.Details["addresses"] = binkpAddresses
+				r.BinkPResult.Details["capabilities"] = binkpCapabilities
+			}
+		}
+		
+		// Populate IFCICO result if tested
+		if ifcicoTested {
+			r.IfcicoResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    ifcicoSuccess,
+				ResponseMs: ifcicoResponseMs,
+				Error:      ifcicoError,
+				Details:    make(map[string]interface{}),
+			}
+			if ifcicoSystemName != "" || ifcicoMailerInfo != "" {
+				r.IfcicoResult.Details["system_name"] = ifcicoSystemName
+				r.IfcicoResult.Details["mailer_info"] = ifcicoMailerInfo
+				r.IfcicoResult.Details["addresses"] = ifcicoAddresses
+				r.IfcicoResult.Details["response_type"] = ifcicoResponseType
+			}
+		}
+		
+		// Populate Telnet result if tested
+		if telnetTested {
+			r.TelnetResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    telnetSuccess,
+				ResponseMs: telnetResponseMs,
+				Error:      telnetError,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		// Populate FTP result if tested
+		if ftpTested {
+			r.FTPResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    ftpSuccess,
+				ResponseMs: ftpResponseMs,
+				Error:      ftpError,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		// Populate VModem result if tested
+		if vmodemTested {
+			r.VModemResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    vmodemSuccess,
+				ResponseMs: vmodemResponseMs,
+				Error:      vmodemError,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		results = append(results, r)
+	}
+	
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating test results: %w", err)
+	}
+	
+	return results, nil
+}
+
+// GetCurrentNodeStatus gets the latest status for each node from test results
+func (s *ClickHouseStorage) GetCurrentNodeStatus(ctx context.Context) ([]map[string]interface{}, error) {
+	query := `
+		SELECT 
+			zone, net, node, address,
+			argMax(test_time, test_time) as last_test_time,
+			argMax(is_operational, test_time) as is_operational,
+			argMax(binkp_success, test_time) as binkp_works,
+			argMax(country, test_time) as country,
+			argMax(isp, test_time) as isp
+		FROM node_test_results
+		WHERE test_time > now() - INTERVAL 7 DAY
+		GROUP BY zone, net, node, address
+		ORDER BY zone, net, node
+	`
+	
+	rows, err := s.conn.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current node status: %w", err)
+	}
+	defer rows.Close()
+	
+	var results []map[string]interface{}
+	for rows.Next() {
+		var zone, net, node int32
+		var address, country, isp string
+		var lastTestTime time.Time
+		var isOperational, binkpWorks bool
+		
+		err := rows.Scan(&zone, &net, &node, &address, &lastTestTime, 
+			&isOperational, &binkpWorks, &country, &isp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		
+		results = append(results, map[string]interface{}{
+			"zone":           zone,
+			"net":            net,
+			"node":           node,
+			"address":        address,
+			"last_test_time": lastTestTime,
+			"is_operational": isOperational,
+			"binkp_works":    binkpWorks,
+			"country":        country,
+			"isp":            isp,
+		})
+	}
+	
+	return results, nil
 }
 
 // GetNodeTestHistory retrieves test history for a specific node
-func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, node int, days int) ([]*models.TestResult, error) {
-	_ = `
-		SELECT * FROM node_test_results
+func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, node int, limit int) ([]*models.TestResult, error) {
+	// Debug logging disabled for performance
+	// fmt.Printf("DEBUG GetNodeTestHistory: Querying history for %d:%d/%d (limit=%d)\n", zone, net, node, limit)
+	
+	query := `
+		SELECT 
+			test_time, test_date,
+			zone, net, node, address,
+			hostname, resolved_ipv4, resolved_ipv6, dns_error,
+			country, country_code, city, region, 
+			latitude, longitude, isp, org, asn,
+			binkp_tested, binkp_success, binkp_response_ms,
+			binkp_system_name, binkp_sysop, binkp_location, 
+			binkp_version, binkp_addresses, binkp_capabilities, binkp_error,
+			ifcico_tested, ifcico_success, ifcico_response_ms,
+			ifcico_mailer_info, ifcico_system_name, ifcico_addresses, 
+			ifcico_response_type, ifcico_error,
+			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
+			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
+			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
+			is_operational, has_connectivity_issues, address_validated
+		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
-			AND test_date >= today() - INTERVAL ? DAY
-		ORDER BY test_time DESC
-	`
-	// Implementation would parse results back into TestResult structs
-	// Simplified for brevity
-	return nil, fmt.Errorf("not fully implemented yet")
+		ORDER BY test_time DESC`
+	
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	
+	rows, err := s.conn.Query(ctx, query, zone, net, node)
+	if err != nil {
+		// Log the error for debugging
+		fmt.Printf("DEBUG GetNodeTestHistory ERROR: Failed to query history for %d:%d/%d - %v\n", zone, net, node, err)
+		// Return empty result if no history found (not an error for scheduler)
+		return []*models.TestResult{}, nil
+	}
+	defer rows.Close()
+	
+	var results []*models.TestResult
+	for rows.Next() {
+		r := &models.TestResult{}
+		var testDate time.Time
+		var zone, net, node uint16  // ClickHouse uses UInt16 for these columns
+		var dnsError, binkpError, ifcicoError, telnetError, ftpError, vmodemError string
+		var binkpTested, binkpSuccess, ifcicoTested, ifcicoSuccess bool
+		var telnetTested, telnetSuccess, ftpTested, ftpSuccess bool 
+		var vmodemTested, vmodemSuccess bool
+		var binkpResponseMs, ifcicoResponseMs, telnetResponseMs uint32
+		var ftpResponseMs, vmodemResponseMs uint32
+		var binkpSystemName, binkpSysop, binkpLocation, binkpVersion string
+		var binkpAddresses, binkpCapabilities []string
+		var ifcicoMailerInfo, ifcicoSystemName, ifcicoResponseType string
+		var ifcicoAddresses []string
+		
+		err := rows.Scan(
+			&r.TestTime, &testDate,
+			&zone, &net, &node, &r.Address,
+			&r.Hostname, &r.ResolvedIPv4, &r.ResolvedIPv6, &dnsError,
+			&r.Country, &r.CountryCode, &r.City, &r.Region,
+			&r.Latitude, &r.Longitude, &r.ISP, &r.Org, &r.ASN,
+			&binkpTested, &binkpSuccess, &binkpResponseMs,
+			&binkpSystemName, &binkpSysop, &binkpLocation,
+			&binkpVersion, &binkpAddresses, &binkpCapabilities, &binkpError,
+			&ifcicoTested, &ifcicoSuccess, &ifcicoResponseMs,
+			&ifcicoMailerInfo, &ifcicoSystemName, &ifcicoAddresses,
+			&ifcicoResponseType, &ifcicoError,
+			&telnetTested, &telnetSuccess, &telnetResponseMs, &telnetError,
+			&ftpTested, &ftpSuccess, &ftpResponseMs, &ftpError,
+			&vmodemTested, &vmodemSuccess, &vmodemResponseMs, &vmodemError,
+			&r.IsOperational, &r.HasConnectivityIssues, &r.AddressValidated,
+		)
+		if err != nil {
+			// Log error but continue
+			continue
+		}
+		
+		// Convert UInt16 to int
+		r.Zone = int(zone)
+		r.Net = int(net)
+		r.Node = int(node)
+		r.TestDate = testDate
+		r.DNSError = dnsError
+		
+		// Populate BinkP result if tested
+		if binkpTested {
+			r.BinkPResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    binkpSuccess,
+				ResponseMs: binkpResponseMs,
+				Error:      binkpError,
+				Details:    make(map[string]interface{}),
+			}
+			if binkpSystemName != "" {
+				r.BinkPResult.Details["system_name"] = binkpSystemName
+				r.BinkPResult.Details["sysop"] = binkpSysop
+				r.BinkPResult.Details["location"] = binkpLocation
+				r.BinkPResult.Details["version"] = binkpVersion
+				r.BinkPResult.Details["addresses"] = binkpAddresses
+				r.BinkPResult.Details["capabilities"] = binkpCapabilities
+			}
+		}
+		
+		// Populate IFCICO result if tested
+		if ifcicoTested {
+			r.IfcicoResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    ifcicoSuccess,
+				ResponseMs: ifcicoResponseMs,
+				Error:      ifcicoError,
+				Details:    make(map[string]interface{}),
+			}
+			if ifcicoSystemName != "" || ifcicoMailerInfo != "" {
+				r.IfcicoResult.Details["system_name"] = ifcicoSystemName
+				r.IfcicoResult.Details["mailer_info"] = ifcicoMailerInfo
+				r.IfcicoResult.Details["addresses"] = ifcicoAddresses
+				r.IfcicoResult.Details["response_type"] = ifcicoResponseType
+			}
+		}
+		
+		// Populate Telnet result if tested
+		if telnetTested {
+			r.TelnetResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    telnetSuccess,
+				ResponseMs: telnetResponseMs,
+				Error:      telnetError,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		// Populate FTP result if tested
+		if ftpTested {
+			r.FTPResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    ftpSuccess,
+				ResponseMs: ftpResponseMs,
+				Error:      ftpError,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		// Populate VModem result if tested
+		if vmodemTested {
+			r.VModemResult = &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    vmodemSuccess,
+				ResponseMs: vmodemResponseMs,
+				Error:      vmodemError,
+				Details:    make(map[string]interface{}),
+			}
+		}
+		
+		results = append(results, r)
+	}
+	
+	if err := rows.Err(); err != nil {
+		// Return what we got so far
+		return results, nil
+	}
+	
+	// Debug logging disabled for performance
+	// fmt.Printf("DEBUG GetNodeTestHistory: Found %d results for %d:%d/%d\n", len(results), zone, net, node)
+	
+	return results, nil
 }
 
 // Helper methods
+
+// scanNodesNative scans rows from native ClickHouse driver
+func (s *ClickHouseStorage) scanNodesNative(rows driver.Rows) ([]*models.Node, error) {
+	var nodes []*models.Node
+	for rows.Next() {
+		node := &models.Node{}
+		var hostnames, protocols string
+		var zone, net, nodeNum int32
+		var configJSON string
+		
+		err := rows.Scan(
+			&zone,
+			&net,
+			&nodeNum,
+			&node.SystemName,
+			&node.SysopName,
+			&node.Location,
+			&hostnames,
+			&protocols,
+			&node.HasInet,
+			&configJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		
+		// Convert int32 values to int
+		node.Zone = int(zone)
+		node.Net = int(net)
+		node.Node = int(nodeNum)
+		
+		// Convert hostname string to array
+		if hostnames != "" {
+			node.InternetHostnames = []string{hostnames}
+		} else {
+			node.InternetHostnames = []string{}
+		}
+		
+		// Parse protocols from comma-separated string
+		if protocols != "" {
+			node.InternetProtocols = strings.Split(protocols, ",")
+			// Trim spaces from each protocol
+			for i := range node.InternetProtocols {
+				node.InternetProtocols[i] = strings.TrimSpace(node.InternetProtocols[i])
+			}
+		} else {
+			node.InternetProtocols = []string{}
+		}
+		
+		// Parse internet_config JSON to extract custom ports
+		node.ProtocolPorts = make(map[string]int)
+		if configJSON != "" && configJSON != "{}" {
+			var config map[string]interface{}
+			if err := json.Unmarshal([]byte(configJSON), &config); err == nil {
+				// Extract protocol ports from the JSON structure
+				if protocols, ok := config["protocols"].(map[string]interface{}); ok {
+					for proto, protoData := range protocols {
+						if protoMap, ok := protoData.(map[string]interface{}); ok {
+							if portStr, ok := protoMap["port"].(string); ok {
+								if port, err := strconv.Atoi(portStr); err == nil {
+									node.ProtocolPorts[proto] = port
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
+}
 
 func (s *ClickHouseStorage) scanNodes(rows *sql.Rows) ([]*models.Node, error) {
 	var nodes []*models.Node
 	for rows.Next() {
 		node := &models.Node{}
+		var hostnames, protocols string
+		
 		err := rows.Scan(
 			&node.Zone,
 			&node.Net,
@@ -454,13 +990,32 @@ func (s *ClickHouseStorage) scanNodes(rows *sql.Rows) ([]*models.Node, error) {
 			&node.SystemName,
 			&node.SysopName,
 			&node.Location,
-			&node.InternetHostnames,
-			&node.InternetProtocols,
+			&hostnames,
+			&protocols,
 			&node.HasInet,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
+		
+		// Convert hostname string to array
+		if hostnames != "" {
+			node.InternetHostnames = []string{hostnames}
+		} else {
+			node.InternetHostnames = []string{}
+		}
+		
+		// Parse protocols from comma-separated string
+		if protocols != "" {
+			node.InternetProtocols = strings.Split(protocols, ",")
+			// Trim spaces from each protocol
+			for i := range node.InternetProtocols {
+				node.InternetProtocols[i] = strings.TrimSpace(node.InternetProtocols[i])
+			}
+		} else {
+			node.InternetProtocols = []string{}
+		}
+		
 		nodes = append(nodes, node)
 	}
 	return nodes, nil

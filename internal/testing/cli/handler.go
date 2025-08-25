@@ -10,17 +10,23 @@ import (
 )
 
 type Handler struct {
-	daemon    DaemonInterface
-	writer    *bufio.Writer
-	formatter *Formatter
+	daemon         DaemonInterface
+	writer         *bufio.Writer
+	formatter      *Formatter
+	debugToTelnet  bool           // Whether to show debug output in telnet session
+	debugCapture   *DebugCapture  // Debug output capturer
 }
 
 func NewHandler(daemon DaemonInterface, writer *bufio.Writer) *Handler {
-	return &Handler{
-		daemon:    daemon,
-		writer:    writer,
-		formatter: NewFormatter(writer),
+	h := &Handler{
+		daemon:        daemon,
+		writer:        writer,
+		formatter:     NewFormatter(writer),
+		debugToTelnet: false,
 	}
+	// Setup debug capture
+	h.debugCapture = SetupDebugCapture(h)
+	return h
 }
 
 func (h *Handler) HandleCommand(ctx context.Context, input string) error {
@@ -36,7 +42,9 @@ func (h *Handler) HandleCommand(ctx context.Context, input string) error {
 	case "help":
 		return h.handleHelp(args)
 	case "test":
-		return h.handleTest(ctx, args)
+		return h.handleTestSimple(ctx, args)
+	case "show":
+		return h.handleShowSimple(ctx, args)
 	case "status":
 		return h.handleStatus()
 	case "workers":
@@ -47,6 +55,8 @@ func (h *Handler) HandleCommand(ctx context.Context, input string) error {
 		return h.handleResume()
 	case "reload":
 		return h.handleReload()
+	case "debug":
+		return h.handleDebug(args)
 	case "clear":
 		return h.handleClear()
 	default:
@@ -64,8 +74,13 @@ Available Commands:
 ===================
 
 Testing Commands:
-  test node <zone> <net> <node> [hostname] - Test specific node
-  test address <address> [hostname]        - Test by FidoNet address (e.g., 2:5001/100)
+  test <address> [hostname/ip] [protocol] - Test a FidoNet node
+       address:  FidoNet address (e.g., 2:5001/100)
+       hostname: Optional hostname or IP address
+       protocol: Optional protocol (binkp, ifcico, telnet, ftp, vmodem)
+
+Information Commands:
+  show <address>  - Show node information from database
 
 Status Commands:
   status    - Show daemon status
@@ -75,13 +90,20 @@ Control Commands:
   pause     - Pause all testing
   resume    - Resume testing
   reload    - Reload configuration
+  debug     - Toggle debug mode (on/off/status)
 
 Utility Commands:
   help [command] - Show help
   clear         - Clear screen
   exit/quit     - Disconnect
 
-Type 'help <command>' for detailed help on a specific command.
+Examples:
+  test 2:5001/100                     - Test using database info
+  test 2:5001/100 f100.5001.ru        - Test with specific hostname
+  test 2:5001/100 192.168.1.10 binkp  - Test BinkP on specific IP
+  show 2:5001/100                     - Show node info
+
+Note: Tests automatically try both IPv4 and IPv6 when available.
 `
 	h.writer.WriteString(help)
 	return h.writer.Flush()
@@ -96,14 +118,21 @@ func (h *Handler) showCommandHelp(command string) error {
 test - Run tests on FidoNet nodes
 
 Usage:
-  test node <zone> <net> <node> [hostname] [options]
-  test address <address> [hostname] [options]
+  test <address> [hostname/ip] [protocol]
+
+Parameters:
+  address     - FidoNet address (e.g., 2:5001/100)
+  hostname/ip - Optional hostname or IP address to test
+  protocol    - Optional specific protocol to test:
+                binkp, ifcico, telnet, ftp, vmodem
+                (if not specified, all enabled protocols are tested)
 
 Examples:
-  test node 2 5001 100 f100.5001.ru
-  test address 2:5001/100 f100.5001.ru
+  test 2:5001/100                      - Test using database info
+  test 2:5001/100 f100.5001.ru         - Test with specific hostname
+  test 2:5001/100 192.168.1.10 binkp   - Test only BinkP on IP
 
-The command will test the specified node using available protocols
+The command will test the node using both IPv4 and IPv6 (when available)
 and display detailed results including connection status, response times,
 and system information.
 `
@@ -118,12 +147,151 @@ Displays current daemon statistics including:
 - Active workers
 - Queue status
 `
+	case "show":
+		help = `
+show - Show information about FidoNet nodes
+
+Usage:
+  show <address>
+
+Example:
+  show 2:5001/100
+
+Displays detailed information about the node from the database,
+including system name, sysop, location, and connectivity details.
+`
 	default:
 		help = fmt.Sprintf("No detailed help available for '%s'\n", command)
 	}
 	
 	h.writer.WriteString(help)
 	return h.writer.Flush()
+}
+
+// handleTestSimple handles the simplified test command syntax
+// test <address> [hostname/ip] [protocol]
+func (h *Handler) handleTestSimple(ctx context.Context, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: test <address> [hostname/ip] [protocol]")
+	}
+	
+	// Parse FidoNet address
+	address := args[0]
+	zone, net, node, err := parseAddress(address)
+	if err != nil {
+		return fmt.Errorf("invalid address: %v", err)
+	}
+	
+	// Parse optional arguments
+	hostname := ""
+	protocol := ""
+	
+	if len(args) > 1 {
+		hostname = args[1]
+	}
+	
+	if len(args) > 2 {
+		protocol = strings.ToLower(args[2])
+	}
+	
+	h.formatter.WriteHeader(fmt.Sprintf("Testing node %s", address))
+	
+	if hostname != "" {
+		h.formatter.WriteInfo(fmt.Sprintf("Target: %s", hostname))
+	}
+	if protocol != "" {
+		h.formatter.WriteInfo(fmt.Sprintf("Protocol: %s", protocol))
+	}
+	h.formatter.WriteInfo("Testing both IPv4 and IPv6 when available")
+	
+	h.formatter.WriteInfo("Starting tests...")
+	h.writer.Flush()
+	
+	// Determine which protocols to test
+	protocols := []string{}
+	if protocol != "" && protocol != "all" {
+		protocols = []string{protocol}
+	} else {
+		// Use all enabled protocols
+		protocols = []string{"binkp", "ifcico", "telnet", "ftp", "vmodem"}
+	}
+	
+	options := TestOptions{
+		Protocols: protocols,
+		Timeout:   10 * time.Second,
+		Verbose:   true,
+	}
+	
+	testCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	
+	result, err := h.daemon.TestNode(testCtx, zone, net, node, hostname, options)
+	if err != nil {
+		h.formatter.WriteError(fmt.Sprintf("Test failed: %v", err))
+		return h.writer.Flush()
+	}
+	
+	h.formatter.FormatTestResult(result)
+	return h.writer.Flush()
+}
+
+// handleShowSimple handles the simplified show command syntax
+// show <address>
+func (h *Handler) handleShowSimple(ctx context.Context, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: show <address>")
+	}
+	
+	// Parse FidoNet address
+	address := args[0]
+	zone, net, node, err := parseAddress(address)
+	if err != nil {
+		return fmt.Errorf("invalid address: %v", err)
+	}
+	
+	// Get node information from daemon
+	nodeInfo, err := h.daemon.GetNodeInfo(ctx, zone, net, node)
+	if err != nil {
+		h.formatter.WriteError(fmt.Sprintf("Failed to get node info: %v", err))
+		return h.writer.Flush()
+	}
+	
+	// Format and display node information
+	h.formatter.FormatNodeInfo(nodeInfo)
+	return h.writer.Flush()
+}
+
+// parseAddress parses a FidoNet address string (e.g., "2:5001/100")
+func parseAddress(address string) (uint16, uint16, uint16, error) {
+	parts := strings.Split(address, ":")
+	if len(parts) != 2 {
+		return 0, 0, 0, fmt.Errorf("expected format zone:net/node")
+	}
+	
+	zonePart := parts[0]
+	netNodePart := parts[1]
+	
+	netNodeParts := strings.Split(netNodePart, "/")
+	if len(netNodeParts) != 2 {
+		return 0, 0, 0, fmt.Errorf("expected format zone:net/node")
+	}
+	
+	zone, err := strconv.ParseUint(zonePart, 10, 16)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid zone")
+	}
+	
+	net, err := strconv.ParseUint(netNodeParts[0], 10, 16)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid net")
+	}
+	
+	node, err := strconv.ParseUint(netNodeParts[1], 10, 16)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid node")
+	}
+	
+	return uint16(zone), uint16(net), uint16(node), nil
 }
 
 func (h *Handler) handleTest(ctx context.Context, args []string) error {
@@ -327,10 +495,94 @@ func (h *Handler) handleReload() error {
 	return h.writer.Flush()
 }
 
+func (h *Handler) handleDebug(args []string) error {
+	// If no arguments provided, toggle the current state
+	if len(args) == 0 {
+		currentState := h.daemon.GetDebugMode()
+		newState := !currentState
+		
+		// Toggle telnet output along with debug mode
+		h.debugToTelnet = false
+		h.debugCapture.Disable()
+		
+		if err := h.daemon.SetDebugMode(newState); err != nil {
+			h.formatter.WriteError(fmt.Sprintf("Failed to toggle debug mode: %v", err))
+		} else {
+			if newState {
+				h.formatter.WriteSuccess("Debug mode ENABLED")
+				h.formatter.WriteInfo("Debug logs are written to daemon console")
+				h.formatter.WriteInfo("Use 'debug on telnet' to show debug output here")
+			} else {
+				h.formatter.WriteSuccess("Debug mode DISABLED")
+			}
+		}
+		return h.writer.Flush()
+	}
+	
+	action := strings.ToLower(args[0])
+	
+	switch action {
+	case "on", "enable", "true":
+		// Check if there's a second argument for telnet output
+		if len(args) > 1 && strings.ToLower(args[1]) == "telnet" {
+			h.debugToTelnet = true
+			h.debugCapture.Enable()
+			if err := h.daemon.SetDebugMode(true); err != nil {
+				h.formatter.WriteError(fmt.Sprintf("Failed to enable debug mode: %v", err))
+			} else {
+				h.formatter.WriteSuccess("Debug mode ENABLED with telnet output")
+				h.formatter.WriteInfo("Debug logs will be shown in this telnet session")
+				h.formatter.WriteWarning("Note: Debug output may be verbose and affect readability")
+			}
+		} else {
+			h.debugToTelnet = false
+			h.debugCapture.Disable()
+			if err := h.daemon.SetDebugMode(true); err != nil {
+				h.formatter.WriteError(fmt.Sprintf("Failed to enable debug mode: %v", err))
+			} else {
+				h.formatter.WriteSuccess("Debug mode ENABLED")
+				h.formatter.WriteInfo("Debug logs are written to daemon console")
+				h.formatter.WriteInfo("Use 'debug on telnet' to show debug output here")
+			}
+		}
+	case "off", "disable", "false":
+		h.debugToTelnet = false
+		h.debugCapture.Disable()
+		if err := h.daemon.SetDebugMode(false); err != nil {
+			h.formatter.WriteError(fmt.Sprintf("Failed to disable debug mode: %v", err))
+		} else {
+			h.formatter.WriteSuccess("Debug mode DISABLED")
+		}
+	case "status":
+		debugEnabled := h.daemon.GetDebugMode()
+		if debugEnabled {
+			if h.debugToTelnet {
+				h.formatter.WriteInfo("Debug mode: ENABLED (output to telnet)")
+			} else {
+				h.formatter.WriteInfo("Debug mode: ENABLED (output to console)")
+			}
+		} else {
+			h.formatter.WriteInfo("Debug mode: DISABLED")
+		}
+	default:
+		h.formatter.WriteError(fmt.Sprintf("Invalid debug command: %s", action))
+		h.formatter.WriteInfo("Usage: debug [on [telnet]|off|status] or just 'debug' to toggle")
+		h.formatter.WriteInfo("  debug on        - Enable debug (output to console)")
+		h.formatter.WriteInfo("  debug on telnet - Enable debug (output to this session)")
+		h.formatter.WriteInfo("  debug off       - Disable debug")
+		h.formatter.WriteInfo("  debug status    - Show current debug status")
+		h.formatter.WriteInfo("  debug           - Toggle debug on/off")
+	}
+	
+	return h.writer.Flush()
+}
+
 func (h *Handler) handleClear() error {
 	h.writer.WriteString("\033[2J\033[H")
 	return h.writer.Flush()
 }
+
+
 
 func formatDuration(d time.Duration) string {
 	hours := int(d.Hours())

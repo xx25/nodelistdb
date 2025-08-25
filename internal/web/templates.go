@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/nodelistdb/internal/database"
@@ -143,6 +144,20 @@ func (s *Server) loadTemplates() {
 			_, hasIBN := internetConfig.Protocols["IBN"]
 			_, hasBND := internetConfig.Protocols["BND"]
 			return hasIBN || hasBND
+		},
+		"add": func(a, b int) int {
+			return a + b
+		},
+		"len": func(v interface{}) int {
+			if v == nil {
+				return 0
+			}
+			switch reflect.TypeOf(v).Kind() {
+			case reflect.Slice, reflect.Array, reflect.Map, reflect.String:
+				return reflect.ValueOf(v).Len()
+			default:
+				return 0
+			}
 		},
 	}
 

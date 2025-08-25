@@ -102,3 +102,4 @@ scripts/analytics/*.pkl
 scripts/analytics/.cache/
 
 scripts/
+cache/

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"time"
 	
 	"github.com/nodelistdb/internal/testing/models"
 )
@@ -13,6 +14,7 @@ type Storage interface {
 	GetNodesByZone(ctx context.Context, zone int) ([]*models.Node, error)
 	GetNodesByProtocol(ctx context.Context, protocol string, limit int) ([]*models.Node, error)
 	GetStatistics(ctx context.Context) (map[string]int, error)
+	GetLatestNodelistDate(ctx context.Context) (time.Time, error)
 	
 	// Test result storage operations
 	StoreTestResult(ctx context.Context, result *models.TestResult) error

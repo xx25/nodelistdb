@@ -28,6 +28,9 @@ type NodeInfo struct {
 type Session struct {
 	conn         net.Conn
 	localAddress string // Our FidoNet address
+	systemName   string // Our system name (SYS)
+	sysop        string // Our sysop name (ZYZ)
+	location     string // Our location (LOC)
 	remoteInfo   NodeInfo
 	timeout      time.Duration
 	debug        bool
@@ -38,6 +41,22 @@ func NewSession(conn net.Conn, localAddress string) *Session {
 	return &Session{
 		conn:         conn,
 		localAddress: localAddress,
+		systemName:   "NodelistDB Test Daemon",
+		sysop:        "Test Operator",
+		location:     "Test Location",
+		timeout:      30 * time.Second,
+		debug:        false,
+	}
+}
+
+// NewSessionWithInfo creates a new BinkP session with custom system info
+func NewSessionWithInfo(conn net.Conn, localAddress, systemName, sysop, location string) *Session {
+	return &Session{
+		conn:         conn,
+		localAddress: localAddress,
+		systemName:   systemName,
+		sysop:        sysop,
+		location:     location,
 		timeout:      30 * time.Second,
 		debug:        false,
 	}
@@ -82,12 +101,13 @@ func (s *Session) Handshake() error {
 func (s *Session) sendOurInfo() error {
 	// System info
 	frames := []*Frame{
-		CreateM_NUL("SYS", "NodelistDB Test Daemon"),
-		CreateM_NUL("ZYZ", "Test Operator"),
-		CreateM_NUL("LOC", "Test Location"),
+		CreateM_NUL("SYS", s.systemName),
+		CreateM_NUL("ZYZ", s.sysop),
+		CreateM_NUL("LOC", s.location),
 		CreateM_NUL("VER", "NodelistDB/1.0 binkp/1.1"),
 		CreateM_NUL("TIME", time.Now().Format(time.RFC822)),
-		CreateM_NUL("OPT", "CRAM-MD5"), // Advertise capabilities
+		// Don't advertise CRAM-MD5 since we're not implementing it for testing
+		// CreateM_NUL("OPT", "CRAM-MD5"),
 	}
 	
 	for _, frame := range frames {

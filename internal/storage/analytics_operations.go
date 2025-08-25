@@ -27,6 +27,28 @@ type FlagUsageByYear struct {
 	Percentage float64 `json:"percentage"`
 }
 
+// NetworkAppearance represents a continuous period when a network was active
+type NetworkAppearance struct {
+	StartDate    time.Time `json:"start_date"`
+	EndDate      time.Time `json:"end_date"`
+	StartDayNum  int       `json:"start_day_num"`
+	EndDayNum    int       `json:"end_day_num"`
+	DurationDays int       `json:"duration_days"`
+	NodelistCount int      `json:"nodelist_count"`
+}
+
+// NetworkHistory represents the complete history of a network
+type NetworkHistory struct {
+	Zone         int                 `json:"zone"`
+	Net          int                 `json:"net"`
+	NetworkName  string              `json:"network_name"`
+	FirstSeen    time.Time           `json:"first_seen"`
+	LastSeen     time.Time           `json:"last_seen"`
+	TotalDays    int                 `json:"total_days"`
+	ActiveDays   int                 `json:"active_days"`
+	Appearances  []NetworkAppearance `json:"appearances"`
+}
+
 // AnalyticsOperations handles analytics-related database operations
 type AnalyticsOperations struct {
 	db           database.DatabaseInterface
@@ -112,6 +134,81 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string) ([]FlagUsageByYea
 	}
 
 	return results, nil
+}
+
+// GetNetworkHistory returns the complete appearance history of a network
+func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
+	ao.mu.RLock()
+	defer ao.mu.RUnlock()
+
+	conn := ao.db.Conn()
+
+	// First, get the network name from node 0 if it exists
+	nameQuery := ao.queryBuilder.NetworkNameSQL()
+	var networkName string
+	err := conn.QueryRow(nameQuery, zone, net).Scan(&networkName)
+	if err != nil {
+		// Network might not have a coordinator, use default name
+		networkName = fmt.Sprintf("Network %d:%d", zone, net)
+	}
+
+	// Get all appearances of the network
+	historyQuery := ao.queryBuilder.NetworkHistorySQL()
+	rows, err := conn.Query(historyQuery, zone, net)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query network history: %w", err)
+	}
+	defer rows.Close()
+
+	var appearances []NetworkAppearance
+	var firstSeen, lastSeen time.Time
+	var totalNodelistCount int
+
+	for rows.Next() {
+		var app NetworkAppearance
+		err := rows.Scan(
+			&app.StartDate,
+			&app.EndDate,
+			&app.StartDayNum,
+			&app.EndDayNum,
+			&app.NodelistCount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan network appearance: %w", err)
+		}
+
+		app.DurationDays = int(app.EndDate.Sub(app.StartDate).Hours()/24) + 1
+		appearances = append(appearances, app)
+		totalNodelistCount += app.NodelistCount
+
+		if firstSeen.IsZero() || app.StartDate.Before(firstSeen) {
+			firstSeen = app.StartDate
+		}
+		if app.EndDate.After(lastSeen) {
+			lastSeen = app.EndDate
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	if len(appearances) == 0 {
+		return nil, nil // Network not found
+	}
+
+	totalDays := int(lastSeen.Sub(firstSeen).Hours()/24) + 1
+
+	return &NetworkHistory{
+		Zone:        zone,
+		Net:         net,
+		NetworkName: networkName,
+		FirstSeen:   firstSeen,
+		LastSeen:    lastSeen,
+		TotalDays:   totalDays,
+		ActiveDays:  totalNodelistCount,
+		Appearances: appearances,
+	}, nil
 }
 
 // Close closes the analytics operations

@@ -22,12 +22,14 @@ type Config struct {
 
 // DaemonConfig contains daemon-specific settings
 type DaemonConfig struct {
-	TestInterval time.Duration `yaml:"test_interval"`
-	Workers      int           `yaml:"workers"`
-	BatchSize    int           `yaml:"batch_size"`
-	RunOnce      bool          `yaml:"-"` // Set from command line
-	DryRun       bool          `yaml:"-"` // Set from command line
-	CLIOnly      bool          `yaml:"-"` // Set from command line - disable automatic testing
+	TestInterval      time.Duration `yaml:"test_interval"`
+	Workers           int           `yaml:"workers"`
+	BatchSize         int           `yaml:"batch_size"`
+	StaleTestThreshold time.Duration `yaml:"stale_test_threshold"` // Consider test stale after this duration (default: same as test_interval)
+	FailedRetryInterval time.Duration `yaml:"failed_retry_interval"` // Retry failed nodes after this duration (default: 24h)
+	RunOnce           bool          `yaml:"-"` // Set from command line
+	DryRun            bool          `yaml:"-"` // Set from command line
+	CLIOnly           bool          `yaml:"-"` // Set from command line - disable automatic testing
 }
 
 // DatabaseConfig contains database connection settings
@@ -50,6 +52,13 @@ type ClickHouseConfig struct {
 	Database      string        `yaml:"database"`
 	Username      string        `yaml:"username"`
 	Password      string        `yaml:"password"`
+	UseSSL        bool          `yaml:"use_ssl"`
+	MaxOpenConns  int           `yaml:"max_open_conns"`
+	MaxIdleConns  int           `yaml:"max_idle_conns"`
+	DialTimeout   time.Duration `yaml:"dial_timeout"`
+	ReadTimeout   time.Duration `yaml:"read_timeout"`
+	WriteTimeout  time.Duration `yaml:"write_timeout"`
+	Compression   string        `yaml:"compression"`
 	BatchSize     int           `yaml:"batch_size"`
 	FlushInterval time.Duration `yaml:"flush_interval"`
 }
@@ -69,6 +78,9 @@ type ProtocolConfig struct {
 	Port       int           `yaml:"port"`
 	Timeout    time.Duration `yaml:"timeout"`
 	OurAddress string        `yaml:"our_address,omitempty"` // For BinkP
+	SystemName string        `yaml:"system_name,omitempty"` // SYS field
+	Sysop      string        `yaml:"sysop,omitempty"`       // ZYZ field
+	Location   string        `yaml:"location,omitempty"`    // LOC field
 }
 
 // ServicesConfig contains external service settings
@@ -144,6 +156,14 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Daemon.TestInterval == 0 {
 		cfg.Daemon.TestInterval = 3600  // Will be converted to Duration later
 	}
+	// Set StaleTestThreshold to same as TestInterval if not specified
+	if cfg.Daemon.StaleTestThreshold == 0 {
+		cfg.Daemon.StaleTestThreshold = cfg.Daemon.TestInterval
+	}
+	// Set FailedRetryInterval to 24h if not specified
+	if cfg.Daemon.FailedRetryInterval == 0 {
+		cfg.Daemon.FailedRetryInterval = 24 * 3600  // 24 hours, will be converted to Duration later
+	}
 	
 	// Database-specific defaults
 	if cfg.Database.Type == "clickhouse" && cfg.Database.ClickHouse != nil {
@@ -175,6 +195,12 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Daemon.TestInterval < 1000 {
 		cfg.Daemon.TestInterval *= time.Second
 	}
+	if cfg.Daemon.StaleTestThreshold < 1000 {
+		cfg.Daemon.StaleTestThreshold *= time.Second
+	}
+	if cfg.Daemon.FailedRetryInterval < 1000 {
+		cfg.Daemon.FailedRetryInterval *= time.Second
+	}
 	
 	if cfg.Database.Type == "clickhouse" && cfg.Database.ClickHouse != nil {
 		if cfg.Database.ClickHouse.FlushInterval < 1000 {
@@ -185,8 +211,29 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Protocols.BinkP.Timeout < 1000 {
 		cfg.Protocols.BinkP.Timeout *= time.Second
 	}
+	// Set default system info for BinkP if not specified
+	if cfg.Protocols.BinkP.SystemName == "" {
+		cfg.Protocols.BinkP.SystemName = "NodelistDB Test Daemon"
+	}
+	if cfg.Protocols.BinkP.Sysop == "" {
+		cfg.Protocols.BinkP.Sysop = "Test Operator"
+	}
+	if cfg.Protocols.BinkP.Location == "" {
+		cfg.Protocols.BinkP.Location = "Test Location"
+	}
+	
 	if cfg.Protocols.Ifcico.Timeout < 1000 {
 		cfg.Protocols.Ifcico.Timeout *= time.Second
+	}
+	// Set default system info for Ifcico if not specified
+	if cfg.Protocols.Ifcico.SystemName == "" {
+		cfg.Protocols.Ifcico.SystemName = "NodelistDB Test Daemon"
+	}
+	if cfg.Protocols.Ifcico.Sysop == "" {
+		cfg.Protocols.Ifcico.Sysop = "Test Operator"
+	}
+	if cfg.Protocols.Ifcico.Location == "" {
+		cfg.Protocols.Ifcico.Location = "Test Location"
 	}
 	if cfg.Protocols.Telnet.Timeout < 1000 {
 		cfg.Protocols.Telnet.Timeout *= time.Second

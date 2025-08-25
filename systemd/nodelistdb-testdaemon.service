@@ -1,5 +1,5 @@
 [Unit]
-Description=NodelistDB FidoNet Nodelist Server
+Description=NodelistDB FidoNet Test Daemon
 Documentation=https://github.com/xx25/nodelistdb
 After=network.target
 Wants=network.target
@@ -9,19 +9,19 @@ Type=simple
 User=daemon
 Group=daemon
 WorkingDirectory=/opt/nodelistdb
-ExecStart=/opt/nodelistdb/server -db /var/db/nodelist.duckdb -host 0.0.0.0 -port 8081
+ExecStart=/opt/nodelistdb/testdaemon -config /etc/nodelistdb/testdaemon.yaml
 Restart=always
-RestartSec=5
+RestartSec=30
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=nodelistdb
+SyslogIdentifier=nodelistdb-testdaemon
 
 # Security settings
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/db
+ReadWritePaths=/var/cache/nodetest /var/log/nodetest
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -30,7 +30,10 @@ RestrictNamespaces=true
 
 # Resource limits
 LimitNOFILE=65536
-MemoryMax=2G
+MemoryMax=4G
+
+# Network access required for testing nodes
+PrivateNetwork=false
 
 [Install]
 WantedBy=multi-user.target

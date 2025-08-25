@@ -73,7 +73,7 @@ func GetFlagDescriptions() map[string]FlagInfo {
 
 		// Internet flags
 		"IBN": {Category: "internet", HasValue: true, Description: "BinkP"},
-		"IFC": {Category: "internet", HasValue: true, Description: "File transfer"},
+		"IFC": {Category: "internet", HasValue: true, Description: "Ifcico"},
 		"ITN": {Category: "internet", HasValue: true, Description: "Telnet"},
 		"IVM": {Category: "internet", HasValue: true, Description: "VModem"},
 		"IFT": {Category: "internet", HasValue: true, Description: "FTP"},

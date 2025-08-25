@@ -26,6 +26,8 @@ func main() {
 		dryRun     = flag.Bool("dry-run", false, "Test without storing results")
 		cliOnly    = flag.Bool("cli-only", false, "Disable automatic testing, only test via CLI commands")
 		showVer    = flag.Bool("version", false, "Show version and exit")
+		testNode   = flag.String("test-node", "", "Test specific node (format: address or host:port) and exit")
+		testProto  = flag.String("test-proto", "ifcico", "Protocol to test (binkp, ifcico, telnet)")
 	)
 
 	flag.Parse()
@@ -53,6 +55,16 @@ func main() {
 	d, err := daemon.New(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize daemon: %v", err)
+	}
+
+	// If test-node is specified, run single test and exit
+	if *testNode != "" {
+		ctx := context.Background()
+		if err := d.TestSingleNode(ctx, *testNode, *testProto); err != nil {
+			log.Fatalf("Test failed: %v", err)
+		}
+		log.Println("Test completed")
+		os.Exit(0)
 	}
 
 	// Setup signal handling

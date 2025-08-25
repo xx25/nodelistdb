@@ -13,7 +13,7 @@ import (
 type Storage struct {
 	db                  database.DatabaseInterface
 	queryBuilder        QueryBuilderInterface
-	resultParser        *ResultParser
+	resultParser        ResultParserInterface
 	nodeOperations      *NodeOperations
 	searchOperations    *SearchOperations
 	statsOperations     *StatisticsOperations
@@ -30,14 +30,14 @@ func (s *Storage) GetDatabase() database.DatabaseInterface {
 // New creates a new Storage instance with all specialized components
 func New(db database.DatabaseInterface) (*Storage, error) {
 	var queryBuilder QueryBuilderInterface
-	var resultParser *ResultParser
+	var resultParser ResultParserInterface
 
 	// Check if this is a ClickHouse database and use specialized components
 	if _, isClickHouse := db.(*database.ClickHouseDB); isClickHouse {
 		chQueryBuilder := NewClickHouseQueryBuilder()
 		chResultParser := NewClickHouseResultParser()
 		queryBuilder = chQueryBuilder
-		resultParser = chResultParser.ResultParser
+		resultParser = chResultParser // Use the ClickHouse parser directly
 	} else {
 		// Default to DuckDB components
 		queryBuilder = NewQueryBuilder()
@@ -269,7 +269,15 @@ func (s *Storage) GetQueryBuilder() QueryBuilderInterface {
 
 // GetResultParser returns the result parser for direct access
 func (s *Storage) GetResultParser() *ResultParser {
-	return s.resultParser
+	// Type assert to get concrete type when needed
+	if rp, ok := s.resultParser.(*ResultParser); ok {
+		return rp
+	}
+	// For ClickHouse, extract the embedded ResultParser
+	if crp, ok := s.resultParser.(*ClickHouseResultParser); ok {
+		return crp.ResultParser
+	}
+	return nil
 }
 
 // --- Health and Monitoring ---
@@ -334,4 +342,9 @@ func (s *Storage) GetFlagFirstAppearance(flag string) (*FlagFirstAppearance, err
 // GetFlagUsageByYear returns the usage statistics of a flag by year
 func (s *Storage) GetFlagUsageByYear(flag string) ([]FlagUsageByYear, error) {
 	return s.analyticsOperations.GetFlagUsageByYear(flag)
+}
+
+// GetNetworkHistory returns the complete appearance history of a network
+func (s *Storage) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
+	return s.analyticsOperations.GetNetworkHistory(zone, net)
 }

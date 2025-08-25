@@ -49,19 +49,28 @@ func (crp *ClickHouseResultParser) ParseNodeRow(scanner RowScanner) (database.No
 	if internetConfig != nil {
 		switch config := internetConfig.(type) {
 		case string:
-			if config != "" && config != "{}" {
+			// Always store the JSON, even if it's empty "{}"
+			// The change detection needs to see the transition from {} to populated
+			if config != "" {
 				node.InternetConfig = json.RawMessage(config)
 			}
 		case []byte:
-			if len(config) > 0 && string(config) != "{}" {
+			if len(config) > 0 {
 				node.InternetConfig = json.RawMessage(config)
 			}
 		case map[string]interface{}:
 			// ClickHouse may return JSON as a Go map
-			if len(config) > 0 {
-				if jsonBytes, err := json.Marshal(config); err == nil {
-					node.InternetConfig = json.RawMessage(jsonBytes)
-				}
+			// Always marshal it, even if empty
+			if jsonBytes, err := json.Marshal(config); err == nil {
+				node.InternetConfig = json.RawMessage(jsonBytes)
+			}
+		case json.RawMessage:
+			// ClickHouse might return it as json.RawMessage already
+			node.InternetConfig = config
+		default:
+			// Try to handle any other type by marshaling it
+			if jsonBytes, err := json.Marshal(config); err == nil && len(jsonBytes) > 0 {
+				node.InternetConfig = json.RawMessage(jsonBytes)
 			}
 		}
 	}

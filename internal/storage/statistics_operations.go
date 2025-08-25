@@ -20,7 +20,7 @@ type CacheEntry struct {
 type StatisticsOperations struct {
 	db           database.DatabaseInterface
 	queryBuilder QueryBuilderInterface
-	resultParser *ResultParser
+	resultParser ResultParserInterface
 	mu           sync.RWMutex
 	// Enhanced cache with TTL support for better performance
 	statsCache map[string]*CacheEntry
@@ -28,7 +28,7 @@ type StatisticsOperations struct {
 }
 
 // NewStatisticsOperations creates a new StatisticsOperations instance
-func NewStatisticsOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser *ResultParser) *StatisticsOperations {
+func NewStatisticsOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser ResultParserInterface) *StatisticsOperations {
 	return &StatisticsOperations{
 		db:           db,
 		queryBuilder: queryBuilder,

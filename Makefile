@@ -22,6 +22,10 @@ GOBUILD=$(GO) build
 GOCLEAN=$(GO) clean
 GOMOD=$(GO) mod
 
+# Cross-compilation toolchains (can be overridden)
+ARM64_CC ?= aarch64-linux-gnu-gcc
+ARM64_CXX ?= aarch64-linux-gnu-g++
+
 .PHONY: help build clean test run-parser deps build-daemon run-daemon
 
 # Default target
@@ -95,10 +99,48 @@ run-daemon-once: build-daemon ## Run testing daemon single cycle
 	./bin/testdaemon -config config.yaml -once
 
 # Cross-compilation for deployment
-build-linux: ## Build for Linux x64
-	@echo "Building for Linux x64..."
-	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/parser-linux ./cmd/parser
-	@echo "✓ Linux build complete"
+build-linux: build-linux-amd64 build-linux-arm64 ## Build for Linux (both x64 and ARM64)
+
+build-linux-amd64: ## Build for Linux x64/AMD64
+	@echo "Building for Linux x64/AMD64..."
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/parser-linux-amd64 ./cmd/parser
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/server-linux-amd64 ./cmd/server
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/testdaemon-linux-amd64 ./cmd/testdaemon
+	@echo "✓ Linux AMD64 build complete"
+
+build-linux-arm64: ## Build for Linux ARM64
+	@echo "Building for Linux ARM64..."
+	@if ! command -v $(ARM64_CC) >/dev/null 2>&1; then \
+		echo "Error: $(ARM64_CC) not found. Install gcc-aarch64-linux-gnu or set ARM64_CC to your ARM64 compiler."; \
+		exit 1; \
+	fi
+	@if ! command -v $(ARM64_CXX) >/dev/null 2>&1; then \
+		echo "Error: $(ARM64_CXX) not found. Install g++-aarch64-linux-gnu or set ARM64_CXX to your ARM64 C++ compiler."; \
+		exit 1; \
+	fi
+	CC=$(ARM64_CC) CXX=$(ARM64_CXX) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/parser-linux-arm64 ./cmd/parser
+	CC=$(ARM64_CC) CXX=$(ARM64_CXX) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/server-linux-arm64 ./cmd/server
+	CC=$(ARM64_CC) CXX=$(ARM64_CXX) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/testdaemon-linux-arm64 ./cmd/testdaemon
+	@echo "✓ Linux ARM64 build complete"
+
+# Individual cross-compilation targets
+build-parser-linux-amd64: ## Build parser for Linux AMD64
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/parser-linux-amd64 ./cmd/parser
+
+build-parser-linux-arm64: ## Build parser for Linux ARM64
+	CC=$(ARM64_CC) CXX=$(ARM64_CXX) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/parser-linux-arm64 ./cmd/parser
+
+build-server-linux-amd64: ## Build server for Linux AMD64
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/server-linux-amd64 ./cmd/server
+
+build-server-linux-arm64: ## Build server for Linux ARM64
+	CC=$(ARM64_CC) CXX=$(ARM64_CXX) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/server-linux-arm64 ./cmd/server
+
+build-daemon-linux-amd64: ## Build daemon for Linux AMD64
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/testdaemon-linux-amd64 ./cmd/testdaemon
+
+build-daemon-linux-arm64: ## Build daemon for Linux ARM64
+	CC=$(ARM64_CC) CXX=$(ARM64_CXX) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o bin/testdaemon-linux-arm64 ./cmd/testdaemon
 
 # Clean targets
 clean: ## Clean build artifacts

@@ -552,6 +552,8 @@ func (s *Server) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 		Flag            string
 		FirstAppearance *storage.FlagFirstAppearance
 		YearlyUsage     []storage.FlagUsageByYear
+		Network         string
+		NetworkHistory  *storage.NetworkHistory
 		Error           error
 		Version         string
 	}{
@@ -580,6 +582,8 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 		Flag            string
 		FirstAppearance *storage.FlagFirstAppearance
 		YearlyUsage     []storage.FlagUsageByYear
+		Network         string
+		NetworkHistory  *storage.NetworkHistory
 		Error           error
 		Version         string
 	}{
@@ -607,6 +611,58 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 				data.Error = fmt.Errorf("Failed to get yearly usage: %v", err)
 			} else {
 				data.YearlyUsage = yearlyUsage
+			}
+		}
+	}
+
+	if err := s.templates["analytics"].Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// AnalyticsNetworkHandler handles network analytics requests
+func (s *Server) AnalyticsNetworkHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/analytics", http.StatusSeeOther)
+		return
+	}
+
+	network := r.FormValue("network")
+
+	data := struct {
+		Title           string
+		ActivePage      string
+		Flag            string
+		FirstAppearance *storage.FlagFirstAppearance
+		YearlyUsage     []storage.FlagUsageByYear
+		Network         string
+		NetworkHistory  *storage.NetworkHistory
+		Error           error
+		Version         string
+	}{
+		Title:      "Analytics",
+		ActivePage: "analytics",
+		Network:    network,
+		Version:    version.GetVersionInfo(),
+	}
+
+	if network == "" {
+		data.Error = fmt.Errorf("Please enter a network address (e.g., 2:5000)")
+	} else {
+		// Parse network address (zone:net)
+		var zone, net int
+		_, err := fmt.Sscanf(network, "%d:%d", &zone, &net)
+		if err != nil {
+			data.Error = fmt.Errorf("Invalid network format. Use zone:net (e.g., 2:5000)")
+		} else {
+			// Get network history
+			history, err := s.storage.GetNetworkHistory(zone, net)
+			if err != nil {
+				data.Error = fmt.Errorf("Failed to fetch network history: %v", err)
+			} else if history == nil {
+				data.Error = fmt.Errorf("Network %s not found", network)
+			} else {
+				data.NetworkHistory = history
 			}
 		}
 	}

@@ -125,6 +125,18 @@ func (a *CLIAdapter) ReloadConfig() error {
 	return a.daemon.ReloadConfig(a.configPath)
 }
 
+func (a *CLIAdapter) SetDebugMode(enabled bool) error {
+	return a.daemon.SetDebugMode(enabled)
+}
+
+func (a *CLIAdapter) GetDebugMode() bool {
+	return a.daemon.GetDebugMode()
+}
+
+func (a *CLIAdapter) GetNodeInfo(ctx context.Context, zone, net, node uint16) (*cli.NodeInfo, error) {
+	return a.daemon.GetNodeInfo(ctx, zone, net, node)
+}
+
 // SetConfigPath sets the config path for reload
 func (a *CLIAdapter) SetConfigPath(path string) {
 	a.configPath = path
