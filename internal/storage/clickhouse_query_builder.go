@@ -387,6 +387,10 @@ func (cqb *ClickHouseQueryBuilder) StatsSQL() string {
 		countIf(node_type = 'Pvt') as pvt_nodes,
 		countIf(node_type = 'Down') as down_nodes,
 		countIf(node_type = 'Hold') as hold_nodes,
+		countIf(node_type = 'Hub') as hub_nodes,
+		countIf(node_type = 'Zone') as zone_nodes,
+		countIf(node_type = 'Region') as region_nodes,
+		countIf(node_type = 'Host') as host_nodes,
 		countIf(has_inet = true) as internet_nodes
 	FROM nodes 
 	WHERE nodelist_date = ?

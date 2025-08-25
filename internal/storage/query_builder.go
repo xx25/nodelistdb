@@ -330,6 +330,10 @@ func (qb *QueryBuilder) StatsSQL() string {
 		COUNT(*) FILTER (WHERE node_type = 'Pvt') as pvt_nodes,
 		COUNT(*) FILTER (WHERE node_type = 'Down') as down_nodes,
 		COUNT(*) FILTER (WHERE node_type = 'Hold') as hold_nodes,
+		COUNT(*) FILTER (WHERE node_type = 'Hub') as hub_nodes,
+		COUNT(*) FILTER (WHERE node_type = 'Zone') as zone_nodes,
+		COUNT(*) FILTER (WHERE node_type = 'Region') as region_nodes,
+		COUNT(*) FILTER (WHERE node_type = 'Host') as host_nodes,
 		COUNT(*) FILTER (WHERE has_inet = true) as internet_nodes
 	FROM nodes 
 	WHERE nodelist_date = ?

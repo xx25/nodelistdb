@@ -110,6 +110,29 @@
                             <p>Private Nodes</p>
                         </div>
                     </div>
+
+                    <h3 style="color: var(--text-primary); margin-top: 1.5rem; margin-bottom: 1rem;">🏛️ Node Types</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>{{.Stats.ZoneNodes}}</h3>
+                            <p>Zone Nodes</p>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h3>{{.Stats.RegionNodes}}</h3>
+                            <p>Region Nodes</p>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h3>{{.Stats.HostNodes}}</h3>
+                            <p>Host Nodes</p>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h3>{{.Stats.HubNodes}}</h3>
+                            <p>Hub Nodes</p>
+                        </div>
+                    </div>
                 </div>
                 
                 {{if .Stats.ZoneDistribution}}

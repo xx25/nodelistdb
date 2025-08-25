@@ -99,7 +99,9 @@ func (rp *ResultParser) ParseNetworkStatsRow(scanner RowScanner) (*database.Netw
 	err := scanner.Scan(
 		&stats.Date, &stats.TotalNodes, &stats.ActiveNodes,
 		&stats.CMNodes, &stats.MONodes, &stats.BinkpNodes, &stats.TelnetNodes,
-		&stats.PvtNodes, &stats.DownNodes, &stats.HoldNodes, &stats.InternetNodes,
+		&stats.PvtNodes, &stats.DownNodes, &stats.HoldNodes,
+		&stats.HubNodes, &stats.ZoneNodes, &stats.RegionNodes, &stats.HostNodes,
+		&stats.InternetNodes,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan network stats: %w", err)

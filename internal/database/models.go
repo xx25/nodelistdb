@@ -132,6 +132,10 @@ type NetworkStats struct {
 	PvtNodes         int          `json:"pvt_nodes"`
 	DownNodes        int          `json:"down_nodes"`
 	HoldNodes        int          `json:"hold_nodes"`
+	HubNodes         int          `json:"hub_nodes"`
+	ZoneNodes        int          `json:"zone_nodes"`
+	RegionNodes      int          `json:"region_nodes"`
+	HostNodes        int          `json:"host_nodes"`
 	InternetNodes    int          `json:"internet_nodes"`
 	ZoneDistribution map[int]int  `json:"zone_distribution"`
 	LargestRegions   []RegionInfo `json:"largest_regions"`
