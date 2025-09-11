@@ -31,6 +31,12 @@ func (s *Server) loadTemplates() {
 			}
 			return ""
 		},
+		"getFieldDescription": func(field string) string {
+			return GetFieldDescription(field)
+		},
+		"getFieldIcon": func(field string) string {
+			return GetFieldIcon(field)
+		},
 		"renderFlagChange": func(flagDescriptions map[string]flags.FlagInfo, changeValue string) template.HTML {
 			// Parse change value like "[MO LO V34] → [MO XA V34]"
 			if !strings.Contains(changeValue, "→") {

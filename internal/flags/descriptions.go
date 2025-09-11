@@ -73,7 +73,7 @@ func GetFlagDescriptions() map[string]FlagInfo {
 
 		// Internet flags
 		"IBN": {Category: "internet", HasValue: true, Description: "BinkP"},
-		"IFC": {Category: "internet", HasValue: true, Description: "Ifcico"},
+		"IFC": {Category: "internet", HasValue: true, Description: "EMSI over TCP"},
 		"ITN": {Category: "internet", HasValue: true, Description: "Telnet"},
 		"IVM": {Category: "internet", HasValue: true, Description: "VModem"},
 		"IFT": {Category: "internet", HasValue: true, Description: "FTP"},
@@ -82,10 +82,15 @@ func GetFlagDescriptions() map[string]FlagInfo {
 
 		// Email protocols
 		"IEM": {Category: "internet", HasValue: true, Description: "Email"},
-		"IMI": {Category: "internet", HasValue: true, Description: "Mail interface"},
+		"IMI": {Category: "internet", HasValue: true, Description: "Internet Mail Interface"},
 		"ITX": {Category: "internet", HasValue: true, Description: "TransX"},
 		"IUC": {Category: "internet", HasValue: true, Description: "UUencoded"},
 		"ISE": {Category: "internet", HasValue: true, Description: "SendEmail"},
+		
+		// Internet information flags
+		"ICM":  {Category: "internet", HasValue: false, Description: "Internet CM"},
+		"INO4": {Category: "internet", HasValue: false, Description: "No IPv4"},
+		"INO6": {Category: "internet", HasValue: false, Description: "No IPv6"},
 
 		// Capability flags
 		"CM": {Category: "capability", HasValue: false, Description: "Continuous Mail"},
