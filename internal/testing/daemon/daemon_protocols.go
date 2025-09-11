@@ -3,12 +3,11 @@ package daemon
 import (
 	"context"
 
-	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
 	"github.com/nodelistdb/internal/testing/protocols"
 )
 
-// testBinkP tests BinkP connectivity
+// testBinkP tests BinkP connectivity on both IPv4 and IPv6
 func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *models.TestResult) {
 	if d.binkpTester == nil {
 		return
@@ -19,43 +18,94 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 		return
 	}
 	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
 	// Use custom port if specified, otherwise use default from config
 	port := node.GetProtocolPort("IBN")
 	if port == 0 {
 		port = d.config.Protocols.BinkP.Port
 	}
 	
-	testResult := d.binkpTester.Test(ctx, ip, port, node.Address())
+	// Initialize BinkP result
+	if result.BinkPResult == nil {
+		result.BinkPResult = &models.ProtocolTestResult{
+			Details: make(map[string]interface{}),
+		}
+	}
 	
-	if binkpResult, ok := testResult.(*protocols.BinkPTestResult); ok {
-		details := &models.BinkPTestDetails{
-			SystemName:   binkpResult.SystemName,
-			Sysop:        binkpResult.Sysop,
-			Location:     binkpResult.Location,
-			Version:      binkpResult.Version,
-			Addresses:    binkpResult.Addresses,
-			Capabilities: binkpResult.Capabilities,
+	// Test IPv6 first (if available)
+	if len(result.ResolvedIPv6) > 0 {
+		for _, ipv6 := range result.ResolvedIPv6 {
+			testResult := d.binkpTester.Test(ctx, ipv6, port, node.Address())
+			
+			if binkpResult, ok := testResult.(*protocols.BinkPTestResult); ok {
+				result.BinkPResult.SetIPv6Result(
+					binkpResult.Success,
+					binkpResult.ResponseMs,
+					ipv6,
+					binkpResult.Error,
+				)
+				
+				// Store details if successful
+				if binkpResult.Success {
+					details := &models.BinkPTestDetails{
+						SystemName:   binkpResult.SystemName,
+						Sysop:        binkpResult.Sysop,
+						Location:     binkpResult.Location,
+						Version:      binkpResult.Version,
+						Addresses:    binkpResult.Addresses,
+						Capabilities: binkpResult.Capabilities,
+					}
+					result.BinkPResult.Details["ipv6"] = details
+					
+					if binkpResult.AddressValid {
+						result.AddressValidated = true
+					}
+					break // First successful IPv6 is enough
+				}
+			}
 		}
-		result.SetBinkPResult(binkpResult.Success, binkpResult.ResponseMs, details, binkpResult.Error)
-		
-		// Use the AddressValid flag from BinkP tester
-		if binkpResult.AddressValid {
-			result.AddressValidated = true
+	}
+	
+	// Test IPv4 (if available)
+	if len(result.ResolvedIPv4) > 0 {
+		for _, ipv4 := range result.ResolvedIPv4 {
+			testResult := d.binkpTester.Test(ctx, ipv4, port, node.Address())
+			
+			if binkpResult, ok := testResult.(*protocols.BinkPTestResult); ok {
+				result.BinkPResult.SetIPv4Result(
+					binkpResult.Success,
+					binkpResult.ResponseMs,
+					ipv4,
+					binkpResult.Error,
+				)
+				
+				// Store details if successful
+				if binkpResult.Success {
+					details := &models.BinkPTestDetails{
+						SystemName:   binkpResult.SystemName,
+						Sysop:        binkpResult.Sysop,
+						Location:     binkpResult.Location,
+						Version:      binkpResult.Version,
+						Addresses:    binkpResult.Addresses,
+						Capabilities: binkpResult.Capabilities,
+					}
+					result.BinkPResult.Details["ipv4"] = details
+					
+					if binkpResult.AddressValid {
+						result.AddressValidated = true
+					}
+					break // First successful IPv4 is enough
+				}
+			}
 		}
+	}
+	
+	// Update operational status if either IPv4 or IPv6 succeeded
+	if result.BinkPResult.Success && !result.IsOperational {
+		result.IsOperational = true
 	}
 }
 
-// testIfcico tests IFCICO connectivity
+// testIfcico tests IFCICO connectivity on both IPv4 and IPv6
 func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *models.TestResult) {
 	if d.ifcicoTester == nil {
 		return
@@ -66,43 +116,90 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 		return
 	}
 	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
 	// Use custom port if specified, otherwise use default from config
 	port := node.GetProtocolPort("IFC")
 	if port == 0 {
 		port = d.config.Protocols.Ifcico.Port
 	}
 	
-	testResult := d.ifcicoTester.Test(ctx, ip, port, node.Address())
+	// Initialize IFCICO result
+	if result.IfcicoResult == nil {
+		result.IfcicoResult = &models.ProtocolTestResult{
+			Details: make(map[string]interface{}),
+		}
+	}
 	
-	if ifcicoResult, ok := testResult.(*protocols.IfcicoTestResult); ok {
-		details := &models.IfcicoTestDetails{
-			MailerInfo:   ifcicoResult.MailerInfo,
-			SystemName:   ifcicoResult.SystemName,
-			Addresses:    ifcicoResult.Addresses,
-			ResponseType: ifcicoResult.ResponseType,
+	// Test IPv6 first (if available)
+	if len(result.ResolvedIPv6) > 0 {
+		for _, ipv6 := range result.ResolvedIPv6 {
+			testResult := d.ifcicoTester.Test(ctx, ipv6, port, node.Address())
+			
+			if ifcicoResult, ok := testResult.(*protocols.IfcicoTestResult); ok {
+				result.IfcicoResult.SetIPv6Result(
+					ifcicoResult.Success,
+					ifcicoResult.ResponseMs,
+					ipv6,
+					ifcicoResult.Error,
+				)
+				
+				// Store details if successful
+				if ifcicoResult.Success {
+					details := &models.IfcicoTestDetails{
+						MailerInfo:   ifcicoResult.MailerInfo,
+						SystemName:   ifcicoResult.SystemName,
+						Addresses:    ifcicoResult.Addresses,
+						ResponseType: ifcicoResult.ResponseType,
+					}
+					result.IfcicoResult.Details["ipv6"] = details
+					
+					if ifcicoResult.AddressValid {
+						result.AddressValidated = true
+					}
+					break // First successful IPv6 is enough
+				}
+			}
 		}
-		
-		// Debug logging
-		if ifcicoResult.Success && (details.MailerInfo == "" && details.SystemName == "") {
-			logging.Warnf("IFCICO test successful but no details for %s: mailer=%s, system=%s, addresses=%v",
-				node.Address(), details.MailerInfo, details.SystemName, details.Addresses)
+	}
+	
+	// Test IPv4 (if available)
+	if len(result.ResolvedIPv4) > 0 {
+		for _, ipv4 := range result.ResolvedIPv4 {
+			testResult := d.ifcicoTester.Test(ctx, ipv4, port, node.Address())
+			
+			if ifcicoResult, ok := testResult.(*protocols.IfcicoTestResult); ok {
+				result.IfcicoResult.SetIPv4Result(
+					ifcicoResult.Success,
+					ifcicoResult.ResponseMs,
+					ipv4,
+					ifcicoResult.Error,
+				)
+				
+				// Store details if successful
+				if ifcicoResult.Success {
+					details := &models.IfcicoTestDetails{
+						MailerInfo:   ifcicoResult.MailerInfo,
+						SystemName:   ifcicoResult.SystemName,
+						Addresses:    ifcicoResult.Addresses,
+						ResponseType: ifcicoResult.ResponseType,
+					}
+					result.IfcicoResult.Details["ipv4"] = details
+					
+					if ifcicoResult.AddressValid {
+						result.AddressValidated = true
+					}
+					break // First successful IPv4 is enough
+				}
+			}
 		}
-		
-		result.SetIfcicoResult(ifcicoResult.Success, ifcicoResult.ResponseMs, details, ifcicoResult.Error)
+	}
+	
+	// Update operational status if either IPv4 or IPv6 succeeded
+	if result.IfcicoResult.Success && !result.IsOperational {
+		result.IsOperational = true
 	}
 }
 
-// testTelnet tests Telnet connectivity
+// testTelnet tests Telnet connectivity on both IPv4 and IPv6
 func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *models.TestResult) {
 	if d.telnetTester == nil {
 		return
@@ -113,26 +210,66 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 		return
 	}
 	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
 	// Use custom port if specified, otherwise use default from config
 	port := node.GetProtocolPort("ITN")
 	if port == 0 {
 		port = d.config.Protocols.Telnet.Port
 	}
 	
-	testResult := d.telnetTester.Test(ctx, ip, port, node.Address())
+	// Initialize Telnet result
+	if result.TelnetResult == nil {
+		result.TelnetResult = &models.ProtocolTestResult{
+			Details: make(map[string]interface{}),
+		}
+	}
 	
-	if telnetResult, ok := testResult.(*protocols.TelnetTestResult); ok {
-		result.SetTelnetResult(telnetResult.Success, telnetResult.ResponseMs, telnetResult.Banner, telnetResult.Error)
+	// Test IPv6 first (if available)
+	if len(result.ResolvedIPv6) > 0 {
+		for _, ipv6 := range result.ResolvedIPv6 {
+			testResult := d.telnetTester.Test(ctx, ipv6, port, node.Address())
+			
+			if telnetResult, ok := testResult.(*protocols.TelnetTestResult); ok {
+				result.TelnetResult.SetIPv6Result(
+					telnetResult.Success,
+					telnetResult.ResponseMs,
+					ipv6,
+					telnetResult.Error,
+				)
+				
+				// Store banner if successful
+				if telnetResult.Success && telnetResult.Banner != "" {
+					result.TelnetResult.Details["ipv6_banner"] = telnetResult.Banner
+					break // First successful IPv6 is enough
+				}
+			}
+		}
+	}
+	
+	// Test IPv4 (if available)
+	if len(result.ResolvedIPv4) > 0 {
+		for _, ipv4 := range result.ResolvedIPv4 {
+			testResult := d.telnetTester.Test(ctx, ipv4, port, node.Address())
+			
+			if telnetResult, ok := testResult.(*protocols.TelnetTestResult); ok {
+				result.TelnetResult.SetIPv4Result(
+					telnetResult.Success,
+					telnetResult.ResponseMs,
+					ipv4,
+					telnetResult.Error,
+				)
+				
+				// Store banner if successful
+				if telnetResult.Success && telnetResult.Banner != "" {
+					result.TelnetResult.Details["ipv4_banner"] = telnetResult.Banner
+					break // First successful IPv4 is enough
+				}
+			}
+		}
+	}
+	
+	// Update operational status if either IPv4 or IPv6 succeeded
+	if result.TelnetResult.Success && !result.IsOperational {
+		result.IsOperational = true
 	}
 }
 

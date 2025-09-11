@@ -29,6 +29,7 @@ type NodeSchedule struct {
 	NextTestTime     time.Time
 	Priority         int
 	BackoffLevel     int
+	TestReason       string // Reason for current/next test: "stale", "new", "config_changed", "scheduled", "failed_retry"
 }
 
 type Scheduler struct {
@@ -145,15 +146,23 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 			ConsecutiveFails: 0,
 			Priority:         s.calculatePriority(node),
 			BackoffLevel:     0,
+			TestReason:       "new", // Default to "new" until we check history
 		}
 
 		if err == nil && lastResult != nil {
 			schedule.LastTestTime = lastResult.TestTime
 			schedule.LastTestSuccess = lastResult.IsOperational
 			
-			if !lastResult.IsOperational {
+			// Determine test reason based on history
+			timeSinceLastTest := time.Since(lastResult.TestTime)
+			if timeSinceLastTest > s.staleTestThreshold {
+				schedule.TestReason = "stale"
+			} else if !lastResult.IsOperational {
+				schedule.TestReason = "failed_retry"
 				schedule.ConsecutiveFails = s.getConsecutiveFailCount(ctx, node)
 				schedule.BackoffLevel = s.calculateBackoffLevel(schedule.ConsecutiveFails)
+			} else {
+				schedule.TestReason = "scheduled"
 			}
 		} else if err != nil {
 			// Log error retrieving test history
@@ -202,8 +211,10 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 				Priority:         s.calculatePriority(node),
 				BackoffLevel:     0,
 				NextTestTime:     time.Now(), // Test new nodes immediately
+				TestReason:       "new",
 			}
 			s.schedules[key] = schedule
+			logging.Debugf("New node %s added to scheduler, will test immediately", key)
 		} else {
 			// Check if internet configuration has changed
 			configChanged := s.hasInternetConfigChanged(existingSchedule.Node, node)
@@ -216,6 +227,7 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 			if configChanged {
 				existingSchedule.NextTestTime = time.Now()
 				existingSchedule.BackoffLevel = 0  // Reset backoff since config changed
+				existingSchedule.TestReason = "config_changed"
 				nodesWithChangedConfig++
 				
 				logging.Infof("Internet config changed for %s, scheduling immediate retest", key)
@@ -302,10 +314,20 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 		
 		// Check if node is ready based on schedule OR if test is stale
 		if schedule.NextTestTime.Before(now) || schedule.NextTestTime.Equal(now) || isStale {
-			readyNodes = append(readyNodes, schedule)
+			// Update test reason based on current state
 			if isStale {
+				schedule.TestReason = "stale"
 				staleNodes++
+			} else if schedule.TestReason == "" || schedule.TestReason == "scheduled" {
+				// Update reason if not already set by RefreshNodes
+				if schedule.ConsecutiveFails > 0 {
+					schedule.TestReason = "failed_retry"
+				} else {
+					schedule.TestReason = "scheduled"
+				}
 			}
+			
+			readyNodes = append(readyNodes, schedule)
 		} else {
 			futureNodes++
 			// Collect sample of future times for debugging
@@ -338,7 +360,10 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 
 	result := make([]*models.Node, resultCount)
 	for i := 0; i < resultCount; i++ {
-		result[i] = readyNodes[i].Node
+		// Copy the node and include the test reason
+		node := readyNodes[i].Node
+		node.TestReason = readyNodes[i].TestReason
+		result[i] = node
 	}
 
 	return result

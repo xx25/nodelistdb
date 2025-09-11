@@ -426,6 +426,24 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		logging.Infof("Scheduler selected %d nodes for testing", len(nodes))
 	}
 	
+	// Log breakdown of test reasons
+	reasonCounts := make(map[string]int)
+	for _, node := range nodes {
+		reason := node.TestReason
+		if reason == "" {
+			reason = "unknown"
+		}
+		reasonCounts[reason]++
+	}
+	
+	if len(reasonCounts) > 0 {
+		var reasons []string
+		for reason, count := range reasonCounts {
+			reasons = append(reasons, fmt.Sprintf("%s=%d", reason, count))
+		}
+		logging.Infof("Test reasons: %s", strings.Join(reasons, ", "))
+	}
+	
 	// Process nodes in batches
 	batchSize := d.config.Daemon.BatchSize
 	var allResults []*models.TestResult
@@ -505,10 +523,22 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 func (d *Daemon) testNode(ctx context.Context, node *models.Node) *models.TestResult {
 	result := models.NewTestResult(node)
 	
+	// Log why we're testing this node
+	reason := node.TestReason
+	if reason == "" {
+		reason = "unknown"
+	}
+	logging.Debugf("Testing %s (reason: %s)", node.Address(), reason)
+	
 	// DNS resolution
 	if hostname := node.GetPrimaryHostname(); hostname != "" {
 		dnsResult := d.dnsResolver.Resolve(ctx, hostname)
 		result.SetDNSResult(dnsResult)
+		
+		// Log DNS results
+		if len(dnsResult.IPv4Addresses) > 0 || len(dnsResult.IPv6Addresses) > 0 {
+			logging.Debugf("  DNS: IPv4=%v, IPv6=%v", dnsResult.IPv4Addresses, dnsResult.IPv6Addresses)
+		}
 		
 		// Get geolocation for first resolved IP
 		if len(dnsResult.IPv4Addresses) > 0 {
@@ -521,27 +551,111 @@ func (d *Daemon) testNode(ctx context.Context, node *models.Node) *models.TestRe
 	// Test protocols
 	if d.config.Protocols.BinkP.Enabled && node.HasProtocol("IBN") {
 		d.testBinkP(ctx, node, result)
+		d.logProtocolResult("BinkP", result.BinkPResult)
 	}
 	
 	if d.config.Protocols.Ifcico.Enabled && node.HasProtocol("IFC") {
 		d.testIfcico(ctx, node, result)
+		d.logProtocolResult("IFCICO", result.IfcicoResult)
 	}
 	
 	if d.config.Protocols.Telnet.Enabled && node.HasProtocol("ITN") {
 		d.testTelnet(ctx, node, result)
+		d.logProtocolResult("Telnet", result.TelnetResult)
 	}
 	
 	if d.config.Protocols.FTP.Enabled && node.HasProtocol("IFT") {
 		d.testFTP(ctx, node, result)
+		d.logProtocolResult("FTP", result.FTPResult)
 	}
 	
 	if d.config.Protocols.VModem.Enabled && node.HasProtocol("IVM") {
 		d.testVModem(ctx, node, result)
+		d.logProtocolResult("VModem", result.VModemResult)
 	}
+	
+	// Log summary of connectivity
+	d.logConnectivitySummary(node, result)
 	
 	return result
 }
 
+// logProtocolResult logs the dual-stack test results for a protocol
+func (d *Daemon) logProtocolResult(protocol string, result *models.ProtocolTestResult) {
+	if result == nil || !result.Tested {
+		return
+	}
+	
+	var status string
+	if result.IPv4Success && result.IPv6Success {
+		status = fmt.Sprintf("✓ Dual-stack (IPv4=%dms, IPv6=%dms)", 
+			result.IPv4ResponseMs, result.IPv6ResponseMs)
+	} else if result.IPv6Success {
+		status = fmt.Sprintf("✓ IPv6-only (%dms)", result.IPv6ResponseMs)
+	} else if result.IPv4Success {
+		status = fmt.Sprintf("✓ IPv4-only (%dms)", result.IPv4ResponseMs)
+	} else {
+		var tried []string
+		if result.IPv4Tested {
+			tried = append(tried, "IPv4")
+		}
+		if result.IPv6Tested {
+			tried = append(tried, "IPv6")
+		}
+		status = fmt.Sprintf("✗ Failed (tried: %s)", strings.Join(tried, ", "))
+	}
+	
+	logging.Debugf("  %s: %s", protocol, status)
+}
+
+// logConnectivitySummary logs a summary of the node's connectivity
+func (d *Daemon) logConnectivitySummary(node *models.Node, result *models.TestResult) {
+	var summary []string
+	
+	// Count dual-stack protocols
+	dualStackCount := 0
+	ipv4OnlyCount := 0
+	ipv6OnlyCount := 0
+	
+	protocols := []struct{
+		name string
+		result *models.ProtocolTestResult
+	}{
+		{"BinkP", result.BinkPResult},
+		{"IFCICO", result.IfcicoResult},
+		{"Telnet", result.TelnetResult},
+		{"FTP", result.FTPResult},
+		{"VModem", result.VModemResult},
+	}
+	
+	for _, p := range protocols {
+		if p.result != nil && p.result.Tested {
+			connType := p.result.GetConnectivityType()
+			switch connType {
+			case "dual-stack":
+				dualStackCount++
+			case "ipv6-only":
+				ipv6OnlyCount++
+			case "ipv4-only":
+				ipv4OnlyCount++
+			}
+		}
+	}
+	
+	if dualStackCount > 0 {
+		summary = append(summary, fmt.Sprintf("%d dual-stack", dualStackCount))
+	}
+	if ipv6OnlyCount > 0 {
+		summary = append(summary, fmt.Sprintf("%d IPv6-only", ipv6OnlyCount))
+	}
+	if ipv4OnlyCount > 0 {
+		summary = append(summary, fmt.Sprintf("%d IPv4-only", ipv4OnlyCount))
+	}
+	
+	if len(summary) > 0 {
+		logging.Infof("  %s connectivity: %s protocols", node.Address(), strings.Join(summary, ", "))
+	}
+}
 
 // calculateStatistics calculates statistics from test results
 func (d *Daemon) calculateStatistics(results []*models.TestResult) *models.TestStatistics {

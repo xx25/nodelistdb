@@ -46,10 +46,25 @@ type TestResult struct {
 
 // ProtocolTestResult represents test result for a specific protocol
 type ProtocolTestResult struct {
+	// Overall results (backward compatible)
 	Tested      bool
-	Success     bool
-	ResponseMs  uint32
+	Success     bool   // Success on ANY IP version
+	ResponseMs  uint32 // Best response time from any IP version
 	Error       string
+	
+	// IPv4 specific results
+	IPv4Tested     bool
+	IPv4Success    bool
+	IPv4ResponseMs uint32
+	IPv4Error      string
+	IPv4Address    string // Which IPv4 address was used/succeeded
+	
+	// IPv6 specific results
+	IPv6Tested     bool
+	IPv6Success    bool
+	IPv6ResponseMs uint32
+	IPv6Error      string
+	IPv6Address    string // Which IPv6 address was used/succeeded
 	
 	// Protocol-specific details
 	Details map[string]interface{}
@@ -259,4 +274,56 @@ func (tr *TestResult) SetVModemResult(success bool, responseMs uint32, err strin
 	if success && !tr.IsOperational {
 		tr.IsOperational = true
 	}
+}
+
+// SetIPv4Result updates IPv4-specific test results for a protocol
+func (pr *ProtocolTestResult) SetIPv4Result(success bool, responseMs uint32, address string, err string) {
+	pr.IPv4Tested = true
+	pr.IPv4Success = success
+	pr.IPv4ResponseMs = responseMs
+	pr.IPv4Address = address
+	pr.IPv4Error = err
+	
+	// Update overall success if IPv4 succeeded
+	if success {
+		pr.Success = true
+		pr.Tested = true
+		// Update overall response time to best (lowest) time
+		if pr.ResponseMs == 0 || responseMs < pr.ResponseMs {
+			pr.ResponseMs = responseMs
+		}
+	}
+}
+
+// SetIPv6Result updates IPv6-specific test results for a protocol
+func (pr *ProtocolTestResult) SetIPv6Result(success bool, responseMs uint32, address string, err string) {
+	pr.IPv6Tested = true
+	pr.IPv6Success = success
+	pr.IPv6ResponseMs = responseMs
+	pr.IPv6Address = address
+	pr.IPv6Error = err
+	
+	// Update overall success if IPv6 succeeded
+	if success {
+		pr.Success = true
+		pr.Tested = true
+		// Update overall response time to best (lowest) time
+		if pr.ResponseMs == 0 || responseMs < pr.ResponseMs {
+			pr.ResponseMs = responseMs
+		}
+	}
+}
+
+// GetConnectivityType returns a string describing the connectivity type
+func (pr *ProtocolTestResult) GetConnectivityType() string {
+	if pr.IPv4Success && pr.IPv6Success {
+		return "dual-stack"
+	} else if pr.IPv6Success {
+		return "ipv6-only"
+	} else if pr.IPv4Success {
+		return "ipv4-only"
+	} else if pr.IPv4Tested || pr.IPv6Tested {
+		return "failed"
+	}
+	return "not-tested"
 }

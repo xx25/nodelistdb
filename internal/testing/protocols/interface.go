@@ -66,6 +66,7 @@ type IfcicoTestResult struct {
 	SystemName   string
 	Addresses    []string
 	ResponseType string // REQ/ACK/NAK/CLI/HBT
+	AddressValid bool
 }
 
 // TelnetTestResult contains Telnet-specific test results

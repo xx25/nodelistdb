@@ -18,6 +18,7 @@ type Node struct {
 	ProtocolPorts     map[string]int     `db:"-"` // Custom ports for protocols (e.g., "IFC" -> 5983)
 	InternetConfig    map[string]interface{} `db:"internet_config"` // Raw JSON config from database
 	HasInet           bool               `db:"has_inet"`
+	TestReason        string             `db:"-"` // Reason for current test: "stale", "new", "config_changed", "scheduled", "failed_retry"
 }
 
 // Address returns the FidoNet address string

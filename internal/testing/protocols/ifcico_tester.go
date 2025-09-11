@@ -166,6 +166,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 			TestTime:   startTime,
 		},
 		ResponseType: "EMSI",
+		AddressValid: false, // Initialize to false
 	}
 	
 	if remoteInfo != nil {
@@ -187,10 +188,10 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		
 		// Validate address if expected
 		if expectedAddress != "" {
-			addressValid := session.ValidateAddress(expectedAddress)
+			result.AddressValid = session.ValidateAddress(expectedAddress)
 			if t.debug {
 				log.Printf("IFCICO: Address validation: expected=%s, received=%v, valid=%v",
-					expectedAddress, remoteInfo.Addresses, addressValid)
+					expectedAddress, remoteInfo.Addresses, result.AddressValid)
 			}
 		}
 	} else {
