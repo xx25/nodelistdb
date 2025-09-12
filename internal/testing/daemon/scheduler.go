@@ -431,6 +431,22 @@ func (s *Scheduler) calculateNextTestTime(schedule *NodeSchedule) time.Time {
 
 	nextTime := schedule.LastTestTime.Add(interval)
 	
+	// If the calculated next time is in the past (e.g., daemon was down), 
+	// calculate how many intervals have passed and schedule for the next one
+	now := time.Now()
+	if nextTime.Before(now) {
+		// Calculate how many intervals have elapsed since last test
+		timeSinceLastTest := now.Sub(schedule.LastTestTime)
+		intervalsElapsed := int(timeSinceLastTest / interval)
+		
+		// Schedule for the next interval boundary
+		nextTime = schedule.LastTestTime.Add(time.Duration(intervalsElapsed+1) * interval)
+		
+		// Add some jitter to avoid thundering herd after restart
+		jitter := time.Duration(rand.Float64() * float64(time.Hour))
+		nextTime = nextTime.Add(jitter)
+	}
+	
 	// Debug logging disabled
 	// if schedule.Node.Zone == 1 && schedule.Node.Net < 110 {
 	// 	fmt.Printf("DEBUG calculateNextTestTime: Node %s last_test=%v, interval=%v, next=%v\n",

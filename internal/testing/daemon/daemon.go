@@ -405,13 +405,9 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		logging.Infof("Scheduler status: total_nodes=%v, ready=%v, failing=%v", 
 			schedStatus["total_nodes"], schedStatus["ready_for_test"], schedStatus["failing_nodes"])
 		
-		// Fallback to getting all nodes if scheduler has no nodes ready
-		logging.Warnf("No nodes ready from scheduler, falling back to testing ALL nodes (this should not happen if tests were done recently)")
-		allNodes, err := d.storage.GetNodesWithInternet(ctx, 0) // 0 = no limit
-		if err != nil {
-			return fmt.Errorf("failed to get nodes: %w", err)
-		}
-		nodes = allNodes
+		// This is normal after a restart if all nodes were tested recently
+		logging.Infof("No nodes ready for testing at this time. All nodes are within their test intervals.")
+		return nil  // Skip this test cycle
 	}
 	
 	// Apply test limit filter if specified
