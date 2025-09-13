@@ -22,6 +22,12 @@ func NewClickHouseResultParser() *ClickHouseResultParser {
 	}
 }
 
+// ParseTestResultRow delegates to the base ResultParser implementation
+// as test result parsing is the same for both DuckDB and ClickHouse
+func (crp *ClickHouseResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestResult) error {
+	return crp.ResultParser.ParseTestResultRow(scanner, result)
+}
+
 // ParseNodeRow parses a ClickHouse database row into a Node struct
 func (crp *ClickHouseResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) {
 	var node database.Node

@@ -244,6 +244,79 @@ func (rp *ResultParser) parseStringArray(s string) []string {
 	return cleaned
 }
 
+// ParseTestResultRow parses a database row into a NodeTestResult struct
+func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestResult) error {
+	var resolvedIPv4, resolvedIPv6 interface{}
+	var binkpAddresses, binkpCapabilities interface{}
+	var ifcicoAddresses interface{}
+
+	err := scanner.Scan(
+		&result.TestTime,
+		&result.Zone,
+		&result.Net,
+		&result.Node,
+		&result.Address,
+		&result.Hostname,
+		&resolvedIPv4,
+		&resolvedIPv6,
+		&result.DNSError,
+		&result.Country,
+		&result.CountryCode,
+		&result.City,
+		&result.Region,
+		&result.Latitude,
+		&result.Longitude,
+		&result.ISP,
+		&result.Org,
+		&result.ASN,
+		&result.BinkPTested,
+		&result.BinkPSuccess,
+		&result.BinkPResponseMs,
+		&result.BinkPSystemName,
+		&result.BinkPSysop,
+		&result.BinkPLocation,
+		&result.BinkPVersion,
+		&binkpAddresses,
+		&binkpCapabilities,
+		&result.BinkPError,
+		&result.IfcicoTested,
+		&result.IfcicoSuccess,
+		&result.IfcicoResponseMs,
+		&result.IfcicoMailerInfo,
+		&result.IfcicoSystemName,
+		&ifcicoAddresses,
+		&result.IfcicoResponseType,
+		&result.IfcicoError,
+		&result.TelnetTested,
+		&result.TelnetSuccess,
+		&result.TelnetResponseMs,
+		&result.TelnetError,
+		&result.FTPTested,
+		&result.FTPSuccess,
+		&result.FTPResponseMs,
+		&result.FTPError,
+		&result.VModemTested,
+		&result.VModemSuccess,
+		&result.VModemResponseMs,
+		&result.VModemError,
+		&result.IsOperational,
+		&result.HasConnectivityIssues,
+		&result.AddressValidated,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to scan test result: %w", err)
+	}
+
+	// Parse arrays (compatible with both DuckDB and ClickHouse)
+	result.ResolvedIPv4 = rp.parseInterfaceToStringArray(resolvedIPv4)
+	result.ResolvedIPv6 = rp.parseInterfaceToStringArray(resolvedIPv6)
+	result.BinkPAddresses = rp.parseInterfaceToStringArray(binkpAddresses)
+	result.BinkPCapabilities = rp.parseInterfaceToStringArray(binkpCapabilities)
+	result.IfcicoAddresses = rp.parseInterfaceToStringArray(ifcicoAddresses)
+
+	return nil
+}
+
 // parseIntArray parses a string representation of an int array
 func (rp *ResultParser) parseIntArray(s string) []int {
 	if s == "[]" || s == "" {

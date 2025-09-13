@@ -81,6 +81,13 @@ type Operations interface {
 	GetAvailableDates() ([]time.Time, error)
 	GetNearestAvailableDate(requestedDate time.Time) (time.Time, error)
 
+	// Test operations
+	GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error)
+	GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error)
+	GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error)
+	GetReachabilityTrends(days int) ([]ReachabilityTrend, error)
+	SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error)
+
 	// Utility operations
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
 	FindConflictingNode(zone, net, node int, date time.Time) (bool, error)
@@ -146,6 +153,7 @@ type ResultParserInterface interface {
 	ParseNetworkStatsRow(scanner RowScanner) (*database.NetworkStats, error)
 	ParseRegionInfoRow(scanner RowScanner) (database.RegionInfo, error)
 	ParseNetInfoRow(scanner RowScanner) (database.NetInfo, error)
+	ParseTestResultRow(scanner RowScanner, result *NodeTestResult) error
 	ValidateNodeFilter(filter database.NodeFilter) error
 	SanitizeStringInput(input string) string
 }

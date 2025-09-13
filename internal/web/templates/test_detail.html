@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Address}} - Test Result Details - NodelistDB</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .detail-section {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+            text-align: right;
+            padding-right: 10px;
+        }
+        .detail-value {
+            color: #333;
+        }
+        .protocol-section {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .protocol-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .failed {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .untested {
+            color: #6c757d;
+        }
+        .array-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .array-item {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .geo-info {
+            background: #e8f4f8;
+            border-radius: 6px;
+            padding: 15px;
+        }
+        .error-details {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .response-time {
+            font-weight: bold;
+            color: #17a2b8;
+        }
+        .node-info {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Test Result Details</h1>
+            <p class="subtitle">Comprehensive test information for {{.Address}}</p>
+        </header>
+
+        {{template "nav" .}}
+
+        <div class="content">
+            <a href="/reachability/node?zone={{.TestResult.Zone}}&net={{.TestResult.Net}}&node={{.TestResult.Node}}" class="back-link">← Back to Node Reachability</a>
+
+            {{if .NodeInfo}}
+            <div class="node-info">
+                <h3>Node Information</h3>
+                <div class="detail-grid">
+                    <span class="detail-label">System:</span>
+                    <span class="detail-value">{{.NodeInfo.SystemName}}</span>
+                    <span class="detail-label">Location:</span>
+                    <span class="detail-value">{{.NodeInfo.Location}}</span>
+                    <span class="detail-label">Sysop:</span>
+                    <span class="detail-value">{{.NodeInfo.SysopName}}</span>
+                </div>
+            </div>
+            {{end}}
+
+            <div class="detail-section">
+                <h2>Test Summary</h2>
+                <div class="detail-grid">
+                    <span class="detail-label">Test Time:</span>
+                    <span class="detail-value">{{.TestResult.TestTime.Format "2006-01-02 15:04:05 UTC"}}</span>
+                    <span class="detail-label">Node Address:</span>
+                    <span class="detail-value">{{.Address}}</span>
+                    <span class="detail-label">Overall Status:</span>
+                    <span class="detail-value {{if .TestResult.IsOperational}}success{{else}}failed{{end}}">
+                        {{if .TestResult.IsOperational}}Operational{{else}}Failed{{end}}
+                    </span>
+                    <span class="detail-label">Connectivity Issues:</span>
+                    <span class="detail-value">{{if .TestResult.HasConnectivityIssues}}Yes{{else}}No{{end}}</span>
+                    <span class="detail-label">Address Validated:</span>
+                    <span class="detail-value">{{if .TestResult.AddressValidated}}Yes{{else}}No{{end}}</span>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h2>DNS Resolution</h2>
+                <div class="detail-grid">
+                    <span class="detail-label">Hostname:</span>
+                    <span class="detail-value">{{if .TestResult.Hostname}}{{.TestResult.Hostname}}{{else}}-{{end}}</span>
+                    <span class="detail-label">IPv4 Addresses:</span>
+                    <span class="detail-value">
+                        {{if .TestResult.ResolvedIPv4}}
+                        <div class="array-list">
+                            {{range .TestResult.ResolvedIPv4}}
+                            <span class="array-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                        {{else}}-{{end}}
+                    </span>
+                    <span class="detail-label">IPv6 Addresses:</span>
+                    <span class="detail-value">
+                        {{if .TestResult.ResolvedIPv6}}
+                        <div class="array-list">
+                            {{range .TestResult.ResolvedIPv6}}
+                            <span class="array-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                        {{else}}-{{end}}
+                    </span>
+                    {{if .TestResult.DNSError}}
+                    <span class="detail-label">DNS Error:</span>
+                    <span class="detail-value">
+                        <div class="error-details">{{.TestResult.DNSError}}</div>
+                    </span>
+                    {{end}}
+                </div>
+            </div>
+
+            {{if .TestResult.Country}}
+            <div class="detail-section geo-info">
+                <h2>Geographic Information</h2>
+                <div class="detail-grid">
+                    <span class="detail-label">Country:</span>
+                    <span class="detail-value">{{.TestResult.Country}} ({{.TestResult.CountryCode}})</span>
+                    <span class="detail-label">City/Region:</span>
+                    <span class="detail-value">{{.TestResult.City}}{{if .TestResult.Region}}, {{.TestResult.Region}}{{end}}</span>
+                    {{if ne .TestResult.Latitude 0.0}}
+                    <span class="detail-label">Coordinates:</span>
+                    <span class="detail-value">{{printf "%.6f" .TestResult.Latitude}}, {{printf "%.6f" .TestResult.Longitude}}</span>
+                    {{end}}
+                    <span class="detail-label">ISP:</span>
+                    <span class="detail-value">{{if .TestResult.ISP}}{{.TestResult.ISP}}{{else}}-{{end}}</span>
+                    <span class="detail-label">Organization:</span>
+                    <span class="detail-value">{{if .TestResult.Org}}{{.TestResult.Org}}{{else}}-{{end}}</span>
+                    {{if ne .TestResult.ASN 0}}
+                    <span class="detail-label">ASN:</span>
+                    <span class="detail-value">AS{{.TestResult.ASN}}</span>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
+            <!-- BinkP Protocol -->
+            <div class="protocol-section">
+                <div class="protocol-header">BinkP Protocol</div>
+                <div class="detail-grid">
+                    <span class="detail-label">Tested:</span>
+                    <span class="detail-value">{{if .TestResult.BinkPTested}}Yes{{else}}No{{end}}</span>
+                    {{if .TestResult.BinkPTested}}
+                    <span class="detail-label">Result:</span>
+                    <span class="detail-value {{if .TestResult.BinkPSuccess}}success{{else}}failed{{end}}">
+                        {{if .TestResult.BinkPSuccess}}Success{{else}}Failed{{end}}
+                        {{if .TestResult.BinkPSuccess}}
+                        <span class="response-time">({{.TestResult.BinkPResponseMs}}ms)</span>
+                        {{end}}
+                    </span>
+                    {{if .TestResult.BinkPSystemName}}
+                    <span class="detail-label">System Name:</span>
+                    <span class="detail-value">{{.TestResult.BinkPSystemName}}</span>
+                    {{end}}
+                    {{if .TestResult.BinkPSysop}}
+                    <span class="detail-label">Sysop:</span>
+                    <span class="detail-value">{{.TestResult.BinkPSysop}}</span>
+                    {{end}}
+                    {{if .TestResult.BinkPLocation}}
+                    <span class="detail-label">Location:</span>
+                    <span class="detail-value">{{.TestResult.BinkPLocation}}</span>
+                    {{end}}
+                    {{if .TestResult.BinkPVersion}}
+                    <span class="detail-label">Version:</span>
+                    <span class="detail-value">{{.TestResult.BinkPVersion}}</span>
+                    {{end}}
+                    {{if .TestResult.BinkPAddresses}}
+                    <span class="detail-label">Addresses:</span>
+                    <span class="detail-value">
+                        <div class="array-list">
+                            {{range .TestResult.BinkPAddresses}}
+                            <span class="array-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </span>
+                    {{end}}
+                    {{if .TestResult.BinkPCapabilities}}
+                    <span class="detail-label">Capabilities:</span>
+                    <span class="detail-value">
+                        <div class="array-list">
+                            {{range .TestResult.BinkPCapabilities}}
+                            <span class="array-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </span>
+                    {{end}}
+                    {{if .TestResult.BinkPError}}
+                    <span class="detail-label">Error:</span>
+                    <span class="detail-value">
+                        <div class="error-details">{{.TestResult.BinkPError}}</div>
+                    </span>
+                    {{end}}
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- IFCICO Protocol -->
+            <div class="protocol-section">
+                <div class="protocol-header">IFCICO Protocol</div>
+                <div class="detail-grid">
+                    <span class="detail-label">Tested:</span>
+                    <span class="detail-value">{{if .TestResult.IfcicoTested}}Yes{{else}}No{{end}}</span>
+                    {{if .TestResult.IfcicoTested}}
+                    <span class="detail-label">Result:</span>
+                    <span class="detail-value {{if .TestResult.IfcicoSuccess}}success{{else}}failed{{end}}">
+                        {{if .TestResult.IfcicoSuccess}}Success{{else}}Failed{{end}}
+                        {{if .TestResult.IfcicoSuccess}}
+                        <span class="response-time">({{.TestResult.IfcicoResponseMs}}ms)</span>
+                        {{end}}
+                    </span>
+                    {{if .TestResult.IfcicoMailerInfo}}
+                    <span class="detail-label">Mailer Info:</span>
+                    <span class="detail-value">{{.TestResult.IfcicoMailerInfo}}</span>
+                    {{end}}
+                    {{if .TestResult.IfcicoSystemName}}
+                    <span class="detail-label">System Name:</span>
+                    <span class="detail-value">{{.TestResult.IfcicoSystemName}}</span>
+                    {{end}}
+                    {{if .TestResult.IfcicoAddresses}}
+                    <span class="detail-label">Addresses:</span>
+                    <span class="detail-value">
+                        <div class="array-list">
+                            {{range .TestResult.IfcicoAddresses}}
+                            <span class="array-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </span>
+                    {{end}}
+                    {{if .TestResult.IfcicoResponseType}}
+                    <span class="detail-label">Response Type:</span>
+                    <span class="detail-value">{{.TestResult.IfcicoResponseType}}</span>
+                    {{end}}
+                    {{if .TestResult.IfcicoError}}
+                    <span class="detail-label">Error:</span>
+                    <span class="detail-value">
+                        <div class="error-details">{{.TestResult.IfcicoError}}</div>
+                    </span>
+                    {{end}}
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Telnet Protocol -->
+            <div class="protocol-section">
+                <div class="protocol-header">Telnet Protocol</div>
+                <div class="detail-grid">
+                    <span class="detail-label">Tested:</span>
+                    <span class="detail-value">{{if .TestResult.TelnetTested}}Yes{{else}}No{{end}}</span>
+                    {{if .TestResult.TelnetTested}}
+                    <span class="detail-label">Result:</span>
+                    <span class="detail-value {{if .TestResult.TelnetSuccess}}success{{else}}failed{{end}}">
+                        {{if .TestResult.TelnetSuccess}}Success{{else}}Failed{{end}}
+                        {{if .TestResult.TelnetSuccess}}
+                        <span class="response-time">({{.TestResult.TelnetResponseMs}}ms)</span>
+                        {{end}}
+                    </span>
+                    {{if .TestResult.TelnetError}}
+                    <span class="detail-label">Error:</span>
+                    <span class="detail-value">
+                        <div class="error-details">{{.TestResult.TelnetError}}</div>
+                    </span>
+                    {{end}}
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- FTP Protocol -->
+            {{if .TestResult.FTPTested}}
+            <div class="protocol-section">
+                <div class="protocol-header">FTP Protocol</div>
+                <div class="detail-grid">
+                    <span class="detail-label">Tested:</span>
+                    <span class="detail-value">Yes</span>
+                    <span class="detail-label">Result:</span>
+                    <span class="detail-value {{if .TestResult.FTPSuccess}}success{{else}}failed{{end}}">
+                        {{if .TestResult.FTPSuccess}}Success{{else}}Failed{{end}}
+                        {{if .TestResult.FTPSuccess}}
+                        <span class="response-time">({{.TestResult.FTPResponseMs}}ms)</span>
+                        {{end}}
+                    </span>
+                    {{if .TestResult.FTPError}}
+                    <span class="detail-label">Error:</span>
+                    <span class="detail-value">
+                        <div class="error-details">{{.TestResult.FTPError}}</div>
+                    </span>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
+            <!-- VModem Protocol -->
+            {{if .TestResult.VModemTested}}
+            <div class="protocol-section">
+                <div class="protocol-header">VModem Protocol</div>
+                <div class="detail-grid">
+                    <span class="detail-label">Tested:</span>
+                    <span class="detail-value">Yes</span>
+                    <span class="detail-label">Result:</span>
+                    <span class="detail-value {{if .TestResult.VModemSuccess}}success{{else}}failed{{end}}">
+                        {{if .TestResult.VModemSuccess}}Success{{else}}Failed{{end}}
+                        {{if .TestResult.VModemSuccess}}
+                        <span class="response-time">({{.TestResult.VModemResponseMs}}ms)</span>
+                        {{end}}
+                    </span>
+                    {{if .TestResult.VModemError}}
+                    <span class="detail-label">Error:</span>
+                    <span class="detail-value">
+                        <div class="error-details">{{.TestResult.VModemError}}</div>
+                    </span>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+
+        {{template "footer" .}}
+    </div>
+</body>
+</html>

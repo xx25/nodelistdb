@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{if .Address}}Node {{.Address}} - {{end}}Reachability History - NodelistDB</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .reachability-section {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .search-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .search-form input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .search-form select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .search-form button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .search-form button:hover {
+            background: #0056b3;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-card h4 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        .stat-value.success {
+            color: #28a745;
+        }
+        .stat-value.danger {
+            color: #dc3545;
+        }
+        .stat-value.warning {
+            color: #ffc107;
+        }
+        .node-info {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .node-info h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .node-details {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .node-details dt {
+            font-weight: bold;
+            color: #555;
+        }
+        .node-details dd {
+            margin: 0;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        .results-table th {
+            background: #f0f0f0;
+            padding: 8px;
+            text-align: center;
+            border: 1px solid #ddd;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .results-table th[rowspan="2"] {
+            padding: 10px;
+            font-size: 14px;
+        }
+        .results-table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: center;
+            font-size: 12px;
+        }
+        .results-table td:first-child {
+            text-align: left;
+            font-size: 13px;
+        }
+        .results-table tbody tr:hover {
+            background: #f5f5f5;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-badge.operational {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status-badge.partial {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .protocol-status {
+            display: inline-block;
+            margin: 0 1px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        .protocol-status.success {
+            background: #28a745;
+            color: white;
+        }
+        .protocol-status.failed {
+            background: #dc3545;
+            color: white;
+        }
+        .protocol-status.untested {
+            background: #6c757d;
+            color: white;
+        }
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .no-results {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+        .nodes-list {
+            display: grid;
+            gap: 10px;
+        }
+        .node-item {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .node-item:hover {
+            border-color: #007bff;
+            box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+        }
+        .node-address {
+            font-family: monospace;
+            font-weight: bold;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .node-address:hover {
+            text-decoration: underline;
+        }
+        .response-time {
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{{if .Address}}Node {{.Address}} - {{end}}Reachability History</h1>
+            <p class="subtitle">Node connectivity testing and reachability analysis</p>
+        </header>
+        
+        {{template "nav" .}}
+        
+        <div class="content">
+            {{if not .Address}}
+            <!-- Main reachability page with trends -->
+            <div class="reachability-section">
+                <h2>Node Reachability Search</h2>
+                <p>Enter a node address to view its detailed reachability history and test results.</p>
+                
+                <form class="search-form" method="post" action="/reachability/node">
+                    <input type="text" name="address" placeholder="Enter node address (e.g., 2:5001/100)" required>
+                    <select name="days">
+                        <option value="7">Last 7 days</option>
+                        <option value="30" selected>Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                        <option value="180">Last 180 days</option>
+                        <option value="365">Last year</option>
+                    </select>
+                    <button type="submit">View History</button>
+                </form>
+            </div>
+
+            {{if .Trends}}
+            <div class="reachability-section">
+                <h2>Network Reachability Trends</h2>
+                <div class="chart-container">
+                    <canvas id="trendsChart"></canvas>
+                </div>
+                
+                <script>
+                    const ctx = document.getElementById('trendsChart').getContext('2d');
+                    const trendsData = {
+                        labels: [{{range $i, $t := .Trends}}{{if $i}},{{end}}'{{$t.Date.Format "2006-01-02"}}'{{end}}],
+                        datasets: [{
+                            label: 'Operational Nodes',
+                            data: [{{range $i, $t := .Trends}}{{if $i}},{{end}}{{$t.OperationalNodes}}{{end}}],
+                            backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                            borderColor: 'rgba(40, 167, 69, 1)',
+                            borderWidth: 2,
+                            tension: 0.1
+                        }, {
+                            label: 'Failed Nodes',
+                            data: [{{range $i, $t := .Trends}}{{if $i}},{{end}}{{$t.FailedNodes}}{{end}}],
+                            backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                            borderColor: 'rgba(220, 53, 69, 1)',
+                            borderWidth: 2,
+                            tension: 0.1
+                        }, {
+                            label: 'Success Rate (%)',
+                            data: [{{range $i, $t := .Trends}}{{if $i}},{{end}}{{$t.SuccessRate}}{{end}}],
+                            backgroundColor: 'rgba(0, 123, 255, 0.2)',
+                            borderColor: 'rgba(0, 123, 255, 1)',
+                            borderWidth: 2,
+                            tension: 0.1,
+                            yAxisID: 'y1'
+                        }]
+                    };
+                    
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: trendsData,
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Daily Reachability Trends',
+                                    font: {
+                                        size: 16
+                                    }
+                                },
+                                legend: {
+                                    display: true,
+                                    position: 'top'
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'left',
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: 'Number of Nodes'
+                                    }
+                                },
+                                y1: {
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'right',
+                                    beginAtZero: true,
+                                    max: 100,
+                                    title: {
+                                        display: true,
+                                        text: 'Success Rate (%)'
+                                    },
+                                    grid: {
+                                        drawOnChartArea: false
+                                    }
+                                },
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Date'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                </script>
+            </div>
+            {{end}}
+
+            <div class="reachability-section">
+                <h2>Recently Tested Nodes</h2>
+
+                <!-- Configuration Controls -->
+                <form class="search-form" method="get" action="/reachability">
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 15px;">
+                        <label style="font-weight: bold;">Status:</label>
+                        <select name="status">
+                            <option value="all" {{if eq .StatusFilter "all"}}selected{{end}}>All Nodes</option>
+                            <option value="operational" {{if eq .StatusFilter "operational"}}selected{{end}}>Operational Only</option>
+                            <option value="failed" {{if eq .StatusFilter "failed"}}selected{{end}}>Failed Only</option>
+                        </select>
+
+                        <label style="font-weight: bold;">Time Period:</label>
+                        <select name="nodes_period">
+                            <option value="30" {{if eq .NodesPeriodFilter 30}}selected{{end}}>Last 30 days</option>
+                            <option value="90" {{if eq .NodesPeriodFilter 90}}selected{{end}}>Last 90 days</option>
+                            <option value="180" {{if eq .NodesPeriodFilter 180}}selected{{end}}>Last 180 days</option>
+                            <option value="365" {{if eq .NodesPeriodFilter 365}}selected{{end}}>Last year</option>
+                        </select>
+
+                        <label style="font-weight: bold;">Protocol:</label>
+                        <select name="protocol">
+                            <option value="any" {{if eq .ProtocolFilter "any"}}selected{{end}}>Any Protocol</option>
+                            <option value="binkp" {{if eq .ProtocolFilter "binkp"}}selected{{end}}>BinkP Only</option>
+                            <option value="ifcico" {{if eq .ProtocolFilter "ifcico"}}selected{{end}}>IFCICO Only</option>
+                            <option value="telnet" {{if eq .ProtocolFilter "telnet"}}selected{{end}}>Telnet Only</option>
+                        </select>
+
+                        <label style="font-weight: bold;">Limit:</label>
+                        <select name="limit">
+                            <option value="10" {{if eq .LimitFilter 10}}selected{{end}}>10 nodes</option>
+                            <option value="25" {{if eq .LimitFilter 25}}selected{{end}}>25 nodes</option>
+                            <option value="50" {{if eq .LimitFilter 50}}selected{{end}}>50 nodes</option>
+                            <option value="100" {{if eq .LimitFilter 100}}selected{{end}}>100 nodes</option>
+                        </select>
+
+                        <button type="submit" style="padding: 8px 16px;">Apply Filters</button>
+                    </div>
+                </form>
+
+                {{if .FilteredNodes}}
+                <div class="nodes-list">
+                    {{range .FilteredNodes}}
+                    <div class="node-item">
+                        <div>
+                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="node-address">
+                                {{.Zone}}:{{.Net}}/{{.Node}}
+                            </a>
+                            {{if .Hostname}}
+                            <span style="margin-left: 10px; color: #666;">{{.Hostname}}</span>
+                            {{end}}
+                            {{if .Country}}
+                            <span style="margin-left: 10px; color: #888; font-size: 12px;">{{.Country}}</span>
+                            {{end}}
+                        </div>
+                        <div>
+                            {{if .IsOperational}}
+                            <span class="status-badge operational">Operational</span>
+                            {{else}}
+                            <span class="status-badge failed">Failed</span>
+                            {{end}}
+                            {{if .BinkPSuccess}}
+                            <span class="protocol-status success">BinkP</span>
+                            {{end}}
+                            {{if .IfcicoSuccess}}
+                            <span class="protocol-status success">IFCICO</span>
+                            {{end}}
+                            {{if .TelnetSuccess}}
+                            <span class="protocol-status success">Telnet</span>
+                            {{end}}
+                            <span class="response-time">{{.TestTime.Format "2006-01-02 15:04"}}</span>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+                {{else}}
+                <div class="no-results">
+                    <p>No nodes found matching the current filter criteria.</p>
+                </div>
+                {{end}}
+
+                <!-- Legacy sections for backward compatibility if no filters applied -->
+                {{if and (not .StatusFilter) (not .NodesPeriodFilter) (not .ProtocolFilter) (not .LimitFilter)}}
+                {{if .OperationalNodes}}
+                <h3>✅ Operational Nodes</h3>
+                <div class="nodes-list">
+                    {{range .OperationalNodes}}
+                    <div class="node-item">
+                        <div>
+                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="node-address">
+                                {{.Zone}}:{{.Net}}/{{.Node}}
+                            </a>
+                            {{if .Hostname}}
+                            <span style="margin-left: 10px; color: #666;">{{.Hostname}}</span>
+                            {{end}}
+                        </div>
+                        <div>
+                            {{if .BinkPSuccess}}
+                            <span class="protocol-status success">BinkP</span>
+                            {{end}}
+                            {{if .IfcicoSuccess}}
+                            <span class="protocol-status success">IFCICO</span>
+                            {{end}}
+                            {{if .TelnetSuccess}}
+                            <span class="protocol-status success">Telnet</span>
+                            {{end}}
+                            <span class="response-time">{{.TestTime.Format "2006-01-02 15:04"}}</span>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+                {{end}}
+
+                {{if .FailedNodes}}
+                <h3 style="margin-top: 20px;">❌ Failed Nodes</h3>
+                <div class="nodes-list">
+                    {{range .FailedNodes}}
+                    <div class="node-item">
+                        <div>
+                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="node-address">
+                                {{.Zone}}:{{.Net}}/{{.Node}}
+                            </a>
+                            {{if .Hostname}}
+                            <span style="margin-left: 10px; color: #666;">{{.Hostname}}</span>
+                            {{end}}
+                        </div>
+                        <div>
+                            {{if .DNSError}}
+                            <span class="protocol-status failed">DNS Failed</span>
+                            {{else if .HasConnectivityIssues}}
+                            <span class="protocol-status failed">Connectivity Issues</span>
+                            {{else}}
+                            <span class="protocol-status failed">All Protocols Failed</span>
+                            {{end}}
+                            <span class="response-time">{{.TestTime.Format "2006-01-02 15:04"}}</span>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+                {{end}}
+                {{end}}
+            </div>
+
+            {{else}}
+            <!-- Node-specific reachability page -->
+            {{if .NodeInfo}}
+            <div class="node-info">
+                <h3>Node Information</h3>
+                <dl class="node-details">
+                    <dt>Address:</dt>
+                    <dd>{{.Address}}</dd>
+                    
+                    <dt>System Name:</dt>
+                    <dd>{{.NodeInfo.SystemName}}</dd>
+                    
+                    <dt>Location:</dt>
+                    <dd>{{.NodeInfo.Location}}</dd>
+                    
+                    <dt>Sysop:</dt>
+                    <dd>{{.NodeInfo.SysopName}}</dd>
+                </dl>
+            </div>
+            {{end}}
+
+            {{if .Stats}}
+            <div class="reachability-section">
+                <h2>Reachability Statistics</h2>
+
+                <!-- Period Configuration -->
+                <form class="search-form" method="get" style="margin-bottom: 20px;">
+                    <input type="hidden" name="zone" value="{{.Zone}}">
+                    <input type="hidden" name="net" value="{{.Net}}">
+                    <input type="hidden" name="node" value="{{.Node}}">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <label style="font-weight: bold;">Time Period:</label>
+                        <select name="days" onchange="this.form.submit()">
+                            <option value="7" {{if eq .Days 7}}selected{{end}}>Last 7 days</option>
+                            <option value="14" {{if eq .Days 14}}selected{{end}}>Last 2 weeks</option>
+                            <option value="30" {{if eq .Days 30}}selected{{end}}>Last 30 days</option>
+                            <option value="90" {{if eq .Days 90}}selected{{end}}>Last 90 days</option>
+                            <option value="180" {{if eq .Days 180}}selected{{end}}>Last 180 days</option>
+                            <option value="365" {{if eq .Days 365}}selected{{end}}>Last year</option>
+                        </select>
+                        <span style="color: #666; font-size: 14px;">(Currently showing {{.Days}} days)</span>
+                    </div>
+                </form>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>Total Tests</h4>
+                        <div class="stat-value">{{.Stats.TotalTests}}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Success Rate</h4>
+                        <div class="stat-value {{if ge .Stats.SuccessRate 80.0}}success{{else if ge .Stats.SuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.SuccessRate}}%
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Successful Tests</h4>
+                        <div class="stat-value success">{{.Stats.SuccessfulTests}}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Failed Tests</h4>
+                        <div class="stat-value danger">{{.Stats.FailedTests}}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Avg Response Time</h4>
+                        <div class="stat-value">{{printf "%.0f" .Stats.AverageResponseMs}}ms</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Last Status</h4>
+                        <div class="stat-value">
+                            {{if eq .Stats.LastStatus "Operational"}}
+                            <span class="status-badge operational">{{.Stats.LastStatus}}</span>
+                            {{else}}
+                            <span class="status-badge failed">{{.Stats.LastStatus}}</span>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+
+                {{if .Stats.BinkPSuccessRate}}
+                <h3>Protocol Success Rates</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>BinkP</h4>
+                        <div class="stat-value {{if ge .Stats.BinkPSuccessRate 80.0}}success{{else if ge .Stats.BinkPSuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.BinkPSuccessRate}}%
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>IFCICO</h4>
+                        <div class="stat-value {{if ge .Stats.IfcicoSuccessRate 80.0}}success{{else if ge .Stats.IfcicoSuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.IfcicoSuccessRate}}%
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Telnet</h4>
+                        <div class="stat-value {{if ge .Stats.TelnetSuccessRate 80.0}}success{{else if ge .Stats.TelnetSuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.TelnetSuccessRate}}%
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <div class="reachability-section">
+                <h2>Reachability Statistics (Last {{.Days}} Days)</h2>
+                <div class="no-results">
+                    <p>No test statistics available for node {{.Address}}.</p>
+                </div>
+            </div>
+            {{end}}
+
+            {{if .History}}
+            <div class="reachability-section">
+                <h2>Test History</h2>
+                
+                <!-- Time period selector -->
+                <form class="search-form" method="post" action="/reachability/node">
+                    <input type="hidden" name="address" value="{{.Address}}">
+                    <select name="days" onchange="this.form.submit()">
+                        <option value="7" {{if eq .Days 7}}selected{{end}}>Last 7 days</option>
+                        <option value="30" {{if eq .Days 30}}selected{{end}}>Last 30 days</option>
+                        <option value="90" {{if eq .Days 90}}selected{{end}}>Last 90 days</option>
+                        <option value="180" {{if eq .Days 180}}selected{{end}}>Last 180 days</option>
+                        <option value="365" {{if eq .Days 365}}selected{{end}}>Last year</option>
+                    </select>
+                </form>
+
+                <div class="chart-container">
+                    <canvas id="historyChart"></canvas>
+                </div>
+                
+                <script>
+                    const ctx2 = document.getElementById('historyChart').getContext('2d');
+                    const historyData = {
+                        labels: [{{range $i, $h := .History}}{{if $i}},{{end}}'{{$h.TestTime.Format "01-02 15:04"}}'{{end}}],
+                        datasets: [{
+                            label: 'BinkP Response (ms)',
+                            data: [{{range $i, $h := .History}}{{if $i}},{{end}}{{if $h.BinkPSuccess}}{{$h.BinkPResponseMs}}{{else}}null{{end}}{{end}}],
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                            pointRadius: 3
+                        }, {
+                            label: 'IFCICO Response (ms)',
+                            data: [{{range $i, $h := .History}}{{if $i}},{{end}}{{if $h.IfcicoSuccess}}{{$h.IfcicoResponseMs}}{{else}}null{{end}}{{end}}],
+                            backgroundColor: 'rgba(255, 206, 86, 0.6)',
+                            borderColor: 'rgba(255, 206, 86, 1)',
+                            borderWidth: 1,
+                            pointRadius: 3
+                        }, {
+                            label: 'Telnet Response (ms)',
+                            data: [{{range $i, $h := .History}}{{if $i}},{{end}}{{if $h.TelnetSuccess}}{{$h.TelnetResponseMs}}{{else}}null{{end}}{{end}}],
+                            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1,
+                            pointRadius: 3
+                        }]
+                    };
+                    
+                    new Chart(ctx2, {
+                        type: 'line',
+                        data: historyData,
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Protocol Response Times',
+                                    font: {
+                                        size: 16
+                                    }
+                                },
+                                legend: {
+                                    display: true,
+                                    position: 'top'
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: 'Response Time (ms)'
+                                    }
+                                },
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Test Time'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                </script>
+
+                <div class="table-container">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">Test Time</th>
+                                <th rowspan="2">Status</th>
+                                <th colspan="2">BinkP</th>
+                                <th colspan="2">IFCICO</th>
+                                <th colspan="2">Telnet</th>
+                                <th rowspan="2">DNS</th>
+                                <th rowspan="2">Details</th>
+                            </tr>
+                            <tr>
+                                <th>IPv4</th>
+                                <th>IPv6</th>
+                                <th>IPv4</th>
+                                <th>IPv6</th>
+                                <th>IPv4</th>
+                                <th>IPv6</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{range .History}}
+                            <tr>
+                                <td><a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05Z07:00"}}" style="text-decoration: none; color: #007bff;">{{.TestTime.Format "2006-01-02 15:04:05"}}</a></td>
+                                <td>
+                                    {{if .IsOperational}}
+                                    <span class="status-badge operational">Operational</span>
+                                    {{else}}
+                                    <span class="status-badge failed">Failed</span>
+                                    {{end}}
+                                </td>
+                                <!-- BinkP IPv4 -->
+                                <td>
+                                    {{if .ResolvedIPv4}}
+                                        {{if .BinkPSuccess}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.BinkPResponseMs}}ms</span>
+                                        {{else if .BinkPError}}
+                                        <span class="protocol-status failed" title="{{.BinkPError}}">✗</span>
+                                        {{else}}
+                                        <span class="protocol-status untested">-</span>
+                                        {{end}}
+                                    {{else}}
+                                    <span class="protocol-status untested" title="IPv4 not resolved">N/A</span>
+                                    {{end}}
+                                </td>
+                                <!-- BinkP IPv6 -->
+                                <td>
+                                    {{if .ResolvedIPv6}}
+                                        {{if .BinkPSuccess}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.BinkPResponseMs}}ms</span>
+                                        {{else if .BinkPError}}
+                                        <span class="protocol-status failed" title="{{.BinkPError}}">✗</span>
+                                        {{else}}
+                                        <span class="protocol-status untested">-</span>
+                                        {{end}}
+                                    {{else}}
+                                    <span class="protocol-status untested" title="IPv6 not resolved">N/A</span>
+                                    {{end}}
+                                </td>
+                                <!-- IFCICO IPv4 -->
+                                <td>
+                                    {{if .ResolvedIPv4}}
+                                        {{if .IfcicoSuccess}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.IfcicoResponseMs}}ms</span>
+                                        {{else if .IfcicoError}}
+                                        <span class="protocol-status failed" title="{{.IfcicoError}}">✗</span>
+                                        {{else}}
+                                        <span class="protocol-status untested">-</span>
+                                        {{end}}
+                                    {{else}}
+                                    <span class="protocol-status untested" title="IPv4 not resolved">N/A</span>
+                                    {{end}}
+                                </td>
+                                <!-- IFCICO IPv6 -->
+                                <td>
+                                    {{if .ResolvedIPv6}}
+                                        {{if .IfcicoSuccess}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.IfcicoResponseMs}}ms</span>
+                                        {{else if .IfcicoError}}
+                                        <span class="protocol-status failed" title="{{.IfcicoError}}">✗</span>
+                                        {{else}}
+                                        <span class="protocol-status untested">-</span>
+                                        {{end}}
+                                    {{else}}
+                                    <span class="protocol-status untested" title="IPv6 not resolved">N/A</span>
+                                    {{end}}
+                                </td>
+                                <!-- Telnet IPv4 -->
+                                <td>
+                                    {{if .ResolvedIPv4}}
+                                        {{if .TelnetSuccess}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.TelnetResponseMs}}ms</span>
+                                        {{else if .TelnetError}}
+                                        <span class="protocol-status failed" title="{{.TelnetError}}">✗</span>
+                                        {{else}}
+                                        <span class="protocol-status untested">-</span>
+                                        {{end}}
+                                    {{else}}
+                                    <span class="protocol-status untested" title="IPv4 not resolved">N/A</span>
+                                    {{end}}
+                                </td>
+                                <!-- Telnet IPv6 -->
+                                <td>
+                                    {{if .ResolvedIPv6}}
+                                        {{if .TelnetSuccess}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.TelnetResponseMs}}ms</span>
+                                        {{else if .TelnetError}}
+                                        <span class="protocol-status failed" title="{{.TelnetError}}">✗</span>
+                                        {{else}}
+                                        <span class="protocol-status untested">-</span>
+                                        {{end}}
+                                    {{else}}
+                                    <span class="protocol-status untested" title="IPv6 not resolved">N/A</span>
+                                    {{end}}
+                                </td>
+                                <td>
+                                    {{if .DNSError}}
+                                    <span class="protocol-status failed" title="{{.DNSError}}">Failed</span>
+                                    {{else if .ResolvedIPv4}}
+                                    <span class="protocol-status success">IPv4</span>
+                                    {{end}}
+                                    {{if .ResolvedIPv6}}
+                                    <span class="protocol-status success">IPv6</span>
+                                    {{end}}
+                                </td>
+                                <td>
+                                    {{if .BinkPSystemName}}
+                                    <small>{{.BinkPSystemName}}</small>
+                                    {{else if .IfcicoMailerInfo}}
+                                    <small>{{.IfcicoMailerInfo}}</small>
+                                    {{end}}
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {{else if .HasResults}}
+            <div class="no-results">
+                <p>No test results found for node {{.Address}} in the last {{.Days}} days.</p>
+            </div>
+            {{end}}
+            {{end}}
+        </div>
+        
+        {{template "footer" .}}
+    </div>
+</body>
+</html>

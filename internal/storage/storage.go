@@ -18,6 +18,7 @@ type Storage struct {
 	searchOperations    *SearchOperations
 	statsOperations     *StatisticsOperations
 	analyticsOperations *AnalyticsOperations
+	testOperations      *TestOperations
 
 	mu sync.RWMutex
 }
@@ -53,6 +54,7 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 		storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
 		storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
 		storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
+		storage.testOperations = NewTestOperations(db, queryBuilder, resultParser)
 		
 		return storage, nil
 	} else {
@@ -73,6 +75,7 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 	storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
 	storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
 	storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
+	storage.testOperations = NewTestOperations(db, queryBuilder, resultParser)
 
 	return storage, nil
 }
@@ -364,4 +367,31 @@ func (s *Storage) GetFlagUsageByYear(flag string) ([]FlagUsageByYear, error) {
 // GetNetworkHistory returns the complete appearance history of a network
 func (s *Storage) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
 	return s.analyticsOperations.GetNetworkHistory(zone, net)
+}
+
+// --- Test Operations (delegated to TestOperations) ---
+
+// GetNodeTestHistory retrieves test history for a specific node
+func (s *Storage) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
+	return s.testOperations.GetNodeTestHistory(zone, net, node, days)
+}
+
+// GetDetailedTestResult retrieves a detailed test result for a specific node and timestamp
+func (s *Storage) GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error) {
+	return s.testOperations.GetDetailedTestResult(zone, net, node, testTime)
+}
+
+// GetNodeReachabilityStats calculates reachability statistics for a node
+func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error) {
+	return s.testOperations.GetNodeReachabilityStats(zone, net, node, days)
+}
+
+// GetReachabilityTrends gets daily reachability trends
+func (s *Storage) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
+	return s.testOperations.GetReachabilityTrends(days)
+}
+
+// SearchNodesByReachability searches for nodes by reachability status
+func (s *Storage) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
+	return s.testOperations.SearchNodesByReachability(operational, limit, days)
 }
