@@ -120,6 +120,7 @@ type LoggingConfig struct {
 	MaxSize    int    `yaml:"max_size"`
 	MaxBackups int    `yaml:"max_backups"`
 	MaxAge     int    `yaml:"max_age"`
+	Console    bool   `yaml:"console"`
 }
 
 // CLIConfig contains CLI server settings
@@ -197,26 +198,27 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// Convert seconds to Duration for YAML unmarshaling
-	// Only convert if the value looks like plain seconds (< 1000)
-	// Values >= 1000 are likely already time.Duration in nanoseconds
-	
-	if cfg.Daemon.TestInterval < 1000 {
+	// Only convert if the value looks like plain seconds
+	// Values >= 1e9 (1 second in nanoseconds) are likely already time.Duration
+	const oneSecondInNanos = int64(time.Second)
+
+	if cfg.Daemon.TestInterval < time.Duration(oneSecondInNanos) {
 		cfg.Daemon.TestInterval *= time.Second
 	}
-	if cfg.Daemon.StaleTestThreshold < 1000 {
+	if cfg.Daemon.StaleTestThreshold < time.Duration(oneSecondInNanos) {
 		cfg.Daemon.StaleTestThreshold *= time.Second
 	}
-	if cfg.Daemon.FailedRetryInterval < 1000 {
+	if cfg.Daemon.FailedRetryInterval < time.Duration(oneSecondInNanos) {
 		cfg.Daemon.FailedRetryInterval *= time.Second
 	}
 	
 	if cfg.Database.Type == "clickhouse" && cfg.Database.ClickHouse != nil {
-		if cfg.Database.ClickHouse.FlushInterval < 1000 {
+		if cfg.Database.ClickHouse.FlushInterval < time.Duration(oneSecondInNanos) {
 			cfg.Database.ClickHouse.FlushInterval *= time.Second
 		}
 	}
-	
-	if cfg.Protocols.BinkP.Timeout < 1000 {
+
+	if cfg.Protocols.BinkP.Timeout < time.Duration(oneSecondInNanos) {
 		cfg.Protocols.BinkP.Timeout *= time.Second
 	}
 	// Set default system info for BinkP if not specified
@@ -230,7 +232,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Protocols.BinkP.Location = "Test Location"
 	}
 	
-	if cfg.Protocols.Ifcico.Timeout < 1000 {
+	if cfg.Protocols.Ifcico.Timeout < time.Duration(oneSecondInNanos) {
 		cfg.Protocols.Ifcico.Timeout *= time.Second
 	}
 	// Set default system info for Ifcico if not specified
@@ -243,19 +245,19 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Protocols.Ifcico.Location == "" {
 		cfg.Protocols.Ifcico.Location = "Test Location"
 	}
-	if cfg.Protocols.Telnet.Timeout < 1000 {
+	if cfg.Protocols.Telnet.Timeout < time.Duration(oneSecondInNanos) {
 		cfg.Protocols.Telnet.Timeout *= time.Second
 	}
-	if cfg.Protocols.FTP.Timeout < 1000 {
+	if cfg.Protocols.FTP.Timeout < time.Duration(oneSecondInNanos) {
 		cfg.Protocols.FTP.Timeout *= time.Second
 	}
-	if cfg.Protocols.VModem.Timeout < 1000 {
+	if cfg.Protocols.VModem.Timeout < time.Duration(oneSecondInNanos) {
 		cfg.Protocols.VModem.Timeout *= time.Second
 	}
-	if cfg.Services.Geolocation.CacheTTL < 1000 {
+	if cfg.Services.Geolocation.CacheTTL < time.Duration(oneSecondInNanos) {
 		cfg.Services.Geolocation.CacheTTL *= time.Second
 	}
-	if cfg.Services.DNS.Timeout < 1000 {
+	if cfg.Services.DNS.Timeout < time.Duration(oneSecondInNanos) {
 		cfg.Services.DNS.Timeout *= time.Second
 	}
 	if cfg.Services.DNS.CacheTTL < 1000 {

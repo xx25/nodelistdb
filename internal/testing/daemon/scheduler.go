@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
@@ -65,6 +66,9 @@ type SchedulerConfig struct {
 }
 
 func NewScheduler(cfg SchedulerConfig, storage storage.Storage) *Scheduler {
+	// Seed random number generator for true randomness
+	rand.Seed(time.Now().UnixNano())
+
 	if cfg.BaseInterval == 0 {
 		cfg.BaseInterval = 1 * time.Hour
 	}
@@ -113,7 +117,7 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	fmt.Printf("DEBUG InitializeSchedules: Processing %d nodes\n", len(nodes))
+	logging.Debugf("InitializeSchedules: Processing %d nodes", len(nodes))
 	nodesWithHistory := 0
 	nodesWithoutHistory := 0
 	failedQueries := 0
@@ -135,7 +139,7 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 		
 		// Log progress every 100 nodes
 		if (i+1) % 100 == 0 {
-			fmt.Printf("DEBUG InitializeSchedules: Processed %d/%d nodes (with_history=%d, without=%d, failed=%d)\n", 
+			logging.Debugf("InitializeSchedules: Processed %d/%d nodes (with_history=%d, without=%d, failed=%d)",
 				i+1, len(nodes), nodesWithHistory, nodesWithoutHistory, failedQueries)
 		}
 		
@@ -166,14 +170,14 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 			}
 		} else if err != nil {
 			// Log error retrieving test history
-			fmt.Printf("DEBUG InitializeSchedules: Failed to get test history for %s: %v\n", key, err)
+			logging.Debugf("InitializeSchedules: Failed to get test history for %s: %v", key, err)
 		}
 
 		schedule.NextTestTime = s.calculateNextTestTime(schedule)
 		s.schedules[key] = schedule
 	}
 
-	fmt.Printf("DEBUG InitializeSchedules: Final stats - nodes_with_history=%d, without_history=%d, failed_queries=%d\n",
+	logging.Debugf("InitializeSchedules: Final stats - nodes_with_history=%d, without_history=%d, failed_queries=%d",
 		nodesWithHistory, nodesWithoutHistory, failedQueries)
 
 	return nil
@@ -299,8 +303,8 @@ func stringSlicesEqual(a, b []string) bool {
 }
 
 func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*models.Node {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	now := time.Now()
 	var readyNodes []*NodeSchedule
@@ -334,20 +338,16 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 	}
 
 	// Sort future nodes by NextTestTime to show which will be tested soonest
-	for i := 0; i < len(allFutureNodes)-1; i++ {
-		for j := 0; j < len(allFutureNodes)-i-1; j++ {
-			if allFutureNodes[j].NextTestTime.After(allFutureNodes[j+1].NextTestTime) {
-				allFutureNodes[j], allFutureNodes[j+1] = allFutureNodes[j+1], allFutureNodes[j]
-			}
-		}
-	}
+	sort.Slice(allFutureNodes, func(i, j int) bool {
+		return allFutureNodes[i].NextTestTime.Before(allFutureNodes[j].NextTestTime)
+	})
 
-	fmt.Printf("DEBUG GetNodesForTesting: now=%v, ready=%d (stale=%d), future=%d, total=%d, staleThreshold=%v\n",
+	logging.Debugf("GetNodesForTesting: now=%v, ready=%d (stale=%d), future=%d, total=%d, staleThreshold=%v",
 		now, len(readyNodes), staleNodes, len(allFutureNodes), len(s.schedules), s.staleTestThreshold)
 
 	// Show the next 15 nodes that will be tested
 	if len(allFutureNodes) > 0 {
-		fmt.Printf("DEBUG GetNodesForTesting: Next nodes to be tested (sorted by time):\n")
+		logging.Debug("GetNodesForTesting: Next nodes to be tested (sorted by time):")
 		showCount := 15
 		if len(allFutureNodes) < showCount {
 			showCount = len(allFutureNodes)
@@ -355,7 +355,7 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 		for i := 0; i < showCount; i++ {
 			node := allFutureNodes[i]
 			nodeAddr := fmt.Sprintf("%d:%d/%d", node.Node.Zone, node.Node.Net, node.Node.Node)
-			fmt.Printf("  [%d] %s -> %v (in %v)\n", i, nodeAddr, node.NextTestTime, node.NextTestTime.Sub(now))
+			logging.Debugf("  [%d] %s -> %v (in %v)", i, nodeAddr, node.NextTestTime, node.NextTestTime.Sub(now))
 		}
 	}
 
@@ -411,13 +411,14 @@ func (s *Scheduler) UpdateTestResult(ctx context.Context, node *models.Node, res
 
 func (s *Scheduler) calculateNextTestTime(schedule *NodeSchedule) time.Time {
 	if schedule.LastTestTime.IsZero() {
-		// Node has no test history - schedule randomly within base interval
-		randomDelay := s.addJitter(time.Duration(rand.Float64() * float64(s.baseInterval)))
-		nextTime := time.Now().Add(randomDelay)
+		// Node has no test history - schedule immediately with small jitter to prevent thundering herd
+		// Add 0-5 minutes of jitter
+		jitter := time.Duration(rand.Float64() * float64(5*time.Minute))
+		nextTime := time.Now().Add(jitter)
 		// Debug logging disabled
 		// if schedule.Node.Zone == 1 && schedule.Node.Net < 110 {
-		// 	fmt.Printf("DEBUG calculateNextTestTime: Node %s has no history, scheduling for %v (in %v)\n", 
-		// 		s.nodeKey(schedule.Node), nextTime, randomDelay)
+		// 	fmt.Printf("DEBUG calculateNextTestTime: Node %s has no history, scheduling for %v (in %v)\n",
+		// 		s.nodeKey(schedule.Node), nextTime, jitter)
 		// }
 		return nextTime
 	}
@@ -478,21 +479,11 @@ func (s *Scheduler) calculateRegularInterval(schedule *NodeSchedule) time.Durati
 }
 
 func (s *Scheduler) calculateAdaptiveInterval(schedule *NodeSchedule) time.Duration {
-	baseInterval := s.calculateRegularInterval(schedule)
-
-	if !schedule.LastTestSuccess {
-		if schedule.ConsecutiveFails <= 3 {
-			return time.Duration(float64(baseInterval) * 0.3)
-		} else if schedule.ConsecutiveFails <= 10 {
-			return time.Duration(float64(baseInterval) * 0.5)
-		} else if schedule.ConsecutiveFails <= 20 {
-			return baseInterval
-		} else {
-			return time.Duration(float64(baseInterval) * 2.0)
-		}
-	}
-
-	return baseInterval
+	// For both successful and failed nodes, use the regular interval
+	// which already handles the distinction:
+	// - Successful nodes: baseInterval (72h)
+	// - Failed nodes: failedRetryInterval (24h)
+	return s.calculateRegularInterval(schedule)
 }
 
 func (s *Scheduler) calculatePriorityInterval(schedule *NodeSchedule) time.Duration {

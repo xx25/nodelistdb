@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -78,7 +79,7 @@ func New(cfg *Config) (*Daemon, error) {
 		MaxSize:    cfg.Logging.MaxSize,
 		MaxBackups: cfg.Logging.MaxBackups,
 		MaxAge:     cfg.Logging.MaxAge,
-		Console:    true, // Always log to console as well
+		Console:    cfg.Logging.Console, // Use config value instead of hardcoding
 	}
 	if err := logging.Initialize(logConfig); err != nil {
 		return nil, fmt.Errorf("failed to initialize logging: %w", err)
@@ -220,7 +221,7 @@ func New(cfg *Config) (*Daemon, error) {
 		Strategy:          StrategyAdaptive,
 		BaseInterval:      cfg.Daemon.TestInterval,
 		FailureMultiplier: 2.0,
-		MaxInterval:       24 * time.Hour,
+		MaxInterval:       7 * 24 * time.Hour, // Allow up to 7 days to accommodate 72h test interval
 		MaxBackoffLevel:   5,
 		JitterPercent:     0.1,
 		StaleTestThreshold: cfg.Daemon.StaleTestThreshold,
@@ -290,15 +291,17 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return nil
 	}
 	
-	// Create ticker for periodic testing
-	ticker := time.NewTicker(d.config.Daemon.TestInterval)
+	// Create ticker for periodic checking of nodes ready for testing
+	// Check every minute to see if any nodes are due for testing
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 	
 	// Create ticker for checking nodelist updates (every 5 minutes)
 	nodelistCheckTicker := time.NewTicker(5 * time.Minute)
 	defer nodelistCheckTicker.Stop()
 	
-	logging.Infof("Daemon started, will run tests every %v", d.config.Daemon.TestInterval)
+	logging.Info("Daemon started, checking for nodes to test every minute")
+	logging.Infof("Test intervals: successful nodes=%v, failed nodes=%v", d.config.Daemon.TestInterval, d.config.Daemon.FailedRetryInterval)
 	logging.Info("Will check for nodelist updates every 5 minutes")
 	
 	for {
@@ -749,7 +752,7 @@ func (d *Daemon) Close() error {
 	// Close logging to flush any pending writes
 	if err := logging.GetLogger().Close(); err != nil {
 		// Can't log this error since we're closing the logger
-		fmt.Printf("Error closing logger: %v\n", err)
+		log.Printf("Error closing logger: %v\n", err)
 	}
 	
 	if d.storage != nil {
@@ -856,10 +859,12 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 		d.vmodemTester = nil
 	}
 	
-	// Update scheduler with new interval
+	// Update scheduler with new intervals
 	if d.scheduler != nil {
 		d.scheduler.mu.Lock()
 		d.scheduler.baseInterval = newCfg.Daemon.TestInterval
+		d.scheduler.failedRetryInterval = newCfg.Daemon.FailedRetryInterval
+		d.scheduler.staleTestThreshold = newCfg.Daemon.StaleTestThreshold
 		d.scheduler.mu.Unlock()
 	}
 	

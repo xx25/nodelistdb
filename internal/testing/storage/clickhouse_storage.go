@@ -449,7 +449,27 @@ func (s *ClickHouseStorage) flushBatch(ctx context.Context) error {
 		return nil
 	}
 	
-	batch, err := s.conn.PrepareBatch(ctx, `INSERT INTO node_test_results`)
+	batch, err := s.conn.PrepareBatch(ctx, `INSERT INTO node_test_results (
+		test_time, test_date, zone, net, node, address,
+		hostname, resolved_ipv4, resolved_ipv6, dns_error,
+		country, country_code, city, region, latitude, longitude, isp, org, asn,
+		binkp_tested, binkp_success, binkp_response_ms,
+		binkp_system_name, binkp_sysop, binkp_location, binkp_version,
+		binkp_addresses, binkp_capabilities, binkp_error,
+		ifcico_tested, ifcico_success, ifcico_response_ms,
+		ifcico_mailer_info, ifcico_system_name, ifcico_addresses,
+		ifcico_response_type, ifcico_error,
+		telnet_tested, telnet_success, telnet_response_ms, telnet_error,
+		ftp_tested, ftp_success, ftp_response_ms, ftp_error,
+		vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
+		is_operational, has_connectivity_issues, address_validated,
+		binkp_ipv4_tested, binkp_ipv4_success, binkp_ipv4_response_ms, binkp_ipv4_address, binkp_ipv4_error,
+		binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_response_ms, binkp_ipv6_address, binkp_ipv6_error,
+		ifcico_ipv4_tested, ifcico_ipv4_success, ifcico_ipv4_response_ms, ifcico_ipv4_address, ifcico_ipv4_error,
+		ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_response_ms, ifcico_ipv6_address, ifcico_ipv6_error,
+		telnet_ipv4_tested, telnet_ipv4_success, telnet_ipv4_response_ms, telnet_ipv4_address, telnet_ipv4_error,
+		telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_response_ms, telnet_ipv6_address, telnet_ipv6_error
+	)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
@@ -1106,18 +1126,81 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		vmodemError = r.VModemResult.Error
 	}
 	
+	// Extract IPv4/IPv6 specific results for each protocol
+	var binkpIPv4Tested, binkpIPv4Success, binkpIPv6Tested, binkpIPv6Success bool
+	var binkpIPv4ResponseMs, binkpIPv6ResponseMs uint32
+	var binkpIPv4Address, binkpIPv4Error, binkpIPv6Address, binkpIPv6Error string
+
+	if r.BinkPResult != nil {
+		binkpIPv4Tested = r.BinkPResult.IPv4Tested
+		binkpIPv4Success = r.BinkPResult.IPv4Success
+		binkpIPv4ResponseMs = r.BinkPResult.IPv4ResponseMs
+		binkpIPv4Address = r.BinkPResult.IPv4Address
+		binkpIPv4Error = r.BinkPResult.IPv4Error
+
+		binkpIPv6Tested = r.BinkPResult.IPv6Tested
+		binkpIPv6Success = r.BinkPResult.IPv6Success
+		binkpIPv6ResponseMs = r.BinkPResult.IPv6ResponseMs
+		binkpIPv6Address = r.BinkPResult.IPv6Address
+		binkpIPv6Error = r.BinkPResult.IPv6Error
+	}
+
+	var ifcicoIPv4Tested, ifcicoIPv4Success, ifcicoIPv6Tested, ifcicoIPv6Success bool
+	var ifcicoIPv4ResponseMs, ifcicoIPv6ResponseMs uint32
+	var ifcicoIPv4Address, ifcicoIPv4Error, ifcicoIPv6Address, ifcicoIPv6Error string
+
+	if r.IfcicoResult != nil {
+		ifcicoIPv4Tested = r.IfcicoResult.IPv4Tested
+		ifcicoIPv4Success = r.IfcicoResult.IPv4Success
+		ifcicoIPv4ResponseMs = r.IfcicoResult.IPv4ResponseMs
+		ifcicoIPv4Address = r.IfcicoResult.IPv4Address
+		ifcicoIPv4Error = r.IfcicoResult.IPv4Error
+
+		ifcicoIPv6Tested = r.IfcicoResult.IPv6Tested
+		ifcicoIPv6Success = r.IfcicoResult.IPv6Success
+		ifcicoIPv6ResponseMs = r.IfcicoResult.IPv6ResponseMs
+		ifcicoIPv6Address = r.IfcicoResult.IPv6Address
+		ifcicoIPv6Error = r.IfcicoResult.IPv6Error
+	}
+
+	var telnetIPv4Tested, telnetIPv4Success, telnetIPv6Tested, telnetIPv6Success bool
+	var telnetIPv4ResponseMs, telnetIPv6ResponseMs uint32
+	var telnetIPv4Address, telnetIPv4Error, telnetIPv6Address, telnetIPv6Error string
+
+	if r.TelnetResult != nil {
+		telnetIPv4Tested = r.TelnetResult.IPv4Tested
+		telnetIPv4Success = r.TelnetResult.IPv4Success
+		telnetIPv4ResponseMs = r.TelnetResult.IPv4ResponseMs
+		telnetIPv4Address = r.TelnetResult.IPv4Address
+		telnetIPv4Error = r.TelnetResult.IPv4Error
+
+		telnetIPv6Tested = r.TelnetResult.IPv6Tested
+		telnetIPv6Success = r.TelnetResult.IPv6Success
+		telnetIPv6ResponseMs = r.TelnetResult.IPv6ResponseMs
+		telnetIPv6Address = r.TelnetResult.IPv6Address
+		telnetIPv6Error = r.TelnetResult.IPv6Error
+	}
+
 	return []interface{}{
+		// First 52 fields (original)
 		r.TestTime, r.TestDate, r.Zone, r.Net, r.Node, r.Address,
 		r.Hostname, r.ResolvedIPv4, r.ResolvedIPv6, r.DNSError,
 		r.Country, r.CountryCode, r.City, r.Region, r.Latitude, r.Longitude, r.ISP, r.Org, r.ASN,
 		binkpTested, binkpSuccess, binkpResponseMs, binkpSystemName,
 		binkpSysop, binkpLocation, binkpVersion, binkpAddresses,
 		binkpCapabilities, binkpError,
-		ifcicoTested, ifcicoSuccess, ifcicoResponseMs, ifcicoMailerInfo, 
+		ifcicoTested, ifcicoSuccess, ifcicoResponseMs, ifcicoMailerInfo,
 		ifcicoSystemName, ifcicoAddresses, ifcicoResponseType, ifcicoError,
 		telnetTested, telnetSuccess, telnetResponseMs, telnetError,
 		ftpTested, ftpSuccess, ftpResponseMs, ftpError,
 		vmodemTested, vmodemSuccess, vmodemResponseMs, vmodemError,
 		r.IsOperational, r.HasConnectivityIssues, r.AddressValidated,
+		// IPv4/IPv6 specific fields (53-82)
+		binkpIPv4Tested, binkpIPv4Success, binkpIPv4ResponseMs, binkpIPv4Address, binkpIPv4Error,
+		binkpIPv6Tested, binkpIPv6Success, binkpIPv6ResponseMs, binkpIPv6Address, binkpIPv6Error,
+		ifcicoIPv4Tested, ifcicoIPv4Success, ifcicoIPv4ResponseMs, ifcicoIPv4Address, ifcicoIPv4Error,
+		ifcicoIPv6Tested, ifcicoIPv6Success, ifcicoIPv6ResponseMs, ifcicoIPv6Address, ifcicoIPv6Error,
+		telnetIPv4Tested, telnetIPv4Success, telnetIPv4ResponseMs, telnetIPv4Address, telnetIPv4Error,
+		telnetIPv6Tested, telnetIPv6Success, telnetIPv6ResponseMs, telnetIPv6Address, telnetIPv6Error,
 	}
 }

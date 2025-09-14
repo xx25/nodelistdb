@@ -360,6 +360,8 @@
 
                         <label style="font-weight: bold;">Time Period:</label>
                         <select name="nodes_period">
+                            <option value="1" {{if eq .NodesPeriodFilter 1}}selected{{end}}>Last 24 hours</option>
+                            <option value="7" {{if eq .NodesPeriodFilter 7}}selected{{end}}>Last 7 days</option>
                             <option value="30" {{if eq .NodesPeriodFilter 30}}selected{{end}}>Last 30 days</option>
                             <option value="90" {{if eq .NodesPeriodFilter 90}}selected{{end}}>Last 90 days</option>
                             <option value="180" {{if eq .NodesPeriodFilter 180}}selected{{end}}>Last 180 days</option>

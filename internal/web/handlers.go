@@ -680,9 +680,9 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	statusFilter := query.Get("status")
 	protocolFilter := query.Get("protocol")
 
-	// Parse period filter (default to 30 days if not specified for trends, 7 days for nodes)
+	// Parse period filter (default to 1 day for nodes, 30 days for trends)
 	trendsPeriodFilter := 30 // For trends chart
-	nodesPeriodFilter := 30  // For recently tested nodes
+	nodesPeriodFilter := 1   // Default to 1 day for recently tested nodes
 	if p := query.Get("trends_period"); p != "" {
 		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 && parsed <= 365 {
 			trendsPeriodFilter = parsed
@@ -721,6 +721,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		"LimitFilter":         limitFilter,
 	}
 
+	// Always show data by default - get recently tested nodes for the last day
 	// If filters are applied, get filtered results
 	if statusFilter != "" || protocolFilter != "" || query.Get("nodes_period") != "" || query.Get("limit") != "" {
 		filteredNodes, err := s.getFilteredReachabilityNodes(statusFilter, protocolFilter, nodesPeriodFilter, limitFilter)
@@ -730,7 +731,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		data["FilteredNodes"] = filteredNodes
 	} else {
-		// Legacy behavior - get recently tested nodes (both operational and failed)
+		// Default behavior - get recently tested nodes (both operational and failed) for the last day
 		operational, err := s.storage.SearchNodesByReachability(true, 10, nodesPeriodFilter)
 		if err != nil {
 			log.Printf("Error getting operational nodes: %v", err)
