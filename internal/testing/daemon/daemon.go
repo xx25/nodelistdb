@@ -402,9 +402,9 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	if len(nodes) == 0 {
 		// Log scheduler status for debugging
 		schedStatus := d.scheduler.GetScheduleStatus()
-		logging.Infof("Scheduler status: total_nodes=%v, ready=%v, failing=%v", 
-			schedStatus["total_nodes"], schedStatus["ready_for_test"], schedStatus["failing_nodes"])
-		
+		logging.Infof("Scheduler status: total_nodes=%v, ready=%v, failing=%v, pending_first_test=%v",
+			schedStatus["total_nodes"], schedStatus["ready_for_test"], schedStatus["failing_nodes"], schedStatus["pending_first_test"])
+
 		// This is normal after a restart if all nodes were tested recently
 		logging.Infof("No nodes ready for testing at this time. All nodes are within their test intervals.")
 		return nil  // Skip this test cycle

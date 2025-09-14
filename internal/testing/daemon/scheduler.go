@@ -304,14 +304,13 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 
 	now := time.Now()
 	var readyNodes []*NodeSchedule
-	futureNodes := 0
+	var allFutureNodes []*NodeSchedule
 	staleNodes := 0
-	sampleFutureTimes := []time.Time{}
 
 	for _, schedule := range s.schedules {
 		// Check if test is stale (hasn't been tested in staleTestThreshold duration)
 		isStale := !schedule.LastTestTime.IsZero() && now.Sub(schedule.LastTestTime) > s.staleTestThreshold
-		
+
 		// Check if node is ready based on schedule OR if test is stale
 		if schedule.NextTestTime.Before(now) || schedule.NextTestTime.Equal(now) || isStale {
 			// Update test reason based on current state
@@ -326,24 +325,37 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 					schedule.TestReason = "scheduled"
 				}
 			}
-			
+
 			readyNodes = append(readyNodes, schedule)
 		} else {
-			futureNodes++
-			// Collect sample of future times for debugging
-			if len(sampleFutureTimes) < 5 {
-				sampleFutureTimes = append(sampleFutureTimes, schedule.NextTestTime)
+			// Collect ALL future nodes
+			allFutureNodes = append(allFutureNodes, schedule)
+		}
+	}
+
+	// Sort future nodes by NextTestTime to show which will be tested soonest
+	for i := 0; i < len(allFutureNodes)-1; i++ {
+		for j := 0; j < len(allFutureNodes)-i-1; j++ {
+			if allFutureNodes[j].NextTestTime.After(allFutureNodes[j+1].NextTestTime) {
+				allFutureNodes[j], allFutureNodes[j+1] = allFutureNodes[j+1], allFutureNodes[j]
 			}
 		}
 	}
 
-	fmt.Printf("DEBUG GetNodesForTesting: now=%v, ready=%d (stale=%d), future=%d, total=%d, staleThreshold=%v\n", 
-		now, len(readyNodes), staleNodes, futureNodes, len(s.schedules), s.staleTestThreshold)
-	
-	if len(sampleFutureTimes) > 0 {
-		fmt.Printf("DEBUG GetNodesForTesting: Sample future NextTestTimes:\n")
-		for i, t := range sampleFutureTimes {
-			fmt.Printf("  [%d] %v (in %v)\n", i, t, t.Sub(now))
+	fmt.Printf("DEBUG GetNodesForTesting: now=%v, ready=%d (stale=%d), future=%d, total=%d, staleThreshold=%v\n",
+		now, len(readyNodes), staleNodes, len(allFutureNodes), len(s.schedules), s.staleTestThreshold)
+
+	// Show the next 15 nodes that will be tested
+	if len(allFutureNodes) > 0 {
+		fmt.Printf("DEBUG GetNodesForTesting: Next nodes to be tested (sorted by time):\n")
+		showCount := 15
+		if len(allFutureNodes) < showCount {
+			showCount = len(allFutureNodes)
+		}
+		for i := 0; i < showCount; i++ {
+			node := allFutureNodes[i]
+			nodeAddr := fmt.Sprintf("%d:%d/%d", node.Node.Zone, node.Node.Net, node.Node.Node)
+			fmt.Printf("  [%d] %s -> %v (in %v)\n", i, nodeAddr, node.NextTestTime, node.NextTestTime.Sub(now))
 		}
 	}
 
@@ -631,15 +643,20 @@ func (s *Scheduler) GetScheduleStatus() map[string]interface{} {
 	totalNodes := len(s.schedules)
 	readyNodes := 0
 	failingNodes := 0
+	pendingFirstTest := 0
 	avgBackoffLevel := 0.0
-	
+
 	var nextTestTimes []time.Time
 
 	for _, schedule := range s.schedules {
 		if schedule.NextTestTime.Before(now) || schedule.NextTestTime.Equal(now) {
 			readyNodes++
 		}
-		if !schedule.LastTestSuccess {
+		// Check if node has never been tested
+		if schedule.LastTestTime.IsZero() {
+			pendingFirstTest++
+		} else if !schedule.LastTestSuccess {
+			// Only count as failing if it has been tested and failed
 			failingNodes++
 			avgBackoffLevel += float64(schedule.BackoffLevel)
 		}
@@ -654,6 +671,7 @@ func (s *Scheduler) GetScheduleStatus() map[string]interface{} {
 		"total_nodes":       totalNodes,
 		"ready_for_test":    readyNodes,
 		"failing_nodes":     failingNodes,
+		"pending_first_test": pendingFirstTest,
 		"avg_backoff_level": avgBackoffLevel,
 		"strategy":          s.strategy.String(),
 	}
