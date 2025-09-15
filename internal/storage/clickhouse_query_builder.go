@@ -74,7 +74,7 @@ func (cqb *ClickHouseQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.No
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
 	) VALUES `)
 
 	for i, node := range nodes {
@@ -131,8 +131,8 @@ func (cqb *ClickHouseQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.No
 			buf.WriteString("'{}',")
 		}
 
-		// FTS ID
-		buf.WriteString(fmt.Sprintf("'%s')", cqb.escapeClickHouseSQL(node.FtsId)))
+		// FTS ID and raw line
+		buf.WriteString(fmt.Sprintf("'%s','%s')", cqb.escapeClickHouseSQL(node.FtsId), cqb.escapeClickHouseSQL(node.RawLine)))
 	}
 
 	return buf.String()

@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -52,21 +51,6 @@ func parseNodeURLPath(path string) (zone, net, node int, err error) {
 	return zone, net, node, nil
 }
 
-// buildChangeFilter creates a ChangeFilter from URL query parameters
-func buildChangeFilter(query url.Values) storage.ChangeFilter {
-	return storage.ChangeFilter{
-		IgnoreFlags:             query.Get("noflags") == "1",
-		IgnorePhone:             query.Get("nophone") == "1",
-		IgnoreSpeed:             query.Get("nospeed") == "1",
-		IgnoreStatus:            query.Get("nostatus") == "1",
-		IgnoreLocation:          query.Get("nolocation") == "1",
-		IgnoreName:              query.Get("noname") == "1",
-		IgnoreSysop:             query.Get("nosysop") == "1",
-		IgnoreConnectivity:      query.Get("noconnectivity") == "1",
-		IgnoreModemFlags:        query.Get("nomodemflags") == "1",
-		// Internet array fields are no longer available - these options are ignored
-	}
-}
 
 // NodeActivityInfo holds information about a node's activity
 type NodeActivityInfo struct {
@@ -461,10 +445,8 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := buildChangeFilter(r.URL.Query())
-
-	// Get node changes with filter applied
-	changes, err := s.storage.GetNodeChanges(zone, net, node, filter)
+	// Get all node changes without filtering
+	changes, err := s.storage.GetNodeChanges(zone, net, node)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error retrieving node changes: %v", err), http.StatusInternalServerError)
 		return
@@ -477,7 +459,6 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		Address          string
 		History          []database.Node
 		Changes          []database.NodeChange
-		Filter           storage.ChangeFilter
 		FirstDate        time.Time
 		LastDate         time.Time
 		CurrentlyActive  bool
@@ -489,7 +470,6 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		Address:          fmt.Sprintf("%d:%d/%d", zone, net, node),
 		History:          history,
 		Changes:          changes,
-		Filter:           filter,
 		FirstDate:        activityInfo.FirstDate,
 		LastDate:         activityInfo.LastDate,
 		CurrentlyActive:  activityInfo.CurrentlyActive,

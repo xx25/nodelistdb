@@ -233,7 +233,12 @@ func New(cfg *Config) (*Daemon, error) {
 
 // Run starts the daemon
 func (d *Daemon) Run(ctx context.Context) error {
-	logging.Infof("Starting NodeTest Daemon with %d workers", d.config.Daemon.Workers)
+	// Log version if available
+	if d.config.Version != "" {
+		logging.Infof("Starting NodeTest Daemon %s with %d workers", d.config.Version, d.config.Daemon.Workers)
+	} else {
+		logging.Infof("Starting NodeTest Daemon with %d workers", d.config.Daemon.Workers)
+	}
 	
 	// Record start time for uptime calculation
 	d.stats.Lock()
@@ -527,60 +532,78 @@ func (d *Daemon) testNode(ctx context.Context, node *models.Node) *models.TestRe
 	if reason == "" {
 		reason = "unknown"
 	}
-	logging.Debugf("Testing %s (reason: %s)", node.Address(), reason)
-	
+	addr := node.Address()
+	logging.Debugf("[%s] Testing (reason: %s)", addr, reason)
+	logging.Debugf("[%s]   Node data: SystemName=%s, Hostnames=%v, Protocols=%v, HasInet=%v",
+		addr, node.SystemName, node.InternetHostnames, node.InternetProtocols, node.HasInet)
+
 	// DNS resolution
 	if hostname := node.GetPrimaryHostname(); hostname != "" {
 		dnsResult := d.dnsResolver.Resolve(ctx, hostname)
 		result.SetDNSResult(dnsResult)
-		
+
 		// Log DNS results
 		if len(dnsResult.IPv4Addresses) > 0 || len(dnsResult.IPv6Addresses) > 0 {
-			logging.Debugf("  DNS: IPv4=%v, IPv6=%v", dnsResult.IPv4Addresses, dnsResult.IPv6Addresses)
+			logging.Debugf("[%s]   DNS: IPv4=%v, IPv6=%v", addr, dnsResult.IPv4Addresses, dnsResult.IPv6Addresses)
+		} else if dnsResult.Error != nil {
+			logging.Debugf("[%s]   DNS failed: %v", addr, dnsResult.Error)
+		} else {
+			logging.Debugf("[%s]   DNS: No addresses resolved", addr)
 		}
-		
+
 		// Get geolocation for first resolved IP
 		if len(dnsResult.IPv4Addresses) > 0 {
 			if geo := d.geolocator.GetLocation(ctx, dnsResult.IPv4Addresses[0]); geo != nil {
 				result.SetGeolocation(geo)
 			}
 		}
+	} else {
+		logging.Debugf("[%s]   No hostname configured for node", addr)
 	}
 	
 	// Test protocols
 	if d.config.Protocols.BinkP.Enabled && node.HasProtocol("IBN") {
 		d.testBinkP(ctx, node, result)
-		d.logProtocolResult("BinkP", result.BinkPResult)
+		d.logProtocolResult(addr, "BinkP", result.BinkPResult)
 	}
-	
+
 	if d.config.Protocols.Ifcico.Enabled && node.HasProtocol("IFC") {
 		d.testIfcico(ctx, node, result)
-		d.logProtocolResult("IFCICO", result.IfcicoResult)
+		d.logProtocolResult(addr, "IFCICO", result.IfcicoResult)
 	}
-	
+
 	if d.config.Protocols.Telnet.Enabled && node.HasProtocol("ITN") {
 		d.testTelnet(ctx, node, result)
-		d.logProtocolResult("Telnet", result.TelnetResult)
+		d.logProtocolResult(addr, "Telnet", result.TelnetResult)
 	}
-	
+
 	if d.config.Protocols.FTP.Enabled && node.HasProtocol("IFT") {
 		d.testFTP(ctx, node, result)
-		d.logProtocolResult("FTP", result.FTPResult)
+		d.logProtocolResult(addr, "FTP", result.FTPResult)
 	}
-	
+
 	if d.config.Protocols.VModem.Enabled && node.HasProtocol("IVM") {
 		d.testVModem(ctx, node, result)
-		d.logProtocolResult("VModem", result.VModemResult)
+		d.logProtocolResult(addr, "VModem", result.VModemResult)
 	}
-	
+
 	// Log summary of connectivity
-	d.logConnectivitySummary(node, result)
-	
+	d.logConnectivitySummary(addr, node, result)
+
+	// Log final test result status
+	if result.IsOperational {
+		logging.Debugf("[%s]   Test result: OPERATIONAL", addr)
+	} else if result.HasConnectivityIssues {
+		logging.Debugf("[%s]   Test result: HAS ISSUES", addr)
+	} else {
+		logging.Debugf("[%s]   Test result: FAILED (no successful connections)", addr)
+	}
+
 	return result
 }
 
 // logProtocolResult logs the dual-stack test results for a protocol
-func (d *Daemon) logProtocolResult(protocol string, result *models.ProtocolTestResult) {
+func (d *Daemon) logProtocolResult(nodeAddr, protocol string, result *models.ProtocolTestResult) {
 	if result == nil || !result.Tested {
 		return
 	}
@@ -604,11 +627,11 @@ func (d *Daemon) logProtocolResult(protocol string, result *models.ProtocolTestR
 		status = fmt.Sprintf("✗ Failed (tried: %s)", strings.Join(tried, ", "))
 	}
 	
-	logging.Debugf("  %s: %s", protocol, status)
+	logging.Debugf("[%s]   %s: %s", nodeAddr, protocol, status)
 }
 
 // logConnectivitySummary logs a summary of the node's connectivity
-func (d *Daemon) logConnectivitySummary(node *models.Node, result *models.TestResult) {
+func (d *Daemon) logConnectivitySummary(nodeAddr string, node *models.Node, result *models.TestResult) {
 	var summary []string
 	
 	// Count dual-stack protocols
@@ -652,7 +675,7 @@ func (d *Daemon) logConnectivitySummary(node *models.Node, result *models.TestRe
 	}
 	
 	if len(summary) > 0 {
-		logging.Infof("  %s connectivity: %s protocols", node.Address(), strings.Join(summary, ", "))
+		logging.Infof("[%s] connectivity: %s protocols", nodeAddr, strings.Join(summary, ", "))
 	}
 }
 

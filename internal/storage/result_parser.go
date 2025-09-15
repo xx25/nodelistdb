@@ -31,7 +31,7 @@ func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) 
 		&node.IsCM, &node.IsMO,
 		&flags, &modemFlags,
 		&node.ConflictSequence, &node.HasConflict,
-		&node.HasInet, &internetConfig, &node.FtsId,
+		&node.HasInet, &internetConfig, &node.FtsId, &node.RawLine,
 	)
 	if err != nil {
 		return node, fmt.Errorf("failed to scan node: %w", err)

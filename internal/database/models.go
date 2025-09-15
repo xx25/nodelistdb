@@ -44,6 +44,9 @@ type Node struct {
 
 	// FTS identifier
 	FtsId string `json:"fts_id"`
+
+	// Raw nodelist line (original format from file)
+	RawLine string `json:"raw_line,omitempty"`
 }
 
 // ComputeFtsId generates the FTS identifier for this node

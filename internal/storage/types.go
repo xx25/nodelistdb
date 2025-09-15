@@ -29,19 +29,6 @@ type SysopInfo struct {
 	Zones       []int     `json:"zones"`
 }
 
-// ChangeFilter allows filtering out specific types of changes when analyzing node history
-type ChangeFilter struct {
-	IgnoreFlags             bool // Ignore changes in flag arrays
-	IgnorePhone             bool // Ignore phone number changes
-	IgnoreSpeed             bool // Ignore max speed changes
-	IgnoreStatus            bool // Ignore node type/status changes
-	IgnoreLocation          bool // Ignore location changes
-	IgnoreName              bool // Ignore system name changes
-	IgnoreSysop             bool // Ignore sysop name changes
-	IgnoreConnectivity      bool // Ignore Binkp, Telnet capability changes
-	// Internet array fields have been removed - these options are no longer available
-	IgnoreModemFlags        bool // Ignore modem flag changes
-}
 
 // BatchInsertConfig holds configuration for batch insert operations
 type BatchInsertConfig struct {
@@ -67,7 +54,7 @@ type Operations interface {
 
 	// Search operations
 	SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error)
-	GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error)
+	GetNodeChanges(zone, net, node int) ([]database.NodeChange, error)
 	GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error)
 	GetNodesBySysop(sysopName string, limit int) ([]database.Node, error)
 	SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error)

@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 
+	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
 	"github.com/nodelistdb/internal/testing/protocols"
 )
@@ -34,8 +35,9 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 	// Test IPv6 first (if available)
 	if len(result.ResolvedIPv6) > 0 {
 		for _, ipv6 := range result.ResolvedIPv6 {
+			logging.Debugf("[%s]   Testing BinkP IPv6 %s:%d", node.Address(), ipv6, port)
 			testResult := d.binkpTester.Test(ctx, ipv6, port, node.Address())
-			
+
 			if binkpResult, ok := testResult.(*protocols.BinkPTestResult); ok {
 				result.BinkPResult.SetIPv6Result(
 					binkpResult.Success,
@@ -43,9 +45,10 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 					ipv6,
 					binkpResult.Error,
 				)
-				
+
 				// Store details if successful
 				if binkpResult.Success {
+					logging.Debugf("[%s]     BinkP IPv6 success: %s (%dms)", node.Address(), binkpResult.SystemName, binkpResult.ResponseMs)
 					details := &models.BinkPTestDetails{
 						SystemName:   binkpResult.SystemName,
 						Sysop:        binkpResult.Sysop,
@@ -55,11 +58,15 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 						Capabilities: binkpResult.Capabilities,
 					}
 					result.BinkPResult.Details["ipv6"] = details
-					
+
 					if binkpResult.AddressValid {
 						result.AddressValidated = true
 					}
 					break // First successful IPv6 is enough
+				} else if binkpResult.Error != "" {
+					logging.Debugf("[%s]     BinkP IPv6 failed: %s", node.Address(), binkpResult.Error)
+				} else {
+					logging.Debugf("[%s]     BinkP IPv6 failed: timeout or connection refused", node.Address())
 				}
 			}
 		}
@@ -68,8 +75,9 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 	// Test IPv4 (if available)
 	if len(result.ResolvedIPv4) > 0 {
 		for _, ipv4 := range result.ResolvedIPv4 {
+			logging.Debugf("[%s]   Testing BinkP IPv4 %s:%d", node.Address(), ipv4, port)
 			testResult := d.binkpTester.Test(ctx, ipv4, port, node.Address())
-			
+
 			if binkpResult, ok := testResult.(*protocols.BinkPTestResult); ok {
 				result.BinkPResult.SetIPv4Result(
 					binkpResult.Success,
@@ -77,9 +85,10 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 					ipv4,
 					binkpResult.Error,
 				)
-				
+
 				// Store details if successful
 				if binkpResult.Success {
+					logging.Debugf("[%s]     BinkP IPv4 success: %s (%dms)", node.Address(), binkpResult.SystemName, binkpResult.ResponseMs)
 					details := &models.BinkPTestDetails{
 						SystemName:   binkpResult.SystemName,
 						Sysop:        binkpResult.Sysop,
@@ -89,11 +98,15 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 						Capabilities: binkpResult.Capabilities,
 					}
 					result.BinkPResult.Details["ipv4"] = details
-					
+
 					if binkpResult.AddressValid {
 						result.AddressValidated = true
 					}
 					break // First successful IPv4 is enough
+				} else if binkpResult.Error != "" {
+					logging.Debugf("[%s]     BinkP IPv4 failed: %s", node.Address(), binkpResult.Error)
+				} else {
+					logging.Debugf("[%s]     BinkP IPv4 failed: timeout or connection refused", node.Address())
 				}
 			}
 		}
@@ -132,8 +145,9 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 	// Test IPv6 first (if available)
 	if len(result.ResolvedIPv6) > 0 {
 		for _, ipv6 := range result.ResolvedIPv6 {
+			logging.Debugf("[%s]   Testing IFCICO IPv6 %s:%d", node.Address(), ipv6, port)
 			testResult := d.ifcicoTester.Test(ctx, ipv6, port, node.Address())
-			
+
 			if ifcicoResult, ok := testResult.(*protocols.IfcicoTestResult); ok {
 				result.IfcicoResult.SetIPv6Result(
 					ifcicoResult.Success,
@@ -141,9 +155,10 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 					ipv6,
 					ifcicoResult.Error,
 				)
-				
+
 				// Store details if successful
 				if ifcicoResult.Success {
+					logging.Debugf("[%s]     IFCICO IPv6 success: %s (%dms)", node.Address(), ifcicoResult.SystemName, ifcicoResult.ResponseMs)
 					details := &models.IfcicoTestDetails{
 						MailerInfo:   ifcicoResult.MailerInfo,
 						SystemName:   ifcicoResult.SystemName,
@@ -151,11 +166,15 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 						ResponseType: ifcicoResult.ResponseType,
 					}
 					result.IfcicoResult.Details["ipv6"] = details
-					
+
 					if ifcicoResult.AddressValid {
 						result.AddressValidated = true
 					}
 					break // First successful IPv6 is enough
+				} else if ifcicoResult.Error != "" {
+					logging.Debugf("[%s]     IFCICO IPv6 failed: %s", node.Address(), ifcicoResult.Error)
+				} else {
+					logging.Debugf("[%s]     IFCICO IPv6 failed: timeout or connection refused", node.Address())
 				}
 			}
 		}
@@ -164,8 +183,9 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 	// Test IPv4 (if available)
 	if len(result.ResolvedIPv4) > 0 {
 		for _, ipv4 := range result.ResolvedIPv4 {
+			logging.Debugf("[%s]   Testing IFCICO IPv4 %s:%d", node.Address(), ipv4, port)
 			testResult := d.ifcicoTester.Test(ctx, ipv4, port, node.Address())
-			
+
 			if ifcicoResult, ok := testResult.(*protocols.IfcicoTestResult); ok {
 				result.IfcicoResult.SetIPv4Result(
 					ifcicoResult.Success,
@@ -173,9 +193,10 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 					ipv4,
 					ifcicoResult.Error,
 				)
-				
+
 				// Store details if successful
 				if ifcicoResult.Success {
+					logging.Debugf("[%s]     IFCICO IPv4 success: %s (%dms)", node.Address(), ifcicoResult.SystemName, ifcicoResult.ResponseMs)
 					details := &models.IfcicoTestDetails{
 						MailerInfo:   ifcicoResult.MailerInfo,
 						SystemName:   ifcicoResult.SystemName,
@@ -183,11 +204,15 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 						ResponseType: ifcicoResult.ResponseType,
 					}
 					result.IfcicoResult.Details["ipv4"] = details
-					
+
 					if ifcicoResult.AddressValid {
 						result.AddressValidated = true
 					}
 					break // First successful IPv4 is enough
+				} else if ifcicoResult.Error != "" {
+					logging.Debugf("[%s]     IFCICO IPv4 failed: %s", node.Address(), ifcicoResult.Error)
+				} else {
+					logging.Debugf("[%s]     IFCICO IPv4 failed: timeout or connection refused", node.Address())
 				}
 			}
 		}

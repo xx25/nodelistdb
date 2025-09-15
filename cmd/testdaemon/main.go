@@ -53,7 +53,8 @@ func main() {
 	cfg.Daemon.CLIOnly = *cliOnly
 	cfg.Daemon.TestLimit = *testLimit
 
-	// Initialize daemon
+	// Initialize daemon with version info
+	cfg.Version = fmt.Sprintf("v%s (%s) built %s", version, commit, date)
 	d, err := daemon.New(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize daemon: %v", err)

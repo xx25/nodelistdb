@@ -48,10 +48,13 @@ VERSION := $(shell echo "$(VERSION_RAW)" | sed 's/^v//')
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME := $(shell date -u +"%Y-%m-%d %H:%M:%S UTC")
 
-# Build flags
+# Build flags for both version package and main
 LDFLAGS := -X 'github.com/nodelistdb/internal/version.Version=$(VERSION)' \
            -X 'github.com/nodelistdb/internal/version.GitCommit=$(COMMIT)' \
-           -X 'github.com/nodelistdb/internal/version.BuildTime=$(BUILD_TIME)'
+           -X 'github.com/nodelistdb/internal/version.BuildTime=$(BUILD_TIME)' \
+           -X 'main.version=$(VERSION)' \
+           -X 'main.commit=$(COMMIT)' \
+           -X 'main.date=$(BUILD_TIME)'
 
 # Build targets
 build: build-parser build-server build-daemon ## Build all binaries

@@ -190,7 +190,10 @@ func (db *DB) CreateSchema() error {
 		
 		-- FTS unique identifier for full-text search
 		fts_id TEXT NOT NULL,
-		
+
+		-- Raw nodelist line
+		raw_line TEXT,
+
 		PRIMARY KEY (zone, net, node, nodelist_date, conflict_sequence)
 	)`
 

@@ -80,7 +80,7 @@ func (m *MockStorage) GetNodeDateRange(zone, net, node int) (time.Time, time.Tim
 	return first, last, nil
 }
 
-func (m *MockStorage) GetNodeChanges(zone, net, node int, filter storage.ChangeFilter) ([]database.NodeChange, error) {
+func (m *MockStorage) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
 	if m.shouldError {
 		return nil, fmt.Errorf(m.errorMsg)
 	}
@@ -415,32 +415,8 @@ func createNodeChangesHandler(mockStorage *MockStorage) http.HandlerFunc {
 			return
 		}
 
-		// Parse filter options
-		query := r.URL.Query()
-		filter := storage.ChangeFilter{}
-
-		// Check for new exclude parameter format
-		if excludeStr := query.Get("exclude"); excludeStr != "" {
-			excludeFields := strings.Split(excludeStr, ",")
-			for _, field := range excludeFields {
-				field = strings.TrimSpace(strings.ToLower(field))
-				switch field {
-				case "flags":
-					filter.IgnoreFlags = true
-				case "phone":
-					filter.IgnorePhone = true
-				case "speed":
-					filter.IgnoreSpeed = true
-				}
-			}
-		} else {
-			// Support old format
-			filter.IgnoreFlags = query.Get("noflags") == "1"
-			filter.IgnorePhone = query.Get("nophone") == "1"
-			filter.IgnoreSpeed = query.Get("nospeed") == "1"
-		}
-
-		changes, err := mockStorage.GetNodeChanges(1, 234, 56, filter)
+		// Get all node changes without filtering
+		changes, err := mockStorage.GetNodeChanges(1, 234, 56)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to get node changes: %v", err), http.StatusInternalServerError)
 			return
@@ -450,7 +426,6 @@ func createNodeChangesHandler(mockStorage *MockStorage) http.HandlerFunc {
 			"address": "1:234/56",
 			"changes": changes,
 			"count":   len(changes),
-			"filter":  filter,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -769,13 +744,10 @@ func TestNodeChangesHandler_NewExcludeFormat(t *testing.T) {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
 
-	filter, ok := response["filter"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected filter in response")
-	}
-
-	if filter["IgnoreFlags"] != true || filter["IgnorePhone"] != true || filter["IgnoreSpeed"] != true {
-		t.Errorf("Expected exclude parameters to be applied, got %v", filter)
+	// Filter is no longer included in response since filtering has been removed
+	_, hasFilter := response["filter"]
+	if hasFilter {
+		t.Fatal("Filter should not be in response anymore")
 	}
 }
 
@@ -797,13 +769,10 @@ func TestNodeChangesHandler_OldFormatBackwardCompatibility(t *testing.T) {
 		t.Fatalf("Failed to parse JSON response: %v", err)
 	}
 
-	filter, ok := response["filter"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected filter in response")
-	}
-
-	if filter["IgnoreFlags"] != true || filter["IgnorePhone"] != true {
-		t.Errorf("Expected old format parameters to be applied, got %v", filter)
+	// Filter is no longer included in response since filtering has been removed
+	_, hasFilter := response["filter"]
+	if hasFilter {
+		t.Fatal("Filter should not be in response anymore")
 	}
 }
 

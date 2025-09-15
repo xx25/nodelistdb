@@ -70,8 +70,10 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 	}
 	
 	// Parse hostname:port if port is in the hostname
-	if strings.Contains(host, ":") {
-		parts := strings.Split(host, ":")
+	// But skip this for IPv6 addresses (which contain colons)
+	if strings.Contains(host, ":") && !strings.Contains(host, "::") && strings.Count(host, ":") == 1 {
+		// This looks like hostname:port, not an IPv6 address
+		parts := strings.SplitN(host, ":", 2)
 		host = parts[0]
 		// Port in hostname overrides the port parameter
 		if len(parts) > 1 {
@@ -83,7 +85,7 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 		}
 	}
 	
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	
 	if t.debug {
 		log.Printf("BinkP: Testing %s (expected address: %s)", address, expectedAddress)

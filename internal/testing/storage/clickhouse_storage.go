@@ -278,9 +278,24 @@ func (s *ClickHouseStorage) Close() error {
 // GetNodesWithInternet retrieves nodes from ClickHouse nodes table
 func (s *ClickHouseStorage) GetNodesWithInternet(ctx context.Context, limit int) ([]*models.Node, error) {
 	query := `
-		SELECT 
+		SELECT
 			zone, net, node, system_name, sysop_name, location,
-			coalesce(JSONExtractString(toString(internet_config), 'defaults', 'INA'), '') as internet_hostnames,
+			if(JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address') != '',
+				JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address'),
+				if(JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address') != '',
+					JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address'),
+					if(JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address') != '',
+						JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address'),
+						if(JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address') != '',
+							JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address'),
+							if(JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address') != '',
+								JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address'),
+								JSONExtractString(toString(internet_config), 'defaults', 'INA')
+							)
+						)
+					)
+				)
+			) as internet_hostnames,
 			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
 			has_inet,
 			toString(internet_config) as config_json
@@ -308,9 +323,24 @@ func (s *ClickHouseStorage) GetNodesWithInternet(ctx context.Context, limit int)
 // GetNodesByZone retrieves nodes from a specific zone
 func (s *ClickHouseStorage) GetNodesByZone(ctx context.Context, zone int) ([]*models.Node, error) {
 	query := `
-		SELECT 
+		SELECT
 			zone, net, node, system_name, sysop_name, location,
-			coalesce(JSONExtractString(toString(internet_config), 'defaults', 'INA'), '') as internet_hostnames,
+			if(JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address') != '',
+				JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address'),
+				if(JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address') != '',
+					JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address'),
+					if(JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address') != '',
+						JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address'),
+						if(JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address') != '',
+							JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address'),
+							if(JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address') != '',
+								JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address'),
+								JSONExtractString(toString(internet_config), 'defaults', 'INA')
+							)
+						)
+					)
+				)
+			) as internet_hostnames,
 			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
 			has_inet,
 			toString(internet_config) as config_json
@@ -334,9 +364,24 @@ func (s *ClickHouseStorage) GetNodesByZone(ctx context.Context, zone int) ([]*mo
 // GetNodesByProtocol retrieves nodes that support a specific protocol
 func (s *ClickHouseStorage) GetNodesByProtocol(ctx context.Context, protocol string, limit int) ([]*models.Node, error) {
 	query := `
-		SELECT 
+		SELECT
 			zone, net, node, system_name, sysop_name, location,
-			coalesce(JSONExtractString(toString(internet_config), 'defaults', 'INA'), '') as internet_hostnames,
+			if(JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address') != '',
+				JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address'),
+				if(JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address') != '',
+					JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address'),
+					if(JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address') != '',
+						JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address'),
+						if(JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address') != '',
+							JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address'),
+							if(JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address') != '',
+								JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address'),
+								JSONExtractString(toString(internet_config), 'defaults', 'INA')
+							)
+						)
+					)
+				)
+			) as internet_hostnames,
 			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
 			has_inet,
 			toString(internet_config) as config_json
@@ -954,9 +999,26 @@ func (s *ClickHouseStorage) scanNodesNative(rows driver.Rows) ([]*models.Node, e
 		node.Net = int(net)
 		node.Node = int(nodeNum)
 		
-		// Convert hostname string to array
+		// Convert hostname string to array and handle addresses with embedded ports
 		if hostnames != "" {
-			node.InternetHostnames = []string{hostnames}
+			// Check if the hostname contains a port (e.g., "185.22.236.179:2030" for IVM)
+			if strings.Contains(hostnames, ":") {
+				// Split hostname and port
+				parts := strings.SplitN(hostnames, ":", 2)
+				if len(parts) == 2 {
+					node.InternetHostnames = []string{parts[0]}
+					// Store the port for IVM protocol if it's the only protocol
+					if len(node.InternetProtocols) == 1 && node.InternetProtocols[0] == "IVM" {
+						if port, err := strconv.Atoi(parts[1]); err == nil {
+							node.ProtocolPorts["IVM"] = port
+						}
+					}
+				} else {
+					node.InternetHostnames = []string{hostnames}
+				}
+			} else {
+				node.InternetHostnames = []string{hostnames}
+			}
 		} else {
 			node.InternetHostnames = []string{}
 		}
@@ -981,9 +1043,25 @@ func (s *ClickHouseStorage) scanNodesNative(rows driver.Rows) ([]*models.Node, e
 				if protocols, ok := config["protocols"].(map[string]interface{}); ok {
 					for proto, protoData := range protocols {
 						if protoMap, ok := protoData.(map[string]interface{}); ok {
+							// Check for port field
 							if portStr, ok := protoMap["port"].(string); ok {
 								if port, err := strconv.Atoi(portStr); err == nil {
 									node.ProtocolPorts[proto] = port
+								}
+							} else if portFloat, ok := protoMap["port"].(float64); ok {
+								// Sometimes port comes as a number
+								node.ProtocolPorts[proto] = int(portFloat)
+							}
+
+							// Special handling for IVM protocol with embedded port in address
+							if proto == "IVM" {
+								if addr, ok := protoMap["address"].(string); ok && strings.Contains(addr, ":") {
+									parts := strings.SplitN(addr, ":", 2)
+									if len(parts) == 2 {
+										if port, err := strconv.Atoi(parts[1]); err == nil {
+											node.ProtocolPorts[proto] = port
+										}
+									}
 								}
 							}
 						}
@@ -1018,9 +1096,26 @@ func (s *ClickHouseStorage) scanNodes(rows *sql.Rows) ([]*models.Node, error) {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 		
-		// Convert hostname string to array
+		// Convert hostname string to array and handle addresses with embedded ports
 		if hostnames != "" {
-			node.InternetHostnames = []string{hostnames}
+			// Check if the hostname contains a port (e.g., "185.22.236.179:2030" for IVM)
+			if strings.Contains(hostnames, ":") {
+				// Split hostname and port
+				parts := strings.SplitN(hostnames, ":", 2)
+				if len(parts) == 2 {
+					node.InternetHostnames = []string{parts[0]}
+					// Store the port for IVM protocol if it's the only protocol
+					if len(node.InternetProtocols) == 1 && node.InternetProtocols[0] == "IVM" {
+						if port, err := strconv.Atoi(parts[1]); err == nil {
+							node.ProtocolPorts["IVM"] = port
+						}
+					}
+				} else {
+					node.InternetHostnames = []string{hostnames}
+				}
+			} else {
+				node.InternetHostnames = []string{hostnames}
+			}
 		} else {
 			node.InternetHostnames = []string{}
 		}

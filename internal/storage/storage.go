@@ -151,8 +151,8 @@ func (s *Storage) GetNodesBySysop(sysopName string, limit int) ([]database.Node,
 }
 
 // GetNodeChanges analyzes the history of a node and returns detected changes
-func (s *Storage) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error) {
-	return s.searchOperations.GetNodeChanges(zone, net, node, filter)
+func (s *Storage) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
+	return s.searchOperations.GetNodeChanges(zone, net, node)
 }
 
 // --- Statistics Operations (delegated to StatisticsOperations) ---

@@ -80,26 +80,6 @@
                 <p><strong>Total Entries:</strong> {{len .History}}</p>
                 <p><strong>Changes:</strong> {{len .Changes}}</p>
             </div>
-            
-            <div class="card">
-                <h3>Filter Options</h3>
-            <form method="get">
-                <div class="filter-options">
-                    <label><input type="checkbox" name="noflags" value="1" {{if .Filter.IgnoreFlags}}checked{{end}}> Ignore flag changes</label>
-                    <label><input type="checkbox" name="nophone" value="1" {{if .Filter.IgnorePhone}}checked{{end}}> Ignore phone changes</label>
-                    <label><input type="checkbox" name="nospeed" value="1" {{if .Filter.IgnoreSpeed}}checked{{end}}> Ignore speed changes</label>
-                    <label><input type="checkbox" name="nostatus" value="1" {{if .Filter.IgnoreStatus}}checked{{end}}> Ignore status changes</label>
-                    <label><input type="checkbox" name="nolocation" value="1" {{if .Filter.IgnoreLocation}}checked{{end}}> Ignore location changes</label>
-                    <label><input type="checkbox" name="noname" value="1" {{if .Filter.IgnoreName}}checked{{end}}> Ignore name changes</label>
-                    <label><input type="checkbox" name="nosysop" value="1" {{if .Filter.IgnoreSysop}}checked{{end}}> Ignore sysop changes</label>
-                    <label><input type="checkbox" name="noconnectivity" value="1" {{if .Filter.IgnoreConnectivity}}checked{{end}}> Ignore connectivity changes (Binkp/Telnet)</label>
-                    <label><input type="checkbox" name="nomodemflags" value="1" {{if .Filter.IgnoreModemFlags}}checked{{end}}> Ignore modem flag changes</label>
-                    <!-- Internet array fields are no longer available - these filters have been removed -->
-                </div>
-                <button type="submit" class="btn">Apply Filters</button>
-            </form>
-            </div>
-            
             <div class="card">
                 <h3>Change History</h3>
             <div class="timeline">
@@ -239,8 +219,34 @@
                 <p>No changes found with current filter settings.</p>
             {{end}}
             </div>
+
+            <!-- Raw Nodelist Lines Section -->
+            <div class="card">
+                <h3>Raw Nodelist Lines</h3>
+                <div class="raw-lines">
+                    {{$prevRawLine := ""}}
+                    {{range $i, $entry := .History}}
+                        {{if ne $entry.RawLine $prevRawLine}}
+                            {{if $entry.RawLine}}
+                                <div class="raw-line-entry" style="margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-left: 3px solid #007bff; font-family: monospace;">
+                                    <div style="font-size: 0.875rem; color: #6c757d; margin-bottom: 0.25rem;">
+                                        <strong>{{$entry.NodelistDate.Format "2 Jan 2006"}}</strong>, nodelist.{{printf "%03d" $entry.DayNumber}}:
+                                    </div>
+                                    <div style="font-size: 0.9rem; word-break: break-all;">
+                                        {{$entry.RawLine}}
+                                    </div>
+                                </div>
+                                {{$prevRawLine = $entry.RawLine}}
+                            {{end}}
+                        {{end}}
+                    {{end}}
+                </div>
+                {{if not .History}}
+                    <p>No raw nodelist lines available.</p>
+                {{end}}
+            </div>
         </div>
-        
+
         {{template "footer" .}}
     </div>
 </body>

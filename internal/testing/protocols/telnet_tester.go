@@ -40,7 +40,7 @@ func (t *TelnetTester) Test(ctx context.Context, host string, port int, expected
 		Timeout: t.timeout,
 	}
 	
-	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", host, port))
+	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 	if err != nil {
 		return &TelnetTestResult{
 			BaseTestResult: BaseTestResult{

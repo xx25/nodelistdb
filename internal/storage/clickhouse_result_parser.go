@@ -41,7 +41,7 @@ func (crp *ClickHouseResultParser) ParseNodeRow(scanner RowScanner) (database.No
 		&node.IsCM, &node.IsMO,
 		&flags, &modemFlags,
 		&node.ConflictSequence, &node.HasConflict,
-		&node.HasInet, &internetConfig, &node.FtsId,
+		&node.HasInet, &internetConfig, &node.FtsId, &node.RawLine,
 	)
 	if err != nil {
 		return node, fmt.Errorf("failed to scan node: %w", err)
@@ -272,6 +272,6 @@ func (crp *ClickHouseResultParser) NodeToArgsClickHouse(node database.Node) []in
 		node.Flags,      // Pass as Go slice for ClickHouse native batch
 		node.ModemFlags, // Pass as Go slice for ClickHouse native batch
 		node.ConflictSequence, node.HasConflict,
-		node.HasInet, configJSON, node.FtsId,
+		node.HasInet, configJSON, node.FtsId, node.RawLine,
 	}
 }

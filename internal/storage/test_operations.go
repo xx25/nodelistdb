@@ -441,18 +441,47 @@ func (to *TestOperations) GetReachabilityTrends(days int) ([]ReachabilityTrend, 
 	
 	var query string
 	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		// Query that maintains the last known status of each node
+		// Properly handles the fact that operational nodes are tested every 72h
+		// while failed nodes are retested every 24h
 		query = `
+			WITH
+			-- Generate date series for the report period
+			date_series AS (
+				SELECT toDate(now() - INTERVAL number DAY) as report_date
+				FROM numbers(?)
+			),
+			-- For each date, find the last known status of each node up to that date
+			-- Look back up to 3 days since operational nodes are tested every 72 hours
+			daily_status AS (
+				SELECT
+					d.report_date,
+					r.zone,
+					r.net,
+					r.node,
+					argMax(r.is_operational, r.test_time) as last_status,
+					max(r.test_time) as last_test_time,
+					argMax(least(
+						if(r.binkp_response_ms > 0, r.binkp_response_ms, 999999),
+						if(r.ifcico_response_ms > 0, r.ifcico_response_ms, 999999),
+						if(r.telnet_response_ms > 0, r.telnet_response_ms, 999999)
+					), r.test_time) as last_response_ms
+				FROM date_series d
+				CROSS JOIN node_test_results r
+				WHERE r.test_time <= d.report_date + INTERVAL 1 DAY
+					AND r.test_time >= d.report_date - INTERVAL 3 DAY
+				GROUP BY d.report_date, r.zone, r.net, r.node
+			)
 			SELECT
-				toDate(test_time) as test_date,
+				report_date as test_date,
 				count(DISTINCT (zone, net, node)) as total_nodes,
-				countDistinctIf((zone, net, node), is_operational) as operational_nodes,
-				countDistinctIf((zone, net, node), NOT is_operational) as failed_nodes,
-				avg(is_operational) * 100 as success_rate,
-				avgIf(least(binkp_response_ms, ifcico_response_ms, telnet_response_ms), is_operational) as avg_response_ms
-			FROM node_test_results
-			WHERE test_time >= now() - INTERVAL ? DAY
-			GROUP BY test_date
-			ORDER BY test_date ASC
+				countDistinctIf((zone, net, node), last_status = 1) as operational_nodes,
+				countDistinctIf((zone, net, node), last_status = 0) as failed_nodes,
+				avg(toUInt8(last_status)) * 100 as success_rate,
+				avgIf(last_response_ms, last_status = 1 AND last_response_ms < 999999) as avg_response_ms
+			FROM daily_status
+			GROUP BY report_date
+			ORDER BY report_date ASC
 		`
 	} else {
 		// DuckDB query
@@ -477,6 +506,7 @@ func (to *TestOperations) GetReachabilityTrends(days int) ([]ReachabilityTrend, 
 		`
 	}
 
+	// Both queries now use days parameter once
 	rows, err := conn.Query(query, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query reachability trends: %w", err)

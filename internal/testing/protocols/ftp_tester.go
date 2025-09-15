@@ -40,7 +40,7 @@ func (t *FTPTester) Test(ctx context.Context, host string, port int, expectedAdd
 		Timeout: t.timeout,
 	}
 	
-	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", host, port))
+	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 	if err != nil {
 		return &FTPTestResult{
 			BaseTestResult: BaseTestResult{

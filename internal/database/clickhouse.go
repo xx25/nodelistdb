@@ -184,7 +184,10 @@ func (db *ClickHouseDB) CreateSchema() error {
 		has_conflict Bool DEFAULT false,
 		
 		-- FTS unique identifier
-		fts_id String
+		fts_id String,
+
+		-- Raw nodelist line
+		raw_line String DEFAULT ''
 	) ENGINE = MergeTree()
 	ORDER BY (zone, net, node, nodelist_date, conflict_sequence)
 	PARTITION BY toYYYYMM(nodelist_date)

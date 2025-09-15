@@ -130,14 +130,13 @@ func (cs *CachedStorage) GetNodeHistory(zone, net, node int) ([]database.Node, e
 }
 
 // GetNodeChanges with caching
-func (cs *CachedStorage) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error) {
+func (cs *CachedStorage) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodeChanges(zone, net, node, filter)
+		return cs.Storage.GetNodeChanges(zone, net, node)
 	}
 
-	filterHash := cs.keyGen.HashFilter(filter)
-	key := cs.keyGen.NodeChangesKey(zone, net, node, filterHash)
-	
+	key := cs.keyGen.NodeChangesKey(zone, net, node, "")
+
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var changes []database.NodeChange
@@ -146,15 +145,15 @@ func (cs *CachedStorage) GetNodeChanges(zone, net, node int, filter ChangeFilter
 			return changes, nil
 		}
 	}
-	
+
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-	
+
 	// Fall back to database
-	changes, err := cs.Storage.GetNodeChanges(zone, net, node, filter)
+	changes, err := cs.Storage.GetNodeChanges(zone, net, node)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Cache result
 	if data, err := json.Marshal(changes); err == nil {
 		_ = cs.cache.Set(context.Background(), key, data, cs.config.NodeTTL)

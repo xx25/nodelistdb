@@ -375,7 +375,7 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetNodeChangesHandler returns detected changes for a node
-// GET /api/nodes/{zone}/{net}/{node}/changes?noflags=1&nophone=1
+// GET /api/nodes/{zone}/{net}/{node}/changes
 func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -407,56 +407,8 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse filter options
-	query := r.URL.Query()
-	filter := storage.ChangeFilter{}
-
-	// Check for new exclude parameter format
-	if excludeStr := query.Get("exclude"); excludeStr != "" {
-		// Parse comma-separated list of fields to exclude
-		excludeFields := strings.Split(excludeStr, ",")
-		for _, field := range excludeFields {
-			field = strings.TrimSpace(strings.ToLower(field))
-			switch field {
-			case "flags":
-				filter.IgnoreFlags = true
-			case "phone":
-				filter.IgnorePhone = true
-			case "speed":
-				filter.IgnoreSpeed = true
-			case "status":
-				filter.IgnoreStatus = true
-			case "location":
-				filter.IgnoreLocation = true
-			case "name":
-				filter.IgnoreName = true
-			case "sysop":
-				filter.IgnoreSysop = true
-			case "connectivity":
-				filter.IgnoreConnectivity = true
-			case "internetprotocols", "internet_protocols", "internethostnames", "internet_hostnames", "internetports", "internet_ports", "internetemails", "internet_emails":
-				// These fields are now handled through internet_config JSON - ignore them
-				continue
-			case "modemflags", "modem_flags":
-				filter.IgnoreModemFlags = true
-			}
-		}
-	} else {
-		// Maintain backward compatibility with old format
-		filter.IgnoreFlags = query.Get("noflags") == "1"
-		filter.IgnorePhone = query.Get("nophone") == "1"
-		filter.IgnoreSpeed = query.Get("nospeed") == "1"
-		filter.IgnoreStatus = query.Get("nostatus") == "1"
-		filter.IgnoreLocation = query.Get("nolocation") == "1"
-		filter.IgnoreName = query.Get("noname") == "1"
-		filter.IgnoreSysop = query.Get("nosysop") == "1"
-		filter.IgnoreConnectivity = query.Get("noconnectivity") == "1"
-		// Internet array fields are no longer available - these options are ignored
-		filter.IgnoreModemFlags = query.Get("nomodemflags") == "1"
-	}
-
-	// Get node changes
-	changes, err := s.storage.GetNodeChanges(zone, net, node, filter)
+	// Get all node changes without filtering
+	changes, err := s.storage.GetNodeChanges(zone, net, node)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get node changes: %v", err), http.StatusInternalServerError)
 		return
@@ -466,7 +418,6 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 		"address": fmt.Sprintf("%d:%d/%d", zone, net, node),
 		"changes": changes,
 		"count":   len(changes),
-		"filter":  filter,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

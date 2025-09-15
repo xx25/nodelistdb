@@ -19,6 +19,7 @@ type Config struct {
 	Logging         LoggingConfig   `yaml:"logging"`
 	CLI             CLIConfig       `yaml:"cli"`
 	ConfigPath      string          `yaml:"-"` // Path to config file, set when loading
+	Version         string          `yaml:"-"` // Version string, set from main
 }
 
 // DaemonConfig contains daemon-specific settings

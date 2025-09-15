@@ -26,10 +26,10 @@ func (qb *QueryBuilder) InsertNodeSQL() string {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		?, ?,
-		?, ?, ?, ?, ?)`
+		?, ?, ?, ?, ?, ?)`
 }
 
 // BuildBatchInsertSQL creates a batch INSERT statement with proper parameterization
@@ -39,7 +39,7 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 	}
 
 	// Create placeholder for one row with direct array binding (no JSON casting)
-	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 	// Build batch values
 	values := make([]string, batchSize)
@@ -53,9 +53,9 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
 			is_cm, is_mo,
 			flags, modem_flags,
-			conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+			conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
 		) VALUES %s
-		ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) 
+		ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence)
 		DO NOTHING`, strings.Join(values, ","))
 }
 
@@ -71,7 +71,7 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
 	) VALUES `)
 
 	for i, node := range nodes {
@@ -128,8 +128,8 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 			buf.WriteString("NULL,")
 		}
 
-		// FTS ID
-		buf.WriteString(fmt.Sprintf("'%s')", qb.escapeSQL(node.FtsId)))
+		// FTS ID and raw line
+		buf.WriteString(fmt.Sprintf("'%s','%s')", qb.escapeSQL(node.FtsId), qb.escapeSQL(node.RawLine)))
 	}
 
 	buf.WriteString(" ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence) DO NOTHING")
@@ -421,7 +421,7 @@ func (qb *QueryBuilder) NodeHistorySQL() string {
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo,
 		   flags, modem_flags,
-		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
 	FROM nodes
 	WHERE zone = ? AND net = ? AND node = ?
 	ORDER BY nodelist_date ASC, conflict_sequence ASC`

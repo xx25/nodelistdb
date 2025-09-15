@@ -380,6 +380,9 @@ func (p *Parser) detectFormat(line string, firstLine string) NodelistFormat {
 // parseLine parses a single nodelist entry line
 func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, filePath string) (*database.Node, error) {
 
+	// Store the original raw line before any processing
+	rawLine := line
+
 	// Sanitize UTF-8 for database storage
 	line = sanitizeUTF8(line)
 
@@ -536,6 +539,7 @@ func (p *Parser) parseLine(line string, nodelistDate time.Time, dayNumber int, f
 		InternetConfig: internetConfig,
 		ConflictSequence:  0,     // Default to 0 (original entry)
 		HasConflict:       false, // Default to false
+		RawLine:           rawLine, // Store the original nodelist line
 	}
 
 	return &dbNode, nil

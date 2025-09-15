@@ -316,11 +316,7 @@ paths:
     get:
       summary: Get Node Changes
       description: |
-        Get a summary of changes to a node over time.
-        
-        You can exclude specific types of changes using either:
-        - The new `exclude` parameter with comma-separated values
-        - The legacy individual boolean parameters (for backward compatibility)
+        Get a summary of all changes to a node over time.
       operationId: getNodeChanges
       tags:
         - Nodes
@@ -343,46 +339,6 @@ paths:
           description: Node number
           schema:
             type: integer
-        - name: exclude
-          in: query
-          description: |
-            Comma-separated list of fields to exclude from change detection.
-            
-            Supported values: flags, phone, speed, status, location, name, sysop,
-            connectivity, modem_flags
-            
-            Note: internet_* array fields have been removed - data is now in internet_config JSON
-          schema:
-            type: string
-            example: "flags,phone,speed"
-        - name: noflags
-          in: query
-          description: Exclude flag changes (legacy parameter)
-          deprecated: true
-          schema:
-            type: string
-            enum: ["1"]
-        - name: nophone
-          in: query
-          description: Exclude phone changes (legacy parameter)
-          deprecated: true
-          schema:
-            type: string
-            enum: ["1"]
-        - name: nospeed
-          in: query
-          description: Exclude speed changes (legacy parameter)
-          deprecated: true
-          schema:
-            type: string
-            enum: ["1"]
-        - name: nostatus
-          in: query
-          description: Exclude status changes (legacy parameter)
-          deprecated: true
-          schema:
-            type: string
-            enum: ["1"]
       responses:
         '200':
           description: Node changes retrieved successfully

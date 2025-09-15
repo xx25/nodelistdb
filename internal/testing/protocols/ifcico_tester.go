@@ -92,7 +92,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	}
 	
 	connStart := time.Now()
-	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", host, port))
+	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 	connDuration := time.Since(connStart)
 	
 	if err != nil {

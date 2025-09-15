@@ -74,7 +74,7 @@ func (so *SearchOperations) SearchNodesBySysop(sysopName string, limit int) ([]N
 }
 
 // GetNodeChanges analyzes the history of a node and returns detected changes
-func (so *SearchOperations) GetNodeChanges(zone, net, node int, filter ChangeFilter) ([]database.NodeChange, error) {
+func (so *SearchOperations) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
 	// Get all historical entries using node operations
 	history, err := so.nodeOps.GetNodeHistory(zone, net, node)
 	if err != nil {
@@ -134,7 +134,7 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, filter ChangeFil
 		}
 
 		// Detect field changes
-		fieldChanges := so.detectFieldChanges(prev, curr, filter)
+		fieldChanges := so.detectFieldChanges(prev, curr)
 
 		if len(fieldChanges) > 0 {
 			changes = append(changes, database.NodeChange{
@@ -164,41 +164,39 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, filter ChangeFil
 }
 
 // detectFieldChanges analyzes two consecutive node entries for changes
-func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter ChangeFilter) map[string]string {
+func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node) map[string]string {
 	fieldChanges := make(map[string]string)
 
-	if !filter.IgnoreStatus && prev.NodeType != curr.NodeType {
+	if prev.NodeType != curr.NodeType {
 		fieldChanges["status"] = fmt.Sprintf("%s → %s", prev.NodeType, curr.NodeType)
 	}
-	if !filter.IgnoreName && prev.SystemName != curr.SystemName {
+	if prev.SystemName != curr.SystemName {
 		fieldChanges["name"] = fmt.Sprintf("%s → %s", prev.SystemName, curr.SystemName)
 	}
-	if !filter.IgnoreLocation && prev.Location != curr.Location {
+	if prev.Location != curr.Location {
 		fieldChanges["location"] = fmt.Sprintf("%s → %s", prev.Location, curr.Location)
 	}
-	if !filter.IgnoreSysop && prev.SysopName != curr.SysopName {
+	if prev.SysopName != curr.SysopName {
 		fieldChanges["sysop"] = fmt.Sprintf("%s → %s", prev.SysopName, curr.SysopName)
 	}
-	if !filter.IgnorePhone && prev.Phone != curr.Phone {
+	if prev.Phone != curr.Phone {
 		fieldChanges["phone"] = fmt.Sprintf("%s → %s", prev.Phone, curr.Phone)
 	}
-	if !filter.IgnoreSpeed && prev.MaxSpeed != curr.MaxSpeed {
+	if prev.MaxSpeed != curr.MaxSpeed {
 		fieldChanges["speed"] = fmt.Sprintf("%d → %d", prev.MaxSpeed, curr.MaxSpeed)
 	}
-	if !filter.IgnoreFlags && !so.equalStringSlices(prev.Flags, curr.Flags) {
+	if !so.equalStringSlices(prev.Flags, curr.Flags) {
 		fieldChanges["flags"] = fmt.Sprintf("%v → %v", prev.Flags, curr.Flags)
 	}
 
-	// Internet connectivity changes  
-	if !filter.IgnoreConnectivity {
-		prevBinkp := so.hasBinkpFromJSON(prev.InternetConfig)
-		currBinkp := so.hasBinkpFromJSON(curr.InternetConfig)
-		if prevBinkp != currBinkp {
-			fieldChanges["binkp"] = fmt.Sprintf("%t → %t", prevBinkp, currBinkp)
-		}
+	// Internet connectivity changes
+	prevBinkp := so.hasBinkpFromJSON(prev.InternetConfig)
+	currBinkp := so.hasBinkpFromJSON(curr.InternetConfig)
+	if prevBinkp != currBinkp {
+		fieldChanges["binkp"] = fmt.Sprintf("%t → %t", prevBinkp, currBinkp)
 	}
 
-	if !filter.IgnoreModemFlags && !so.equalStringSlices(prev.ModemFlags, curr.ModemFlags) {
+	if !so.equalStringSlices(prev.ModemFlags, curr.ModemFlags) {
 		fieldChanges["modem_flags"] = fmt.Sprintf("%v → %v", prev.ModemFlags, curr.ModemFlags)
 	}
 
@@ -209,10 +207,9 @@ func (so *SearchOperations) detectFieldChanges(prev, curr *database.Node, filter
 	}
 
 	// Check has_inet changes
-	if !filter.IgnoreConnectivity && prev.HasInet != curr.HasInet {
+	if prev.HasInet != curr.HasInet {
 		fieldChanges["has_inet"] = fmt.Sprintf("%t → %t", prev.HasInet, curr.HasInet)
 	}
-
 
 	return fieldChanges
 }
