@@ -139,6 +139,10 @@
                     <span class="detail-value">{{if .TestResult.HasConnectivityIssues}}Yes{{else}}No{{end}}</span>
                     <span class="detail-label">Address Validated:</span>
                     <span class="detail-value">{{if .TestResult.AddressValidated}}Yes{{else}}No{{end}}</span>
+                    <span class="detail-label">Software Version:</span>
+                    <span class="detail-value">
+                        {{if .TestResult.BinkPVersion}}{{.TestResult.BinkPVersion}}{{else if .TestResult.IfcicoMailerInfo}}{{.TestResult.IfcicoMailerInfo}}{{else}}-{{end}}
+                    </span>
                 </div>
             </div>
 

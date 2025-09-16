@@ -18,6 +18,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics", s.AnalyticsHandler)
 	mux.HandleFunc("/analytics/flag", s.AnalyticsFlagHandler)
 	mux.HandleFunc("/analytics/network", s.AnalyticsNetworkHandler)
+	mux.HandleFunc("/analytics/ipv6", s.IPv6AnalyticsHandler)
 	mux.HandleFunc("/reachability", s.ReachabilityHandler)
 	mux.HandleFunc("/reachability/node", s.ReachabilityNodeHandler)
 	mux.HandleFunc("/reachability/test", s.TestResultDetailHandler)

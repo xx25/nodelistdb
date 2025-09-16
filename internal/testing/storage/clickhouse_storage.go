@@ -1150,23 +1150,41 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		binkpError = r.BinkPResult.Error
 		
 		// Extract details from map
-		if sysName, ok := r.BinkPResult.Details["system_name"].(string); ok {
-			binkpSystemName = sysName
-		}
-		if sysop, ok := r.BinkPResult.Details["sysop"].(string); ok {
-			binkpSysop = sysop
-		}
-		if loc, ok := r.BinkPResult.Details["location"].(string); ok {
-			binkpLocation = loc
-		}
-		if ver, ok := r.BinkPResult.Details["version"].(string); ok {
-			binkpVersion = ver
-		}
-		if addrs, ok := r.BinkPResult.Details["addresses"].([]string); ok {
-			binkpAddresses = addrs
-		}
-		if caps, ok := r.BinkPResult.Details["capabilities"].([]string); ok {
-			binkpCapabilities = caps
+		// First try to get from IPv6 or IPv4 structured details
+		if details, ok := r.BinkPResult.Details["ipv6"].(*models.BinkPTestDetails); ok {
+			binkpSystemName = details.SystemName
+			binkpSysop = details.Sysop
+			binkpLocation = details.Location
+			binkpVersion = details.Version
+			binkpAddresses = details.Addresses
+			binkpCapabilities = details.Capabilities
+		} else if details, ok := r.BinkPResult.Details["ipv4"].(*models.BinkPTestDetails); ok {
+			binkpSystemName = details.SystemName
+			binkpSysop = details.Sysop
+			binkpLocation = details.Location
+			binkpVersion = details.Version
+			binkpAddresses = details.Addresses
+			binkpCapabilities = details.Capabilities
+		} else {
+			// Fall back to flat string extraction for backward compatibility
+			if sysName, ok := r.BinkPResult.Details["system_name"].(string); ok {
+				binkpSystemName = sysName
+			}
+			if sysop, ok := r.BinkPResult.Details["sysop"].(string); ok {
+				binkpSysop = sysop
+			}
+			if loc, ok := r.BinkPResult.Details["location"].(string); ok {
+				binkpLocation = loc
+			}
+			if ver, ok := r.BinkPResult.Details["version"].(string); ok {
+				binkpVersion = ver
+			}
+			if addrs, ok := r.BinkPResult.Details["addresses"].([]string); ok {
+				binkpAddresses = addrs
+			}
+			if caps, ok := r.BinkPResult.Details["capabilities"].([]string); ok {
+				binkpCapabilities = caps
+			}
 		}
 	}
 	
@@ -1181,17 +1199,32 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		ifcicoSuccess = r.IfcicoResult.Success
 		ifcicoResponseMs = r.IfcicoResult.ResponseMs
 		ifcicoError = r.IfcicoResult.Error
-		if mailer, ok := r.IfcicoResult.Details["mailer_info"].(string); ok {
-			ifcicoMailerInfo = mailer
-		}
-		if sysName, ok := r.IfcicoResult.Details["system_name"].(string); ok {
-			ifcicoSystemName = sysName
-		}
-		if addrs, ok := r.IfcicoResult.Details["addresses"].([]string); ok {
-			ifcicoAddresses = addrs
-		}
-		if respType, ok := r.IfcicoResult.Details["response_type"].(string); ok {
-			ifcicoResponseType = respType
+
+		// First try to get from IPv6 or IPv4 structured details
+		if details, ok := r.IfcicoResult.Details["ipv6"].(*models.IfcicoTestDetails); ok {
+			ifcicoMailerInfo = details.MailerInfo
+			ifcicoSystemName = details.SystemName
+			ifcicoAddresses = details.Addresses
+			ifcicoResponseType = details.ResponseType
+		} else if details, ok := r.IfcicoResult.Details["ipv4"].(*models.IfcicoTestDetails); ok {
+			ifcicoMailerInfo = details.MailerInfo
+			ifcicoSystemName = details.SystemName
+			ifcicoAddresses = details.Addresses
+			ifcicoResponseType = details.ResponseType
+		} else {
+			// Fall back to flat string extraction for backward compatibility
+			if mailer, ok := r.IfcicoResult.Details["mailer_info"].(string); ok {
+				ifcicoMailerInfo = mailer
+			}
+			if sysName, ok := r.IfcicoResult.Details["system_name"].(string); ok {
+				ifcicoSystemName = sysName
+			}
+			if addrs, ok := r.IfcicoResult.Details["addresses"].([]string); ok {
+				ifcicoAddresses = addrs
+			}
+			if respType, ok := r.IfcicoResult.Details["response_type"].(string); ok {
+				ifcicoResponseType = respType
+			}
 		}
 	}
 	

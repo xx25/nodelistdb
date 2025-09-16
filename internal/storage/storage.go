@@ -395,3 +395,8 @@ func (s *Storage) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
 func (s *Storage) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
 	return s.testOperations.SearchNodesByReachability(operational, limit, days)
 }
+
+// GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6
+func (s *Storage) GetIPv6EnabledNodes(limit int, days int) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6EnabledNodes(limit, days)
+}

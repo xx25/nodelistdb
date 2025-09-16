@@ -223,24 +223,8 @@
             <!-- Raw Nodelist Lines Section -->
             <div class="card">
                 <h3>Raw Nodelist Lines</h3>
-                <div class="raw-lines">
-                    {{$prevRawLine := ""}}
-                    {{range $i, $entry := .History}}
-                        {{if ne $entry.RawLine $prevRawLine}}
-                            {{if $entry.RawLine}}
-                                <div class="raw-line-entry" style="margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-left: 3px solid #007bff; font-family: monospace;">
-                                    <div style="font-size: 0.875rem; color: #6c757d; margin-bottom: 0.25rem;">
-                                        <strong>{{$entry.NodelistDate.Format "2 Jan 2006"}}</strong>, nodelist.{{printf "%03d" $entry.DayNumber}}:
-                                    </div>
-                                    <div style="font-size: 0.9rem; word-break: break-all;">
-                                        {{$entry.RawLine}}
-                                    </div>
-                                </div>
-                                {{$prevRawLine = $entry.RawLine}}
-                            {{end}}
-                        {{end}}
-                    {{end}}
-                </div>
+                <pre style="font-size: 0.875rem; line-height: 1.4; overflow-x: auto;">{{$prevRawLine := ""}}{{range $i, $entry := .History}}{{if ne $entry.RawLine $prevRawLine}}{{if $entry.RawLine}}<b>{{printf "%2d" $entry.NodelistDate.Day}}&nbsp;{{$entry.NodelistDate.Format "Jan"}}&nbsp;{{$entry.NodelistDate.Year}}, nodelist.{{printf "%03d" $entry.DayNumber}}: </b>{{$entry.RawLine}}
+{{$prevRawLine = $entry.RawLine}}{{end}}{{end}}{{end}}</pre>
                 {{if not .History}}
                     <p>No raw nodelist lines available.</p>
                 {{end}}

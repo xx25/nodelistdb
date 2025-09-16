@@ -795,6 +795,60 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 	return filteredNodes, nil
 }
 
+// IPv6AnalyticsHandler shows IPv6 enabled nodes analytics
+func (s *Server) IPv6AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	query := r.URL.Query()
+
+	// Days parameter
+	daysStr := query.Get("days")
+	days := 30 // default
+	if daysStr != "" {
+		if parsed, err := strconv.Atoi(daysStr); err == nil && parsed > 0 && parsed <= 365 {
+			days = parsed
+		}
+	}
+
+	// Limit parameter
+	limitStr := query.Get("limit")
+	limit := 1000 // default
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Get IPv6 enabled nodes
+	ipv6Nodes, err := s.storage.GetIPv6EnabledNodes(limit, days)
+	if err != nil {
+		log.Printf("Error getting IPv6 enabled nodes: %v", err)
+		ipv6Nodes = []storage.NodeTestResult{}
+	}
+
+	data := struct {
+		Title      string
+		ActivePage string
+		Version    string
+		IPv6Nodes  []storage.NodeTestResult
+		Days       int
+		Limit      int
+		Error      error
+	}{
+		Title:      "IPv6 Enabled Nodes",
+		ActivePage: "analytics",
+		Version:    version.GetVersionInfo(),
+		IPv6Nodes:  ipv6Nodes,
+		Days:       days,
+		Limit:      limit,
+		Error:      err,
+	}
+
+	if err := s.templates["ipv6_analytics"].Execute(w, data); err != nil {
+		log.Printf("Error executing IPv6 analytics template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // ReachabilityNodeHandler serves the reachability history for a specific node
 func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse node address from form or URL

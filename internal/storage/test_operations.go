@@ -533,6 +533,120 @@ func (to *TestOperations) GetReachabilityTrends(days int) ([]ReachabilityTrend, 
 	return trends, nil
 }
 
+// GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6
+func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int) ([]NodeTestResult, error) {
+	to.mu.RLock()
+	defer to.mu.RUnlock()
+
+	conn := to.db.Conn()
+
+	var query string
+	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		query = `
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND length(resolved_ipv6) > 0
+					AND is_operational = true
+					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
+					AND node != 0
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					argMax(system_name, nodelist_date) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
+				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
+				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`
+	} else {
+		// DuckDB query
+		query = `
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND array_length(resolved_ipv6) > 0
+					AND is_operational = true
+					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
+					AND node != 0
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
+				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
+				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`
+	}
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search IPv6 enabled nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var r NodeTestResult
+		err := to.resultParser.ParseTestResultRow(rows, &r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse test result: %w", err)
+		}
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
 // SearchNodesByReachability searches for nodes by reachability status
 func (to *TestOperations) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
 	to.mu.RLock()
