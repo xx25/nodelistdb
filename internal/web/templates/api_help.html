@@ -11,18 +11,18 @@
         <header>
             <h1>{{.Title}}</h1>
             <p class="subtitle">REST API endpoints for programmatic access to nodelist data</p>
-            
-            <div style="margin-top: 1.5rem; text-align: center;">
-                <a href="/api/docs" class="btn" style="text-decoration: none; margin-right: 1rem;">
-                    📋 Interactive API Documentation (Swagger UI)
-                </a>
-                <a href="/api/openapi.yaml" class="btn btn-secondary" style="text-decoration: none;">
-                    📄 Download OpenAPI Spec
-                </a>
-            </div>
         </header>
-        
+
         {{template "nav" .}}
+
+        <div style="margin-top: 1.5rem; text-align: center;">
+            <a href="/api/docs" class="btn" style="text-decoration: none; margin-right: 1rem;">
+                📋 Interactive API Documentation (Swagger UI)
+            </a>
+            <a href="/api/openapi.yaml" class="btn btn-secondary" style="text-decoration: none;">
+                📄 Download OpenAPI Spec
+            </a>
+        </div>
         
         <div class="content">
             <div class="card">
