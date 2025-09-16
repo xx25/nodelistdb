@@ -34,7 +34,7 @@ servers:
     description: NodelistDB API Server
 
 paths:
-  /health:
+  /api/health:
     get:
       summary: Health Check
       description: Returns the health status of the API server
@@ -57,7 +57,7 @@ paths:
                     format: date-time
                     example: "2025-07-29T14:30:00Z"
 
-  /nodes:
+  /api/nodes:
     get:
       summary: Search Nodes
       description: |
@@ -111,24 +111,12 @@ paths:
           schema:
             type: string
             example: "John Doe"
-        - name: has_binkp
+        - name: node_type
           in: query
-          description: Filter by Binkp capability
+          description: Node type (Zone, Region, Host, Hub, Pvt, Down, Hold)
           schema:
-            type: boolean
-            example: true
-        - name: has_telnet
-          in: query
-          description: Filter by Telnet capability
-          schema:
-            type: boolean
-            example: true
-        - name: has_inet
-          in: query
-          description: Filter by internet connectivity
-          schema:
-            type: boolean
-            example: true
+            type: string
+            example: "Hub"
         - name: is_cm
           in: query
           description: Filter by CM (Continuous Mail) flag
@@ -137,7 +125,7 @@ paths:
             example: true
         - name: is_active
           in: query
-          description: Filter by active/inactive status
+          description: Filter by active status (true=in latest nodelist, false=historical only)
           schema:
             type: boolean
             example: true
@@ -206,7 +194,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /nodes/{zone}/{net}/{node}:
+  /api/nodes/{zone}/{net}/{node}:
     get:
       summary: Get Specific Node
       description: Get detailed information for a specific node by its address
@@ -258,7 +246,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /nodes/{zone}/{net}/{node}/history:
+  /api/nodes/{zone}/{net}/{node}/history:
     get:
       summary: Get Node History
       description: Get complete historical timeline for a specific node
@@ -312,7 +300,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /nodes/{zone}/{net}/{node}/changes:
+  /api/nodes/{zone}/{net}/{node}/changes:
     get:
       summary: Get Node Changes
       description: |
@@ -356,7 +344,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /nodes/{zone}/{net}/{node}/timeline:
+  /api/nodes/{zone}/{net}/{node}/timeline:
     get:
       summary: Get Node Timeline
       description: Get a visual timeline representation of node changes
@@ -396,7 +384,7 @@ paths:
                       $ref: '#/components/schemas/TimelineEvent'
 
 
-  /sysops:
+  /api/sysops:
     get:
       summary: List Sysops
       description: |
@@ -457,7 +445,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /sysops/{name}/nodes:
+  /api/sysops/{name}/nodes:
     get:
       summary: Get Nodes by Sysop
       description: |
@@ -512,7 +500,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /stats:
+  /api/stats:
     get:
       summary: Get Network Statistics
       description: Get comprehensive FidoNet network statistics
@@ -529,7 +517,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /stats/dates:
+  /api/stats/dates:
     get:
       summary: Get Available Dates
       description: Get list of all dates for which nodelist data is available
@@ -554,7 +542,7 @@ paths:
                     type: integer
                     example: 52
 
-  /flags:
+  /api/flags:
     get:
       summary: Get Flags Documentation
       description: Get comprehensive documentation for all FidoNet node flags
@@ -574,7 +562,7 @@ paths:
                     additionalProperties:
                       $ref: '#/components/schemas/FlagDefinition'
 
-  /download/database:
+  /api/download/database:
     get:
       summary: Download Database
       description: Download the complete DuckDB database file for offline analysis
@@ -592,7 +580,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /nodelist/latest:
+  /api/nodelist/latest:
     get:
       summary: Get Latest Nodelist
       description: Get information about the latest available nodelist
@@ -606,6 +594,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NodelistInfo'
+
+  /api/openapi.yaml:
+    get:
+      summary: OpenAPI Specification
+      description: Get the OpenAPI specification for this API
+      operationId: getOpenAPISpec
+      tags:
+        - Documentation
+      responses:
+        '200':
+          description: OpenAPI specification
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+
+  /api/docs:
+    get:
+      summary: API Documentation
+      description: Interactive Swagger UI documentation for this API
+      operationId: getAPIDocs
+      tags:
+        - Documentation
+      responses:
+        '200':
+          description: Swagger UI HTML page
+          content:
+            text/html:
+              schema:
+                type: string
 
 components:
   schemas:
@@ -1105,6 +1123,8 @@ tags:
     description: Data export and download endpoints
   - name: Nodelists
     description: Nodelist file information and metadata
+  - name: Documentation
+    description: API documentation and specifications
 
 externalDocs:
   description: NodelistDB Documentation

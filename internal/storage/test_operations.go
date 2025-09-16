@@ -355,7 +355,15 @@ func (to *TestOperations) GetNodeReachabilityStats(zone, net, node int, days int
 				countIf(is_operational) as successful_tests,
 				countIf(NOT is_operational) as failed_tests,
 				avg(is_operational) * 100 as success_rate,
-				avgIf(least(binkp_response_ms, ifcico_response_ms, telnet_response_ms), is_operational) as avg_response_ms,
+				avgIf(least(
+					if(binkp_response_ms > 0, binkp_response_ms, 999999),
+					if(ifcico_response_ms > 0, ifcico_response_ms, 999999),
+					if(telnet_response_ms > 0, telnet_response_ms, 999999)
+				), is_operational AND least(
+					if(binkp_response_ms > 0, binkp_response_ms, 999999),
+					if(ifcico_response_ms > 0, ifcico_response_ms, 999999),
+					if(telnet_response_ms > 0, telnet_response_ms, 999999)
+				) < 999999) as avg_response_ms,
 				max(test_time) as last_test_time,
 				argMax(is_operational, test_time) as last_status,
 				avgIf(binkp_success, binkp_tested) * 100 as binkp_success_rate,
@@ -377,12 +385,12 @@ func (to *TestOperations) GetNodeReachabilityStats(zone, net, node int, days int
 				sum(CASE WHEN is_operational THEN 1 ELSE 0 END) as successful_tests,
 				sum(CASE WHEN NOT is_operational THEN 1 ELSE 0 END) as failed_tests,
 				avg(CASE WHEN is_operational THEN 1.0 ELSE 0.0 END) * 100 as success_rate,
-				avg(CASE WHEN is_operational THEN 
+				avg(CASE WHEN is_operational THEN
 					LEAST(
 						CASE WHEN binkp_response_ms > 0 THEN binkp_response_ms ELSE 999999 END,
 						CASE WHEN ifcico_response_ms > 0 THEN ifcico_response_ms ELSE 999999 END,
 						CASE WHEN telnet_response_ms > 0 THEN telnet_response_ms ELSE 999999 END
-					) 
+					)
 				END) as avg_response_ms,
 				max(test_time) as last_test_time,
 				bool_or(is_operational) FILTER (WHERE test_time = max(test_time)) as last_status,
