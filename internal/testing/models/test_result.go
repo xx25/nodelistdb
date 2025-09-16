@@ -202,7 +202,8 @@ func (tr *TestResult) SetDNSResult(result *DNSResult) {
 	
 	if result.Error != nil {
 		tr.DNSError = result.Error.Error()
-		tr.HasConnectivityIssues = true
+		// Don't set HasConnectivityIssues here - DNS issues are separate from connectivity issues
+		// HasConnectivityIssues will be set if protocols fail to connect
 	}
 }
 

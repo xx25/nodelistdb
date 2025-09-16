@@ -135,8 +135,14 @@
                     <span class="detail-value {{if .TestResult.IsOperational}}success{{else}}failed{{end}}">
                         {{if .TestResult.IsOperational}}Operational{{else}}Failed{{end}}
                     </span>
+                    <span class="detail-label">DNS Issues:</span>
+                    <span class="detail-value {{if .TestResult.DNSError}}failed{{end}}">
+                        {{if .TestResult.DNSError}}Yes{{else}}No{{end}}
+                    </span>
                     <span class="detail-label">Connectivity Issues:</span>
-                    <span class="detail-value">{{if .TestResult.HasConnectivityIssues}}Yes{{else}}No{{end}}</span>
+                    <span class="detail-value {{if .TestResult.HasConnectivityIssues}}failed{{end}}">
+                        {{if .TestResult.HasConnectivityIssues}}Yes{{else}}No{{end}}
+                    </span>
                     <span class="detail-label">Address Validated:</span>
                     <span class="detail-value">{{if .TestResult.AddressValidated}}Yes{{else}}No{{end}}</span>
                     <span class="detail-label">Software Version:</span>

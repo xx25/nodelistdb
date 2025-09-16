@@ -587,6 +587,36 @@ func (d *Daemon) testNode(ctx context.Context, node *models.Node) *models.TestRe
 		d.logProtocolResult(addr, "VModem", result.VModemResult)
 	}
 
+	// Check for connectivity issues
+	// Set HasConnectivityIssues to true if protocols were tested but all failed
+	// This is separate from DNS issues (which are already handled in SetDNSResult)
+	if !result.IsOperational && result.DNSError == "" {
+		// DNS worked but no protocols succeeded
+		protocolsTested := false
+
+		// Check if any protocol was tested
+		if result.BinkPResult != nil && result.BinkPResult.Tested {
+			protocolsTested = true
+		}
+		if result.IfcicoResult != nil && result.IfcicoResult.Tested {
+			protocolsTested = true
+		}
+		if result.TelnetResult != nil && result.TelnetResult.Tested {
+			protocolsTested = true
+		}
+		if result.FTPResult != nil && result.FTPResult.Tested {
+			protocolsTested = true
+		}
+		if result.VModemResult != nil && result.VModemResult.Tested {
+			protocolsTested = true
+		}
+
+		// If protocols were tested but none succeeded, we have connectivity issues
+		if protocolsTested {
+			result.HasConnectivityIssues = true
+		}
+	}
+
 	// Log summary of connectivity
 	d.logConnectivitySummary(addr, node, result)
 
@@ -594,7 +624,9 @@ func (d *Daemon) testNode(ctx context.Context, node *models.Node) *models.TestRe
 	if result.IsOperational {
 		logging.Debugf("[%s]   Test result: OPERATIONAL", addr)
 	} else if result.HasConnectivityIssues {
-		logging.Debugf("[%s]   Test result: HAS ISSUES", addr)
+		logging.Debugf("[%s]   Test result: HAS CONNECTIVITY ISSUES", addr)
+	} else if result.DNSError != "" {
+		logging.Debugf("[%s]   Test result: DNS FAILED", addr)
 	} else {
 		logging.Debugf("[%s]   Test result: FAILED (no successful connections)", addr)
 	}
