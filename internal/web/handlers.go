@@ -818,33 +818,333 @@ func (s *Server) IPv6AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Include /0 nodes parameter (default: false)
+	includeZeroNodes := query.Get("includeZero") == "true"
+
 	// Get IPv6 enabled nodes
-	ipv6Nodes, err := s.storage.GetIPv6EnabledNodes(limit, days)
+	ipv6Nodes, err := s.storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
 	if err != nil {
 		log.Printf("Error getting IPv6 enabled nodes: %v", err)
 		ipv6Nodes = []storage.NodeTestResult{}
 	}
 
 	data := struct {
-		Title      string
-		ActivePage string
-		Version    string
-		IPv6Nodes  []storage.NodeTestResult
-		Days       int
-		Limit      int
-		Error      error
+		Title            string
+		ActivePage       string
+		Version          string
+		IPv6Nodes        []storage.NodeTestResult
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
 	}{
-		Title:      "IPv6 Enabled Nodes",
-		ActivePage: "analytics",
-		Version:    version.GetVersionInfo(),
-		IPv6Nodes:  ipv6Nodes,
-		Days:       days,
-		Limit:      limit,
-		Error:      err,
+		Title:            "IPv6 Enabled Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		IPv6Nodes:        ipv6Nodes,
+		Days:             days,
+		Limit:            limit,
+		IncludeZeroNodes: includeZeroNodes,
+		Error:            err,
 	}
 
 	if err := s.templates["ipv6_analytics"].Execute(w, data); err != nil {
 		log.Printf("Error executing IPv6 analytics template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// BinkPAnalyticsHandler shows BinkP enabled nodes analytics
+func (s *Server) BinkPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	query := r.URL.Query()
+
+	// Days parameter
+	daysStr := query.Get("days")
+	days := 30 // default
+	if daysStr != "" {
+		if parsed, err := strconv.Atoi(daysStr); err == nil && parsed > 0 && parsed <= 365 {
+			days = parsed
+		}
+	}
+
+	// Limit parameter
+	limitStr := query.Get("limit")
+	limit := 1000 // default
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Include /0 nodes parameter (default: false)
+	includeZeroNodes := query.Get("includeZero") == "true"
+
+	// Get BinkP enabled nodes
+	binkpNodes, err := s.storage.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		log.Printf("Error getting BinkP enabled nodes: %v", err)
+		binkpNodes = []storage.NodeTestResult{}
+	}
+
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		ProtocolNodes    []storage.NodeTestResult
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
+	}{
+		Title:            "BinkP Enabled Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		ProtocolNodes:    binkpNodes,
+		Days:             days,
+		Limit:            limit,
+		IncludeZeroNodes: includeZeroNodes,
+		Error:            err,
+	}
+
+	if err := s.templates["binkp_analytics"].Execute(w, data); err != nil {
+		log.Printf("Error executing BinkP analytics template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// IfcicoAnalyticsHandler shows IFCICO enabled nodes analytics
+func (s *Server) IfcicoAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	query := r.URL.Query()
+
+	// Days parameter
+	daysStr := query.Get("days")
+	days := 30 // default
+	if daysStr != "" {
+		if parsed, err := strconv.Atoi(daysStr); err == nil && parsed > 0 && parsed <= 365 {
+			days = parsed
+		}
+	}
+
+	// Limit parameter
+	limitStr := query.Get("limit")
+	limit := 1000 // default
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Include /0 nodes parameter (default: false)
+	includeZeroNodes := query.Get("includeZero") == "true"
+
+	// Get IFCICO enabled nodes
+	ifcicoNodes, err := s.storage.GetIfcicoEnabledNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		log.Printf("Error getting IFCICO enabled nodes: %v", err)
+		ifcicoNodes = []storage.NodeTestResult{}
+	}
+
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		ProtocolNodes    []storage.NodeTestResult
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
+	}{
+		Title:            "IFCICO Enabled Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		ProtocolNodes:    ifcicoNodes,
+		Days:             days,
+		Limit:            limit,
+		IncludeZeroNodes: includeZeroNodes,
+		Error:            err,
+	}
+
+	if err := s.templates["ifcico_analytics"].Execute(w, data); err != nil {
+		log.Printf("Error executing IFCICO analytics template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// TelnetAnalyticsHandler shows Telnet enabled nodes analytics
+func (s *Server) TelnetAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	query := r.URL.Query()
+
+	// Days parameter
+	daysStr := query.Get("days")
+	days := 30 // default
+	if daysStr != "" {
+		if parsed, err := strconv.Atoi(daysStr); err == nil && parsed > 0 && parsed <= 365 {
+			days = parsed
+		}
+	}
+
+	// Limit parameter
+	limitStr := query.Get("limit")
+	limit := 1000 // default
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Include /0 nodes parameter (default: false)
+	includeZeroNodes := query.Get("includeZero") == "true"
+
+	// Get Telnet enabled nodes
+	telnetNodes, err := s.storage.GetTelnetEnabledNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		log.Printf("Error getting Telnet enabled nodes: %v", err)
+		telnetNodes = []storage.NodeTestResult{}
+	}
+
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		ProtocolNodes    []storage.NodeTestResult
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
+	}{
+		Title:            "Telnet Enabled Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		ProtocolNodes:    telnetNodes,
+		Days:             days,
+		Limit:            limit,
+		IncludeZeroNodes: includeZeroNodes,
+		Error:            err,
+	}
+
+	if err := s.templates["telnet_analytics"].Execute(w, data); err != nil {
+		log.Printf("Error executing Telnet analytics template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// VModemAnalyticsHandler shows VModem enabled nodes analytics
+func (s *Server) VModemAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	query := r.URL.Query()
+
+	// Days parameter
+	daysStr := query.Get("days")
+	days := 30 // default
+	if daysStr != "" {
+		if parsed, err := strconv.Atoi(daysStr); err == nil && parsed > 0 && parsed <= 365 {
+			days = parsed
+		}
+	}
+
+	// Limit parameter
+	limitStr := query.Get("limit")
+	limit := 1000 // default
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Include /0 nodes parameter (default: false)
+	includeZeroNodes := query.Get("includeZero") == "true"
+
+	// Get VModem enabled nodes
+	vmodemNodes, err := s.storage.GetVModemEnabledNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		log.Printf("Error getting VModem enabled nodes: %v", err)
+		vmodemNodes = []storage.NodeTestResult{}
+	}
+
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		ProtocolNodes    []storage.NodeTestResult
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
+	}{
+		Title:            "VModem Enabled Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		ProtocolNodes:    vmodemNodes,
+		Days:             days,
+		Limit:            limit,
+		IncludeZeroNodes: includeZeroNodes,
+		Error:            err,
+	}
+
+	if err := s.templates["vmodem_analytics"].Execute(w, data); err != nil {
+		log.Printf("Error executing VModem analytics template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// FTPAnalyticsHandler shows FTP enabled nodes analytics
+func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	query := r.URL.Query()
+
+	// Days parameter
+	daysStr := query.Get("days")
+	days := 30 // default
+	if daysStr != "" {
+		if parsed, err := strconv.Atoi(daysStr); err == nil && parsed > 0 && parsed <= 365 {
+			days = parsed
+		}
+	}
+
+	// Limit parameter
+	limitStr := query.Get("limit")
+	limit := 1000 // default
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Include /0 nodes parameter (default: false)
+	includeZeroNodes := query.Get("includeZero") == "true"
+
+	// Get FTP enabled nodes
+	ftpNodes, err := s.storage.GetFTPEnabledNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		log.Printf("Error getting FTP enabled nodes: %v", err)
+		ftpNodes = []storage.NodeTestResult{}
+	}
+
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		ProtocolNodes    []storage.NodeTestResult
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
+	}{
+		Title:            "FTP Enabled Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		ProtocolNodes:    ftpNodes,
+		Days:             days,
+		Limit:            limit,
+		IncludeZeroNodes: includeZeroNodes,
+		Error:            err,
+	}
+
+	if err := s.templates["ftp_analytics"].Execute(w, data); err != nil {
+		log.Printf("Error executing FTP analytics template: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

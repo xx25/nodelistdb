@@ -397,6 +397,31 @@ func (s *Storage) SearchNodesByReachability(operational bool, limit int, days in
 }
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6
-func (s *Storage) GetIPv6EnabledNodes(limit int, days int) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6EnabledNodes(limit, days)
+func (s *Storage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
+}
+
+// GetBinkPEnabledNodes returns nodes that have been successfully tested with BinkP
+func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
+}
+
+// GetIfcicoEnabledNodes returns nodes that have been successfully tested with IFCICO
+func (s *Storage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetIfcicoEnabledNodes(limit, days, includeZeroNodes)
+}
+
+// GetTelnetEnabledNodes returns nodes that have been successfully tested with Telnet
+func (s *Storage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetTelnetEnabledNodes(limit, days, includeZeroNodes)
+}
+
+// GetVModemEnabledNodes returns nodes that have been successfully tested with VModem
+func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes)
+}
+
+// GetFTPEnabledNodes returns nodes that have been successfully tested with FTP
+func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes)
 }

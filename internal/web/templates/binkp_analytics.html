@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPv6 Enabled Nodes - NodelistDB</title>
+    <title>BinkP Enabled Nodes - NodelistDB</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
         .compact-actions {
@@ -16,70 +16,45 @@
             font-size: 0.875rem;
         }
 
-        /* Make hostname badges show pointer cursor on hover */
-        .badge[title] {
-            cursor: help;
-            position: relative;
+        .protocol-info {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
         }
 
-        /* Optional: Add visual feedback when hovering */
-        .badge[title]:hover {
-            opacity: 0.8;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        .protocol-info h3 {
+            margin-top: 0;
+            color: #2c3e50;
         }
 
-        /* Custom tooltip styling for IPv6 addresses */
-        .ipv6-tooltip {
-            position: relative;
-            cursor: help;
+        .capabilities-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
         }
 
-        .ipv6-tooltip:hover::after {
-            content: attr(data-ipv6);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #333;
-            color: #0f0;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-            font-weight: bold;
-            white-space: nowrap;
-            z-index: 1000;
-            margin-bottom: 5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            max-width: 500px;
-            word-break: break-all;
-        }
-
-        .ipv6-tooltip:hover::before {
-            content: '';
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: #333;
-            z-index: 1001;
-            margin-bottom: -1px;
+        .capability-badge {
+            padding: 0.125rem 0.5rem;
+            background: #17a2b8;
+            color: white;
+            border-radius: 3px;
+            font-size: 0.8rem;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>IPv6 Enabled Nodes</h1>
-            <p class="subtitle">Nodes that have been successfully tested with IPv6 connectivity</p>
+            <h1>BinkP Enabled Nodes</h1>
+            <p class="subtitle">Nodes that have been successfully tested with BinkP protocol</p>
         </header>
 
         {{template "nav" .}}
 
         <div class="content">
             <div class="search-container">
-                <form method="get" action="/analytics/ipv6" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem;">
+                <form method="get" action="/analytics/binkp" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem;">
                     <div class="form-group">
                         <label for="days">Period:</label>
                         <select name="days" id="days" class="form-control">
@@ -117,9 +92,9 @@
             </div>
             {{end}}
 
-            {{if .IPv6Nodes}}
+            {{if .ProtocolNodes}}
             <div class="stats-box">
-                <h3>Found {{len .IPv6Nodes}} IPv6 Enabled Nodes</h3>
+                <h3>Found {{len .ProtocolNodes}} BinkP Enabled Nodes</h3>
             </div>
 
             <div class="table-responsive">
@@ -128,14 +103,14 @@
                         <tr>
                             <th>Node Address</th>
                             <th>Hostname</th>
-                            <th>Protocols</th>
+                            <th>Version</th>
                             <th>Location</th>
                             <th>Last Tested</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {{range .IPv6Nodes}}
+                        {{range .ProtocolNodes}}
                         <tr>
                             <td>
                                 <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
@@ -144,23 +119,16 @@
                             </td>
                             <td>
                                 {{if .Hostname}}
-                                    <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">{{.Hostname}}</span>
+                                    <span class="badge badge-info">{{.Hostname}}</span>
                                 {{else}}
-                                    <span class="text-muted ipv6-tooltip" data-ipv6="{{if .ResolvedIPv6}}{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}{{else}}No IPv6{{end}}">N/A</span>
+                                    <span class="text-muted">N/A</span>
                                 {{end}}
                             </td>
                             <td>
-                                {{if .BinkPSuccess}}
-                                    <span class="badge badge-success">BinkP</span>
-                                {{end}}
-                                {{if .IfcicoSuccess}}
-                                    <span class="badge badge-success">IFCICO</span>
-                                {{end}}
-                                {{if .TelnetSuccess}}
-                                    <span class="badge badge-success">Telnet</span>
-                                {{end}}
-                                {{if .FTPSuccess}}
-                                    <span class="badge badge-success">FTP</span>
+                                {{if .BinkPVersion}}
+                                    <span class="badge badge-info">{{.BinkPVersion}}</span>
+                                {{else}}
+                                    <span class="text-muted">Unknown</span>
                                 {{end}}
                             </td>
                             <td>
@@ -190,12 +158,12 @@
             </div>
 
             <div class="info-box" style="margin-top: 2rem;">
-                <p><strong>Note:</strong> This report shows nodes that have IPv6 addresses resolved and have been successfully tested with at least one protocol over the last {{.Days}} days. All listed nodes have working IPv6 connectivity.</p>
+                <p><strong>Note:</strong> This report shows nodes that have been successfully tested with BinkP protocol over the last {{.Days}} days. BinkP is a modern, efficient protocol for FidoNet mail exchange over TCP/IP.</p>
             </div>
             {{else}}
             <div class="alert alert-warning">
-                <strong>No IPv6 enabled nodes found for the selected period.</strong><br>
-                This could mean that either no nodes with IPv6 addresses were tested during this period, or none of them responded successfully to protocol tests.
+                <strong>No BinkP enabled nodes found for the selected period.</strong><br>
+                This could mean that either no nodes with BinkP support were tested during this period, or none of them responded successfully to protocol tests.
             </div>
             {{end}}
         </div>

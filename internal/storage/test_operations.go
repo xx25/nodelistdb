@@ -542,15 +542,21 @@ func (to *TestOperations) GetReachabilityTrends(days int) ([]ReachabilityTrend, 
 }
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6
-func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int) ([]NodeTestResult, error) {
+func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
 	to.mu.RLock()
 	defer to.mu.RUnlock()
 
 	conn := to.db.Conn()
 
+	// Build node filter condition
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
 	var query string
 	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
-		query = `
+		query = fmt.Sprintf(`
 			WITH latest_tests AS (
 				SELECT
 					zone, net, node,
@@ -560,7 +566,7 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int) ([]NodeTestRe
 					AND length(resolved_ipv6) > 0
 					AND is_operational = true
 					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
-					AND node != 0
+					%s
 				GROUP BY zone, net, node
 			),
 			latest_nodes AS (
@@ -589,11 +595,10 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int) ([]NodeTestRe
 				AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
 			ORDER BY r.test_time DESC
-			LIMIT ?
-		`
+			LIMIT ?`, nodeFilter)
 	} else {
 		// DuckDB query
-		query = `
+		query = fmt.Sprintf(`
 			WITH latest_tests AS (
 				SELECT
 					zone, net, node,
@@ -603,7 +608,7 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int) ([]NodeTestRe
 					AND array_length(resolved_ipv6) > 0
 					AND is_operational = true
 					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
-					AND node != 0
+					%s
 				GROUP BY zone, net, node
 			),
 			latest_nodes AS (
@@ -632,13 +637,532 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int) ([]NodeTestRe
 				AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
 			ORDER BY r.test_time DESC
-			LIMIT ?
-		`
+			LIMIT ?`, nodeFilter)
 	}
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search IPv6 enabled nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var r NodeTestResult
+		err := to.resultParser.ParseTestResultRow(rows, &r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse test result: %w", err)
+		}
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
+// GetBinkPEnabledNodes returns nodes that have been successfully tested with BinkP
+func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	to.mu.RLock()
+	defer to.mu.RUnlock()
+
+	conn := to.db.Conn()
+
+	// Build node filter condition
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	var query string
+	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND binkp_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					argMax(system_name, nodelist_date) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	} else {
+		// DuckDB query
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					MAX(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND binkp_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	}
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search BinkP enabled nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var r NodeTestResult
+		err := to.resultParser.ParseTestResultRow(rows, &r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse test result: %w", err)
+		}
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
+// GetIfcicoEnabledNodes returns nodes that have been successfully tested with IFCICO
+func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	to.mu.RLock()
+	defer to.mu.RUnlock()
+
+	conn := to.db.Conn()
+
+	// Build node filter condition
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	var query string
+	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND ifcico_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					argMax(system_name, nodelist_date) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	} else {
+		// DuckDB query
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					MAX(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND ifcico_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	}
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search IFCICO enabled nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var r NodeTestResult
+		err := to.resultParser.ParseTestResultRow(rows, &r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse test result: %w", err)
+		}
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
+// GetTelnetEnabledNodes returns nodes that have been successfully tested with Telnet
+func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	to.mu.RLock()
+	defer to.mu.RUnlock()
+
+	conn := to.db.Conn()
+
+	// Build node filter condition
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	var query string
+	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND telnet_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					argMax(system_name, nodelist_date) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	} else {
+		// DuckDB query
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					MAX(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND telnet_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	}
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search Telnet enabled nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var r NodeTestResult
+		err := to.resultParser.ParseTestResultRow(rows, &r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse test result: %w", err)
+		}
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
+// GetVModemEnabledNodes returns nodes that have been successfully tested with VModem
+func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	to.mu.RLock()
+	defer to.mu.RUnlock()
+
+	conn := to.db.Conn()
+
+	// Build node filter condition
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	var query string
+	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND vmodem_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					argMax(system_name, nodelist_date) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	} else {
+		// DuckDB query
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					MAX(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND vmodem_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	}
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search VModem enabled nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var r NodeTestResult
+		err := to.resultParser.ParseTestResultRow(rows, &r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse test result: %w", err)
+		}
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
+// GetFTPEnabledNodes returns nodes that have been successfully tested with FTP
+func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	to.mu.RLock()
+	defer to.mu.RUnlock()
+
+	conn := to.db.Conn()
+
+	// Build node filter condition
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	var query string
+	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND ftp_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					argMax(system_name, nodelist_date) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	} else {
+		// DuckDB query
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					MAX(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND ftp_success = true
+					AND is_operational = true
+					%s
+				GROUP BY zone, net, node
+			)
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			ORDER BY r.test_time DESC
+			LIMIT ?
+		`, nodeFilter)
+	}
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search FTP enabled nodes: %w", err)
 	}
 	defer rows.Close()
 

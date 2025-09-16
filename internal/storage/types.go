@@ -74,7 +74,12 @@ type Operations interface {
 	GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error)
 	GetReachabilityTrends(days int) ([]ReachabilityTrend, error)
 	SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error)
-	GetIPv6EnabledNodes(limit int, days int) ([]NodeTestResult, error)
+	GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 
 	// Utility operations
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
