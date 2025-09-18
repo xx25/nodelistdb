@@ -24,6 +24,8 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/telnet", s.TelnetAnalyticsHandler)
 	mux.HandleFunc("/analytics/vmodem", s.VModemAnalyticsHandler)
 	mux.HandleFunc("/analytics/ftp", s.FTPAnalyticsHandler)
+	mux.HandleFunc("/analytics/software/binkp", s.BinkPSoftwareHandler)
+	mux.HandleFunc("/analytics/software/ifcico", s.IfcicoSoftwareHandler)
 	mux.HandleFunc("/reachability", s.ReachabilityHandler)
 	mux.HandleFunc("/reachability/node", s.ReachabilityNodeHandler)
 	mux.HandleFunc("/reachability/test", s.TestResultDetailHandler)

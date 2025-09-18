@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -75,6 +76,64 @@ type NodeTestResult struct {
 	IsOperational         bool `json:"is_operational"`
 	HasConnectivityIssues bool `json:"has_connectivity_issues"`
 	AddressValidated      bool `json:"address_validated"`
+
+	// Per-hostname testing fields (simplified migration)
+	TestedHostname        string   `json:"tested_hostname"`         // Which hostname was tested
+	HostnameIndex         int32    `json:"hostname_index"`          // -1=legacy, 0=primary, 1+=backup
+	IsAggregated          bool     `json:"is_aggregated"`           // false=per-hostname, true=summary
+	TotalHostnames        int32    `json:"total_hostnames"`         // Total number of hostnames for this node
+	HostnamesTested       int32    `json:"hostnames_tested"`        // Number of hostnames actually tested
+	HostnamesOperational  int32    `json:"hostnames_operational"`   // Number of operational hostnames
+	AllHostnames          []string `json:"all_hostnames"`           // All hostnames for this node (for display)
+}
+
+// getAllHostnamesForNode fetches all tested hostnames for a specific node that have IPv6
+func (to *TestOperations) getAllHostnamesForNode(zone, net, node int, days int) ([]string, error) {
+	conn := to.db.Conn()
+
+	var query string
+	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		query = `
+			SELECT DISTINCT tested_hostname
+			FROM node_test_results
+			WHERE zone = ? AND net = ? AND node = ?
+				AND test_time >= now() - INTERVAL ? DAY
+				AND length(tested_hostname) > 0
+				AND hostname_index >= 0
+				AND length(resolved_ipv6) > 0
+			ORDER BY hostname_index
+		`
+	} else {
+		query = `
+			SELECT DISTINCT tested_hostname
+			FROM node_test_results
+			WHERE zone = ? AND net = ? AND node = ?
+				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+				AND length(tested_hostname) > 0
+				AND hostname_index >= 0
+				AND array_length(resolved_ipv6) > 0
+			ORDER BY hostname_index
+		`
+	}
+
+	rows, err := conn.Query(query, zone, net, node, days)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hostnames: %w", err)
+	}
+	defer rows.Close()
+
+	var hostnames []string
+	for rows.Next() {
+		var hostname string
+		if err := rows.Scan(&hostname); err != nil {
+			return nil, fmt.Errorf("failed to scan hostname: %w", err)
+		}
+		if hostname != "" {
+			hostnames = append(hostnames, hostname)
+		}
+	}
+
+	return hostnames, nil
 }
 
 // NodeReachabilityStats represents aggregated reachability statistics for a node
@@ -183,11 +242,17 @@ func (to *TestOperations) GetNodeTestHistory(zone, net, node int, days int) ([]N
 				vmodem_error,
 				is_operational,
 				has_connectivity_issues,
-				address_validated
+				address_validated,
+				tested_hostname,
+				hostname_index,
+				is_aggregated,
+				total_hostnames,
+				hostnames_tested,
+				hostnames_operational
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ?
 			AND test_time >= now() - INTERVAL ? DAY
-			ORDER BY test_time ASC
+			ORDER BY test_time DESC, hostname_index
 		`
 	} else {
 		// DuckDB query
@@ -292,7 +357,9 @@ func (to *TestOperations) GetDetailedTestResult(zone, net, node int, testTime st
 				telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 				ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 				vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-				is_operational, has_connectivity_issues, address_validated
+				is_operational, has_connectivity_issues, address_validated,
+				tested_hostname, hostname_index, is_aggregated,
+				total_hostnames, hostnames_tested, hostnames_operational
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ? AND test_time = parseDateTimeBestEffort(?)
 			LIMIT 1
@@ -311,7 +378,9 @@ func (to *TestOperations) GetDetailedTestResult(zone, net, node int, testTime st
 				telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 				ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 				vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-				is_operational, has_connectivity_issues, address_validated
+				is_operational, has_connectivity_issues, address_validated,
+				tested_hostname, hostname_index, is_aggregated,
+				total_hostnames, hostnames_tested, hostnames_operational
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ? AND test_time = ?
 			LIMIT 1
@@ -546,6 +615,7 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 	to.mu.RLock()
 	defer to.mu.RUnlock()
 
+
 	conn := to.db.Conn()
 
 	// Build node filter condition
@@ -565,7 +635,8 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND length(resolved_ipv6) > 0
 					AND is_operational = true
-					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
+					AND is_aggregated = false
+					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
 				GROUP BY zone, net, node
 			),
@@ -589,7 +660,9 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
@@ -607,7 +680,8 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND array_length(resolved_ipv6) > 0
 					AND is_operational = true
-					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
+					AND is_aggregated = false
+					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
 				GROUP BY zone, net, node
 			),
@@ -631,7 +705,9 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
@@ -642,18 +718,33 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
+		log.Printf("[ERROR] GetIPv6EnabledNodes: Query failed: %v", err)
 		return nil, fmt.Errorf("failed to search IPv6 enabled nodes: %w", err)
 	}
 	defer rows.Close()
 
 	var results []NodeTestResult
+	rowCount := 0
 	for rows.Next() {
+		rowCount++
 		var r NodeTestResult
 		err := to.resultParser.ParseTestResultRow(rows, &r)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse test result: %w", err)
+			log.Printf("[ERROR] GetIPv6EnabledNodes: Failed to parse row %d: %v", rowCount, err)
+			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
 		}
 		results = append(results, r)
+	}
+
+	// Fetch all hostnames for each node
+	for i := range results {
+		hostnames, err := to.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
+		if err != nil {
+			log.Printf("[WARNING] Failed to get all hostnames for node %d:%d/%d: %v",
+				results[i].Zone, results[i].Net, results[i].Node, err)
+		} else {
+			results[i].AllHostnames = hostnames
+		}
 	}
 
 	return results, nil
@@ -683,6 +774,7 @@ func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroN
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND binkp_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			),
@@ -704,7 +796,9 @@ func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroN
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
@@ -722,6 +816,7 @@ func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroN
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND binkp_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			)
@@ -736,7 +831,9 @@ func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroN
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			ORDER BY r.test_time DESC
@@ -787,6 +884,7 @@ func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND ifcico_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			),
@@ -808,7 +906,9 @@ func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
@@ -826,6 +926,7 @@ func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND ifcico_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			)
@@ -840,7 +941,9 @@ func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			ORDER BY r.test_time DESC
@@ -891,6 +994,7 @@ func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND telnet_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			),
@@ -912,7 +1016,9 @@ func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
@@ -930,6 +1036,7 @@ func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND telnet_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			)
@@ -944,7 +1051,9 @@ func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			ORDER BY r.test_time DESC
@@ -995,6 +1104,7 @@ func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND vmodem_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			),
@@ -1016,7 +1126,9 @@ func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
@@ -1034,6 +1146,7 @@ func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND vmodem_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			)
@@ -1048,7 +1161,9 @@ func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			ORDER BY r.test_time DESC
@@ -1099,6 +1214,7 @@ func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNod
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND ftp_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			),
@@ -1120,7 +1236,9 @@ func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNod
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
@@ -1138,6 +1256,7 @@ func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNod
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND ftp_success = true
 					AND is_operational = true
+					AND is_aggregated = false
 					%s
 				GROUP BY zone, net, node
 			)
@@ -1152,7 +1271,9 @@ func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNod
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			ORDER BY r.test_time DESC
@@ -1200,7 +1321,9 @@ func (to *TestOperations) SearchNodesByReachability(operational bool, limit int,
 				telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 				ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 				vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-				is_operational, has_connectivity_issues, address_validated
+				is_operational, has_connectivity_issues, address_validated,
+				tested_hostname, hostname_index, is_aggregated,
+				total_hostnames, hostnames_tested, hostnames_operational
 			FROM (
 				SELECT *, row_number() OVER (PARTITION BY zone, net, node ORDER BY test_time DESC) as rn
 				FROM node_test_results
@@ -1224,7 +1347,9 @@ func (to *TestOperations) SearchNodesByReachability(operational bool, limit int,
 				telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 				ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 				vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-				is_operational, has_connectivity_issues, address_validated
+				is_operational, has_connectivity_issues, address_validated,
+				tested_hostname, hostname_index, is_aggregated,
+				total_hostnames, hostnames_tested, hostnames_operational
 			FROM node_test_results
 			WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 			AND is_operational = ?

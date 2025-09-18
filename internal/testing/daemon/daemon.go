@@ -525,37 +525,267 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 
 // testNode tests a single node
 func (d *Daemon) testNode(ctx context.Context, node *models.Node) *models.TestResult {
+	// If node has no hostnames but has a valid system name that can be used as hostname,
+	// add it to the InternetHostnames temporarily for testing
+	if len(node.InternetHostnames) == 0 {
+		if hostname := node.GetPrimaryHostname(); hostname != "" {
+			node.InternetHostnames = []string{hostname}
+		}
+	}
+
+	// Check if node has multiple hostnames
+	if len(node.InternetHostnames) <= 1 {
+		// Single hostname - use simplified testing
+		return d.testSingleHostnameNode(ctx, node)
+	} else {
+		// Multiple hostnames - test each separately and aggregate
+		return d.testMultipleHostnameNode(ctx, node)
+	}
+}
+
+func (d *Daemon) testSingleHostnameNode(ctx context.Context, node *models.Node) *models.TestResult {
+	hostname := node.GetPrimaryHostname()
+	if hostname == "" {
+		hostname = "no-hostname"
+	}
+
+	result := d.performTesting(ctx, node, hostname)
+
+	// For single hostname, set proper indexes
+	result.HostnameIndex = 0  // Mark as new format, primary
+	result.IsAggregated = true // Single result is also the aggregate
+	result.TotalHostnames = 1
+	result.HostnamesTested = 1
+	if result.IsOperational {
+		result.HostnamesOperational = 1
+	}
+
+	// Store the result
+	if err := d.storage.StoreTestResult(context.Background(), result); err != nil {
+		logging.Errorf("Failed to store test result for %s: %v", node.Address(), err)
+	}
+
+	return result
+}
+
+func (d *Daemon) testMultipleHostnameNode(ctx context.Context, node *models.Node) *models.TestResult {
+	var results []*models.TestResult
+	operationalCount := int32(0)
+
+	// Test each hostname
+	for idx, hostname := range node.InternetHostnames {
+		result := d.performTesting(ctx, node, hostname)
+
+		// Set per-hostname metadata
+		result.TestedHostname = hostname
+		result.HostnameIndex = int32(idx)
+		result.IsAggregated = false
+		result.TotalHostnames = int32(len(node.InternetHostnames))
+
+		if result.IsOperational {
+			operationalCount++
+		}
+
+		results = append(results, result)
+
+		// Optional: stop on first success
+		// For now, we test all hostnames to gather comprehensive data
+		// if result.IsOperational {
+		//     break
+		// }
+	}
+
+	// Create aggregated result
+	aggregated := d.createAggregatedResult(node, results)
+	aggregated.HostnameIndex = 0  // Use 0 for aggregated
+	aggregated.IsAggregated = true
+	aggregated.TotalHostnames = int32(len(node.InternetHostnames))
+	aggregated.HostnamesTested = int32(len(results))
+	aggregated.HostnamesOperational = operationalCount
+
+	// Store all results (per-hostname + aggregated)
+	allResults := append(results, aggregated)
+	if store, ok := d.storage.(*storage.ClickHouseStorage); ok {
+		if err := store.StoreBatchTestResults(context.Background(), allResults); err != nil {
+			logging.Errorf("Failed to store batch test results for %s: %v", node.Address(), err)
+		}
+	} else {
+		// Fallback to storing individually
+		for _, r := range allResults {
+			if err := d.storage.StoreTestResult(context.Background(), r); err != nil {
+				logging.Errorf("Failed to store test result for %s: %v", node.Address(), err)
+			}
+		}
+	}
+
+	// Return the aggregated result for compatibility
+	return aggregated
+}
+
+func (d *Daemon) createAggregatedResult(node *models.Node, results []*models.TestResult) *models.TestResult {
+	if len(results) == 0 {
+		return models.NewTestResult(node)
+	}
+
+	// Start with a base result
+	aggregated := models.NewTestResult(node)
+
+	// Determine overall operational status (at least one working hostname)
+	anyOperational := false
+	var bestResponseMs uint32 = 0
+	var bestHostname string
+
+	// Collect all DNS results
+	var allIPv4s []string
+	var allIPv6s []string
+	dnsErrorsMap := make(map[string]bool)
+
+	for _, r := range results {
+		// Check if any hostname is operational
+		if r.IsOperational {
+			anyOperational = true
+
+			// Track best response time
+			responseMs := uint32(0)
+			if r.BinkPResult != nil && r.BinkPResult.Success {
+				responseMs = r.BinkPResult.ResponseMs
+			} else if r.IfcicoResult != nil && r.IfcicoResult.Success {
+				responseMs = r.IfcicoResult.ResponseMs
+			}
+
+			if responseMs > 0 && (bestResponseMs == 0 || responseMs < bestResponseMs) {
+				bestResponseMs = responseMs
+				bestHostname = r.TestedHostname
+			}
+		}
+
+		// Collect all resolved IPs
+		allIPv4s = append(allIPv4s, r.ResolvedIPv4...)
+		allIPv6s = append(allIPv6s, r.ResolvedIPv6...)
+
+		// Track DNS errors
+		if r.DNSError != "" {
+			dnsErrorsMap[r.DNSError] = true
+		}
+	}
+
+	// Use first result as template for location and other common fields
+	firstResult := results[0]
+	aggregated.Country = firstResult.Country
+	aggregated.CountryCode = firstResult.CountryCode
+	aggregated.City = firstResult.City
+	aggregated.Region = firstResult.Region
+	aggregated.Latitude = firstResult.Latitude
+	aggregated.Longitude = firstResult.Longitude
+	aggregated.ISP = firstResult.ISP
+	aggregated.Org = firstResult.Org
+	aggregated.ASN = firstResult.ASN
+
+	// Set DNS results
+	aggregated.ResolvedIPv4 = allIPv4s
+	aggregated.ResolvedIPv6 = allIPv6s
+
+	// Aggregate DNS errors
+	if len(dnsErrorsMap) > 0 {
+		var dnsErrors []string
+		for err := range dnsErrorsMap {
+			dnsErrors = append(dnsErrors, err)
+		}
+		aggregated.DNSError = strings.Join(dnsErrors, "; ")
+	}
+
+	// Set operational status
+	aggregated.IsOperational = anyOperational
+	aggregated.TestedHostname = bestHostname
+
+	// Determine if there are connectivity issues (DNS resolved but all protocols failed)
+	hasAnyDNS := len(allIPv4s) > 0 || len(allIPv6s) > 0
+	aggregated.HasConnectivityIssues = hasAnyDNS && !anyOperational
+
+	// Use best protocol results from any hostname
+	for _, r := range results {
+		if r.BinkPResult != nil && r.BinkPResult.Success {
+			if aggregated.BinkPResult == nil || !aggregated.BinkPResult.Success {
+				aggregated.BinkPResult = r.BinkPResult
+			}
+		}
+		if r.IfcicoResult != nil && r.IfcicoResult.Success {
+			if aggregated.IfcicoResult == nil || !aggregated.IfcicoResult.Success {
+				aggregated.IfcicoResult = r.IfcicoResult
+			}
+		}
+		if r.TelnetResult != nil && r.TelnetResult.Success {
+			if aggregated.TelnetResult == nil || !aggregated.TelnetResult.Success {
+				aggregated.TelnetResult = r.TelnetResult
+			}
+		}
+		if r.FTPResult != nil && r.FTPResult.Success {
+			if aggregated.FTPResult == nil || !aggregated.FTPResult.Success {
+				aggregated.FTPResult = r.FTPResult
+			}
+		}
+		if r.VModemResult != nil && r.VModemResult.Success {
+			if aggregated.VModemResult == nil || !aggregated.VModemResult.Success {
+				aggregated.VModemResult = r.VModemResult
+			}
+		}
+	}
+
+	// Address validation - if any hostname validates the address
+	for _, r := range results {
+		if r.AddressValidated {
+			aggregated.AddressValidated = true
+			break
+		}
+	}
+
+	return aggregated
+}
+
+func (d *Daemon) performTesting(ctx context.Context, node *models.Node, hostname string) *models.TestResult {
 	result := models.NewTestResult(node)
-	
+	result.Hostname = hostname
+	result.TestedHostname = hostname
+
 	// Log why we're testing this node
 	reason := node.TestReason
 	if reason == "" {
 		reason = "unknown"
 	}
 	addr := node.Address()
-	logging.Debugf("[%s] Testing (reason: %s)", addr, reason)
+	logging.Debugf("[%s] Testing hostname '%s' (reason: %s)", addr, hostname, reason)
 	logging.Debugf("[%s]   Node data: SystemName=%s, Hostnames=%v, Protocols=%v, HasInet=%v",
 		addr, node.SystemName, node.InternetHostnames, node.InternetProtocols, node.HasInet)
 
-	// DNS resolution
-	if hostname := node.GetPrimaryHostname(); hostname != "" {
+	// DNS resolution for the specific hostname
+	if hostname != "" && hostname != "no-hostname" {
+		logging.Debugf("[%s]   Resolving DNS for hostname: %s", addr, hostname)
+
 		dnsResult := d.dnsResolver.Resolve(ctx, hostname)
-		result.SetDNSResult(dnsResult)
 
-		// Log DNS results
-		if len(dnsResult.IPv4Addresses) > 0 || len(dnsResult.IPv6Addresses) > 0 {
-			logging.Debugf("[%s]   DNS: IPv4=%v, IPv6=%v", addr, dnsResult.IPv4Addresses, dnsResult.IPv6Addresses)
-		} else if dnsResult.Error != nil {
-			logging.Debugf("[%s]   DNS failed: %v", addr, dnsResult.Error)
-		} else {
-			logging.Debugf("[%s]   DNS: No addresses resolved", addr)
-		}
+		if dnsResult.Error != nil {
+			logging.Debugf("[%s]     DNS failed for %s: %v", addr, hostname, dnsResult.Error)
+			result.SetDNSResult(&models.DNSResult{
+				Hostname: hostname,
+				Error:    dnsResult.Error,
+			})
+		} else if len(dnsResult.IPv4Addresses) > 0 || len(dnsResult.IPv6Addresses) > 0 {
+			logging.Debugf("[%s]     DNS for %s: IPv4=%v, IPv6=%v", addr, hostname, dnsResult.IPv4Addresses, dnsResult.IPv6Addresses)
 
-		// Get geolocation for first resolved IP
-		if len(dnsResult.IPv4Addresses) > 0 {
-			if geo := d.geolocator.GetLocation(ctx, dnsResult.IPv4Addresses[0]); geo != nil {
-				result.SetGeolocation(geo)
+			result.SetDNSResult(&models.DNSResult{
+				Hostname:      hostname,
+				IPv4Addresses: dnsResult.IPv4Addresses,
+				IPv6Addresses: dnsResult.IPv6Addresses,
+			})
+
+			// Get geolocation for first resolved IP
+			if len(dnsResult.IPv4Addresses) > 0 {
+				if geo := d.geolocator.GetLocation(ctx, dnsResult.IPv4Addresses[0]); geo != nil {
+					result.SetGeolocation(geo)
+				}
 			}
+		} else {
+			logging.Debugf("[%s]     DNS for %s: No addresses resolved", addr, hostname)
 		}
 	} else {
 		logging.Debugf("[%s]   No hostname configured for node", addr)
@@ -1141,11 +1371,10 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 			return fmt.Errorf("node %s not found in database", nodeSpec)
 		}
 		
-		// Get hostname from node data
-		if len(targetNode.InternetHostnames) > 0 {
-			hostname = targetNode.InternetHostnames[0]
-		} else {
-			return fmt.Errorf("node %s has no internet hostname", nodeSpec)
+		// Get hostname from node data (with system name fallback)
+		hostname = targetNode.GetPrimaryHostname()
+		if hostname == "" {
+			return fmt.Errorf("node %s has no internet hostname or valid system name", nodeSpec)
 		}
 	} else {
 		// Try to parse as host:port or just host

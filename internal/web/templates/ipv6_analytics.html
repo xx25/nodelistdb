@@ -47,12 +47,11 @@
             font-family: monospace;
             font-size: 14px;
             font-weight: bold;
-            white-space: nowrap;
+            white-space: pre;
             z-index: 1000;
             margin-bottom: 5px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            max-width: 500px;
-            word-break: break-all;
+            min-width: max-content;
         }
 
         .ipv6-tooltip:hover::before {
@@ -143,7 +142,31 @@
                                 </a>
                             </td>
                             <td>
-                                {{if .Hostname}}
+                                {{if .AllHostnames}}
+                                    {{$ipv6List := .ResolvedIPv6}}
+                                    {{range $idx, $hostname := .AllHostnames}}
+                                        {{if $idx}}<br>{{end}}
+                                        <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $ipIdx, $ip := $ipv6List}}{{if $ipIdx}}&#10;{{end}}{{$ip}}{{end}}">
+                                            {{$hostname}}
+                                            {{if eq $idx 0}}
+                                                <small>(primary)</small>
+                                            {{else}}
+                                                <small>(backup #{{$idx}})</small>
+                                            {{end}}
+                                        </span>
+                                    {{end}}
+                                {{else if .TestedHostname}}
+                                    <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">
+                                        {{.TestedHostname}}
+                                        {{if and (gt .TotalHostnames 1) (ge .HostnameIndex 0)}}
+                                            {{if eq .HostnameIndex 0}}
+                                                <small>(primary)</small>
+                                            {{else}}
+                                                <small>(backup #{{.HostnameIndex}})</small>
+                                            {{end}}
+                                        {{end}}
+                                    </span>
+                                {{else if .Hostname}}
                                     <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">{{.Hostname}}</span>
                                 {{else}}
                                     <span class="text-muted ipv6-tooltip" data-ipv6="{{if .ResolvedIPv6}}{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}{{else}}No IPv6{{end}}">N/A</span>

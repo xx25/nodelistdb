@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -754,16 +755,24 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 		}
 		allNodes = nodes
 	default: // "all" or empty
-		// Get both operational and failed nodes
-		operational, err := s.storage.SearchNodesByReachability(true, limitFilter, periodFilter)
+		// Get both operational and failed nodes - fetch more to ensure we get both types
+		// When status=all, we want to show a mix of both operational and failed
+		// Fetch more than needed to account for protocol filtering
+		fetchLimit := limitFilter * 2
+		operational, err := s.storage.SearchNodesByReachability(true, fetchLimit, periodFilter)
 		if err != nil {
 			return nil, err
 		}
-		failed, err := s.storage.SearchNodesByReachability(false, limitFilter, periodFilter)
+		failed, err := s.storage.SearchNodesByReachability(false, fetchLimit, periodFilter)
 		if err != nil {
 			return nil, err
 		}
 		allNodes = append(operational, failed...)
+
+		// Sort by test time (most recent first)
+		sort.Slice(allNodes, func(i, j int) bool {
+			return allNodes[i].TestTime.After(allNodes[j].TestTime)
+		})
 	}
 
 	// Apply protocol filtering
@@ -824,7 +833,7 @@ func (s *Server) IPv6AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	// Get IPv6 enabled nodes
 	ipv6Nodes, err := s.storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
 	if err != nil {
-		log.Printf("Error getting IPv6 enabled nodes: %v", err)
+		log.Printf("[ERROR] IPv6Analytics: Error getting IPv6 enabled nodes: %v", err)
 		ipv6Nodes = []storage.NodeTestResult{}
 	}
 
@@ -968,6 +977,42 @@ func (s *Server) IfcicoAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 
 	if err := s.templates["ifcico_analytics"].Execute(w, data); err != nil {
 		log.Printf("Error executing IFCICO analytics template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// BinkPSoftwareHandler shows BinkP software distribution analytics
+func (s *Server) BinkPSoftwareHandler(w http.ResponseWriter, r *http.Request) {
+	data := struct {
+		Title      string
+		ActivePage string
+		Version    string
+	}{
+		Title:      "BinkP Software Distribution",
+		ActivePage: "analytics",
+		Version:    version.GetVersionInfo(),
+	}
+
+	if err := s.templates["binkp_software"].Execute(w, data); err != nil {
+		log.Printf("Error executing BinkP software template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// IfcicoSoftwareHandler shows IFCICO software distribution analytics
+func (s *Server) IfcicoSoftwareHandler(w http.ResponseWriter, r *http.Request) {
+	data := struct {
+		Title      string
+		ActivePage string
+		Version    string
+	}{
+		Title:      "IFCICO Software Distribution",
+		ActivePage: "analytics",
+		Version:    version.GetVersionInfo(),
+	}
+
+	if err := s.templates["ifcico_software"].Execute(w, data); err != nil {
+		log.Printf("Error executing IFCICO software template: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -1246,6 +1291,70 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 		history = []storage.NodeTestResult{}
 	}
 
+	// Auto-detect data format
+	hasPerHostnameData := false
+	for _, r := range history {
+		if r.HostnameIndex >= 0 {
+			hasPerHostnameData = true
+			break
+		}
+	}
+
+	// Group results by test session if using per-hostname format
+	var groupedHistory []interface{}
+	if hasPerHostnameData {
+		// Group by test time
+		sessionMap := make(map[time.Time][]storage.NodeTestResult)
+		for _, r := range history {
+			sessionMap[r.TestTime] = append(sessionMap[r.TestTime], r)
+		}
+
+		// Convert to sorted list
+		type TestSession struct {
+			TestTime     time.Time
+			Aggregated   *storage.NodeTestResult
+			PerHostname  []storage.NodeTestResult
+			HasMultiple  bool
+		}
+
+		var sessions []TestSession
+		for testTime, results := range sessionMap {
+			session := TestSession{TestTime: testTime}
+
+			// Separate aggregated from per-hostname
+			for _, r := range results {
+				if r.IsAggregated {
+					session.Aggregated = &r
+				} else {
+					session.PerHostname = append(session.PerHostname, r)
+				}
+			}
+
+			// Sort per-hostname by index
+			sort.Slice(session.PerHostname, func(i, j int) bool {
+				return session.PerHostname[i].HostnameIndex < session.PerHostname[j].HostnameIndex
+			})
+
+			session.HasMultiple = len(session.PerHostname) > 1
+			sessions = append(sessions, session)
+		}
+
+		// Sort sessions by time (newest first)
+		sort.Slice(sessions, func(i, j int) bool {
+			return sessions[i].TestTime.After(sessions[j].TestTime)
+		})
+
+		// Convert to interface for template
+		for _, s := range sessions {
+			groupedHistory = append(groupedHistory, s)
+		}
+	} else {
+		// Legacy format - just use history as-is
+		for _, r := range history {
+			groupedHistory = append(groupedHistory, r)
+		}
+	}
+
 	// Get statistics
 	stats, err := s.storage.GetNodeReachabilityStats(zone, net, node, days)
 	if err != nil {
@@ -1261,18 +1370,20 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	data := map[string]interface{}{
-		"Title":       "Node Reachability History",
-		"Version":     version.GetVersionInfo(),
-		"ActivePage":  "reachability",
-		"Zone":        zone,
-		"Net":         net,
-		"Node":        node,
-		"Address":     fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"Days":        days,
-		"History":     history,
-		"Stats":       stats,
-		"NodeInfo":    nodeInfo,
-		"HasResults":  len(history) > 0,
+		"Title":              "Node Reachability History",
+		"Version":            version.GetVersionInfo(),
+		"ActivePage":         "reachability",
+		"Zone":               zone,
+		"Net":                net,
+		"Node":               node,
+		"Address":            fmt.Sprintf("%d:%d/%d", zone, net, node),
+		"Days":               days,
+		"History":            history,
+		"GroupedHistory":     groupedHistory,
+		"Stats":              stats,
+		"NodeInfo":           nodeInfo,
+		"HasResults":         len(history) > 0,
+		"HasPerHostnameData": hasPerHostnameData,
 	}
 
 	if err := s.templates["reachability"].Execute(w, data); err != nil {

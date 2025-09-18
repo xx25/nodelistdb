@@ -277,25 +277,13 @@ func (s *ClickHouseStorage) Close() error {
 
 // GetNodesWithInternet retrieves nodes from ClickHouse nodes table
 func (s *ClickHouseStorage) GetNodesWithInternet(ctx context.Context, limit int) ([]*models.Node, error) {
+	// This query extracts ALL addresses from ALL protocols (supporting arrays)
 	query := `
 		SELECT
 			zone, net, node, system_name, sysop_name, location,
-			if(JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address') != '',
-				JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address'),
-				if(JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address') != '',
-					JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address'),
-					if(JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address') != '',
-						JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address'),
-						if(JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address') != '',
-							JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address'),
-							if(JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address') != '',
-								JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address'),
-								JSONExtractString(toString(internet_config), 'defaults', 'INA')
-							)
-						)
-					)
-				)
-			) as internet_hostnames,
+			-- Extract all hostnames from all protocols as a comma-separated string
+			-- This will be parsed later to handle multiple addresses per protocol
+			'' as internet_hostnames,  -- Will be populated from config_json
 			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
 			has_inet,
 			toString(internet_config) as config_json
@@ -325,22 +313,7 @@ func (s *ClickHouseStorage) GetNodesByZone(ctx context.Context, zone int) ([]*mo
 	query := `
 		SELECT
 			zone, net, node, system_name, sysop_name, location,
-			if(JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address') != '',
-				JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address'),
-				if(JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address') != '',
-					JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address'),
-					if(JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address') != '',
-						JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address'),
-						if(JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address') != '',
-							JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address'),
-							if(JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address') != '',
-								JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address'),
-								JSONExtractString(toString(internet_config), 'defaults', 'INA')
-							)
-						)
-					)
-				)
-			) as internet_hostnames,
+			'' as internet_hostnames,  -- Will be populated from config_json
 			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
 			has_inet,
 			toString(internet_config) as config_json
@@ -366,22 +339,7 @@ func (s *ClickHouseStorage) GetNodesByProtocol(ctx context.Context, protocol str
 	query := `
 		SELECT
 			zone, net, node, system_name, sysop_name, location,
-			if(JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address') != '',
-				JSONExtractString(toString(internet_config), 'protocols', 'IBN', 'address'),
-				if(JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address') != '',
-					JSONExtractString(toString(internet_config), 'protocols', 'IFC', 'address'),
-					if(JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address') != '',
-						JSONExtractString(toString(internet_config), 'protocols', 'ITN', 'address'),
-						if(JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address') != '',
-							JSONExtractString(toString(internet_config), 'protocols', 'IVM', 'address'),
-							if(JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address') != '',
-								JSONExtractString(toString(internet_config), 'protocols', 'IFT', 'address'),
-								JSONExtractString(toString(internet_config), 'defaults', 'INA')
-							)
-						)
-					)
-				)
-			) as internet_hostnames,
+			'' as internet_hostnames,  -- Will be populated from config_json
 			arrayStringConcat(JSONExtractKeys(toString(internet_config), 'protocols'), ',') as internet_protocols,
 			has_inet,
 			toString(internet_config) as config_json
@@ -482,10 +440,25 @@ func (s *ClickHouseStorage) StoreTestResult(ctx context.Context, result *models.
 func (s *ClickHouseStorage) StoreTestResults(ctx context.Context, results []*models.TestResult) error {
 	// Add all to batch
 	s.resultsBatch = append(s.resultsBatch, results...)
-	
+
 	// Always flush to ensure data is persisted
 	// This is called after each batch from the daemon, so we want to persist immediately
 	return s.flushBatch(ctx)
+}
+
+// StoreBatchTestResults stores multiple test results as a batch (for per-hostname testing)
+func (s *ClickHouseStorage) StoreBatchTestResults(ctx context.Context, results []*models.TestResult) error {
+	// For batch inserts, ensure legacy compatibility
+	for _, result := range results {
+		if result.HostnameIndex == 0 && !result.IsAggregated && result.TestedHostname == "" {
+			// Mark as legacy if not explicitly set
+			result.HostnameIndex = -1
+			result.IsAggregated = true
+		}
+	}
+
+	// Use existing batch storage mechanism
+	return s.StoreTestResults(ctx, results)
 }
 
 // flushBatch flushes the current batch to ClickHouse
@@ -513,7 +486,8 @@ func (s *ClickHouseStorage) flushBatch(ctx context.Context) error {
 		ifcico_ipv4_tested, ifcico_ipv4_success, ifcico_ipv4_response_ms, ifcico_ipv4_address, ifcico_ipv4_error,
 		ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_response_ms, ifcico_ipv6_address, ifcico_ipv6_error,
 		telnet_ipv4_tested, telnet_ipv4_success, telnet_ipv4_response_ms, telnet_ipv4_address, telnet_ipv4_error,
-		telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_response_ms, telnet_ipv6_address, telnet_ipv6_error
+		telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_response_ms, telnet_ipv6_address, telnet_ipv6_error,
+		tested_hostname, hostname_index, is_aggregated, total_hostnames, hostnames_tested, hostnames_operational
 	)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
@@ -806,25 +780,27 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 	// fmt.Printf("DEBUG GetNodeTestHistory: Querying history for %d:%d/%d (limit=%d)\n", zone, net, node, limit)
 	
 	query := `
-		SELECT 
+		SELECT
 			test_time, test_date,
 			zone, net, node, address,
 			hostname, resolved_ipv4, resolved_ipv6, dns_error,
-			country, country_code, city, region, 
+			country, country_code, city, region,
 			latitude, longitude, isp, org, asn,
 			binkp_tested, binkp_success, binkp_response_ms,
-			binkp_system_name, binkp_sysop, binkp_location, 
+			binkp_system_name, binkp_sysop, binkp_location,
 			binkp_version, binkp_addresses, binkp_capabilities, binkp_error,
 			ifcico_tested, ifcico_success, ifcico_response_ms,
-			ifcico_mailer_info, ifcico_system_name, ifcico_addresses, 
+			ifcico_mailer_info, ifcico_system_name, ifcico_addresses,
 			ifcico_response_type, ifcico_error,
 			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-			is_operational, has_connectivity_issues, address_validated
+			is_operational, has_connectivity_issues, address_validated,
+			tested_hostname, hostname_index, is_aggregated,
+			total_hostnames, hostnames_tested, hostnames_operational
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
-		ORDER BY test_time DESC`
+		ORDER BY test_time DESC, hostname_index`
 	
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
@@ -854,7 +830,7 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 		var binkpAddresses, binkpCapabilities []string
 		var ifcicoMailerInfo, ifcicoSystemName, ifcicoResponseType string
 		var ifcicoAddresses []string
-		
+
 		err := rows.Scan(
 			&r.TestTime, &testDate,
 			&zone, &net, &node, &r.Address,
@@ -871,6 +847,8 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 			&ftpTested, &ftpSuccess, &ftpResponseMs, &ftpError,
 			&vmodemTested, &vmodemSuccess, &vmodemResponseMs, &vmodemError,
 			&r.IsOperational, &r.HasConnectivityIssues, &r.AddressValidated,
+			&r.TestedHostname, &r.HostnameIndex, &r.IsAggregated,
+			&r.TotalHostnames, &r.HostnamesTested, &r.HostnamesOperational,
 		)
 		if err != nil {
 			// Log error but continue
@@ -1034,36 +1012,66 @@ func (s *ClickHouseStorage) scanNodesNative(rows driver.Rows) ([]*models.Node, e
 			node.InternetProtocols = []string{}
 		}
 		
-		// Parse internet_config JSON to extract custom ports
+		// Parse internet_config JSON to extract ALL addresses and custom ports
 		node.ProtocolPorts = make(map[string]int)
+		node.InternetHostnames = []string{} // Initialize hostnames array
+
 		if configJSON != "" && configJSON != "{}" {
 			var config map[string]interface{}
 			if err := json.Unmarshal([]byte(configJSON), &config); err == nil {
-				// Extract protocol ports from the JSON structure
+				// Store full config for later use
+				node.InternetConfig = config
+
+				// Extract all addresses from all protocols (now supports arrays)
 				if protocols, ok := config["protocols"].(map[string]interface{}); ok {
 					for proto, protoData := range protocols {
-						if protoMap, ok := protoData.(map[string]interface{}); ok {
-							// Check for port field
-							if portStr, ok := protoMap["port"].(string); ok {
-								if port, err := strconv.Atoi(portStr); err == nil {
-									node.ProtocolPorts[proto] = port
-								}
-							} else if portFloat, ok := protoMap["port"].(float64); ok {
-								// Sometimes port comes as a number
-								node.ProtocolPorts[proto] = int(portFloat)
-							}
+						// Handle both old format (single object) and new format (array of objects)
+						switch v := protoData.(type) {
+						case []interface{}:
+							// New format: array of protocol details
+							for _, item := range v {
+								if protoMap, ok := item.(map[string]interface{}); ok {
+									// Extract address
+									if addr, ok := protoMap["address"].(string); ok && addr != "" {
+										node.InternetHostnames = append(node.InternetHostnames, addr)
+									}
 
-							// Special handling for IVM protocol with embedded port in address
-							if proto == "IVM" {
-								if addr, ok := protoMap["address"].(string); ok && strings.Contains(addr, ":") {
-									parts := strings.SplitN(addr, ":", 2)
-									if len(parts) == 2 {
-										if port, err := strconv.Atoi(parts[1]); err == nil {
-											node.ProtocolPorts[proto] = port
+									// Extract port (store first non-default port found)
+									if _, exists := node.ProtocolPorts[proto]; !exists {
+										if portFloat, ok := protoMap["port"].(float64); ok {
+											node.ProtocolPorts[proto] = int(portFloat)
 										}
 									}
 								}
 							}
+						case map[string]interface{}:
+							// Old format: single protocol detail object
+							// Extract address
+							if addr, ok := v["address"].(string); ok && addr != "" {
+								node.InternetHostnames = append(node.InternetHostnames, addr)
+							}
+
+							// Extract port
+							if portFloat, ok := v["port"].(float64); ok {
+								node.ProtocolPorts[proto] = int(portFloat)
+							}
+						}
+					}
+				}
+
+				// Also check defaults for INA address
+				if defaults, ok := config["defaults"].(map[string]interface{}); ok {
+					if ina, ok := defaults["INA"].(string); ok && ina != "" {
+						// Add INA if not already in hostnames
+						found := false
+						for _, h := range node.InternetHostnames {
+							if h == ina {
+								found = true
+								break
+							}
+						}
+						if !found {
+							node.InternetHostnames = append(node.InternetHostnames, ina)
 						}
 					}
 				}
@@ -1309,6 +1317,12 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		telnetIPv6Error = r.TelnetResult.IPv6Error
 	}
 
+	// Handle legacy compatibility: set defaults if hostname_index not set
+	testedHostname := r.TestedHostname
+	if testedHostname == "" {
+		testedHostname = r.Hostname
+	}
+
 	return []interface{}{
 		// First 52 fields (original)
 		r.TestTime, r.TestDate, r.Zone, r.Net, r.Node, r.Address,
@@ -1330,5 +1344,8 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		ifcicoIPv6Tested, ifcicoIPv6Success, ifcicoIPv6ResponseMs, ifcicoIPv6Address, ifcicoIPv6Error,
 		telnetIPv4Tested, telnetIPv4Success, telnetIPv4ResponseMs, telnetIPv4Address, telnetIPv4Error,
 		telnetIPv6Tested, telnetIPv6Success, telnetIPv6ResponseMs, telnetIPv6Address, telnetIPv6Error,
+		// New per-hostname testing fields (83-88)
+		testedHostname, r.HostnameIndex, r.IsAggregated,
+		r.TotalHostnames, r.HostnamesTested, r.HostnamesOperational,
 	}
 }

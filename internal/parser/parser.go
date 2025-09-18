@@ -567,9 +567,9 @@ func (p *Parser) parseProtocolValue(value string) (address string, port int) {
 
 	// Check for standard address:port format
 	if lastColon := strings.LastIndex(value, ":"); lastColon > 0 {
-		// Make sure it's not part of IPv6 without brackets
-		if strings.Count(value[:lastColon], ":") == 1 {
-			// Standard host:port
+		// Make sure it's not part of IPv6 without brackets (IPv6 has multiple colons)
+		if strings.Count(value[:lastColon], ":") <= 1 {
+			// Standard host:port or IPv4:port
 			possiblePort := value[lastColon+1:]
 			if p, err := strconv.Atoi(possiblePort); err == nil && p > 0 && p < 65536 {
 				return value[:lastColon], p
@@ -582,9 +582,9 @@ func (p *Parser) parseProtocolValue(value string) (address string, port int) {
 }
 
 // buildInternetConfig builds the JSON configuration from parsed flag data
-func (p *Parser) buildInternetConfig(protocols map[string]database.InternetProtocolDetail,
+func (p *Parser) buildInternetConfig(protocols map[string][]database.InternetProtocolDetail,
 	defaults map[string]string,
-	emailProtocols map[string]database.EmailProtocolDetail,
+	emailProtocols map[string][]database.EmailProtocolDetail,
 	infoFlags []string) []byte {
 
 	// Build JSON config if we have any internet-related data
@@ -611,9 +611,9 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 	flags := make([]string, 0, 10)
 
 	// Create new maps for each node to avoid cross-contamination
-	protocols := make(map[string]database.InternetProtocolDetail, 10)
+	protocols := make(map[string][]database.InternetProtocolDetail, 10)
 	defaults := make(map[string]string, 5)
-	emailProtocols := make(map[string]database.EmailProtocolDetail, 3)
+	emailProtocols := make(map[string][]database.EmailProtocolDetail, 3)
 	infoFlags := make([]string, 0, 3) // Pre-allocate with typical capacity
 
 	// Default ports for protocols
@@ -657,7 +657,11 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 					}
 				}
 				if detail.Address != "" || detail.Port > 0 {
-					protocols[flagName] = detail
+					// Append to array instead of replacing
+					if protocols[flagName] == nil {
+						protocols[flagName] = []database.InternetProtocolDetail{}
+					}
+					protocols[flagName] = append(protocols[flagName], detail)
 				}
 
 			// Default internet address
@@ -677,7 +681,11 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 				if flagValue != "" {
 					emailDetail.Email = flagValue
 				}
-				emailProtocols[flagName] = emailDetail
+				// Append to array instead of replacing
+				if emailProtocols[flagName] == nil {
+					emailProtocols[flagName] = []database.EmailProtocolDetail{}
+				}
+				emailProtocols[flagName] = append(emailProtocols[flagName], emailDetail)
 
 			// General IP flag
 			case "IP":
@@ -691,7 +699,11 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 						detail.Port = port
 					}
 					if detail.Address != "" || detail.Port > 0 {
-						protocols[flagName] = detail
+						// Append to array instead of replacing
+						if protocols[flagName] == nil {
+							protocols[flagName] = []database.InternetProtocolDetail{}
+						}
+						protocols[flagName] = append(protocols[flagName], detail)
 					}
 				}
 
@@ -709,15 +721,21 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 			// Connection protocol flags without values
 			case "IBN", "IFC", "ITN", "IVM", "IFT", "INA", "IP":
 				// Add to protocols map with default port if applicable
+				detail := database.InternetProtocolDetail{}
 				if defaultPort, ok := defaultPorts[part]; ok {
-					protocols[part] = database.InternetProtocolDetail{Port: defaultPort}
-				} else {
-					protocols[part] = database.InternetProtocolDetail{}
+					detail.Port = defaultPort
 				}
+				if protocols[part] == nil {
+					protocols[part] = []database.InternetProtocolDetail{}
+				}
+				protocols[part] = append(protocols[part], detail)
 
 			// Email protocol flags without values
 			case "IMI", "ITX", "ISE", "IUC", "EMA", "EVY":
-				emailProtocols[part] = database.EmailProtocolDetail{}
+				if emailProtocols[part] == nil {
+					emailProtocols[part] = []database.EmailProtocolDetail{}
+				}
+				emailProtocols[part] = append(emailProtocols[part], database.EmailProtocolDetail{})
 
 			// Information flags
 			case "INO4", "INO6", "ICM":
@@ -725,14 +743,16 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 
 			// Alternative protocol names
 			case "BND": // Alternative name for IBN
-				if _, exists := protocols["IBN"]; !exists {
-					protocols["IBN"] = database.InternetProtocolDetail{Port: 24554}
+				if protocols["IBN"] == nil {
+					protocols["IBN"] = []database.InternetProtocolDetail{}
 				}
+				protocols["IBN"] = append(protocols["IBN"], database.InternetProtocolDetail{Port: 24554})
 
 			case "TEL": // Alternative name for ITN
-				if _, exists := protocols["ITN"]; !exists {
-					protocols["ITN"] = database.InternetProtocolDetail{Port: 23}
+				if protocols["ITN"] == nil {
+					protocols["ITN"] = []database.InternetProtocolDetail{}
 				}
+				protocols["ITN"] = append(protocols["ITN"], database.InternetProtocolDetail{Port: 23})
 
 			default:
 				// Regular flag

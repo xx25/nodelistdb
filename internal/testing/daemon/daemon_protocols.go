@@ -13,13 +13,12 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 	if d.binkpTester == nil {
 		return
 	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
+
+	if len(node.InternetHostnames) == 0 {
 		return
 	}
-	
-	// Use custom port if specified, otherwise use default from config
+
+	// Get port for IBN protocol from node configuration
 	port := node.GetProtocolPort("IBN")
 	if port == 0 {
 		port = d.config.Protocols.BinkP.Port
@@ -123,13 +122,12 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 	if d.ifcicoTester == nil {
 		return
 	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
+
+	if len(node.InternetHostnames) == 0 {
 		return
 	}
-	
-	// Use custom port if specified, otherwise use default from config
+
+	// Get port for IFC protocol from node configuration
 	port := node.GetProtocolPort("IFC")
 	if port == 0 {
 		port = d.config.Protocols.Ifcico.Port
@@ -229,12 +227,11 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 	if d.telnetTester == nil {
 		return
 	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
+
+	if len(node.InternetHostnames) == 0 {
 		return
 	}
-	
+
 	// Use custom port if specified, otherwise use default from config
 	port := node.GetProtocolPort("ITN")
 	if port == 0 {
@@ -303,9 +300,8 @@ func (d *Daemon) testFTP(ctx context.Context, node *models.Node, result *models.
 	if d.ftpTester == nil {
 		return
 	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
+
+	if len(node.InternetHostnames) == 0 {
 		return
 	}
 	
@@ -337,9 +333,8 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 	if d.vmodemTester == nil {
 		return
 	}
-	
-	hostname := node.GetPrimaryHostname()
-	if hostname == "" {
+
+	if len(node.InternetHostnames) == 0 {
 		return
 	}
 	

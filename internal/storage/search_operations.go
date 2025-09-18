@@ -241,13 +241,20 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 
 	if prevIsEmpty && !currIsEmpty {
 		// New config added (was empty or nil before)
-		for proto, detail := range currConfig.Protocols {
-			if detail.Address != "" && detail.Port > 0 {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s:%d", detail.Address, detail.Port)
-			} else if detail.Address != "" {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", detail.Address)
-			} else if detail.Port > 0 {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added port %d", detail.Port)
+		for proto, details := range currConfig.Protocols {
+			// Handle array of protocol details
+			var addresses []string
+			for _, detail := range details {
+				if detail.Address != "" && detail.Port > 0 {
+					addresses = append(addresses, fmt.Sprintf("%s:%d", detail.Address, detail.Port))
+				} else if detail.Address != "" {
+					addresses = append(addresses, detail.Address)
+				} else if detail.Port > 0 {
+					addresses = append(addresses, fmt.Sprintf("port %d", detail.Port))
+				}
+			}
+			if len(addresses) > 0 {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", strings.Join(addresses, ", "))
 			} else {
 				changes[fmt.Sprintf("inet_%s", proto)] = "Added"
 			}
@@ -255,9 +262,16 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 		for key, val := range currConfig.Defaults {
 			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", val)
 		}
-		for key, detail := range currConfig.EmailProtocols {
-			if detail.Email != "" {
-				changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", detail.Email)
+		for key, details := range currConfig.EmailProtocols {
+			// Handle array of email protocol details
+			var emails []string
+			for _, detail := range details {
+				if detail.Email != "" {
+					emails = append(emails, detail.Email)
+				}
+			}
+			if len(emails) > 0 {
+				changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", strings.Join(emails, ", "))
 			} else {
 				changes[fmt.Sprintf("inet_%s", key)] = "Added"
 			}
@@ -267,13 +281,20 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 
 	if !prevIsEmpty && currIsEmpty {
 		// Config removed (became empty or nil)
-		for proto, detail := range prevConfig.Protocols {
-			if detail.Address != "" && detail.Port > 0 {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s:%d", detail.Address, detail.Port)
-			} else if detail.Address != "" {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", detail.Address)
-			} else if detail.Port > 0 {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed port %d", detail.Port)
+		for proto, details := range prevConfig.Protocols {
+			// Handle array of protocol details
+			var addresses []string
+			for _, detail := range details {
+				if detail.Address != "" && detail.Port > 0 {
+					addresses = append(addresses, fmt.Sprintf("%s:%d", detail.Address, detail.Port))
+				} else if detail.Address != "" {
+					addresses = append(addresses, detail.Address)
+				} else if detail.Port > 0 {
+					addresses = append(addresses, fmt.Sprintf("port %d", detail.Port))
+				}
+			}
+			if len(addresses) > 0 {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", strings.Join(addresses, ", "))
 			} else {
 				changes[fmt.Sprintf("inet_%s", proto)] = "Removed"
 			}
@@ -281,9 +302,16 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 		for key, val := range prevConfig.Defaults {
 			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", val)
 		}
-		for key, detail := range prevConfig.EmailProtocols {
-			if detail.Email != "" {
-				changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", detail.Email)
+		for key, details := range prevConfig.EmailProtocols {
+			// Handle array of email protocol details
+			var emails []string
+			for _, detail := range details {
+				if detail.Email != "" {
+					emails = append(emails, detail.Email)
+				}
+			}
+			if len(emails) > 0 {
+				changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", strings.Join(emails, ", "))
 			} else {
 				changes[fmt.Sprintf("inet_%s", key)] = "Removed"
 			}
@@ -296,36 +324,30 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 		return changes
 	}
 
-	// Compare protocols
-	for proto, currDetail := range currConfig.Protocols {
-		prevDetail, existed := prevConfig.Protocols[proto]
+	// Compare protocols (now arrays)
+	for proto, currDetails := range currConfig.Protocols {
+		prevDetails, existed := prevConfig.Protocols[proto]
 		if !existed {
-			if currDetail.Address != "" && currDetail.Port > 0 {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s:%d", currDetail.Address, currDetail.Port)
-			} else if currDetail.Address != "" {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", currDetail.Address)
-			} else if currDetail.Port > 0 {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added port %d", currDetail.Port)
+			formatted := formatProtocolDetails(currDetails)
+			if formatted != "" {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", formatted)
 			} else {
 				changes[fmt.Sprintf("inet_%s", proto)] = "Added"
 			}
-		} else if prevDetail.Address != currDetail.Address || prevDetail.Port != currDetail.Port {
+		} else if !compareProtocolArrays(prevDetails, currDetails) {
 			// Format old and new values
-			oldStr := formatProtocolDetail(prevDetail)
-			newStr := formatProtocolDetail(currDetail)
+			oldStr := formatProtocolDetails(prevDetails)
+			newStr := formatProtocolDetails(currDetails)
 			changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("%s → %s", oldStr, newStr)
 		}
 	}
 
 	// Check for removed protocols
-	for proto, prevDetail := range prevConfig.Protocols {
+	for proto, prevDetails := range prevConfig.Protocols {
 		if _, exists := currConfig.Protocols[proto]; !exists {
-			if prevDetail.Address != "" && prevDetail.Port > 0 {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s:%d", prevDetail.Address, prevDetail.Port)
-			} else if prevDetail.Address != "" {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", prevDetail.Address)
-			} else if prevDetail.Port > 0 {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed port %d", prevDetail.Port)
+			formatted := formatProtocolDetails(prevDetails)
+			if formatted != "" {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", formatted)
 			} else {
 				changes[fmt.Sprintf("inet_%s", proto)] = "Removed"
 			}
@@ -349,27 +371,31 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 		}
 	}
 
-	// Compare email protocols
-	for proto, currDetail := range currConfig.EmailProtocols {
-		prevDetail, existed := prevConfig.EmailProtocols[proto]
+	// Compare email protocols (now arrays)
+	for proto, currDetails := range currConfig.EmailProtocols {
+		prevDetails, existed := prevConfig.EmailProtocols[proto]
 		if !existed {
-			if currDetail.Email != "" {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", currDetail.Email)
+			formatted := formatEmailProtocolDetails(currDetails)
+			if formatted != "" {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Added %s", formatted)
 			} else {
 				changes[fmt.Sprintf("inet_%s", proto)] = "Added (uses default email)"
 			}
-		} else if prevDetail.Email != currDetail.Email {
-			if currDetail.Email != "" {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("%s → %s", prevDetail.Email, currDetail.Email)
+		} else if !compareEmailArrays(prevDetails, currDetails) {
+			oldStr := formatEmailProtocolDetails(prevDetails)
+			newStr := formatEmailProtocolDetails(currDetails)
+			if newStr != "" {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("%s → %s", oldStr, newStr)
 			}
 		}
 	}
 
 	// Check for removed email protocols
-	for proto, prevDetail := range prevConfig.EmailProtocols {
+	for proto, prevDetails := range prevConfig.EmailProtocols {
 		if _, exists := currConfig.EmailProtocols[proto]; !exists {
-			if prevDetail.Email != "" {
-				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", prevDetail.Email)
+			formatted := formatEmailProtocolDetails(prevDetails)
+			if formatted != "" {
+				changes[fmt.Sprintf("inet_%s", proto)] = fmt.Sprintf("Removed %s", formatted)
 			} else {
 				changes[fmt.Sprintf("inet_%s", proto)] = "Removed"
 			}
@@ -422,51 +448,67 @@ func (so *SearchOperations) parseInternetConfig(data json.RawMessage) (*database
 
 	// Convert to the proper InternetConfiguration structure
 	config := &database.InternetConfiguration{
-		Protocols:      make(map[string]database.InternetProtocolDetail),
+		Protocols:      make(map[string][]database.InternetProtocolDetail),
 		Defaults:       rawConfig.Defaults,
-		EmailProtocols: make(map[string]database.EmailProtocolDetail),
+		EmailProtocols: make(map[string][]database.EmailProtocolDetail),
 		InfoFlags:      rawConfig.InfoFlags,
 	}
 
-	// Parse protocols with flexible port handling
+	// Parse protocols with flexible port handling (now supports arrays)
 	for proto, rawDetail := range rawConfig.Protocols {
-		var flexDetail struct {
-			Address interface{} `json:"address,omitempty"`
-			Port    interface{} `json:"port,omitempty"`
-		}
-		if err := json.Unmarshal(rawDetail, &flexDetail); err != nil {
-			continue
-		}
-
-		detail := database.InternetProtocolDetail{}
-		
-		// Handle address
-		switch v := flexDetail.Address.(type) {
-		case string:
-			detail.Address = v
-		}
-		
-		// Handle port (can be string or number)
-		switch v := flexDetail.Port.(type) {
-		case float64:
-			detail.Port = int(v)
-		case string:
-			// Try to parse string as int
-			if portNum, err := strconv.Atoi(v); err == nil {
-				detail.Port = portNum
+		// Try to parse as array first
+		var detailsArray []database.InternetProtocolDetail
+		if err := json.Unmarshal(rawDetail, &detailsArray); err == nil {
+			config.Protocols[proto] = detailsArray
+		} else {
+			// Try parsing as single object (backward compatibility)
+			var flexDetail struct {
+				Address interface{} `json:"address,omitempty"`
+				Port    interface{} `json:"port,omitempty"`
 			}
+			if err := json.Unmarshal(rawDetail, &flexDetail); err != nil {
+				continue
+			}
+
+			detail := database.InternetProtocolDetail{}
+
+			// Handle address
+			switch v := flexDetail.Address.(type) {
+			case string:
+				detail.Address = v
+			}
+
+			// Handle port (can be string or number)
+			switch v := flexDetail.Port.(type) {
+			case float64:
+				detail.Port = int(v)
+			case string:
+				// Try to parse string as int
+				if portNum, err := strconv.Atoi(v); err == nil {
+					detail.Port = portNum
+				}
+			}
+
+			// Store as single-element array for consistency
+			config.Protocols[proto] = []database.InternetProtocolDetail{detail}
 		}
-		
-		config.Protocols[proto] = detail
 	}
 
-	// Parse email protocols
+	// Parse email protocols (now supports arrays)
 	for proto, rawDetail := range rawConfig.EmailProtocols {
-		var detail database.EmailProtocolDetail
-		if err := json.Unmarshal(rawDetail, &detail); err != nil {
-			continue
+		// Try to parse as array first
+		var detailsArray []database.EmailProtocolDetail
+		if err := json.Unmarshal(rawDetail, &detailsArray); err == nil {
+			config.EmailProtocols[proto] = detailsArray
+		} else {
+			// Try parsing as single object (backward compatibility)
+			var detail database.EmailProtocolDetail
+			if err := json.Unmarshal(rawDetail, &detail); err != nil {
+				continue
+			}
+			// Store as single-element array for consistency
+			config.EmailProtocols[proto] = []database.EmailProtocolDetail{detail}
 		}
-		config.EmailProtocols[proto] = detail
 	}
 
 	return config, nil

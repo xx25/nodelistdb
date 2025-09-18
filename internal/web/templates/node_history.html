@@ -180,12 +180,35 @@
                                     </div>
                                 </div>
                                 {{end}}
-                                <!-- Internet protocols are now in InternetConfig JSON field - template helpers needed to extract -->
-                                <!-- TODO: Add template helper to extract protocols from InternetConfig JSON -->
-                                <!-- Internet hostnames and ports are now in InternetConfig JSON field - template helpers needed to extract -->
-                                <!-- TODO: Add template helpers to extract hostnames and ports from InternetConfig JSON -->
-                                <!-- Internet emails are now in InternetConfig JSON field - template helpers needed to extract -->
-                                <!-- TODO: Add template helper to extract emails from InternetConfig JSON -->
+                                {{$protocols := getInternetProtocols .NewNode.InternetConfig}}
+                                {{if $protocols}}
+                                <div class="info-item" style="grid-column: span 2;">
+                                    <strong>Internet Protocols</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{$internetConfig := .NewNode.InternetConfig}}
+                                        {{range $protocol := $protocols}}
+                                            {{$addresses := getProtocolAddresses $internetConfig $protocol}}
+                                            <div style="margin-bottom: 0.5rem;">
+                                                <span class="badge badge-info">{{$protocol}}</span>
+                                                {{range $addresses}}
+                                                    <span style="margin-left: 0.5rem; font-family: monospace;">{{.}}</span>
+                                                {{end}}
+                                            </div>
+                                        {{end}}
+                                    </div>
+                                </div>
+                                {{end}}
+                                {{$emails := getEmails .NewNode.InternetConfig}}
+                                {{if $emails}}
+                                <div class="info-item" style="grid-column: span 2;">
+                                    <strong>Email Addresses</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{range $emails}}
+                                            <span style="margin-right: 0.5rem;">{{.}}</span>
+                                        {{end}}
+                                    </div>
+                                </div>
+                                {{end}}
                             </div>
                             {{end}}
                         {{else if eq .ChangeType "removed"}}

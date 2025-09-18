@@ -425,3 +425,18 @@ func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bo
 func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
 	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes)
 }
+
+// GetBinkPSoftwareDistribution returns BinkP software distribution statistics
+func (s *Storage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+	return s.testOperations.GetBinkPSoftwareDistribution(days)
+}
+
+// GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics
+func (s *Storage) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+	return s.testOperations.GetIFCICOSoftwareDistribution(days)
+}
+
+// GetBinkdDetailedStats returns detailed binkd statistics
+func (s *Storage) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
+	return s.testOperations.GetBinkdDetailedStats(days)
+}

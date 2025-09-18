@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
@@ -250,6 +251,7 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 	var binkpAddresses, binkpCapabilities interface{}
 	var ifcicoAddresses interface{}
 
+	// First try to scan with new fields (per-hostname testing)
 	err := scanner.Scan(
 		&result.TestTime,
 		&result.Zone,
@@ -302,9 +304,27 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 		&result.IsOperational,
 		&result.HasConnectivityIssues,
 		&result.AddressValidated,
+		&result.TestedHostname,
+		&result.HostnameIndex,
+		&result.IsAggregated,
+		&result.TotalHostnames,
+		&result.HostnamesTested,
+		&result.HostnamesOperational,
 	)
+
 	if err != nil {
-		return fmt.Errorf("failed to scan test result: %w", err)
+		log.Printf("[ERROR] ParseTestResultRow: Scan failed with error: %v", err)
+		// If scanning with new fields failed, mark as legacy data
+		result.HostnameIndex = -1
+		result.IsAggregated = true
+		result.TotalHostnames = 1
+		result.HostnamesTested = 1
+		result.HostnamesOperational = 0
+		if result.IsOperational {
+			result.HostnamesOperational = 1
+		}
+		result.TestedHostname = result.Hostname
+	} else {
 	}
 
 	// Parse arrays (compatible with both DuckDB and ClickHouse)

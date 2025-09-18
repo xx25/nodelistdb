@@ -29,6 +29,38 @@ type SysopInfo struct {
 	Zones       []int     `json:"zones"`
 }
 
+// SoftwareDistribution represents software distribution statistics
+type SoftwareDistribution struct {
+	Protocol         string                  `json:"protocol"`
+	TotalNodes       int                     `json:"total_nodes"`
+	SoftwareTypes    []SoftwareTypeStats     `json:"software_types"`
+	VersionBreakdown []SoftwareVersionStats  `json:"version_breakdown"`
+	OSDistribution   []OSStats               `json:"os_distribution"`
+	LastUpdated      time.Time              `json:"last_updated"`
+}
+
+// SoftwareTypeStats represents statistics for a software type
+type SoftwareTypeStats struct {
+	Software   string  `json:"software"`
+	Count      int     `json:"count"`
+	Percentage float64 `json:"percentage"`
+}
+
+// SoftwareVersionStats represents statistics for a software version
+type SoftwareVersionStats struct {
+	Software   string  `json:"software"`
+	Version    string  `json:"version"`
+	Count      int     `json:"count"`
+	Percentage float64 `json:"percentage"`
+}
+
+// OSStats represents operating system statistics
+type OSStats struct {
+	OS         string  `json:"os"`
+	Count      int     `json:"count"`
+	Percentage float64 `json:"percentage"`
+}
+
 
 // BatchInsertConfig holds configuration for batch insert operations
 type BatchInsertConfig struct {
@@ -80,6 +112,11 @@ type Operations interface {
 	GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+
+	// Software analytics operations (ClickHouse only)
+	GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error)
+	GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error)
+	GetBinkdDetailedStats(days int) (*SoftwareDistribution, error)
 
 	// Utility operations
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)

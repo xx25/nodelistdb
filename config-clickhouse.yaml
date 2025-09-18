@@ -42,7 +42,7 @@ database:
   
   # ClickHouse Configuration
   clickhouse:
-    host: localhost
+    host: 10.121.17.211
     port: 9000
     database: nodelistdb
     username: default

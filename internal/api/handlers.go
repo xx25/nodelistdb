@@ -759,6 +759,12 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/download/database", s.DownloadDatabaseHandler)
 	mux.HandleFunc("/api/nodelist/latest", s.LatestNodelistAPIHandler)
 
+	// Software analytics routes
+	mux.HandleFunc("/api/software/binkp", s.GetBinkPSoftwareStats)
+	mux.HandleFunc("/api/software/ifcico", s.GetIFCICOSoftwareStats)
+	mux.HandleFunc("/api/software/binkd", s.GetBinkdDetailedStats)
+	mux.HandleFunc("/api/software/trends", s.GetSoftwareTrends)
+
 	// OpenAPI documentation routes
 	mux.HandleFunc("/api/openapi.yaml", s.OpenAPISpecHandler)
 	mux.HandleFunc("/api/docs", s.SwaggerUIHandler)

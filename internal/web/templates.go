@@ -15,7 +15,7 @@ import (
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
-	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "ipv6_analytics", "binkp_analytics", "ifcico_analytics", "telnet_analytics", "vmodem_analytics", "ftp_analytics"}
+	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "ipv6_analytics", "binkp_analytics", "ifcico_analytics", "telnet_analytics", "vmodem_analytics", "ftp_analytics", "binkp_software", "ifcico_software"}
 
 	// Create function map for template functions
 	funcMap := template.FuncMap{
@@ -141,15 +141,101 @@ func (s *Server) loadTemplates() {
 			if len(config) == 0 {
 				return false
 			}
-			
+
 			var internetConfig database.InternetConfiguration
 			if err := json.Unmarshal(config, &internetConfig); err != nil {
 				return false
 			}
-			
+
 			_, hasIBN := internetConfig.Protocols["IBN"]
 			_, hasBND := internetConfig.Protocols["BND"]
 			return hasIBN || hasBND
+		},
+		"getInternetProtocols": func(config json.RawMessage) []string {
+			if len(config) == 0 {
+				return nil
+			}
+
+			var internetConfig database.InternetConfiguration
+			if err := json.Unmarshal(config, &internetConfig); err != nil {
+				return nil
+			}
+
+			var protocols []string
+			for proto := range internetConfig.Protocols {
+				protocols = append(protocols, proto)
+			}
+			return protocols
+		},
+		"getInternetHostnames": func(config json.RawMessage) []string {
+			if len(config) == 0 {
+				return nil
+			}
+
+			var internetConfig database.InternetConfiguration
+			if err := json.Unmarshal(config, &internetConfig); err != nil {
+				return nil
+			}
+
+			hostnameMap := make(map[string]bool)
+			for _, details := range internetConfig.Protocols {
+				for _, detail := range details {
+					if detail.Address != "" {
+						hostnameMap[detail.Address] = true
+					}
+				}
+			}
+
+			var hostnames []string
+			for hostname := range hostnameMap {
+				hostnames = append(hostnames, hostname)
+			}
+			return hostnames
+		},
+		"getProtocolAddresses": func(config json.RawMessage, protocol string) []string {
+			if len(config) == 0 {
+				return nil
+			}
+
+			var internetConfig database.InternetConfiguration
+			if err := json.Unmarshal(config, &internetConfig); err != nil {
+				return nil
+			}
+
+			details, ok := internetConfig.Protocols[protocol]
+			if !ok {
+				return nil
+			}
+
+			var addresses []string
+			for _, detail := range details {
+				addr := detail.Address
+				if detail.Port != 0 {
+					addr = fmt.Sprintf("%s:%d", addr, detail.Port)
+				}
+				addresses = append(addresses, addr)
+			}
+			return addresses
+		},
+		"getEmails": func(config json.RawMessage) []string {
+			if len(config) == 0 {
+				return nil
+			}
+
+			var internetConfig database.InternetConfiguration
+			if err := json.Unmarshal(config, &internetConfig); err != nil {
+				return nil
+			}
+
+			var emails []string
+			for _, emailDetails := range internetConfig.EmailProtocols {
+				for _, detail := range emailDetails {
+					if detail.Email != "" {
+						emails = append(emails, detail.Email)
+					}
+				}
+			}
+			return emails
 		},
 		"add": func(a, b int) int {
 			return a + b

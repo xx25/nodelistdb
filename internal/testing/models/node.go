@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 )
 
@@ -41,6 +42,19 @@ func (n *Node) GetPrimaryHostname() string {
 	if len(n.InternetHostnames) > 0 {
 		return n.InternetHostnames[0]
 	}
+
+	// If no hostname is configured, try to use system name as fallback
+	// but only if it looks like a valid hostname (FQDN or hostname pattern)
+	if n.SystemName != "" && n.SystemName != "-Unpublished-" {
+		// Simple regex to check if system name looks like a hostname:
+		// - Contains dots (FQDN like "bbs.example.com")
+		// - Or contains only valid hostname characters
+		hostnameRegex := regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
+		if hostnameRegex.MatchString(n.SystemName) {
+			return n.SystemName
+		}
+	}
+
 	return ""
 }
 

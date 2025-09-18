@@ -15,7 +15,8 @@ type TestResult struct {
 	Address  string
 
 	// DNS Resolution
-	Hostname     string
+	Hostname     string   // Primary hostname attempted
+	TestedHostname string // Actual hostname that was tested (may be primary or backup)
 	ResolvedIPv4 []string
 	ResolvedIPv6 []string
 	DNSError     string
@@ -42,6 +43,13 @@ type TestResult struct {
 	IsOperational         bool
 	HasConnectivityIssues bool
 	AddressValidated      bool
+
+	// Per-hostname testing fields (simplified migration)
+	HostnameIndex         int32  // -1=legacy, 0=primary, 1+=backup
+	IsAggregated          bool   // false=per-hostname, true=summary
+	TotalHostnames        int32  // Total number of hostnames for this node
+	HostnamesTested       int32  // Number of hostnames actually tested
+	HostnamesOperational  int32  // Number of operational hostnames
 }
 
 // ProtocolTestResult represents test result for a specific protocol
@@ -130,6 +138,51 @@ type TestStatistics struct {
 	ErrorTypes          map[string]uint32
 }
 
+// HostnameTestResult represents test results for a specific hostname
+type HostnameTestResult struct {
+	Hostname      string
+	DNSResolved   bool
+	DNSError      string
+	IPv4Addresses []string
+	IPv6Addresses []string
+	TestTime      time.Time
+
+	// Protocol results for this specific hostname
+	BinkPResult  *ProtocolTestResult
+	IfcicoResult *ProtocolTestResult
+	TelnetResult *ProtocolTestResult
+	FTPResult    *ProtocolTestResult
+	VModemResult *ProtocolTestResult
+
+	// Summary for this hostname
+	IsOperational bool
+	ResponseMs    uint32 // Best response time from any protocol
+}
+
+// AggregatedTestResult represents test results aggregated across all hostnames
+type AggregatedTestResult struct {
+	// Node identification
+	Zone     int
+	Net      int
+	Node     int
+	Address  string
+	TestTime time.Time
+
+	// Per-hostname results
+	HostnameResults map[string]*HostnameTestResult
+
+	// Aggregate summary
+	AnyHostnameOperational bool   // At least one hostname works
+	AllHostnamesTested     bool   // All available hostnames were tested
+	PrimaryHostname        string // The primary hostname configured
+	WorkingHostnames       []string // List of operational hostnames
+	FailedHostnames        []string // List of non-operational hostnames
+
+	// Best results across all hostnames
+	BestResponseMs uint32
+	BestHostname   string // Which hostname had the best response
+}
+
 // NewTestResult creates a new test result for a node
 func NewTestResult(node *Node) *TestResult {
 	return &TestResult{
@@ -140,6 +193,12 @@ func NewTestResult(node *Node) *TestResult {
 		Node:     node.Node,
 		Address:  node.Address(),
 		Hostname: node.GetPrimaryHostname(),
+		// Initialize per-hostname fields with legacy values
+		HostnameIndex:        -1,  // Mark as legacy by default
+		IsAggregated:         true, // Legacy results are aggregated
+		TotalHostnames:       1,
+		HostnamesTested:      1,
+		HostnamesOperational: 0,
 	}
 }
 
@@ -327,4 +386,56 @@ func (pr *ProtocolTestResult) GetConnectivityType() string {
 		return "failed"
 	}
 	return "not-tested"
+}
+
+// NewAggregatedTestResult creates a new aggregated test result for a node
+func NewAggregatedTestResult(node *Node) *AggregatedTestResult {
+	return &AggregatedTestResult{
+		Zone:            node.Zone,
+		Net:             node.Net,
+		Node:            node.Node,
+		Address:         node.Address(),
+		TestTime:        time.Now(),
+		HostnameResults: make(map[string]*HostnameTestResult),
+		PrimaryHostname: node.GetPrimaryHostname(),
+	}
+}
+
+// AddHostnameResult adds test result for a specific hostname
+func (atr *AggregatedTestResult) AddHostnameResult(result *HostnameTestResult) {
+	if atr.HostnameResults == nil {
+		atr.HostnameResults = make(map[string]*HostnameTestResult)
+	}
+
+	atr.HostnameResults[result.Hostname] = result
+
+	// Update aggregate fields
+	if result.IsOperational {
+		atr.AnyHostnameOperational = true
+		atr.WorkingHostnames = append(atr.WorkingHostnames, result.Hostname)
+
+		// Track best response time
+		if atr.BestResponseMs == 0 || result.ResponseMs < atr.BestResponseMs {
+			atr.BestResponseMs = result.ResponseMs
+			atr.BestHostname = result.Hostname
+		}
+	} else {
+		atr.FailedHostnames = append(atr.FailedHostnames, result.Hostname)
+	}
+}
+
+// GetPrimaryResult returns the test result for the primary hostname
+func (atr *AggregatedTestResult) GetPrimaryResult() *HostnameTestResult {
+	if atr.PrimaryHostname != "" && atr.HostnameResults != nil {
+		return atr.HostnameResults[atr.PrimaryHostname]
+	}
+	return nil
+}
+
+// GetSuccessRate returns the percentage of successful hostnames
+func (atr *AggregatedTestResult) GetSuccessRate() float64 {
+	if len(atr.HostnameResults) == 0 {
+		return 0
+	}
+	return float64(len(atr.WorkingHostnames)) / float64(len(atr.HostnameResults)) * 100
 }

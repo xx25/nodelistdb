@@ -70,10 +70,10 @@ type EmailProtocolDetail struct {
 
 // InternetConfiguration represents the structured internet config
 type InternetConfiguration struct {
-	Protocols      map[string]InternetProtocolDetail `json:"protocols,omitempty"`
-	Defaults       map[string]string                 `json:"defaults,omitempty"`
-	EmailProtocols map[string]EmailProtocolDetail    `json:"email_protocols,omitempty"`
-	InfoFlags      []string                          `json:"info_flags,omitempty"`
+	Protocols      map[string][]InternetProtocolDetail `json:"protocols,omitempty"`
+	Defaults       map[string]string                   `json:"defaults,omitempty"`
+	EmailProtocols map[string][]EmailProtocolDetail    `json:"email_protocols,omitempty"`
+	InfoFlags      []string                            `json:"info_flags,omitempty"`
 }
 
 // NodeFilter represents search criteria for nodes
