@@ -1,0 +1,475 @@
+package daemon
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/nodelistdb/internal/testing/daemon/mocks"
+	"github.com/nodelistdb/internal/testing/daemon/testutil"
+	"github.com/nodelistdb/internal/testing/models"
+	"github.com/nodelistdb/internal/testing/protocols"
+)
+
+func TestDaemon_RunCycle_Complete(t *testing.T) {
+	// Create mock storage
+	storage := &mocks.MockStorage{
+		StoreTestResultFunc: func(ctx context.Context, result *models.TestResult) error {
+			return nil
+		},
+	}
+
+	// Create mock DNS resolver
+	dnsResolver := &mocks.MockDNSResolver{
+		ResolveFunc: func(ctx context.Context, hostname string) *models.DNSResult {
+			return &models.DNSResult{
+				Hostname:       hostname,
+				IPv4Addresses:  []string{"192.168.1.1"},
+				IPv6Addresses:  []string{"2001:db8::1"},
+				ResolveTime:    50 * time.Millisecond,
+				Error:          nil,
+			}
+		},
+	}
+
+	// Create mock protocol tester
+	protocolTester := &mocks.MockProtocolTester{
+		TestFunc: func(ctx context.Context, host string, port int, addr string) protocols.TestResult {
+			return protocols.TestResult{
+				Success:      true,
+				ResponseTime: 100 * time.Millisecond,
+			}
+		},
+	}
+
+	// Create mock geolocation
+	geolocation := &mocks.MockGeolocation{
+		GetLocationFunc: func(ctx context.Context, ip string) *models.GeolocationResult {
+			return &models.GeolocationResult{
+				Country:     "United States",
+				CountryCode: "US",
+				City:        "New York",
+			}
+		},
+	}
+
+	// Create config
+	config := &Config{
+		Daemon: DaemonConfig{
+			TestInterval: 60 * time.Second,
+			DryRun:       false,
+			TestTimeout:  30 * time.Second,
+		},
+	}
+
+	// Create daemon with mocks
+	daemon := &Daemon{
+		config:       config,
+		storage:      storage,
+		dnsResolver:  dnsResolver,
+		binkpTester:  protocolTester,
+		ifcicoTester: protocolTester,
+		telnetTester: protocolTester,
+		geolocation:  geolocation,
+		scheduler:    NewScheduler(config.Daemon.TestInterval),
+	}
+
+	// Create test nodes
+	nodes := []*models.Node{
+		testutil.NewNodeBuilder().
+			WithAddress(1, 1, 1).
+			WithHostname("bbs1.example.com").
+			WithProtocol("IBN").
+			Build(),
+		testutil.NewNodeBuilder().
+			WithAddress(1, 1, 2).
+			WithHostname("bbs2.example.com").
+			WithProtocol("IFC").
+			Build(),
+	}
+
+	// Run test cycle
+	ctx := context.Background()
+	results, err := daemon.TestNodes(ctx, nodes)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("Expected 2 results, got %d", len(results))
+	}
+
+	// Verify results
+	for _, result := range results {
+		if !result.IsOperational {
+			t.Error("Expected node to be operational")
+		}
+
+		if result.TestedCount == 0 {
+			t.Error("Expected node to be tested")
+		}
+	}
+
+	// Verify storage was called
+	if len(storage.StoreCalls) != 2 {
+		t.Errorf("Expected 2 storage calls, got %d", len(storage.StoreCalls))
+	}
+}
+
+func TestDaemon_Scheduler_Integration(t *testing.T) {
+	// Create scheduler with short interval
+	scheduler := NewScheduler(100 * time.Millisecond)
+
+	// Create daemon with scheduler
+	daemon := &Daemon{
+		config: &Config{
+			Daemon: DaemonConfig{
+				TestInterval: 100 * time.Millisecond,
+			},
+		},
+		scheduler: scheduler,
+	}
+
+	// Create nodes with different test times
+	now := time.Now()
+	old := now.Add(-200 * time.Millisecond)
+
+	nodes := []*models.Node{
+		{Zone: 1, Net: 1, Node: 1, LastTested: nil},     // Never tested
+		{Zone: 1, Net: 1, Node: 2, LastTested: &old},    // Old test
+		{Zone: 1, Net: 1, Node: 3, LastTested: &now},    // Just tested
+	}
+
+	// Filter nodes that should be tested
+	var nodesToTest []*models.Node
+	for _, node := range nodes {
+		if daemon.scheduler.ShouldTest(node) {
+			nodesToTest = append(nodesToTest, node)
+		}
+	}
+
+	// Should test 2 nodes (never tested and old test)
+	if len(nodesToTest) != 2 {
+		t.Errorf("Expected 2 nodes to test, got %d", len(nodesToTest))
+	}
+}
+
+func TestDaemon_StorageInteraction_RespectsDryRun(t *testing.T) {
+	// Test with DryRun = true
+	storage := &mocks.MockStorage{
+		StoreTestResultFunc: func(ctx context.Context, result *models.TestResult) error {
+			t.Error("Storage should not be called in dry run mode")
+			return nil
+		},
+	}
+
+	daemon := &Daemon{
+		config: &Config{
+			Daemon: DaemonConfig{
+				DryRun: true,
+			},
+		},
+		storage: storage,
+	}
+
+	// Create test result
+	result := &models.TestResult{
+		Zone:          1,
+		Net:           1,
+		Node:          1,
+		IsOperational: true,
+	}
+
+	// Store result (should not call storage in dry run)
+	ctx := context.Background()
+	err := daemon.StoreResult(ctx, result)
+
+	if err != nil {
+		t.Errorf("Expected no error in dry run, got %v", err)
+	}
+
+	// Verify storage was not called
+	if len(storage.StoreCalls) != 0 {
+		t.Error("Storage should not be called in dry run mode")
+	}
+}
+
+func TestDaemon_ReloadConfig_UpdatesComponents(t *testing.T) {
+	daemon := &Daemon{
+		config: &Config{
+			Daemon: DaemonConfig{
+				TestInterval: 60 * time.Second,
+			},
+		},
+		scheduler: NewScheduler(60 * time.Second),
+	}
+
+	// Update config
+	newConfig := &Config{
+		Daemon: DaemonConfig{
+			TestInterval: 30 * time.Second,
+		},
+	}
+
+	// Reload config
+	daemon.ReloadConfig(newConfig)
+
+	// Verify config was updated
+	if daemon.config.Daemon.TestInterval != 30*time.Second {
+		t.Error("Config was not updated")
+	}
+
+	// Verify scheduler was updated
+	if daemon.scheduler.interval != 30*time.Second {
+		t.Error("Scheduler interval was not updated")
+	}
+}
+
+func TestDaemon_Pause_Resume_Works(t *testing.T) {
+	daemon := &Daemon{
+		paused: false,
+	}
+
+	// Pause daemon
+	daemon.Pause()
+
+	if !daemon.IsPaused() {
+		t.Error("Daemon should be paused")
+	}
+
+	// Resume daemon
+	daemon.Resume()
+
+	if daemon.IsPaused() {
+		t.Error("Daemon should not be paused")
+	}
+}
+
+func TestDaemon_TestSingleNode_CLI(t *testing.T) {
+	// Create mocks
+	storage := &mocks.MockStorage{
+		StoreTestResultFunc: func(ctx context.Context, result *models.TestResult) error {
+			return nil
+		},
+	}
+
+	dnsResolver := &mocks.MockDNSResolver{
+		ResolveFunc: func(ctx context.Context, hostname string) *models.DNSResult {
+			return &models.DNSResult{
+				Hostname:      hostname,
+				IPv4Addresses: []string{"192.168.1.1"},
+				ResolveTime:   50 * time.Millisecond,
+			}
+		},
+	}
+
+	protocolTester := &mocks.MockProtocolTester{
+		TestFunc: func(ctx context.Context, host string, port int, addr string) protocols.TestResult {
+			return protocols.TestResult{
+				Success:      true,
+				ResponseTime: 100 * time.Millisecond,
+			}
+		},
+	}
+
+	daemon := &Daemon{
+		config: &Config{
+			Daemon: DaemonConfig{
+				DryRun:      false,
+				TestTimeout: 30 * time.Second,
+			},
+		},
+		storage:      storage,
+		dnsResolver:  dnsResolver,
+		binkpTester:  protocolTester,
+		ifcicoTester: protocolTester,
+		telnetTester: protocolTester,
+	}
+
+	// Test single node (simulating CLI command)
+	node := testutil.NewNodeBuilder().
+		WithAddress(2, 5020, 100).
+		WithHostname("test.example.com").
+		WithProtocol("IBN").
+		Build()
+
+	ctx := context.Background()
+	result, err := daemon.TestSingleNode(ctx, node)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+
+	if !result.IsOperational {
+		t.Error("Expected node to be operational")
+	}
+
+	// Verify it was stored
+	if len(storage.StoreCalls) != 1 {
+		t.Errorf("Expected 1 storage call, got %d", len(storage.StoreCalls))
+	}
+}
+
+func TestDaemon_ErrorHandling_DNSFailure(t *testing.T) {
+	// DNS resolver that fails
+	dnsResolver := &mocks.MockDNSResolver{
+		ResolveFunc: func(ctx context.Context, hostname string) *models.DNSResult {
+			return &models.DNSResult{
+				Hostname: hostname,
+				Error:    errors.New("DNS resolution failed"),
+			}
+		},
+	}
+
+	daemon := &Daemon{
+		config: &Config{
+			Daemon: DaemonConfig{
+				TestTimeout: 30 * time.Second,
+			},
+		},
+		dnsResolver: dnsResolver,
+	}
+
+	node := testutil.NewNodeBuilder().
+		WithAddress(1, 1, 1).
+		WithHostname("unreachable.example.com").
+		WithProtocol("IBN").
+		Build()
+
+	ctx := context.Background()
+	executor := &TestExecutor{daemon: daemon}
+	result := executor.TestSingleHostname(ctx, node, "unreachable.example.com")
+
+	if result == nil {
+		t.Fatal("Expected non-nil result even on DNS failure")
+	}
+
+	if result.DNSResolved {
+		t.Error("DNS should not be resolved")
+	}
+
+	if result.IsOperational() {
+		t.Error("Node should not be operational with DNS failure")
+	}
+}
+
+func TestDaemon_ErrorHandling_ProtocolFailure(t *testing.T) {
+	// DNS works but protocol fails
+	dnsResolver := &mocks.MockDNSResolver{
+		ResolveFunc: func(ctx context.Context, hostname string) *models.DNSResult {
+			return &models.DNSResult{
+				Hostname:      hostname,
+				IPv4Addresses: []string{"192.168.1.1"},
+				ResolveTime:   50 * time.Millisecond,
+			}
+		},
+	}
+
+	// Protocol tester that fails
+	protocolTester := &mocks.MockProtocolTester{
+		TestFunc: func(ctx context.Context, host string, port int, addr string) protocols.TestResult {
+			return protocols.TestResult{
+				Success:      false,
+				Error:        errors.New("connection refused"),
+				ResponseTime: 100 * time.Millisecond,
+			}
+		},
+	}
+
+	daemon := &Daemon{
+		config: &Config{
+			Daemon: DaemonConfig{
+				TestTimeout: 30 * time.Second,
+			},
+		},
+		dnsResolver:  dnsResolver,
+		binkpTester:  protocolTester,
+		ifcicoTester: protocolTester,
+		telnetTester: protocolTester,
+	}
+
+	node := testutil.NewNodeBuilder().
+		WithAddress(1, 1, 1).
+		WithHostname("bbs.example.com").
+		WithProtocol("IBN").
+		Build()
+
+	ctx := context.Background()
+	executor := &TestExecutor{daemon: daemon}
+	result := executor.TestSingleHostname(ctx, node, "bbs.example.com")
+
+	if result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+
+	if !result.DNSResolved {
+		t.Error("DNS should be resolved")
+	}
+
+	if result.IsOperational() {
+		t.Error("Node should not be operational with protocol failure")
+	}
+
+	// Should have connectivity issues (DNS ok but protocol failed)
+	aggregator := &TestAggregator{}
+	aggregated := aggregator.AggregateResults([]*models.SingleHostTestResult{result})
+
+	if !aggregated.HasConnectivityIssues {
+		t.Error("Should have connectivity issues when DNS succeeds but protocol fails")
+	}
+}
+
+func TestDaemon_ConcurrentTesting(t *testing.T) {
+	testCount := 0
+
+	// Mock protocol tester that counts calls
+	protocolTester := &mocks.MockProtocolTester{
+		TestFunc: func(ctx context.Context, host string, port int, addr string) protocols.TestResult {
+			testCount++
+			time.Sleep(10 * time.Millisecond) // Simulate work
+			return protocols.TestResult{
+				Success:      true,
+				ResponseTime: 100 * time.Millisecond,
+			}
+		},
+	}
+
+	daemon := &Daemon{
+		config: &Config{
+			Daemon: DaemonConfig{
+				MaxConcurrent: 5,
+				TestTimeout:   30 * time.Second,
+			},
+		},
+		binkpTester: protocolTester,
+	}
+
+	// Create multiple nodes
+	var nodes []*models.Node
+	for i := 0; i < 10; i++ {
+		nodes = append(nodes, testutil.NewNodeBuilder().
+			WithAddress(1, 1, i+1).
+			WithHostname("bbs.example.com").
+			WithProtocol("IBN").
+			Build())
+	}
+
+	// Test nodes concurrently
+	ctx := context.Background()
+	results := daemon.TestNodesConcurrent(ctx, nodes)
+
+	if len(results) != 10 {
+		t.Errorf("Expected 10 results, got %d", len(results))
+	}
+
+	// All nodes should have been tested
+	if testCount < 10 {
+		t.Errorf("Expected at least 10 tests, got %d", testCount)
+	}
+}

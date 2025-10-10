@@ -296,9 +296,23 @@ func (bc *BadgerCache) runGC() {
 }
 
 func (bc *BadgerCache) performGC() {
-	err := bc.db.RunValueLogGC(bc.config.GCDiscardRatio)
-	if err != nil && !errors.Is(err, badger.ErrNoRewrite) {
-		log.Printf("Badger GC error: %v", err)
+	startTime := time.Now()
+	cycles := 0
+
+	for {
+		err := bc.db.RunValueLogGC(bc.config.GCDiscardRatio)
+		if err != nil {
+			if errors.Is(err, badger.ErrNoRewrite) {
+				// No more cleanup possible
+				if cycles > 0 {
+					log.Printf("Badger GC completed %d cycles in %v", cycles, time.Since(startTime))
+				}
+				break
+			}
+			log.Printf("Badger GC error after %d cycles: %v", cycles, err)
+			break
+		}
+		cycles++
 	}
 }
 

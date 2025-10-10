@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"time"
+
+	"github.com/nodelistdb/internal/testing/timeavail"
 )
 
 // Node represents a FidoNet node from the database
@@ -20,6 +22,8 @@ type Node struct {
 	InternetConfig    map[string]interface{} `db:"internet_config"` // Raw JSON config from database
 	HasInet           bool               `db:"has_inet"`
 	TestReason        string             `db:"-"` // Reason for current test: "stale", "new", "config_changed", "scheduled", "failed_retry"
+	Availability      *timeavail.NodeAvailability `db:"-"` // Time availability windows for calling
+	Flags             []string           `db:"flags"` // Node flags from nodelist
 }
 
 // Address returns the FidoNet address string
@@ -66,6 +70,51 @@ func (n *Node) GetProtocolPort(protocol string) int {
 		}
 	}
 	return 0 // Return 0 to indicate default port should be used
+}
+
+// IsOnline checks if the node is considered online (has internet protocols)
+func (n *Node) IsOnline() bool {
+	return n.HasInet && len(n.InternetProtocols) > 0
+}
+
+// IsHost checks if the node has the Host flag
+func (n *Node) IsHost() bool {
+	for _, flag := range n.Flags {
+		if flag == "HOST" || flag == "Host" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasBinkP checks if node supports BinkP protocol
+func (n *Node) HasBinkP() bool {
+	return n.HasProtocol("IBN") || n.HasProtocol("IFC")
+}
+
+// HasIFCICO checks if node supports IFCICO (EMSI) protocol
+func (n *Node) HasIFCICO() bool {
+	return n.HasProtocol("IFC") || n.HasProtocol("ITN")
+}
+
+// HasTEL checks if node supports Telnet protocol
+func (n *Node) HasTEL() bool {
+	return n.HasProtocol("ITN") || n.HasProtocol("TEL")
+}
+
+// FTPAddress returns the FTP address if available
+func (n *Node) FTPAddress() string {
+	// Check if node has FTP protocol flag
+	if !n.HasProtocol("IFT") {
+		return ""
+	}
+
+	// Return primary hostname if available
+	if hostname := n.GetPrimaryHostname(); hostname != "" {
+		return hostname
+	}
+
+	return ""
 }
 
 // NodeTestRequest represents a request to test a node

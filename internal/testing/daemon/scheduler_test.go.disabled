@@ -1,0 +1,276 @@
+package daemon
+
+import (
+	"testing"
+	"time"
+
+	"github.com/nodelistdb/internal/testing/models"
+)
+
+func TestScheduler_ShouldTest_NewNode(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	node := &models.Node{
+		Zone: 1,
+		Net:  1,
+		Node: 1,
+	}
+
+	// New node should be tested
+	if !scheduler.ShouldTest(node) {
+		t.Error("Expected new node to be scheduled for testing")
+	}
+}
+
+func TestScheduler_ShouldTest_RecentlyTested(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	now := time.Now()
+	node := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       1,
+		LastTested: &now,
+	}
+
+	// Recently tested node should not be tested
+	if scheduler.ShouldTest(node) {
+		t.Error("Expected recently tested node not to be scheduled")
+	}
+}
+
+func TestScheduler_ShouldTest_OldTest(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	oldTime := time.Now().Add(-2 * time.Hour)
+	node := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       1,
+		LastTested: &oldTime,
+	}
+
+	// Old test should be retested
+	if !scheduler.ShouldTest(node) {
+		t.Error("Expected node with old test to be scheduled for retesting")
+	}
+}
+
+func TestScheduler_ShouldTest_ExactInterval(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	// Test at exact interval boundary
+	exactTime := time.Now().Add(-60 * time.Minute)
+	node := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       1,
+		LastTested: &exactTime,
+	}
+
+	// Should be tested when exactly at interval
+	if !scheduler.ShouldTest(node) {
+		t.Error("Expected node at exact interval to be scheduled")
+	}
+}
+
+func TestScheduler_ShouldTest_JustBeforeInterval(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	// Test just before interval expires (59 minutes ago)
+	justBefore := time.Now().Add(-59 * time.Minute)
+	node := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       1,
+		LastTested: &justBefore,
+	}
+
+	// Should not be tested yet
+	if scheduler.ShouldTest(node) {
+		t.Error("Expected node just before interval not to be scheduled")
+	}
+}
+
+func TestScheduler_MarkTested(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	node := &models.Node{
+		Zone: 1,
+		Net:  1,
+		Node: 1,
+	}
+
+	// Initially should be tested
+	if !scheduler.ShouldTest(node) {
+		t.Error("Expected new node to be scheduled")
+	}
+
+	// Mark as tested
+	scheduler.MarkTested(node)
+
+	// Should not be tested immediately after marking
+	if scheduler.ShouldTest(node) {
+		t.Error("Expected node not to be scheduled immediately after marking as tested")
+	}
+}
+
+func TestScheduler_CustomInterval(t *testing.T) {
+	// Test with 30 minute interval
+	scheduler := NewScheduler(30 * time.Minute)
+
+	// Node tested 31 minutes ago
+	oldTime := time.Now().Add(-31 * time.Minute)
+	node := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       1,
+		LastTested: &oldTime,
+	}
+
+	// Should be tested with 30 minute interval
+	if !scheduler.ShouldTest(node) {
+		t.Error("Expected node to be scheduled with custom interval")
+	}
+
+	// Node tested 29 minutes ago
+	recentTime := time.Now().Add(-29 * time.Minute)
+	recentNode := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       2,
+		LastTested: &recentTime,
+	}
+
+	// Should not be tested yet
+	if scheduler.ShouldTest(recentNode) {
+		t.Error("Expected node not to be scheduled before custom interval")
+	}
+}
+
+func TestScheduler_ZeroInterval_AlwaysTest(t *testing.T) {
+	// Zero interval means always test
+	scheduler := NewScheduler(0)
+
+	now := time.Now()
+	node := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       1,
+		LastTested: &now,
+	}
+
+	// Should always be tested with zero interval
+	if !scheduler.ShouldTest(node) {
+		t.Error("Expected node to always be scheduled with zero interval")
+	}
+}
+
+func TestScheduler_NegativeInterval_AlwaysTest(t *testing.T) {
+	// Negative interval should behave like zero (always test)
+	scheduler := NewScheduler(-1 * time.Hour)
+
+	now := time.Now()
+	node := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       1,
+		LastTested: &now,
+	}
+
+	// Should always be tested with negative interval
+	if !scheduler.ShouldTest(node) {
+		t.Error("Expected node to always be scheduled with negative interval")
+	}
+}
+
+func TestScheduler_ConcurrentAccess(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	node := &models.Node{
+		Zone: 1,
+		Net:  1,
+		Node: 1,
+	}
+
+	// Test concurrent access to scheduler
+	done := make(chan bool, 2)
+
+	// Goroutine 1: Check if should test
+	go func() {
+		for i := 0; i < 100; i++ {
+			scheduler.ShouldTest(node)
+		}
+		done <- true
+	}()
+
+	// Goroutine 2: Mark as tested
+	go func() {
+		for i := 0; i < 100; i++ {
+			scheduler.MarkTested(node)
+		}
+		done <- true
+	}()
+
+	// Wait for both goroutines
+	<-done
+	<-done
+
+	// If we get here without panic/race, concurrent access is safe
+}
+
+func TestScheduler_MultipleNodes(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	// Create multiple nodes with different test times
+	now := time.Now()
+	old := now.Add(-2 * time.Hour)
+	recent := now.Add(-30 * time.Minute)
+
+	nodes := []*models.Node{
+		{Zone: 1, Net: 1, Node: 1, LastTested: nil},        // Never tested
+		{Zone: 1, Net: 1, Node: 2, LastTested: &old},       // Old test
+		{Zone: 1, Net: 1, Node: 3, LastTested: &recent},    // Recent test
+		{Zone: 1, Net: 1, Node: 4, LastTested: &now},       // Just tested
+	}
+
+	expected := []bool{
+		true,  // Never tested - should test
+		true,  // Old test - should test
+		false, // Recent test - should not test
+		false, // Just tested - should not test
+	}
+
+	for i, node := range nodes {
+		result := scheduler.ShouldTest(node)
+		if result != expected[i] {
+			t.Errorf("Node %d: expected ShouldTest=%v, got %v", i+1, expected[i], result)
+		}
+	}
+}
+
+func TestScheduler_UpdateInterval(t *testing.T) {
+	scheduler := NewScheduler(60 * time.Minute)
+
+	// Node tested 45 minutes ago
+	testTime := time.Now().Add(-45 * time.Minute)
+	node := &models.Node{
+		Zone:       1,
+		Net:        1,
+		Node:       1,
+		LastTested: &testTime,
+	}
+
+	// Should not be tested with 60 minute interval
+	if scheduler.ShouldTest(node) {
+		t.Error("Expected node not to be scheduled with 60 minute interval")
+	}
+
+	// Update interval to 30 minutes
+	scheduler.UpdateInterval(30 * time.Minute)
+
+	// Should now be tested with 30 minute interval
+	if !scheduler.ShouldTest(node) {
+		t.Error("Expected node to be scheduled with updated 30 minute interval")
+	}
+}

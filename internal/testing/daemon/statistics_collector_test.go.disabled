@@ -1,0 +1,531 @@
+package daemon
+
+import (
+	"testing"
+	"time"
+
+	"github.com/nodelistdb/internal/testing/models"
+	"github.com/nodelistdb/internal/testing/daemon/testutil"
+)
+
+func TestStatistics_EmptyResults_ReturnsZeros(t *testing.T) {
+	collector := &StatisticsCollector{}
+	stats := collector.CollectStatistics([]*models.TestResult{})
+
+	if stats == nil {
+		t.Fatal("Expected non-nil statistics for empty input")
+	}
+
+	if stats.TotalNodes != 0 {
+		t.Errorf("Expected total nodes to be 0, got %d", stats.TotalNodes)
+	}
+
+	if stats.OperationalNodes != 0 {
+		t.Errorf("Expected operational nodes to be 0, got %d", stats.OperationalNodes)
+	}
+
+	if stats.TestedNodes != 0 {
+		t.Errorf("Expected tested nodes to be 0, got %d", stats.TestedNodes)
+	}
+
+	if stats.DNSFailures != 0 {
+		t.Errorf("Expected DNS failures to be 0, got %d", stats.DNSFailures)
+	}
+
+	if stats.ConnectivityFailures != 0 {
+		t.Errorf("Expected connectivity failures to be 0, got %d", stats.ConnectivityFailures)
+	}
+}
+
+func TestStatistics_CountOperational_Accurate(t *testing.T) {
+	collector := &StatisticsCollector{}
+
+	// Create test results with different operational statuses
+	results := []*models.TestResult{
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          1,
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          2,
+			IsOperational: false,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          3,
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          4,
+			IsOperational: false,
+			TestedCount:   0, // Not tested
+		},
+	}
+
+	stats := collector.CollectStatistics(results)
+
+	if stats.TotalNodes != 4 {
+		t.Errorf("Expected total nodes to be 4, got %d", stats.TotalNodes)
+	}
+
+	if stats.OperationalNodes != 2 {
+		t.Errorf("Expected operational nodes to be 2, got %d", stats.OperationalNodes)
+	}
+
+	if stats.TestedNodes != 3 {
+		t.Errorf("Expected tested nodes to be 3, got %d", stats.TestedNodes)
+	}
+}
+
+func TestStatistics_CountByCountry_Aggregates(t *testing.T) {
+	collector := &StatisticsCollector{}
+
+	results := []*models.TestResult{
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          1,
+			Country:       "United States",
+			CountryCode:   "US",
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          2,
+			Country:       "United States",
+			CountryCode:   "US",
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          3,
+			Country:       "Germany",
+			CountryCode:   "DE",
+			IsOperational: false,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          4,
+			Country:       "Germany",
+			CountryCode:   "DE",
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:        1,
+			Net:         1,
+			Node:        5,
+			Country:     "",
+			CountryCode: "",
+			TestedCount: 1,
+		},
+	}
+
+	stats := collector.CollectStatistics(results)
+
+	if stats.NodesByCountry == nil {
+		t.Fatal("Expected NodesByCountry map to be initialized")
+	}
+
+	usCount, exists := stats.NodesByCountry["US"]
+	if !exists || usCount != 2 {
+		t.Errorf("Expected 2 nodes in US, got %d", usCount)
+	}
+
+	deCount, exists := stats.NodesByCountry["DE"]
+	if !exists || deCount != 2 {
+		t.Errorf("Expected 2 nodes in DE, got %d", deCount)
+	}
+
+	if stats.OperationalByCountry == nil {
+		t.Fatal("Expected OperationalByCountry map to be initialized")
+	}
+
+	usOperational, exists := stats.OperationalByCountry["US"]
+	if !exists || usOperational != 2 {
+		t.Errorf("Expected 2 operational nodes in US, got %d", usOperational)
+	}
+
+	deOperational, exists := stats.OperationalByCountry["DE"]
+	if !exists || deOperational != 1 {
+		t.Errorf("Expected 1 operational node in DE, got %d", deOperational)
+	}
+}
+
+func TestStatistics_CountByISP_Aggregates(t *testing.T) {
+	collector := &StatisticsCollector{}
+
+	results := []*models.TestResult{
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          1,
+			ISP:           "Comcast",
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          2,
+			ISP:           "Comcast",
+			IsOperational: false,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          3,
+			ISP:           "AT&T",
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:        1,
+			Net:         1,
+			Node:        4,
+			ISP:         "",
+			TestedCount: 1,
+		},
+	}
+
+	stats := collector.CollectStatistics(results)
+
+	if stats.NodesByISP == nil {
+		t.Fatal("Expected NodesByISP map to be initialized")
+	}
+
+	comcastCount, exists := stats.NodesByISP["Comcast"]
+	if !exists || comcastCount != 2 {
+		t.Errorf("Expected 2 nodes with Comcast, got %d", comcastCount)
+	}
+
+	attCount, exists := stats.NodesByISP["AT&T"]
+	if !exists || attCount != 1 {
+		t.Errorf("Expected 1 node with AT&T, got %d", attCount)
+	}
+}
+
+func TestStatistics_ProtocolStats_Counts(t *testing.T) {
+	collector := &StatisticsCollector{}
+
+	results := []*models.TestResult{
+		{
+			Zone: 1,
+			Net:  1,
+			Node: 1,
+			ProtocolResults: map[string]*models.ProtocolTestResult{
+				"IBN": {
+					Protocol:     "IBN",
+					Success:      true,
+					ResponseTime: 100 * time.Millisecond,
+				},
+				"IFC": {
+					Protocol:     "IFC",
+					Success:      false,
+					ResponseTime: 200 * time.Millisecond,
+				},
+			},
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone: 1,
+			Net:  1,
+			Node: 2,
+			ProtocolResults: map[string]*models.ProtocolTestResult{
+				"IBN": {
+					Protocol:     "IBN",
+					Success:      true,
+					ResponseTime: 150 * time.Millisecond,
+				},
+			},
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone: 1,
+			Net:  1,
+			Node: 3,
+			ProtocolResults: map[string]*models.ProtocolTestResult{
+				"IBN": {
+					Protocol:     "IBN",
+					Success:      false,
+					ResponseTime: 500 * time.Millisecond,
+				},
+			},
+			IsOperational: false,
+			TestedCount:   1,
+		},
+	}
+
+	stats := collector.CollectStatistics(results)
+
+	if stats.ProtocolStats == nil {
+		t.Fatal("Expected ProtocolStats map to be initialized")
+	}
+
+	ibnStats, exists := stats.ProtocolStats["IBN"]
+	if !exists {
+		t.Fatal("Expected IBN protocol stats to exist")
+	}
+
+	if ibnStats.TotalTests != 3 {
+		t.Errorf("Expected 3 total IBN tests, got %d", ibnStats.TotalTests)
+	}
+
+	if ibnStats.SuccessfulTests != 2 {
+		t.Errorf("Expected 2 successful IBN tests, got %d", ibnStats.SuccessfulTests)
+	}
+
+	if ibnStats.FailedTests != 1 {
+		t.Errorf("Expected 1 failed IBN test, got %d", ibnStats.FailedTests)
+	}
+
+	ifcStats, exists := stats.ProtocolStats["IFC"]
+	if !exists {
+		t.Fatal("Expected IFC protocol stats to exist")
+	}
+
+	if ifcStats.TotalTests != 1 {
+		t.Errorf("Expected 1 total IFC test, got %d", ifcStats.TotalTests)
+	}
+
+	if ifcStats.SuccessfulTests != 0 {
+		t.Errorf("Expected 0 successful IFC tests, got %d", ifcStats.SuccessfulTests)
+	}
+}
+
+func TestStatistics_ResponseTimeAverages_Calculates(t *testing.T) {
+	collector := &StatisticsCollector{}
+
+	results := []*models.TestResult{
+		{
+			Zone: 1,
+			Net:  1,
+			Node: 1,
+			ProtocolResults: map[string]*models.ProtocolTestResult{
+				"IBN": {
+					Protocol:     "IBN",
+					Success:      true,
+					ResponseTime: 100 * time.Millisecond,
+				},
+			},
+			TestedCount: 1,
+		},
+		{
+			Zone: 1,
+			Net:  1,
+			Node: 2,
+			ProtocolResults: map[string]*models.ProtocolTestResult{
+				"IBN": {
+					Protocol:     "IBN",
+					Success:      true,
+					ResponseTime: 200 * time.Millisecond,
+				},
+			},
+			TestedCount: 1,
+		},
+		{
+			Zone: 1,
+			Net:  1,
+			Node: 3,
+			ProtocolResults: map[string]*models.ProtocolTestResult{
+				"IBN": {
+					Protocol:     "IBN",
+					Success:      true,
+					ResponseTime: 300 * time.Millisecond,
+				},
+			},
+			TestedCount: 1,
+		},
+	}
+
+	stats := collector.CollectStatistics(results)
+
+	ibnStats := stats.ProtocolStats["IBN"]
+	// Average should be (100 + 200 + 300) / 3 = 200ms
+	expectedAvg := 200 * time.Millisecond
+	if ibnStats.AverageResponseTime != expectedAvg {
+		t.Errorf("Expected average response time to be %v, got %v", expectedAvg, ibnStats.AverageResponseTime)
+	}
+}
+
+func TestStatistics_ErrorTypes_Buckets(t *testing.T) {
+	collector := &StatisticsCollector{}
+
+	results := []*models.TestResult{
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          1,
+			HasDNSIssues:  true,
+			IsOperational: false,
+			TestedCount:   1,
+		},
+		{
+			Zone:                  1,
+			Net:                   2,
+			Node:                  1,
+			HasConnectivityIssues: true,
+			IsOperational:         false,
+			TestedCount:           1,
+		},
+		{
+			Zone:                  1,
+			Net:                   3,
+			Node:                  1,
+			HasDNSIssues:          true,
+			HasConnectivityIssues: false,
+			IsOperational:         false,
+			TestedCount:           1,
+		},
+		{
+			Zone:          1,
+			Net:           4,
+			Node:          1,
+			IsOperational: true,
+			TestedCount:   1,
+		},
+	}
+
+	stats := collector.CollectStatistics(results)
+
+	if stats.DNSFailures != 2 {
+		t.Errorf("Expected 2 DNS failures, got %d", stats.DNSFailures)
+	}
+
+	if stats.ConnectivityFailures != 1 {
+		t.Errorf("Expected 1 connectivity failure, got %d", stats.ConnectivityFailures)
+	}
+}
+
+func TestStatistics_DNSFailures_Counts(t *testing.T) {
+	collector := &StatisticsCollector{}
+
+	results := []*models.TestResult{
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          1,
+			HasDNSIssues:  true,
+			IsOperational: false,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          2,
+			HasDNSIssues:  false,
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          3,
+			HasDNSIssues:  true,
+			IsOperational: false,
+			TestedCount:   1,
+		},
+	}
+
+	stats := collector.CollectStatistics(results)
+
+	if stats.DNSFailures != 2 {
+		t.Errorf("Expected 2 DNS failures, got %d", stats.DNSFailures)
+	}
+}
+
+func TestStatistics_ZoneDistribution(t *testing.T) {
+	collector := &StatisticsCollector{}
+
+	results := []*models.TestResult{
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          1,
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          1,
+			Net:           1,
+			Node:          2,
+			IsOperational: false,
+			TestedCount:   1,
+		},
+		{
+			Zone:          2,
+			Net:           1,
+			Node:          1,
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          2,
+			Net:           1,
+			Node:          2,
+			IsOperational: true,
+			TestedCount:   1,
+		},
+		{
+			Zone:          3,
+			Net:           1,
+			Node:          1,
+			IsOperational: false,
+			TestedCount:   1,
+		},
+	}
+
+	stats := collector.CollectStatistics(results)
+
+	if stats.NodesByZone == nil {
+		t.Fatal("Expected NodesByZone map to be initialized")
+	}
+
+	zone1Count, exists := stats.NodesByZone[1]
+	if !exists || zone1Count != 2 {
+		t.Errorf("Expected 2 nodes in zone 1, got %d", zone1Count)
+	}
+
+	zone2Count, exists := stats.NodesByZone[2]
+	if !exists || zone2Count != 2 {
+		t.Errorf("Expected 2 nodes in zone 2, got %d", zone2Count)
+	}
+
+	zone3Count, exists := stats.NodesByZone[3]
+	if !exists || zone3Count != 1 {
+		t.Errorf("Expected 1 node in zone 3, got %d", zone3Count)
+	}
+
+	if stats.OperationalByZone == nil {
+		t.Fatal("Expected OperationalByZone map to be initialized")
+	}
+
+	zone1Operational, exists := stats.OperationalByZone[1]
+	if !exists || zone1Operational != 1 {
+		t.Errorf("Expected 1 operational node in zone 1, got %d", zone1Operational)
+	}
+
+	zone2Operational, exists := stats.OperationalByZone[2]
+	if !exists || zone2Operational != 2 {
+		t.Errorf("Expected 2 operational nodes in zone 2, got %d", zone2Operational)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
 	"github.com/nodelistdb/internal/testing/storage"
+	"github.com/nodelistdb/internal/testing/timeavail"
 )
 
 type ScheduleStrategy int
@@ -124,7 +125,18 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 
 	for i, node := range nodes {
 		key := s.nodeKey(node)
-		
+
+		// Parse time availability if flags are present
+		if len(node.Flags) > 0 && node.Availability == nil {
+			phoneNumber := "" // TODO: Get phone number from database if available
+			availability, err := timeavail.ParseAvailability(node.Flags, node.Zone, phoneNumber)
+			if err != nil {
+				logging.Debugf("Failed to parse availability for %s: %v", key, err)
+			} else {
+				node.Availability = availability
+			}
+		}
+
 		// Get last test result for this node
 		history, err := s.storage.GetNodeTestHistory(ctx, node.Zone, node.Net, node.Node, 1)
 		var lastResult *models.TestResult
@@ -202,7 +214,18 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 	for _, node := range nodes {
 		key := s.nodeKey(node)
 		currentNodeKeys[key] = true
-		
+
+		// Parse time availability if flags are present
+		if len(node.Flags) > 0 && node.Availability == nil {
+			phoneNumber := "" // TODO: Get phone number from database if available
+			availability, err := timeavail.ParseAvailability(node.Flags, node.Zone, phoneNumber)
+			if err != nil {
+				logging.Debugf("Failed to parse availability for %s: %v", key, err)
+			} else {
+				node.Availability = availability
+			}
+		}
+
 		// Check if this is a new node or existing one
 		existingSchedule, exists := s.schedules[key]
 		if !exists {
@@ -222,7 +245,7 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 		} else {
 			// Check if internet configuration has changed
 			configChanged := s.hasInternetConfigChanged(existingSchedule.Node, node)
-			
+
 			// Update existing node data (hostname, protocols might have changed)
 			existingSchedule.Node = node
 			existingSchedule.Priority = s.calculatePriority(node)
@@ -309,7 +332,9 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 	now := time.Now()
 	var readyNodes []*NodeSchedule
 	var allFutureNodes []*NodeSchedule
+	var notInCallWindow []*NodeSchedule
 	staleNodes := 0
+	skippedForTimeWindow := 0
 
 	for _, schedule := range s.schedules {
 		// Check if test is stale (hasn't been tested in staleTestThreshold duration)
@@ -317,6 +342,15 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 
 		// Check if node is ready based on schedule OR if test is stale
 		if schedule.NextTestTime.Before(now) || schedule.NextTestTime.Equal(now) || isStale {
+			// Check time availability if node has it configured
+			if schedule.Node.Availability != nil && !schedule.Node.Availability.IsCallableNow(now) {
+				// Node is ready but outside call window
+				schedule.TestReason = "outside_call_window"
+				notInCallWindow = append(notInCallWindow, schedule)
+				skippedForTimeWindow++
+				continue
+			}
+
 			// Update test reason based on current state
 			if isStale {
 				schedule.TestReason = "stale"
@@ -342,8 +376,28 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 		return allFutureNodes[i].NextTestTime.Before(allFutureNodes[j].NextTestTime)
 	})
 
-	logging.Debugf("GetNodesForTesting: now=%v, ready=%d (stale=%d), future=%d, total=%d, staleThreshold=%v",
-		now, len(readyNodes), staleNodes, len(allFutureNodes), len(s.schedules), s.staleTestThreshold)
+	logging.Debugf("GetNodesForTesting: now=%v, ready=%d (stale=%d), future=%d, outside_call_window=%d, total=%d, staleThreshold=%v",
+		now, len(readyNodes), staleNodes, len(allFutureNodes), skippedForTimeWindow, len(s.schedules), s.staleTestThreshold)
+
+	// Log nodes skipped due to time windows
+	if skippedForTimeWindow > 0 {
+		logging.Infof("Skipped %d nodes outside their call windows", skippedForTimeWindow)
+		if len(notInCallWindow) > 0 {
+			showCount := 5
+			if len(notInCallWindow) < showCount {
+				showCount = len(notInCallWindow)
+			}
+			for i := 0; i < showCount; i++ {
+				node := notInCallWindow[i]
+				nodeAddr := fmt.Sprintf("%d:%d/%d", node.Node.Zone, node.Node.Net, node.Node.Node)
+				availStr := "no availability info"
+				if node.Node.Availability != nil {
+					availStr = timeavail.FormatAvailability(node.Node.Availability)
+				}
+				logging.Debugf("  Skipped %s: %s", nodeAddr, availStr)
+			}
+		}
+	}
 
 	// Show the next 15 nodes that will be tested
 	if len(allFutureNodes) > 0 {

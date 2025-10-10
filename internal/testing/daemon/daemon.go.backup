@@ -20,45 +20,39 @@ import (
 type Daemon struct {
 	config  *Config
 	storage storage.Storage
-
+	
 	// Services
 	dnsResolver *services.DNSResolver
 	geolocator  *services.Geolocation
-
+	
 	// Persistent cache (optional)
 	persistentCache *storage.Cache
-
+	
 	// Protocol testers
 	binkpTester  protocols.Tester
 	ifcicoTester protocols.Tester
 	telnetTester protocols.Tester
 	ftpTester    protocols.Tester
 	vmodemTester protocols.Tester
-
+	
 	// Worker pool
 	workerPool *WorkerPool
-
+	
 	// Scheduler for intelligent test scheduling
 	scheduler *Scheduler
-
-	// Modular components
-	testExecutor        *TestExecutor
-	testAggregator      *TestAggregator
-	statisticsCollector *StatisticsCollector
-	nodeFilter          *NodeFilter
-
+	
 	// Control state
 	pauseMu sync.RWMutex
 	paused  bool
-
+	
 	// Debug mode
 	debugMu sync.RWMutex
 	debug   bool
-
+	
 	// Track nodelist updates
 	lastNodelistDate time.Time
 	nodelistMu       sync.RWMutex
-
+	
 	// Statistics
 	stats struct {
 		sync.Mutex
@@ -234,12 +228,6 @@ func New(cfg *Config) (*Daemon, error) {
 		FailedRetryInterval: cfg.Daemon.FailedRetryInterval,
 	}, store)
 
-	// Initialize modular components
-	d.testExecutor = NewTestExecutor(d)
-	d.testAggregator = NewTestAggregator()
-	d.statisticsCollector = NewStatisticsCollector()
-	d.nodeFilter = NewNodeFilter()
-
 	return d, nil
 }
 
@@ -341,6 +329,26 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
+// filterNodesByTestLimit filters nodes based on the test limit string
+func (d *Daemon) filterNodesByTestLimit(nodes []*models.Node, testLimit string) []*models.Node {
+	// Parse the test limit address (e.g., "2:5001/100")
+	var zone, net, node int
+	if _, err := fmt.Sscanf(testLimit, "%d:%d/%d", &zone, &net, &node); err != nil {
+		logging.Errorf("Invalid test limit format '%s': %v", testLimit, err)
+		return nodes
+	}
+	
+	// Filter nodes to only include the specified one
+	var filtered []*models.Node
+	for _, n := range nodes {
+		if n.Zone == zone && n.Net == net && n.Node == node {
+			filtered = append(filtered, n)
+			break // Only need one match
+		}
+	}
+	
+	return filtered
+}
 
 // checkAndRefreshNodelist checks if the nodelist has been updated and refreshes if needed
 func (d *Daemon) checkAndRefreshNodelist(ctx context.Context) bool {
@@ -412,7 +420,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	
 	// Apply test limit filter if specified
 	if d.config.Daemon.TestLimit != "" {
-		nodes = d.nodeFilter.FilterByTestLimit(nodes, d.config.Daemon.TestLimit)
+		nodes = d.filterNodesByTestLimit(nodes, d.config.Daemon.TestLimit)
 		if len(nodes) == 0 {
 			logging.Warnf("No nodes match test limit filter: %s", d.config.Daemon.TestLimit)
 			return nil
@@ -466,7 +474,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 			d.workerPool.Submit(func() {
 				defer wg.Done()
 				
-				result := d.testExecutor.TestNode(ctx, nodeToTest)
+				result := d.testNode(ctx, nodeToTest)
 				
 				// Update scheduler immediately with correct pairing
 				if d.scheduler != nil {
@@ -491,7 +499,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	}
 	
 	// Calculate and store statistics
-	stats := d.statisticsCollector.CalculateStatistics(allResults)
+	stats := d.calculateStatistics(allResults)
 	
 	if !d.config.Daemon.DryRun {
 		if err := d.storage.StoreDailyStats(ctx, stats); err != nil {
@@ -515,9 +523,224 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	return nil
 }
 
+// testNode tests a single node
+func (d *Daemon) testNode(ctx context.Context, node *models.Node) *models.TestResult {
+	// If node has no hostnames but has a valid system name that can be used as hostname,
+	// add it to the InternetHostnames temporarily for testing
+	if len(node.InternetHostnames) == 0 {
+		if hostname := node.GetPrimaryHostname(); hostname != "" {
+			node.InternetHostnames = []string{hostname}
+		}
+	}
 
+	// Check if node has multiple hostnames
+	if len(node.InternetHostnames) <= 1 {
+		// Single hostname - use simplified testing
+		return d.testSingleHostnameNode(ctx, node)
+	} else {
+		// Multiple hostnames - test each separately and aggregate
+		return d.testMultipleHostnameNode(ctx, node)
+	}
+}
 
+func (d *Daemon) testSingleHostnameNode(ctx context.Context, node *models.Node) *models.TestResult {
+	hostname := node.GetPrimaryHostname()
+	if hostname == "" {
+		hostname = "no-hostname"
+	}
 
+	result := d.performTesting(ctx, node, hostname)
+
+	// For single hostname, set proper indexes
+	result.HostnameIndex = 0  // Mark as new format, primary
+	result.IsAggregated = true // Single result is also the aggregate
+	result.TotalHostnames = 1
+	result.HostnamesTested = 1
+	if result.IsOperational {
+		result.HostnamesOperational = 1
+	}
+
+	// Store the result
+	if err := d.storage.StoreTestResult(context.Background(), result); err != nil {
+		logging.Errorf("Failed to store test result for %s: %v", node.Address(), err)
+	}
+
+	return result
+}
+
+func (d *Daemon) testMultipleHostnameNode(ctx context.Context, node *models.Node) *models.TestResult {
+	var results []*models.TestResult
+	operationalCount := int32(0)
+
+	// Test each hostname
+	for idx, hostname := range node.InternetHostnames {
+		result := d.performTesting(ctx, node, hostname)
+
+		// Set per-hostname metadata
+		result.TestedHostname = hostname
+		result.HostnameIndex = int32(idx)
+		result.IsAggregated = false
+		result.TotalHostnames = int32(len(node.InternetHostnames))
+
+		if result.IsOperational {
+			operationalCount++
+		}
+
+		results = append(results, result)
+
+		// Optional: stop on first success
+		// For now, we test all hostnames to gather comprehensive data
+		// if result.IsOperational {
+		//     break
+		// }
+	}
+
+	// Create aggregated result
+	aggregated := d.createAggregatedResult(node, results)
+	aggregated.HostnameIndex = 0  // Use 0 for aggregated
+	aggregated.IsAggregated = true
+	aggregated.TotalHostnames = int32(len(node.InternetHostnames))
+	aggregated.HostnamesTested = int32(len(results))
+	aggregated.HostnamesOperational = operationalCount
+
+	// Store all results (per-hostname + aggregated)
+	allResults := append(results, aggregated)
+	if store, ok := d.storage.(*storage.ClickHouseStorage); ok {
+		if err := store.StoreBatchTestResults(context.Background(), allResults); err != nil {
+			logging.Errorf("Failed to store batch test results for %s: %v", node.Address(), err)
+		}
+	} else {
+		// Fallback to storing individually
+		for _, r := range allResults {
+			if err := d.storage.StoreTestResult(context.Background(), r); err != nil {
+				logging.Errorf("Failed to store test result for %s: %v", node.Address(), err)
+			}
+		}
+	}
+
+	// Return the aggregated result for compatibility
+	return aggregated
+}
+
+func (d *Daemon) createAggregatedResult(node *models.Node, results []*models.TestResult) *models.TestResult {
+	if len(results) == 0 {
+		return models.NewTestResult(node)
+	}
+
+	// Start with a base result
+	aggregated := models.NewTestResult(node)
+
+	// Determine overall operational status (at least one working hostname)
+	anyOperational := false
+	var bestResponseMs uint32 = 0
+	var bestHostname string
+
+	// Collect all DNS results
+	var allIPv4s []string
+	var allIPv6s []string
+	dnsErrorsMap := make(map[string]bool)
+
+	for _, r := range results {
+		// Check if any hostname is operational
+		if r.IsOperational {
+			anyOperational = true
+
+			// Track best response time
+			responseMs := uint32(0)
+			if r.BinkPResult != nil && r.BinkPResult.Success {
+				responseMs = r.BinkPResult.ResponseMs
+			} else if r.IfcicoResult != nil && r.IfcicoResult.Success {
+				responseMs = r.IfcicoResult.ResponseMs
+			}
+
+			if responseMs > 0 && (bestResponseMs == 0 || responseMs < bestResponseMs) {
+				bestResponseMs = responseMs
+				bestHostname = r.TestedHostname
+			}
+		}
+
+		// Collect all resolved IPs
+		allIPv4s = append(allIPv4s, r.ResolvedIPv4...)
+		allIPv6s = append(allIPv6s, r.ResolvedIPv6...)
+
+		// Track DNS errors
+		if r.DNSError != "" {
+			dnsErrorsMap[r.DNSError] = true
+		}
+	}
+
+	// Use first result as template for location and other common fields
+	firstResult := results[0]
+	aggregated.Country = firstResult.Country
+	aggregated.CountryCode = firstResult.CountryCode
+	aggregated.City = firstResult.City
+	aggregated.Region = firstResult.Region
+	aggregated.Latitude = firstResult.Latitude
+	aggregated.Longitude = firstResult.Longitude
+	aggregated.ISP = firstResult.ISP
+	aggregated.Org = firstResult.Org
+	aggregated.ASN = firstResult.ASN
+
+	// Set DNS results
+	aggregated.ResolvedIPv4 = allIPv4s
+	aggregated.ResolvedIPv6 = allIPv6s
+
+	// Aggregate DNS errors
+	if len(dnsErrorsMap) > 0 {
+		var dnsErrors []string
+		for err := range dnsErrorsMap {
+			dnsErrors = append(dnsErrors, err)
+		}
+		aggregated.DNSError = strings.Join(dnsErrors, "; ")
+	}
+
+	// Set operational status
+	aggregated.IsOperational = anyOperational
+	aggregated.TestedHostname = bestHostname
+
+	// Determine if there are connectivity issues (DNS resolved but all protocols failed)
+	hasAnyDNS := len(allIPv4s) > 0 || len(allIPv6s) > 0
+	aggregated.HasConnectivityIssues = hasAnyDNS && !anyOperational
+
+	// Use best protocol results from any hostname
+	for _, r := range results {
+		if r.BinkPResult != nil && r.BinkPResult.Success {
+			if aggregated.BinkPResult == nil || !aggregated.BinkPResult.Success {
+				aggregated.BinkPResult = r.BinkPResult
+			}
+		}
+		if r.IfcicoResult != nil && r.IfcicoResult.Success {
+			if aggregated.IfcicoResult == nil || !aggregated.IfcicoResult.Success {
+				aggregated.IfcicoResult = r.IfcicoResult
+			}
+		}
+		if r.TelnetResult != nil && r.TelnetResult.Success {
+			if aggregated.TelnetResult == nil || !aggregated.TelnetResult.Success {
+				aggregated.TelnetResult = r.TelnetResult
+			}
+		}
+		if r.FTPResult != nil && r.FTPResult.Success {
+			if aggregated.FTPResult == nil || !aggregated.FTPResult.Success {
+				aggregated.FTPResult = r.FTPResult
+			}
+		}
+		if r.VModemResult != nil && r.VModemResult.Success {
+			if aggregated.VModemResult == nil || !aggregated.VModemResult.Success {
+				aggregated.VModemResult = r.VModemResult
+			}
+		}
+	}
+
+	// Address validation - if any hostname validates the address
+	for _, r := range results {
+		if r.AddressValidated {
+			aggregated.AddressValidated = true
+			break
+		}
+	}
+
+	return aggregated
+}
 
 func (d *Daemon) performTesting(ctx context.Context, node *models.Node, hostname string) *models.TestResult {
 	result := models.NewTestResult(node)
@@ -716,6 +939,87 @@ func (d *Daemon) logConnectivitySummary(nodeAddr string, node *models.Node, resu
 	if len(summary) > 0 {
 		logging.Infof("[%s] connectivity: %s protocols", nodeAddr, strings.Join(summary, ", "))
 	}
+}
+
+// calculateStatistics calculates statistics from test results
+func (d *Daemon) calculateStatistics(results []*models.TestResult) *models.TestStatistics {
+	stats := &models.TestStatistics{
+		Date:             time.Now().Truncate(24 * time.Hour),
+		TotalNodesTested: uint32(len(results)),
+		Countries:        make(map[string]uint32),
+		ISPs:             make(map[string]uint32),
+		ProtocolStats:    make(map[string]uint32),
+		ErrorTypes:       make(map[string]uint32),
+	}
+	
+	var binkpResponseTimes []float32
+	var ifcicoResponseTimes []float32
+	
+	for _, r := range results {
+		// Count operational nodes
+		if r.IsOperational {
+			stats.NodesOperational++
+		}
+		if r.HasConnectivityIssues {
+			stats.NodesWithIssues++
+		}
+		if r.DNSError != "" {
+			stats.NodesDNSFailed++
+		}
+		
+		// Count by country
+		if r.Country != "" {
+			stats.Countries[r.Country]++
+		}
+		
+		// Count by ISP
+		if r.ISP != "" {
+			stats.ISPs[r.ISP]++
+		}
+		
+		// Protocol statistics
+		if r.BinkPResult != nil && r.BinkPResult.Tested {
+			stats.NodesWithBinkP++
+			if r.BinkPResult.Success {
+				stats.ProtocolStats["binkp_success"]++
+				binkpResponseTimes = append(binkpResponseTimes, float32(r.BinkPResult.ResponseMs))
+			} else {
+				stats.ProtocolStats["binkp_failed"]++
+				if r.BinkPResult.Error != "" {
+					stats.ErrorTypes[r.BinkPResult.Error]++
+				}
+			}
+		}
+		
+		if r.IfcicoResult != nil && r.IfcicoResult.Tested {
+			stats.NodesWithIfcico++
+			if r.IfcicoResult.Success {
+				stats.ProtocolStats["ifcico_success"]++
+				ifcicoResponseTimes = append(ifcicoResponseTimes, float32(r.IfcicoResult.ResponseMs))
+			} else {
+				stats.ProtocolStats["ifcico_failed"]++
+			}
+		}
+	}
+	
+	// Calculate averages
+	if len(binkpResponseTimes) > 0 {
+		var sum float32
+		for _, t := range binkpResponseTimes {
+			sum += t
+		}
+		stats.AvgBinkPResponseMs = sum / float32(len(binkpResponseTimes))
+	}
+	
+	if len(ifcicoResponseTimes) > 0 {
+		var sum float32
+		for _, t := range ifcicoResponseTimes {
+			sum += t
+		}
+		stats.AvgIfcicoResponseMs = sum / float32(len(ifcicoResponseTimes))
+	}
+	
+	return stats
 }
 
 // Close closes the daemon and releases resources
@@ -971,7 +1275,7 @@ func (d *Daemon) TestNodeDirect(ctx context.Context, zone, net, node uint16, hos
 		}
 	}
 	
-	result := d.testExecutor.TestNode(ctx, testNode)
+	result := d.testNode(ctx, testNode)
 	
 	// Store result if not in dry-run mode
 	if !d.config.Daemon.DryRun {
