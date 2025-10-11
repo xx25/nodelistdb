@@ -263,7 +263,7 @@ func (cqb *ClickHouseQueryBuilder) NodeSelectSQL() string {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
 	FROM nodes`
 }
 
@@ -289,7 +289,7 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 			   system_name, location, sysop_name, phone, node_type, region, max_speed,
 			   is_cm, is_mo,
 			   flags, modem_flags,
-			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
 		FROM nodes
 		WHERE (zone, net, node, nodelist_date) IN (
 			SELECT zone, net, node, MAX(nodelist_date) as max_date
@@ -315,12 +315,12 @@ func (cqb *ClickHouseQueryBuilder) BuildNodesQuery(filter database.NodeFilter) (
 		// For historical search: get latest entry for each node that matches criteria
 		// Use window function approach - more reliable in ClickHouse
 		baseSQL = `
-		SELECT 
+		SELECT
 			zone, net, node, nodelist_date, day_number,
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
 			is_cm, is_mo,
 			flags, modem_flags,
-			conflict_sequence, has_conflict, has_inet, internet_config, fts_id
+			conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
 		FROM (
 			SELECT *,
 				   row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn

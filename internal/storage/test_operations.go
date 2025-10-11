@@ -635,7 +635,7 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND length(resolved_ipv6) > 0
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
 				GROUP BY zone, net, node
@@ -680,7 +680,7 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND array_length(resolved_ipv6) > 0
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
 				GROUP BY zone, net, node
@@ -774,7 +774,7 @@ func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroN
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND binkp_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			),
@@ -816,7 +816,7 @@ func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroN
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND binkp_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			)
@@ -884,7 +884,7 @@ func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND ifcico_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			),
@@ -926,7 +926,7 @@ func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND ifcico_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			)
@@ -994,7 +994,7 @@ func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND telnet_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			),
@@ -1036,7 +1036,7 @@ func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND telnet_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			)
@@ -1104,7 +1104,7 @@ func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND vmodem_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			),
@@ -1146,7 +1146,7 @@ func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZero
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND vmodem_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			)
@@ -1214,7 +1214,7 @@ func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNod
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND ftp_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			),
@@ -1256,7 +1256,7 @@ func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNod
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND ftp_success = true
 					AND is_operational = true
-					AND is_aggregated = false
+					AND is_aggregated = true
 					%s
 				GROUP BY zone, net, node
 			)
