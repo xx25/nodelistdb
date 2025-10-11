@@ -863,6 +863,65 @@ func (s *Server) IPv6AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// IPv6NonWorkingAnalyticsHandler shows IPv6 nodes with non-working services
+func (s *Server) IPv6NonWorkingAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	query := r.URL.Query()
+
+	// Days parameter
+	daysStr := query.Get("days")
+	days := 30 // default
+	if daysStr != "" {
+		if parsed, err := strconv.Atoi(daysStr); err == nil && parsed > 0 && parsed <= 365 {
+			days = parsed
+		}
+	}
+
+	// Limit parameter
+	limitStr := query.Get("limit")
+	limit := 1000 // default
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Include /0 nodes parameter (default: false)
+	includeZeroNodes := query.Get("includeZero") == "true"
+
+	// Get IPv6 non-working nodes
+	ipv6Nodes, err := s.storage.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		log.Printf("[ERROR] IPv6NonWorkingAnalytics: Error getting IPv6 non-working nodes: %v", err)
+		ipv6Nodes = []storage.NodeTestResult{}
+	}
+
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		IPv6Nodes        []storage.NodeTestResult
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
+	}{
+		Title:            "IPv6 Non-Working Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		IPv6Nodes:        ipv6Nodes,
+		Days:             days,
+		Limit:            limit,
+		IncludeZeroNodes: includeZeroNodes,
+		Error:            err,
+	}
+
+	if err := s.templates["ipv6_nonworking_analytics"].Execute(w, data); err != nil {
+		log.Printf("Error executing IPv6 non-working analytics template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // BinkPAnalyticsHandler shows BinkP enabled nodes analytics
 func (s *Server) BinkPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters

@@ -73,6 +73,17 @@ type NodeTestResult struct {
 	VModemResponseMs uint32 `json:"vmodem_response_ms"`
 	VModemError      string `json:"vmodem_error"`
 
+	// IPv6-specific Test Results
+	BinkPIPv6Tested     bool   `json:"binkp_ipv6_tested"`
+	BinkPIPv6Success    bool   `json:"binkp_ipv6_success"`
+	BinkPIPv6Error      string `json:"binkp_ipv6_error"`
+	IfcicoIPv6Tested    bool   `json:"ifcico_ipv6_tested"`
+	IfcicoIPv6Success   bool   `json:"ifcico_ipv6_success"`
+	IfcicoIPv6Error     string `json:"ifcico_ipv6_error"`
+	TelnetIPv6Tested    bool   `json:"telnet_ipv6_tested"`
+	TelnetIPv6Success   bool   `json:"telnet_ipv6_success"`
+	TelnetIPv6Error     string `json:"telnet_ipv6_error"`
+
 	IsOperational         bool `json:"is_operational"`
 	HasConnectivityIssues bool `json:"has_connectivity_issues"`
 	AddressValidated      bool `json:"address_validated"`
@@ -357,11 +368,15 @@ func (to *TestOperations) GetDetailedTestResult(zone, net, node int, testTime st
 				telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 				ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 				vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
+				binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_error,
+				ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_error,
+				telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_error,
 				is_operational, has_connectivity_issues, address_validated,
 				tested_hostname, hostname_index, is_aggregated,
 				total_hostnames, hostnames_tested, hostnames_operational
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ? AND test_time = parseDateTimeBestEffort(?)
+			ORDER BY is_aggregated DESC, hostname_index ASC
 			LIMIT 1
 		`
 	} else {
@@ -378,11 +393,15 @@ func (to *TestOperations) GetDetailedTestResult(zone, net, node int, testTime st
 				telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 				ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 				vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
+				binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_error,
+				ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_error,
+				telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_error,
 				is_operational, has_connectivity_issues, address_validated,
 				tested_hostname, hostname_index, is_aggregated,
 				total_hostnames, hostnames_tested, hostnames_operational
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ? AND test_time = ?
+			ORDER BY is_aggregated DESC, hostname_index ASC
 			LIMIT 1
 		`
 	}
@@ -647,7 +666,7 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				FROM nodes
 				GROUP BY zone, net, node
 			)
-			SELECT
+			SELECT DISTINCT ON (r.zone, r.net, r.node)
 				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
 				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
 				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
@@ -660,6 +679,9 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -667,7 +689,8 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			ORDER BY r.test_time DESC
+			WHERE r.is_aggregated = true
+			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	} else {
 		// DuckDB query
@@ -692,7 +715,7 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				FROM nodes
 				GROUP BY zone, net, node
 			)
-			SELECT
+			SELECT DISTINCT ON (r.zone, r.net, r.node)
 				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
 				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
 				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
@@ -705,6 +728,9 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -712,7 +738,8 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			ORDER BY r.test_time DESC
+			WHERE r.is_aggregated = true
+			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
 
@@ -731,6 +758,153 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 		err := to.resultParser.ParseTestResultRow(rows, &r)
 		if err != nil {
 			log.Printf("[ERROR] GetIPv6EnabledNodes: Failed to parse row %d: %v", rowCount, err)
+			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
+		}
+		results = append(results, r)
+	}
+
+	// Fetch all hostnames for each node
+	for i := range results {
+		hostnames, err := to.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
+		if err != nil {
+			log.Printf("[WARNING] Failed to get all hostnames for node %d:%d/%d: %v",
+				results[i].Zone, results[i].Net, results[i].Node, err)
+		} else {
+			results[i].AllHostnames = hostnames
+		}
+	}
+
+	return results, nil
+}
+
+// GetIPv6NonWorkingNodes returns nodes that have IPv6 addresses but no working IPv6 services
+func (to *TestOperations) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	to.mu.RLock()
+	defer to.mu.RUnlock()
+
+	conn := to.db.Conn()
+
+	// Build node filter condition
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	var query string
+	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND is_aggregated = true
+					%s
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					argMax(system_name, nodelist_date) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT DISTINCT ON (r.zone, r.net, r.node)
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
+				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
+				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+			FROM node_test_results r
+			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			WHERE r.is_aggregated = true
+				AND length(r.resolved_ipv6) > 0
+				AND (r.binkp_ipv6_tested = true OR r.ifcico_ipv6_tested = true OR r.telnet_ipv6_tested = true)
+				AND NOT (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
+			ORDER BY r.zone, r.net, r.node, r.test_time DESC
+			LIMIT ?`, nodeFilter)
+	} else {
+		// DuckDB query
+		query = fmt.Sprintf(`
+			WITH latest_tests AS (
+				SELECT
+					zone, net, node,
+					max(test_time) as latest_test_time
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND is_aggregated = true
+					%s
+				GROUP BY zone, net, node
+			),
+			latest_nodes AS (
+				SELECT
+					zone, net, node,
+					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
+				FROM nodes
+				GROUP BY zone, net, node
+			)
+			SELECT DISTINCT ON (r.zone, r.net, r.node)
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
+				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
+				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+			FROM node_test_results r
+			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				AND r.test_time = lt.latest_test_time
+			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			WHERE r.is_aggregated = true
+				AND array_length(r.resolved_ipv6) > 0
+				AND (r.binkp_ipv6_tested = true OR r.ifcico_ipv6_tested = true OR r.telnet_ipv6_tested = true)
+				AND NOT (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
+			ORDER BY r.zone, r.net, r.node, r.test_time DESC
+			LIMIT ?`, nodeFilter)
+	}
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		log.Printf("[ERROR] GetIPv6NonWorkingNodes: Query failed: %v", err)
+		return nil, fmt.Errorf("failed to search IPv6 non-working nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	rowCount := 0
+	for rows.Next() {
+		rowCount++
+		var r NodeTestResult
+		err := to.resultParser.ParseTestResultRow(rows, &r)
+		if err != nil {
+			log.Printf("[ERROR] GetIPv6NonWorkingNodes: Failed to parse row %d: %v", rowCount, err)
 			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
 		}
 		results = append(results, r)

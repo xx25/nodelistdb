@@ -134,6 +134,32 @@ cache:
   type: badger  # Options: badger, bolt
   path: /var/cache/nodetest
 
+# ============================================================================
+# FTP SERVER CONFIGURATION
+# ============================================================================
+# FTP server for serving nodelist files (anonymous read-only access)
+# Used by the server application only
+
+ftp:
+  # Enable FTP server
+  enabled: false
+
+  # Server binding
+  host: "0.0.0.0"       # Listen on all interfaces
+  port: 2121            # FTP port (use 2121 for non-root, 21 requires root)
+
+  # Nodelist file path
+  nodelist_path: /home/dp/nodelists  # Base directory containing nodelist files
+
+  # Connection limits
+  max_connections: 10   # Maximum concurrent FTP connections
+  idle_timeout: 300s    # 5 minutes idle timeout
+
+  # Passive mode configuration (for firewalls/NAT)
+  passive_port_min: 50000  # Start of passive port range
+  passive_port_max: 50100  # End of passive port range
+  public_host: ""          # Public IP/hostname for passive mode (leave empty for auto-detect)
+
 # Logging Configuration
 # ---------------------
 # Note: Only used by testdaemon. Parser and server use console output.

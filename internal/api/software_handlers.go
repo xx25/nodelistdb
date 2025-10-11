@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 )
@@ -18,6 +19,7 @@ func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
 	// Get software distribution from storage layer
 	dist, err := s.storage.GetBinkPSoftwareDistribution(days)
 	if err != nil {
+		log.Printf("ERROR: GetBinkPSoftwareDistribution failed: %v", err)
 		http.Error(w, "Failed to get BinkP software distribution", http.StatusInternalServerError)
 		return
 	}
@@ -38,6 +40,7 @@ func (s *Server) GetIFCICOSoftwareStats(w http.ResponseWriter, r *http.Request) 
 	// Get software distribution from storage layer
 	dist, err := s.storage.GetIFCICOSoftwareDistribution(days)
 	if err != nil {
+		log.Printf("ERROR: GetIFCICOSoftwareDistribution failed: %v", err)
 		http.Error(w, "Failed to get IFCICO software distribution", http.StatusInternalServerError)
 		return
 	}
@@ -58,6 +61,7 @@ func (s *Server) GetBinkdDetailedStats(w http.ResponseWriter, r *http.Request) {
 	// Get software distribution from storage layer
 	dist, err := s.storage.GetBinkdDetailedStats(days)
 	if err != nil {
+		log.Printf("ERROR: GetBinkdDetailedStats failed: %v", err)
 		http.Error(w, "Failed to get detailed binkd statistics", http.StatusInternalServerError)
 		return
 	}

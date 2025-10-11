@@ -401,6 +401,11 @@ func (s *Storage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool
 	return s.testOperations.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
 }
 
+// GetIPv6NonWorkingNodes returns nodes that have IPv6 addresses but no working IPv6 services
+func (s *Storage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
+}
+
 // GetBinkPEnabledNodes returns nodes that have been successfully tested with BinkP
 func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
 	return s.testOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes)

@@ -1,0 +1,29 @@
+database:
+  type: clickhouse
+  clickhouse:
+    host: localhost
+    port: 9000
+    database: nodelistdb
+    username: default
+    password: ""
+    use_ssl: false
+    max_open_conns: 10
+    max_idle_conns: 5
+    dial_timeout: 30s
+    read_timeout: 5m
+    write_timeout: 1m
+    compression: lz4
+
+cache:
+  enabled: false
+
+ftp:
+  enabled: true
+  host: "0.0.0.0"
+  port: 2121
+  nodelist_path: /home/dp/nodelists
+  max_connections: 10
+  passive_port_min: 50000
+  passive_port_max: 50100
+  idle_timeout: 300s
+  public_host: ""

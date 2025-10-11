@@ -37,15 +37,23 @@ func (to *TestOperations) GetBinkPSoftwareDistribution(days int) (*SoftwareDistr
 
 	conn := to.db.Conn()
 
+	// Get latest test result per node, then count software distribution
 	query := `
 		SELECT
 			binkp_version,
 			COUNT(*) as count
-		FROM node_test_results
-		WHERE binkp_tested = true
-			AND binkp_success = true
-			AND binkp_version <> ''
-			AND test_date >= today() - ?
+		FROM (
+			SELECT
+				zone, net, node,
+				argMax(binkp_version, test_time) as binkp_version
+			FROM node_test_results
+			WHERE binkp_tested = true
+				AND binkp_success = true
+				AND test_date >= today() - ?
+				AND is_aggregated = true
+			GROUP BY zone, net, node
+			HAVING binkp_version <> ''
+		) AS latest_tests
 		GROUP BY binkp_version
 		ORDER BY count DESC
 	`
@@ -129,15 +137,23 @@ func (to *TestOperations) GetIFCICOSoftwareDistribution(days int) (*SoftwareDist
 
 	conn := to.db.Conn()
 
+	// Get latest test result per node, then count software distribution
 	query := `
 		SELECT
 			ifcico_mailer_info,
 			COUNT(*) as count
-		FROM node_test_results
-		WHERE ifcico_tested = true
-			AND ifcico_success = true
-			AND ifcico_mailer_info <> ''
-			AND test_date >= today() - ?
+		FROM (
+			SELECT
+				zone, net, node,
+				argMax(ifcico_mailer_info, test_time) as ifcico_mailer_info
+			FROM node_test_results
+			WHERE ifcico_tested = true
+				AND ifcico_success = true
+				AND test_date >= today() - ?
+				AND is_aggregated = true
+			GROUP BY zone, net, node
+			HAVING ifcico_mailer_info <> ''
+		) AS latest_tests
 		GROUP BY ifcico_mailer_info
 		ORDER BY count DESC
 	`
@@ -215,15 +231,23 @@ func (to *TestOperations) GetBinkdDetailedStats(days int) (*SoftwareDistribution
 
 	conn := to.db.Conn()
 
+	// Get latest test result per node, then count software distribution
 	query := `
 		SELECT
 			binkp_version,
 			COUNT(*) as count
-		FROM node_test_results
-		WHERE binkp_tested = true
-			AND binkp_success = true
-			AND binkp_version LIKE 'binkd/%'
-			AND test_date >= today() - ?
+		FROM (
+			SELECT
+				zone, net, node,
+				argMax(binkp_version, test_time) as binkp_version
+			FROM node_test_results
+			WHERE binkp_tested = true
+				AND binkp_success = true
+				AND test_date >= today() - ?
+				AND is_aggregated = true
+			GROUP BY zone, net, node
+			HAVING binkp_version LIKE 'binkd/%'
+		) AS latest_tests
 		GROUP BY binkp_version
 		ORDER BY count DESC
 	`

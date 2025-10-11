@@ -72,6 +72,7 @@ type ClickHouseConfig struct {
 type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	Cache    CacheConfig    `yaml:"cache"`
+	FTP      FTPConfig      `yaml:"ftp"`
 }
 
 // CacheConfig holds cache configuration
@@ -91,6 +92,19 @@ type CacheConfig struct {
 	ClearAllOnImport  bool          `yaml:"clear_all_on_import"`
 	GCInterval        time.Duration `yaml:"gc_interval"`
 	GCDiscardRatio    float64       `yaml:"gc_discard_ratio"`
+}
+
+// FTPConfig holds FTP server configuration
+type FTPConfig struct {
+	Enabled        bool          `yaml:"enabled"`
+	Host           string        `yaml:"host"`
+	Port           int           `yaml:"port"`
+	NodelistPath   string        `yaml:"nodelist_path"`
+	MaxConnections int           `yaml:"max_connections"`
+	PassivePortMin int           `yaml:"passive_port_min"`
+	PassivePortMax int           `yaml:"passive_port_max"`
+	IdleTimeout    time.Duration `yaml:"idle_timeout"`
+	PublicHost     string        `yaml:"public_host"`
 }
 
 // Default configurations
@@ -142,6 +156,20 @@ func DefaultCacheConfig() *CacheConfig {
 		ClearAllOnImport:  false,
 		GCInterval:        10 * time.Minute,
 		GCDiscardRatio:    0.5,
+	}
+}
+
+func DefaultFTPConfig() *FTPConfig {
+	return &FTPConfig{
+		Enabled:        false,
+		Host:           "0.0.0.0",
+		Port:           2121,
+		NodelistPath:   "/home/dp/nodelists",
+		MaxConnections: 10,
+		PassivePortMin: 50000,
+		PassivePortMax: 50100,
+		IdleTimeout:    300 * time.Second,
+		PublicHost:     "",
 	}
 }
 
@@ -222,7 +250,35 @@ func (c *Config) validate() error {
 	if c.Cache.GCDiscardRatio == 0 {
 		c.Cache.GCDiscardRatio = 0.5
 	}
-	
+
+	// Validate FTP configuration
+	if c.FTP.Port == 0 {
+		c.FTP.Port = 2121
+	}
+	if c.FTP.Host == "" {
+		c.FTP.Host = "0.0.0.0"
+	}
+	if c.FTP.MaxConnections == 0 {
+		c.FTP.MaxConnections = 10
+	}
+	if c.FTP.PassivePortMin == 0 {
+		c.FTP.PassivePortMin = 50000
+	}
+	if c.FTP.PassivePortMax == 0 {
+		c.FTP.PassivePortMax = 50100
+	}
+	if c.FTP.IdleTimeout == 0 {
+		c.FTP.IdleTimeout = 300 * time.Second
+	}
+	if c.FTP.NodelistPath == "" {
+		// Try to get from environment or use default
+		if path := os.Getenv("NODELIST_PATH"); path != "" {
+			c.FTP.NodelistPath = path
+		} else {
+			c.FTP.NodelistPath = "/home/dp/nodelists"
+		}
+	}
+
 	switch c.Database.Type {
 	case DatabaseTypeDuckDB:
 		if c.Database.DuckDB == nil {

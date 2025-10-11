@@ -15,6 +15,7 @@ import (
 	"github.com/nodelistdb/internal/cache"
 	"github.com/nodelistdb/internal/config"
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/ftp"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 	"github.com/nodelistdb/internal/web"
@@ -194,6 +195,29 @@ func main() {
 		log.Println("Cache is disabled")
 	}
 
+	// Initialize FTP server if enabled
+	var ftpServer *ftp.Server
+	if cfg.FTP.Enabled {
+		ftpConfig := &ftp.Config{
+			Enabled:        cfg.FTP.Enabled,
+			Host:           cfg.FTP.Host,
+			Port:           cfg.FTP.Port,
+			NodelistPath:   cfg.FTP.NodelistPath,
+			MaxConnections: cfg.FTP.MaxConnections,
+			PassivePortMin: cfg.FTP.PassivePortMin,
+			PassivePortMax: cfg.FTP.PassivePortMax,
+			IdleTimeout:    cfg.FTP.IdleTimeout,
+			PublicHost:     cfg.FTP.PublicHost,
+		}
+
+		var err error
+		ftpServer, err = ftp.New(ftpConfig)
+		if err != nil {
+			log.Fatalf("Failed to initialize FTP server: %v", err)
+		}
+		log.Printf("FTP server configured on %s:%d", cfg.FTP.Host, cfg.FTP.Port)
+	}
+
 	// Initialize API and Web servers
 	apiServer := api.New(finalStorage)
 	webServer := web.New(finalStorage, web.TemplatesFS, web.StaticFS)
@@ -213,9 +237,22 @@ func main() {
 			metrics := cacheImpl.GetMetrics()
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{"hits":%d,"misses":%d,"sets":%d,"deletes":%d,"size":%d,"keys":%d,"hit_rate":%.2f}`,
-				metrics.Hits, metrics.Misses, metrics.Sets, metrics.Deletes, 
+				metrics.Hits, metrics.Misses, metrics.Sets, metrics.Deletes,
 				metrics.Size, metrics.Keys,
 				float64(metrics.Hits)/float64(metrics.Hits+metrics.Misses+1)*100)
+		})
+	}
+
+	// FTP stats endpoint if FTP is enabled
+	if ftpServer != nil {
+		mux.HandleFunc("/api/ftp/stats", func(w http.ResponseWriter, r *http.Request) {
+			stats := ftpServer.GetStats()
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"enabled":%t,"host":"%s","port":%d,"max_connections":%d}`,
+				stats["enabled"].(bool),
+				stats["host"].(string),
+				stats["port"].(int),
+				stats["max_connections"].(int))
 		})
 	}
 
@@ -223,6 +260,15 @@ func main() {
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", *host, *port),
 		Handler: mux,
+	}
+
+	// Start FTP server if enabled
+	if ftpServer != nil {
+		go func() {
+			if err := ftpServer.Start(); err != nil {
+				log.Fatalf("FTP server failed to start: %v", err)
+			}
+		}()
 	}
 
 	// Start server in a goroutine
@@ -243,6 +289,11 @@ func main() {
 		if cfg.Cache.Enabled {
 			log.Printf("    http://%s:%s/api/cache/stats     - Cache statistics\n", *host, *port)
 		}
+		if ftpServer != nil {
+			log.Printf("    http://%s:%s/api/ftp/stats       - FTP server statistics\n", *host, *port)
+			log.Println("  FTP Server:")
+			log.Printf("    ftp://%s:%d/                 - Anonymous FTP access (read-only)\n", *host, cfg.FTP.Port)
+		}
 		log.Println()
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -256,6 +307,15 @@ func main() {
 	<-quit
 
 	log.Println("Server shutting down...")
+
+	// Stop FTP server first
+	if ftpServer != nil {
+		if err := ftpServer.Stop(); err != nil {
+			log.Printf("FTP server shutdown error: %v", err)
+		}
+	}
+
+	// Stop HTTP server
 	if err := server.Close(); err != nil {
 		log.Printf("Server shutdown error: %v", err)
 	}
