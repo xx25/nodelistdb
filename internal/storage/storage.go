@@ -18,7 +18,7 @@ type Storage struct {
 	searchOperations    *SearchOperations
 	statsOperations     *StatisticsOperations
 	analyticsOperations *AnalyticsOperations
-	testOperations      *TestOperations
+	testOperations      *TestOperationsRefactored
 
 	mu sync.RWMutex
 }
@@ -54,8 +54,8 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 		storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
 		storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
 		storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
-		storage.testOperations = NewTestOperations(db, queryBuilder, resultParser)
-		
+		storage.testOperations = NewTestOperationsRefactored(db, queryBuilder, resultParser)
+
 		return storage, nil
 	} else {
 		// Default to DuckDB components
@@ -75,7 +75,7 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 	storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
 	storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
 	storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
-	storage.testOperations = NewTestOperations(db, queryBuilder, resultParser)
+	storage.testOperations = NewTestOperationsRefactored(db, queryBuilder, resultParser)
 
 	return storage, nil
 }
