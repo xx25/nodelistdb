@@ -61,6 +61,120 @@ type OSStats struct {
 	Percentage float64 `json:"percentage"`
 }
 
+// NodeTestResult represents a test result for a node
+type NodeTestResult struct {
+	TestTime              time.Time `json:"test_time"`
+	Zone                  int       `json:"zone"`
+	Net                   int       `json:"net"`
+	Node                  int       `json:"node"`
+	Address               string    `json:"address"`
+	Hostname              string    `json:"hostname"`
+	ResolvedIPv4          []string  `json:"resolved_ipv4"`
+	ResolvedIPv6          []string  `json:"resolved_ipv6"`
+	DNSError              string    `json:"dns_error"`
+
+	// Geolocation
+	Country     string  `json:"country"`
+	CountryCode string  `json:"country_code"`
+	City        string  `json:"city"`
+	Region      string  `json:"region"`
+	Latitude    float32 `json:"latitude"`
+	Longitude   float32 `json:"longitude"`
+	ISP         string  `json:"isp"`
+	Org         string  `json:"org"`
+	ASN         uint32  `json:"asn"`
+
+	// BinkP Test Results
+	BinkPTested       bool     `json:"binkp_tested"`
+	BinkPSuccess      bool     `json:"binkp_success"`
+	BinkPResponseMs   uint32   `json:"binkp_response_ms"`
+	BinkPSystemName   string   `json:"binkp_system_name"`
+	BinkPSysop        string   `json:"binkp_sysop"`
+	BinkPLocation     string   `json:"binkp_location"`
+	BinkPVersion      string   `json:"binkp_version"`
+	BinkPAddresses    []string `json:"binkp_addresses"`
+	BinkPCapabilities []string `json:"binkp_capabilities"`
+	BinkPError        string   `json:"binkp_error"`
+
+	// IFCICO Test Results
+	IfcicoTested       bool     `json:"ifcico_tested"`
+	IfcicoSuccess      bool     `json:"ifcico_success"`
+	IfcicoResponseMs   uint32   `json:"ifcico_response_ms"`
+	IfcicoMailerInfo   string   `json:"ifcico_mailer_info"`
+	IfcicoSystemName   string   `json:"ifcico_system_name"`
+	IfcicoAddresses    []string `json:"ifcico_addresses"`
+	IfcicoResponseType string   `json:"ifcico_response_type"`
+	IfcicoError        string   `json:"ifcico_error"`
+
+	// Telnet Test Results
+	TelnetTested     bool   `json:"telnet_tested"`
+	TelnetSuccess    bool   `json:"telnet_success"`
+	TelnetResponseMs uint32 `json:"telnet_response_ms"`
+	TelnetError      string `json:"telnet_error"`
+
+	// FTP Test Results
+	FTPTested     bool   `json:"ftp_tested"`
+	FTPSuccess    bool   `json:"ftp_success"`
+	FTPResponseMs uint32 `json:"ftp_response_ms"`
+	FTPError      string `json:"ftp_error"`
+
+	// VModem Test Results
+	VModemTested     bool   `json:"vmodem_tested"`
+	VModemSuccess    bool   `json:"vmodem_success"`
+	VModemResponseMs uint32 `json:"vmodem_response_ms"`
+	VModemError      string `json:"vmodem_error"`
+
+	// IPv6-specific Test Results
+	BinkPIPv6Tested     bool   `json:"binkp_ipv6_tested"`
+	BinkPIPv6Success    bool   `json:"binkp_ipv6_success"`
+	BinkPIPv6Error      string `json:"binkp_ipv6_error"`
+	IfcicoIPv6Tested    bool   `json:"ifcico_ipv6_tested"`
+	IfcicoIPv6Success   bool   `json:"ifcico_ipv6_success"`
+	IfcicoIPv6Error     string `json:"ifcico_ipv6_error"`
+	TelnetIPv6Tested    bool   `json:"telnet_ipv6_tested"`
+	TelnetIPv6Success   bool   `json:"telnet_ipv6_success"`
+	TelnetIPv6Error     string `json:"telnet_ipv6_error"`
+
+	IsOperational         bool `json:"is_operational"`
+	HasConnectivityIssues bool `json:"has_connectivity_issues"`
+	AddressValidated      bool `json:"address_validated"`
+
+	// Per-hostname testing fields (simplified migration)
+	TestedHostname        string   `json:"tested_hostname"`         // Which hostname was tested
+	HostnameIndex         int32    `json:"hostname_index"`          // -1=legacy, 0=primary, 1+=backup
+	IsAggregated          bool     `json:"is_aggregated"`           // false=per-hostname, true=summary
+	TotalHostnames        int32    `json:"total_hostnames"`         // Total number of hostnames for this node
+	HostnamesTested       int32    `json:"hostnames_tested"`        // Number of hostnames actually tested
+	HostnamesOperational  int32    `json:"hostnames_operational"`   // Number of operational hostnames
+	AllHostnames          []string `json:"all_hostnames"`           // All hostnames for this node (for display)
+}
+
+// NodeReachabilityStats represents aggregated reachability statistics for a node
+type NodeReachabilityStats struct {
+	Zone                int     `json:"zone"`
+	Net                 int     `json:"net"`
+	Node                int     `json:"node"`
+	TotalTests          int     `json:"total_tests"`
+	SuccessfulTests     int     `json:"successful_tests"`
+	FailedTests         int     `json:"failed_tests"`
+	SuccessRate         float64 `json:"success_rate"`
+	AverageResponseMs   float64 `json:"average_response_ms"`
+	LastTestTime        time.Time `json:"last_test_time"`
+	LastStatus          string  `json:"last_status"`
+	BinkPSuccessRate    float64 `json:"binkp_success_rate"`
+	IfcicoSuccessRate   float64 `json:"ifcico_success_rate"`
+	TelnetSuccessRate   float64 `json:"telnet_success_rate"`
+}
+
+// ReachabilityTrend represents reachability trend over time
+type ReachabilityTrend struct {
+	Date              time.Time `json:"date"`
+	TotalNodes        int       `json:"total_nodes"`
+	OperationalNodes  int       `json:"operational_nodes"`
+	FailedNodes       int       `json:"failed_nodes"`
+	SuccessRate       float64   `json:"success_rate"`
+	AvgResponseMs     float64   `json:"avg_response_ms"`
+}
 
 // BatchInsertConfig holds configuration for batch insert operations
 type BatchInsertConfig struct {
@@ -192,6 +306,15 @@ type ResultParserInterface interface {
 // RowScanner interface abstracts sql.Rows and sql.Row for easier testing
 type RowScanner interface {
 	Scan(dest ...interface{}) error
+}
+
+// singleRowScanner wraps sql.Row to implement RowScanner interface
+type singleRowScanner struct {
+	Row interface{ Scan(dest ...interface{}) error }
+}
+
+func (s *singleRowScanner) Scan(dest ...interface{}) error {
+	return s.Row.Scan(dest...)
 }
 
 // Constants for default values and limits

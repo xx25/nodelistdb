@@ -10,13 +10,13 @@ import (
 // This is the facade that coordinates all test-related operations
 type TestOperationsRefactored struct {
 	db                 database.DatabaseInterface
-	originalQueryBuilder QueryBuilderInterface      // Keep the original for software analytics
 	testQueryBuilder   *TestQueryBuilder
 	resultParser       ResultParserInterface
 	historyOps         *TestHistoryOperations
 	reachabilityOps    *ReachabilityOperations
 	protocolOps        *ProtocolQueryOperations
 	ipv6Ops            *IPv6QueryOperations
+	softwareOps        *SoftwareAnalyticsOperations
 	mu                 sync.RWMutex
 }
 
@@ -27,13 +27,13 @@ func NewTestOperationsRefactored(db database.DatabaseInterface, queryBuilder Que
 
 	return &TestOperationsRefactored{
 		db:                 db,
-		originalQueryBuilder: queryBuilder,
 		testQueryBuilder:   testQueryBuilder,
 		resultParser:       resultParser,
 		historyOps:         NewTestHistoryOperations(db, testQueryBuilder, resultParser),
 		reachabilityOps:    NewReachabilityOperations(db, testQueryBuilder, resultParser),
 		protocolOps:        NewProtocolQueryOperations(db, testQueryBuilder, resultParser),
 		ipv6Ops:            NewIPv6QueryOperations(db, testQueryBuilder, resultParser),
+		softwareOps:        NewSoftwareAnalyticsOperations(db),
 	}
 }
 
@@ -93,29 +93,21 @@ func (to *TestOperationsRefactored) GetFTPEnabledNodes(limit int, days int, incl
 	return to.protocolOps.GetFTPEnabledNodes(limit, days, includeZeroNodes)
 }
 
-// ===== Software Analytics Operations =====
-// Note: These are implemented in software_analytics.go on TestOperations
-// We need to provide them here too for compatibility
+// ===== Software Analytics Operations (delegated to SoftwareAnalyticsOperations) =====
 
 // GetBinkPSoftwareDistribution returns BinkP software distribution statistics
 func (to *TestOperationsRefactored) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	// Delegate to the original TestOperations implementation
-	tempOps := NewTestOperations(to.db, to.originalQueryBuilder, to.resultParser)
-	return tempOps.GetBinkPSoftwareDistribution(days)
+	return to.softwareOps.GetBinkPSoftwareDistribution(days)
 }
 
 // GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics
 func (to *TestOperationsRefactored) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	// Delegate to the original TestOperations implementation
-	tempOps := NewTestOperations(to.db, to.originalQueryBuilder, to.resultParser)
-	return tempOps.GetIFCICOSoftwareDistribution(days)
+	return to.softwareOps.GetIFCICOSoftwareDistribution(days)
 }
 
 // GetBinkdDetailedStats returns detailed binkd statistics
 func (to *TestOperationsRefactored) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
-	// Delegate to the original TestOperations implementation
-	tempOps := NewTestOperations(to.db, to.originalQueryBuilder, to.resultParser)
-	return tempOps.GetBinkdDetailedStats(days)
+	return to.softwareOps.GetBinkdDetailedStats(days)
 }
 
 // ===== IPv6 Operations (delegated to IPv6QueryOperations) =====

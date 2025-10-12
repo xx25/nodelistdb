@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -18,13 +19,26 @@ type softwareInfo struct {
 	Protocol string
 }
 
+// SoftwareAnalyticsOperations handles software analytics queries
+type SoftwareAnalyticsOperations struct {
+	db database.DatabaseInterface
+	mu sync.RWMutex
+}
+
+// NewSoftwareAnalyticsOperations creates a new SoftwareAnalyticsOperations instance
+func NewSoftwareAnalyticsOperations(db database.DatabaseInterface) *SoftwareAnalyticsOperations {
+	return &SoftwareAnalyticsOperations{
+		db: db,
+	}
+}
+
 // GetBinkPSoftwareDistribution returns BinkP software distribution statistics
-func (to *TestOperations) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	to.mu.RLock()
-	defer to.mu.RUnlock()
+func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+	sao.mu.RLock()
+	defer sao.mu.RUnlock()
 
 	// This feature is only available for ClickHouse
-	if _, isClickHouse := to.db.(*database.ClickHouseDB); !isClickHouse {
+	if _, isClickHouse := sao.db.(*database.ClickHouseDB); !isClickHouse {
 		return &SoftwareDistribution{
 			Protocol:         "BinkP",
 			TotalNodes:       0,
@@ -35,7 +49,7 @@ func (to *TestOperations) GetBinkPSoftwareDistribution(days int) (*SoftwareDistr
 		}, nil
 	}
 
-	conn := to.db.Conn()
+	conn := sao.db.Conn()
 
 	// Get latest test result per node, then count software distribution
 	query := `
@@ -119,12 +133,12 @@ func (to *TestOperations) GetBinkPSoftwareDistribution(days int) (*SoftwareDistr
 }
 
 // GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics
-func (to *TestOperations) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	to.mu.RLock()
-	defer to.mu.RUnlock()
+func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+	sao.mu.RLock()
+	defer sao.mu.RUnlock()
 
 	// This feature is only available for ClickHouse
-	if _, isClickHouse := to.db.(*database.ClickHouseDB); !isClickHouse {
+	if _, isClickHouse := sao.db.(*database.ClickHouseDB); !isClickHouse {
 		return &SoftwareDistribution{
 			Protocol:         "IFCICO/EMSI",
 			TotalNodes:       0,
@@ -135,7 +149,7 @@ func (to *TestOperations) GetIFCICOSoftwareDistribution(days int) (*SoftwareDist
 		}, nil
 	}
 
-	conn := to.db.Conn()
+	conn := sao.db.Conn()
 
 	// Get latest test result per node, then count software distribution
 	query := `
@@ -213,12 +227,12 @@ func (to *TestOperations) GetIFCICOSoftwareDistribution(days int) (*SoftwareDist
 }
 
 // GetBinkdDetailedStats returns detailed binkd statistics
-func (to *TestOperations) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
-	to.mu.RLock()
-	defer to.mu.RUnlock()
+func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
+	sao.mu.RLock()
+	defer sao.mu.RUnlock()
 
 	// This feature is only available for ClickHouse
-	if _, isClickHouse := to.db.(*database.ClickHouseDB); !isClickHouse {
+	if _, isClickHouse := sao.db.(*database.ClickHouseDB); !isClickHouse {
 		return &SoftwareDistribution{
 			Protocol:         "BinkP (binkd only)",
 			TotalNodes:       0,
@@ -229,7 +243,7 @@ func (to *TestOperations) GetBinkdDetailedStats(days int) (*SoftwareDistribution
 		}, nil
 	}
 
-	conn := to.db.Conn()
+	conn := sao.db.Conn()
 
 	// Get latest test result per node, then count software distribution
 	query := `
