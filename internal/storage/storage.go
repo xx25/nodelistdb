@@ -28,42 +28,13 @@ func (s *Storage) GetDatabase() database.DatabaseInterface {
 	return s.db
 }
 
-// New creates a new Storage instance with all specialized components
+// New creates a new Storage instance with ClickHouse-specific components
 func New(db database.DatabaseInterface) (*Storage, error) {
-	var queryBuilder QueryBuilderInterface
-	var resultParser ResultParserInterface
+	// Always use ClickHouse components (only supported database type)
+	queryBuilder := NewClickHouseQueryBuilder()
+	resultParser := NewClickHouseResultParser()
 
-	// Check if this is a ClickHouse database and use specialized components
-	if _, isClickHouse := db.(*database.ClickHouseDB); isClickHouse {
-		chQueryBuilder := NewClickHouseQueryBuilder()
-		chResultParser := NewClickHouseResultParser()
-		queryBuilder = chQueryBuilder
-		resultParser = chResultParser // Use the ClickHouse parser directly
-		
-		// Create the storage instance with ClickHouse components
-		storage := &Storage{
-			db:           db,
-			queryBuilder: queryBuilder,
-			resultParser: resultParser,
-		}
-		
-		// Create specialized operation components
-		// For ClickHouse, we still use the base NodeOperations but with ClickHouse-specific components
-		// The ClickHouse query builder and result parser will handle array formatting correctly
-		storage.nodeOperations = NewNodeOperations(db, queryBuilder, resultParser)
-		storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
-		storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
-		storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
-		storage.testOperations = NewTestOperationsRefactored(db, queryBuilder, resultParser)
-
-		return storage, nil
-	} else {
-		// Default to DuckDB components
-		queryBuilder = NewQueryBuilder()
-		resultParser = NewResultParser()
-	}
-
-	// Create the storage instance
+	// Create the storage instance with ClickHouse components
 	storage := &Storage{
 		db:           db,
 		queryBuilder: queryBuilder,

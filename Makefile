@@ -30,7 +30,7 @@ ARM64_CXX ?= aarch64-linux-gnu-g++
 
 # Default target
 help: ## Show this help message
-	@echo 'NodelistDB - Clean DuckDB-only FidoNet Nodelist System'
+	@echo 'NodelistDB - ClickHouse FidoNet Nodelist System'
 	@echo ''
 	@echo 'Usage: make [target]'
 	@echo ''
@@ -87,10 +87,10 @@ run-parser: ## Run parser (requires NODELIST_PATH)
 		echo "Example: make run-parser NODELIST_PATH='/path/to/nodelists'"; \
 		exit 1; \
 	fi
-	./bin/parser -path "$(NODELIST_PATH)" -db ./nodelist.duckdb -verbose $(ARGS)
+	./bin/parser -config config.yaml -path "$(NODELIST_PATH)" -verbose $(ARGS)
 
 run-server: build-server ## Run web server
-	./bin/server -db ./nodelist.duckdb -host localhost -port 8080
+	./bin/server -config config.yaml -host localhost -port 8080
 
 run-daemon: build-daemon ## Run testing daemon
 	./bin/testdaemon -config config.yaml
@@ -148,12 +148,10 @@ build-daemon-linux-arm64: ## Build daemon for Linux ARM64
 # Clean targets
 clean: ## Clean build artifacts
 	rm -rf bin/
-	rm -f *.duckdb
-	rm -f *.db
 
 # Development database
-init-db: build-parser ## Initialize development database
-	./bin/parser -path ./test_data -db ./dev.duckdb -verbose || true
+init-db: build-parser ## Initialize development database with test data
+	./bin/parser -config config.yaml -path ./test_nodelists -verbose || true
 	@echo "✓ Development database initialized"
 
 # Docker targets (future)

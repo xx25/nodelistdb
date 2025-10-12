@@ -17,10 +17,10 @@ func TestNodeResultAlignment(t *testing.T) {
 			BatchSize:    5,
 		},
 		Database: DatabaseConfig{
-			Type: "duckdb",
-			DuckDB: &DuckDBConfig{
-				NodesPath:   "/tmp/test_nodes.db",
-				ResultsPath: "/tmp/test_results.db",
+			ClickHouse: &ClickHouseConfig{
+				Host:     "localhost",
+				Port:     9000,
+				Database: "nodelistdb_test",
 			},
 		},
 		Protocols: ProtocolsConfig{

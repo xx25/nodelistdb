@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,22 +19,13 @@ import (
 
 // Server represents the API server
 type Server struct {
-	storage    storage.Operations
-	dbFilePath string
+	storage storage.Operations
 }
 
 // New creates a new API server
 func New(storage storage.Operations) *Server {
 	return &Server{
 		storage: storage,
-	}
-}
-
-// NewWithDBPath creates a new API server with database file path
-func NewWithDBPath(storage storage.Operations, dbFilePath string) *Server {
-	return &Server{
-		storage:    storage,
-		dbFilePath: dbFilePath,
 	}
 }
 
@@ -702,50 +692,6 @@ func (s *Server) FlagsDocumentationHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(response)
 }
 
-// DownloadDatabaseHandler serves the DuckDB database file for download
-// GET /api/download/database
-func (s *Server) DownloadDatabaseHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Check if database file path is set
-	if s.dbFilePath == "" {
-		http.Error(w, "Database file path not configured", http.StatusInternalServerError)
-		return
-	}
-
-	// Open the database file
-	file, err := os.Open(s.dbFilePath)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to open database file: %v", err), http.StatusInternalServerError)
-		return
-	}
-	defer file.Close()
-
-	// Get file info
-	fileInfo, err := file.Stat()
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get file info: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Set headers for file download
-	filename := filepath.Base(s.dbFilePath)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Last-Modified", fileInfo.ModTime().UTC().Format(http.TimeFormat))
-
-	// Serve the file
-	_, err = io.Copy(w, file)
-	if err != nil {
-		// Log error but don't send response as headers are already sent
-		log.Printf("Error serving database file: %v", err)
-	}
-}
 
 // SetupRoutes sets up HTTP routes for the API server
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
@@ -756,7 +702,6 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/stats/dates", s.GetAvailableDatesHandler)
 	mux.HandleFunc("/api/flags", s.FlagsDocumentationHandler)
 	mux.HandleFunc("/api/sysops", s.SysopsHandler)
-	mux.HandleFunc("/api/download/database", s.DownloadDatabaseHandler)
 	mux.HandleFunc("/api/nodelist/latest", s.LatestNodelistAPIHandler)
 
 	// Software analytics routes

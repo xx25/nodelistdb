@@ -7,9 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-	"time"
 
 	"github.com/nodelistdb/internal/api"
 	"github.com/nodelistdb/internal/cache"
@@ -25,7 +23,6 @@ func main() {
 	// Command line flags
 	var (
 		configPath  = flag.String("config", "config.yaml", "Path to configuration file")
-		dbPath      = flag.String("db", "", "Path to database file (overrides config)")
 		port        = flag.String("port", "8080", "HTTP server port")
 		host        = flag.String("host", "localhost", "HTTP server host")
 		showVersion = flag.Bool("version", false, "Show version information")
@@ -45,78 +42,26 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Override database path if specified via command line
-	if *dbPath != "" && cfg.Database.Type == config.DatabaseTypeDuckDB {
-		cfg.Database.DuckDB.Path = *dbPath
+	// Verify database configuration
+	if cfg.ClickHouse.Host == "" {
+		log.Fatalf("ClickHouse configuration is missing in %s", *configPath)
 	}
 
-	// Set read-only mode for server
-	if cfg.Database.Type == config.DatabaseTypeDuckDB {
-		cfg.Database.DuckDB.ReadOnly = true
-	}
-
-	fmt.Printf("FidoNet Nodelist Server (%s)\n", strings.ToUpper(string(cfg.Database.Type)))
-	fmt.Println("===============================")
-	switch cfg.Database.Type {
-	case config.DatabaseTypeDuckDB:
-		fmt.Printf("Database: %s\n", cfg.Database.DuckDB.Path)
-	case config.DatabaseTypeClickHouse:
-		fmt.Printf("Database: %s@%s:%d/%s\n", cfg.Database.ClickHouse.Username, cfg.Database.ClickHouse.Host, cfg.Database.ClickHouse.Port, cfg.Database.ClickHouse.Database)
-	}
+	fmt.Println("FidoNet Nodelist Server (ClickHouse)")
+	fmt.Println("====================================")
+	fmt.Printf("Database: %s@%s:%d/%s\n", cfg.ClickHouse.Username, cfg.ClickHouse.Host, cfg.ClickHouse.Port, cfg.ClickHouse.Database)
 	fmt.Printf("Server: http://%s:%s\n", *host, *port)
 	fmt.Println()
 
-	// Initialize database based on configuration
-	log.Printf("Initializing %s database in read-only mode...\n", cfg.Database.Type)
+	// Initialize ClickHouse database
+	log.Println("Initializing ClickHouse database...")
 
-	var db database.DatabaseInterface
-	switch cfg.Database.Type {
-	case config.DatabaseTypeDuckDB:
-		db, err = database.NewReadOnly(cfg.Database.DuckDB.Path)
-	case config.DatabaseTypeClickHouse:
-		// Convert config to ClickHouse config and create connection
-		chConfig := &database.ClickHouseConfig{
-			Host:         cfg.Database.ClickHouse.Host,
-			Port:         cfg.Database.ClickHouse.Port,
-			Database:     cfg.Database.ClickHouse.Database,
-			Username:     cfg.Database.ClickHouse.Username,
-			Password:     cfg.Database.ClickHouse.Password,
-			UseSSL:       cfg.Database.ClickHouse.UseSSL,
-			MaxOpenConns: cfg.Database.ClickHouse.MaxOpenConns,
-			MaxIdleConns: cfg.Database.ClickHouse.MaxIdleConns,
-		}
-
-		// Parse timeout strings
-		if cfg.Database.ClickHouse.DialTimeout != "" {
-			if chConfig.DialTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.DialTimeout); err != nil {
-				log.Fatalf("Invalid dial timeout: %v", err)
-			}
-		} else {
-			chConfig.DialTimeout = 30 * time.Second
-		}
-
-		if cfg.Database.ClickHouse.ReadTimeout != "" {
-			if chConfig.ReadTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.ReadTimeout); err != nil {
-				log.Fatalf("Invalid read timeout: %v", err)
-			}
-		} else {
-			chConfig.ReadTimeout = 5 * time.Minute
-		}
-
-		if cfg.Database.ClickHouse.WriteTimeout != "" {
-			if chConfig.WriteTimeout, err = time.ParseDuration(cfg.Database.ClickHouse.WriteTimeout); err != nil {
-				log.Fatalf("Invalid write timeout: %v", err)
-			}
-		} else {
-			chConfig.WriteTimeout = 1 * time.Minute
-		}
-
-		chConfig.Compression = cfg.Database.ClickHouse.Compression
-
-		db, err = database.NewClickHouseReadOnly(chConfig)
-	default:
-		log.Fatalf("Unsupported database type: %s", cfg.Database.Type)
+	chConfig, err := cfg.ClickHouse.ToClickHouseDatabaseConfig()
+	if err != nil {
+		log.Fatalf("Invalid ClickHouse configuration: %v", err)
 	}
+
+	db, err := database.NewClickHouse(chConfig)
 
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
@@ -125,7 +70,7 @@ func main() {
 
 	// Get database version
 	if version, err := db.GetVersion(); err == nil {
-		fmt.Printf("%s version: %s\n", strings.ToUpper(string(cfg.Database.Type)), version)
+		fmt.Printf("ClickHouse version: %s\n", version)
 	}
 
 	// Enable SQL debugging if requested

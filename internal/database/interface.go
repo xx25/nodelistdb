@@ -28,13 +28,7 @@ type DatabaseFactory func(config interface{}) (DatabaseInterface, error)
 
 // DatabaseRegistry holds factory functions for different database types
 var DatabaseRegistry = map[string]DatabaseFactory{
-	"duckdb": func(config interface{}) (DatabaseInterface, error) {
-		path, ok := config.(string)
-		if !ok {
-			return nil, fmt.Errorf("duckdb config must be a string path")
-		}
-		return New(path)
-	},
+	// ClickHouse factory is registered in clickhouse.go
 }
 
 // RegisterDatabase registers a new database type with its factory function
@@ -50,19 +44,4 @@ func CreateDatabase(dbType string, config interface{}) (DatabaseInterface, error
 	}
 
 	return factory(config)
-}
-
-// Ensure existing DB struct implements the interface
-var _ DatabaseInterface = (*DB)(nil)
-
-// Add Ping method to existing DB struct to satisfy interface
-func (db *DB) Ping() error {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-
-	if db.conn == nil {
-		return fmt.Errorf("database connection is nil")
-	}
-
-	return db.conn.Ping()
 }

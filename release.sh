@@ -46,7 +46,7 @@ git tag -a "$VERSION" -m "Release $VERSION
 
 Features:
 - FidoNet nodelist parsing and storage system
-- DuckDB-based high-performance storage engine  
+- ClickHouse-based high-performance storage engine
 - REST API for node search and statistics
 - Web interface for browsing nodelist data
 - Command-line tools for parsing and serving

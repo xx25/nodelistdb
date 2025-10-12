@@ -172,7 +172,7 @@
                 <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🗄️ Database Structure</h2>
                 
                 <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Main Table: nodes</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">The database stores FidoNet nodelist data in a DuckDB database with the following schema:</p>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">The database stores FidoNet nodelist data in ClickHouse with the following schema:</p>
                 
                 <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
                     <strong>Core Identity Fields:</strong><br>
@@ -266,31 +266,25 @@
             </div>
 
             <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">💾 Database Download</h2>
-                
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Download Complete Database</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">You can download the complete DuckDB database file for local analysis and querying:</p>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
-                    <strong>Using wget:</strong><br>
-                    <code>wget {{.SiteURL}}/nodelist.duckdb</code><br><br>
-                    
-                    <strong>Using curl:</strong><br>
-                    <code>curl -O {{.SiteURL}}/nodelist.duckdb</code>
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">💾 Database Access</h2>
+
+                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Query via API</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Access the ClickHouse-backed database through the REST API endpoints documented above. The API provides efficient access to all nodelist data with filtering, pagination, and search capabilities.</p>
+
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
+                    <strong>Example API queries:</strong><br>
+                    <code># Get all nodes in Zone 2<br>
+                    curl "{{.BaseURL}}api/nodes?zone=2&limit=100"<br><br>
+
+                    # Search for nodes with Binkp support<br>
+                    curl "{{.BaseURL}}api/nodes?has_binkp=true&limit=50"<br><br>
+
+                    # Get network statistics<br>
+                    curl "{{.BaseURL}}api/stats"</code>
                 </div>
-                
-                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Query locally with DuckDB:</strong><br>
-                    <code># Install DuckDB CLI from https://duckdb.org<br>
-                    duckdb nodelist.duckdb<br><br>
-                    
-                    # Example queries:<br>
-                    SELECT COUNT(*) FROM nodes WHERE zone = 2;<br>
-                    SELECT DISTINCT system_name FROM nodes WHERE has_binkp = true;</code>
-                </div>
-                
+
                 <div class="alert alert-success">
-                    <strong>Database Info:</strong> The database is updated weekly with the latest FidoNet nodelist data. Current size is approximately X MB compressed.
+                    <strong>Database Info:</strong> The ClickHouse database is updated weekly with the latest FidoNet nodelist data, providing high-performance analytics and time-series capabilities.
                 </div>
             </div>
 

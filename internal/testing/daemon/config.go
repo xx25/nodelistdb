@@ -10,16 +10,16 @@ import (
 
 // Config represents the complete daemon configuration
 type Config struct {
-	Daemon          DaemonConfig    `yaml:"daemon"`
-	Database        DatabaseConfig  `yaml:"database"`
-	Protocols       ProtocolsConfig `yaml:"protocols"`
-	Services        ServicesConfig  `yaml:"services"`
-	Cache           CacheConfig     `yaml:"cache"` // Not used by testdaemon
-	TestdaemonCache CacheConfig     `yaml:"testdaemon_cache"` // Required cache config for testdaemon
-	Logging         LoggingConfig   `yaml:"logging"`
-	CLI             CLIConfig       `yaml:"cli"`
-	ConfigPath      string          `yaml:"-"` // Path to config file, set when loading
-	Version         string          `yaml:"-"` // Version string, set from main
+	Daemon          DaemonConfig       `yaml:"daemon"`
+	ClickHouse      *ClickHouseConfig  `yaml:"clickhouse"`
+	Protocols       ProtocolsConfig    `yaml:"protocols"`
+	Services        ServicesConfig     `yaml:"services"`
+	Cache           CacheConfig        `yaml:"cache"` // Not used by testdaemon
+	TestdaemonCache CacheConfig        `yaml:"testdaemon_cache"` // Required cache config for testdaemon
+	Logging         LoggingConfig      `yaml:"logging"`
+	CLI             CLIConfig          `yaml:"cli"`
+	ConfigPath      string             `yaml:"-"` // Path to config file, set when loading
+	Version         string             `yaml:"-"` // Version string, set from main
 }
 
 // DaemonConfig contains daemon-specific settings
@@ -33,19 +33,6 @@ type DaemonConfig struct {
 	DryRun            bool          `yaml:"-"` // Set from command line
 	CLIOnly           bool          `yaml:"-"` // Set from command line - disable automatic testing
 	TestLimit         string        `yaml:"-"` // Set from command line - limit to specific node(s)
-}
-
-// DatabaseConfig contains database connection settings
-type DatabaseConfig struct {
-	Type       string                `yaml:"type"` // "duckdb" or "clickhouse"
-	DuckDB     *DuckDBConfig        `yaml:"duckdb,omitempty"`
-	ClickHouse *ClickHouseConfig    `yaml:"clickhouse,omitempty"`
-}
-
-// DuckDBConfig for DuckDB database
-type DuckDBConfig struct {
-	NodesPath   string `yaml:"nodes_path"`   // Path to nodes database
-	ResultsPath string `yaml:"results_path"` // Path to test results database
 }
 
 // ClickHouseConfig for ClickHouse database
@@ -169,13 +156,13 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Daemon.FailedRetryInterval = 24 * 3600  // 24 hours, will be converted to Duration later
 	}
 	
-	// Database-specific defaults
-	if cfg.Database.Type == "clickhouse" && cfg.Database.ClickHouse != nil {
-		if cfg.Database.ClickHouse.BatchSize == 0 {
-			cfg.Database.ClickHouse.BatchSize = 1000
+	// ClickHouse-specific defaults
+	if cfg.ClickHouse != nil {
+		if cfg.ClickHouse.BatchSize == 0 {
+			cfg.ClickHouse.BatchSize = 1000
 		}
-		if cfg.Database.ClickHouse.FlushInterval == 0 {
-			cfg.Database.ClickHouse.FlushInterval = 30  // Will be converted to Duration later
+		if cfg.ClickHouse.FlushInterval == 0 {
+			cfg.ClickHouse.FlushInterval = 30  // Will be converted to Duration later
 		}
 	}
 	
@@ -213,9 +200,9 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Daemon.FailedRetryInterval *= time.Second
 	}
 	
-	if cfg.Database.Type == "clickhouse" && cfg.Database.ClickHouse != nil {
-		if cfg.Database.ClickHouse.FlushInterval < time.Duration(oneSecondInNanos) {
-			cfg.Database.ClickHouse.FlushInterval *= time.Second
+	if cfg.ClickHouse != nil {
+		if cfg.ClickHouse.FlushInterval < time.Duration(oneSecondInNanos) {
+			cfg.ClickHouse.FlushInterval *= time.Second
 		}
 	}
 
@@ -294,34 +281,15 @@ func LoadConfig(path string) (*Config, error) {
 
 // Validate checks if configuration is valid
 func (c *Config) Validate() error {
-	// Check database configuration
-	if c.Database.Type == "" {
-		return fmt.Errorf("database.type is required (duckdb or clickhouse)")
+	// Check ClickHouse database configuration
+	if c.ClickHouse == nil {
+		return fmt.Errorf("clickhouse configuration is required")
 	}
-	
-	switch c.Database.Type {
-	case "duckdb":
-		if c.Database.DuckDB == nil {
-			return fmt.Errorf("database.duckdb configuration is required when type is duckdb")
-		}
-		if c.Database.DuckDB.NodesPath == "" {
-			return fmt.Errorf("database.duckdb.nodes_path is required")
-		}
-		if c.Database.DuckDB.ResultsPath == "" {
-			return fmt.Errorf("database.duckdb.results_path is required")
-		}
-	case "clickhouse":
-		if c.Database.ClickHouse == nil {
-			return fmt.Errorf("database.clickhouse configuration is required when type is clickhouse")
-		}
-		if c.Database.ClickHouse.Host == "" {
-			return fmt.Errorf("database.clickhouse.host is required")
-		}
-		if c.Database.ClickHouse.Database == "" {
-			return fmt.Errorf("database.clickhouse.database is required")
-		}
-	default:
-		return fmt.Errorf("unsupported database type: %s (must be duckdb or clickhouse)", c.Database.Type)
+	if c.ClickHouse.Host == "" {
+		return fmt.Errorf("clickhouse.host is required")
+	}
+	if c.ClickHouse.Database == "" {
+		return fmt.Errorf("clickhouse.database is required")
 	}
 	
 	// Check if at least one protocol is enabled

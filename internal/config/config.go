@@ -10,47 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DatabaseType represents the supported database types
-type DatabaseType string
-
-const (
-	DatabaseTypeDuckDB     DatabaseType = "duckdb"
-	DatabaseTypeClickHouse DatabaseType = "clickhouse"
-)
-
-// DatabaseConfig holds database connection configuration
-type DatabaseConfig struct {
-	Type       DatabaseType      `yaml:"type"`
-	DuckDB     *DuckDBConfig     `yaml:"duckdb,omitempty"`
-	ClickHouse *ClickHouseConfig `yaml:"clickhouse,omitempty"`
-	// Support for multiple databases
-	Databases  []SingleDatabaseConfig `yaml:"databases,omitempty"`
-}
-
-// SingleDatabaseConfig represents a single database configuration
-type SingleDatabaseConfig struct {
-	Name       string            `yaml:"name"`
-	Type       DatabaseType      `yaml:"type"`
-	DuckDB     *DuckDBConfig     `yaml:"duckdb,omitempty"`
-	ClickHouse *ClickHouseConfig `yaml:"clickhouse,omitempty"`
-}
-
-// DuckDBConfig holds DuckDB-specific configuration
-type DuckDBConfig struct {
-	Path        string `yaml:"path"`
-	MemoryLimit string `yaml:"memory_limit,omitempty"`
-	Threads     int    `yaml:"threads,omitempty"`
-	ReadOnly    bool   `yaml:"read_only,omitempty"`
-
-	// Performance settings for bulk loading
-	BulkMode            bool   `yaml:"bulk_mode,omitempty"`            // Enable bulk loading optimizations
-	DisableWAL          bool   `yaml:"disable_wal,omitempty"`          // Disable Write-Ahead Logging
-	CheckpointThreshold string `yaml:"checkpoint_threshold,omitempty"` // Memory threshold before checkpoint
-	WALAutoCheckpoint   int    `yaml:"wal_auto_checkpoint,omitempty"`  // Pages before auto checkpoint (0 = disabled)
-	TempDirectory       string `yaml:"temp_directory,omitempty"`       // Temporary files directory
-}
-
-// ClickHouseConfig holds ClickHouse-specific configuration
+// ClickHouseConfig holds ClickHouse database connection configuration
 type ClickHouseConfig struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
@@ -70,9 +30,9 @@ type ClickHouseConfig struct {
 
 // Config represents the complete application configuration
 type Config struct {
-	Database DatabaseConfig `yaml:"database"`
-	Cache    CacheConfig    `yaml:"cache"`
-	FTP      FTPConfig      `yaml:"ftp"`
+	ClickHouse ClickHouseConfig `yaml:"clickhouse"`
+	Cache      CacheConfig      `yaml:"cache"`
+	FTP        FTPConfig        `yaml:"ftp"`
 }
 
 // CacheConfig holds cache configuration
@@ -108,22 +68,8 @@ type FTPConfig struct {
 }
 
 // Default configurations
-func DefaultDuckDBConfig() *DuckDBConfig {
-	return &DuckDBConfig{
-		Path:                "./nodelist.duckdb",
-		MemoryLimit:         "16GB",
-		Threads:             8,
-		ReadOnly:            false,
-		BulkMode:            false,
-		DisableWAL:          false,
-		CheckpointThreshold: "1GB",
-		WALAutoCheckpoint:   1000,
-		TempDirectory:       "/tmp",
-	}
-}
-
-func DefaultClickHouseConfig() *ClickHouseConfig {
-	return &ClickHouseConfig{
+func DefaultClickHouseConfig() ClickHouseConfig {
+	return ClickHouseConfig{
 		Host:         "localhost",
 		Port:         9000,
 		Database:     "nodelist",
@@ -175,13 +121,10 @@ func DefaultFTPConfig() *FTPConfig {
 
 // LoadConfig loads configuration from a YAML file
 func LoadConfig(configPath string) (*Config, error) {
-	// If config file doesn't exist, return default DuckDB config
+	// If config file doesn't exist, return default database config
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return &Config{
-			Database: DatabaseConfig{
-				Type:   DatabaseTypeDuckDB,
-				DuckDB: DefaultDuckDBConfig(),
-			},
+			ClickHouse: DefaultClickHouseConfig(),
 		}, nil
 	}
 
@@ -279,189 +222,59 @@ func (c *Config) validate() error {
 		}
 	}
 
-	switch c.Database.Type {
-	case DatabaseTypeDuckDB:
-		if c.Database.DuckDB == nil {
-			c.Database.DuckDB = DefaultDuckDBConfig()
-		}
-		if c.Database.DuckDB.Path == "" {
-			return fmt.Errorf("duckdb path is required")
-		}
-		if c.Database.DuckDB.MemoryLimit == "" {
-			c.Database.DuckDB.MemoryLimit = "16GB"
-		}
-		if c.Database.DuckDB.Threads == 0 {
-			c.Database.DuckDB.Threads = 8
-		}
-	case DatabaseTypeClickHouse:
-		if c.Database.ClickHouse == nil {
-			c.Database.ClickHouse = DefaultClickHouseConfig()
-		}
-		if c.Database.ClickHouse.Host == "" {
-			return fmt.Errorf("clickhouse host is required")
-		}
-		if c.Database.ClickHouse.Port == 0 {
-			c.Database.ClickHouse.Port = 9000
-		}
-		if c.Database.ClickHouse.Database == "" {
-			return fmt.Errorf("clickhouse database name is required")
-		}
-		if c.Database.ClickHouse.Username == "" {
-			c.Database.ClickHouse.Username = "default"
-		}
-		// Set defaults for connection settings
-		if c.Database.ClickHouse.MaxOpenConns == 0 {
-			c.Database.ClickHouse.MaxOpenConns = 10
-		}
-		if c.Database.ClickHouse.MaxIdleConns == 0 {
-			c.Database.ClickHouse.MaxIdleConns = 5
-		}
-		if c.Database.ClickHouse.DialTimeout == "" {
-			c.Database.ClickHouse.DialTimeout = "30s"
-		}
-		if c.Database.ClickHouse.ReadTimeout == "" {
-			c.Database.ClickHouse.ReadTimeout = "5m"
-		}
-		if c.Database.ClickHouse.WriteTimeout == "" {
-			c.Database.ClickHouse.WriteTimeout = "1m"
-		}
-		if c.Database.ClickHouse.Compression == "" {
-			c.Database.ClickHouse.Compression = "lz4"
-		}
-	default:
-		return fmt.Errorf("unsupported database type: %s", c.Database.Type)
+	// Validate ClickHouse configuration
+	if c.ClickHouse.Host == "" {
+		return fmt.Errorf("clickhouse host is required")
+	}
+	if c.ClickHouse.Port == 0 {
+		c.ClickHouse.Port = 9000
+	}
+	if c.ClickHouse.Database == "" {
+		return fmt.Errorf("clickhouse database name is required")
+	}
+	if c.ClickHouse.Username == "" {
+		c.ClickHouse.Username = "default"
+	}
+	// Set defaults for connection settings
+	if c.ClickHouse.MaxOpenConns == 0 {
+		c.ClickHouse.MaxOpenConns = 10
+	}
+	if c.ClickHouse.MaxIdleConns == 0 {
+		c.ClickHouse.MaxIdleConns = 5
+	}
+	if c.ClickHouse.DialTimeout == "" {
+		c.ClickHouse.DialTimeout = "30s"
+	}
+	if c.ClickHouse.ReadTimeout == "" {
+		c.ClickHouse.ReadTimeout = "5m"
+	}
+	if c.ClickHouse.WriteTimeout == "" {
+		c.ClickHouse.WriteTimeout = "1m"
+	}
+	if c.ClickHouse.Compression == "" {
+		c.ClickHouse.Compression = "lz4"
 	}
 
 	return nil
 }
 
-// GetDSN returns the appropriate DSN string based on database type
-func (c *Config) GetDSN() (string, error) {
-	switch c.Database.Type {
-	case DatabaseTypeDuckDB:
-		dsn := c.Database.DuckDB.Path + "?"
-
-		// Basic settings
-		if c.Database.DuckDB.ReadOnly {
-			dsn += "access_mode=read_only&"
-		}
-		dsn += fmt.Sprintf("memory_limit=%s&threads=%d",
-			c.Database.DuckDB.MemoryLimit, c.Database.DuckDB.Threads)
-
-		// Performance settings for bulk mode (only valid connection string options)
-		if c.Database.DuckDB.BulkMode || c.Database.DuckDB.DisableWAL {
-			// Note: checkpoint_threshold and wal_autocheckpoint must be set via PRAGMA after connection
-		}
-
-		if c.Database.DuckDB.TempDirectory != "" {
-			dsn += fmt.Sprintf("&temp_directory=%s", c.Database.DuckDB.TempDirectory)
-		}
-
-		return dsn, nil
-	case DatabaseTypeClickHouse:
-		// ClickHouse DSN will be handled by the ClickHouse adapter
-		return "", nil
-	default:
-		return "", fmt.Errorf("unsupported database type: %s", c.Database.Type)
-	}
-}
-
-// CreateExampleConfigs creates example configuration files
-func CreateExampleConfigs(dir string) error {
-	// DuckDB example
-	duckdbConfig := &Config{
-		Database: DatabaseConfig{
-			Type:   DatabaseTypeDuckDB,
-			DuckDB: DefaultDuckDBConfig(),
-		},
+// CreateExampleConfig creates example configuration file
+func CreateExampleConfig(dir string) error {
+	// ClickHouse database configuration (only supported database)
+	config := &Config{
+		ClickHouse: DefaultClickHouseConfig(),
+		Cache:      *DefaultCacheConfig(),
+		FTP:        *DefaultFTPConfig(),
 	}
 
-	if err := SaveConfig(duckdbConfig, filepath.Join(dir, "config-duckdb-example.yaml")); err != nil {
-		return fmt.Errorf("failed to create DuckDB example config: %w", err)
-	}
-
-	// ClickHouse example
-	clickhouseConfig := &Config{
-		Database: DatabaseConfig{
-			Type:       DatabaseTypeClickHouse,
-			ClickHouse: DefaultClickHouseConfig(),
-		},
-	}
-
-	if err := SaveConfig(clickhouseConfig, filepath.Join(dir, "config-clickhouse-example.yaml")); err != nil {
-		return fmt.Errorf("failed to create ClickHouse example config: %w", err)
+	if err := SaveConfig(config, filepath.Join(dir, "config.example.yaml")); err != nil {
+		return fmt.Errorf("failed to create example config: %w", err)
 	}
 
 	return nil
 }
 
-// IsMultiDatabase returns true if multiple databases are configured
-func (c *Config) IsMultiDatabase() bool {
-	return len(c.Database.Databases) > 0
-}
-
-// GetAllDatabases returns all database configurations, including legacy single config
-func (c *Config) GetAllDatabases() []SingleDatabaseConfig {
-	if len(c.Database.Databases) > 0 {
-		return c.Database.Databases
-	}
-	
-	// Fallback to legacy single database config
-	return []SingleDatabaseConfig{
-		{
-			Name:       "default",
-			Type:       c.Database.Type,
-			DuckDB:     c.Database.DuckDB,
-			ClickHouse: c.Database.ClickHouse,
-		},
-	}
-}
-
-// CreateDualDatabaseConfig creates a config with both DuckDB and ClickHouse
-func CreateDualDatabaseConfig(duckdbPath string, clickhouseHost string, clickhousePort int, clickhouseDB string) *Config {
-	return &Config{
-		Database: DatabaseConfig{
-			Type: DatabaseTypeDuckDB, // Legacy field for backward compatibility
-			Databases: []SingleDatabaseConfig{
-				{
-					Name:   "duckdb",
-					Type:   DatabaseTypeDuckDB,
-					DuckDB: &DuckDBConfig{
-						Path:                duckdbPath,
-						MemoryLimit:         "16GB",
-						Threads:             8,
-						ReadOnly:            false,
-						BulkMode:            false,
-						DisableWAL:          false,
-						CheckpointThreshold: "1GB",
-						WALAutoCheckpoint:   1000,
-						TempDirectory:       "/tmp",
-					},
-				},
-				{
-					Name: "clickhouse",
-					Type: DatabaseTypeClickHouse,
-					ClickHouse: &ClickHouseConfig{
-						Host:         clickhouseHost,
-						Port:         clickhousePort,
-						Database:     clickhouseDB,
-						Username:     "default",
-						Password:     "",
-						UseSSL:       false,
-						MaxOpenConns: 10,
-						MaxIdleConns: 5,
-						DialTimeout:  "30s",
-						ReadTimeout:  "5m",
-						WriteTimeout: "1m",
-						Compression:  "lz4",
-					},
-				},
-			},
-		},
-	}
-}
-
-// ToClickHouseDatabaseConfig converts config ClickHouseConfig to database ClickHouseConfig
+// ToClickHouseDatabaseConfig converts ClickHouseConfig to database.ClickHouseConfig
 func (c *ClickHouseConfig) ToClickHouseDatabaseConfig() (*database.ClickHouseConfig, error) {
 	dialTimeout, err := time.ParseDuration(c.DialTimeout)
 	if err != nil {

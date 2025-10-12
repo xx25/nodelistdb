@@ -1,55 +1,197 @@
 # NodelistDB Configuration
-# This is the main configuration file for NodelistDB
+# =========================
+# Single configuration file for ALL NodelistDB components.
+#
+# COMPONENTS:
+# - Parser: Uses only 'clickhouse' section
+# - Server: Uses 'clickhouse', 'cache', and 'ftp' sections
+# - Testdaemon: Uses all sections
+#
+# Quick Start:
+# - Parser/Server: Uncomment and configure 'clickhouse' section below
+# - Testdaemon: Configure all sections as needed
 
-# Cache Configuration
+# ============================================================================
+# CLICKHOUSE DATABASE (Required for ALL components)
+# ============================================================================
+clickhouse:
+  host: localhost              # ClickHouse server hostname
+  port: 9000                   # Native protocol port (9000 = default)
+  database: nodelistdb         # Database name
+  username: default            # Database user
+  password: ""                 # Database password (empty for default user)
+  use_ssl: false               # Enable SSL/TLS connection
+
+  # Connection Pool Settings
+  max_open_conns: 10           # Maximum open connections
+  max_idle_conns: 5            # Maximum idle connections
+  dial_timeout: 30s            # Connection timeout
+  read_timeout: 5m             # Query read timeout
+  write_timeout: 1m            # Query write timeout
+  compression: lz4             # Compression: none, lz4, zstd, gzip
+
+  # Testdaemon-only settings (ignored by parser/server)
+  batch_size: 1000             # Batch size for bulk inserts
+  flush_interval: 30s          # Batch flush interval
+
+# Production ClickHouse: host: 10.121.17.211
+
+# ============================================================================
+# CACHE (Server only - optional)
+# ============================================================================
 cache:
-  enabled: false  # Disabled by default for DuckDB (already fast enough for most use cases)
-  type: badger
-  path: ./cache/badger
-  max_memory_mb: 256
-  value_log_max_mb: 100
-  default_ttl: 5m
-  node_ttl: 15m
-  stats_ttl: 1h
-  search_ttl: 5m
-  max_search_results: 500
-  warmup_on_start: false
-  compact_on_close: true
-  clear_all_on_import: false
-  gc_interval: 10m
-  gc_discard_ratio: 0.5
+  enabled: false               # Enable caching for server
+  type: badger                 # Cache backend: badger or memory
+  path: ./cache/badger         # Cache directory (badger only)
 
-database:
-  type: duckdb  # Options: duckdb or clickhouse
-  
-  # DuckDB Configuration
-  duckdb:
-    path: /home/dp/nodelists/nodelistdb.duckdb
-    memory_limit: 16GB
-    threads: 8
-    read_only: false
-    
-    # Performance settings for bulk loading
-    bulk_mode: false           # Enable bulk loading optimizations
-    disable_wal: false         # Disable Write-Ahead Logging
-    checkpoint_threshold: 1GB  # Memory threshold before checkpoint
-    wal_auto_checkpoint: 1000  # Pages before auto checkpoint (0 = disabled)
-    temp_directory: /tmp       # Temporary files directory
-  
-  # ClickHouse Configuration (alternative to DuckDB)
-  # Uncomment and configure if using ClickHouse
-  # clickhouse:
-  #   host: localhost
-  #   port: 9000
-  #   database: nodelistdb
-  #   username: default
-  #   password: ""
-  #   use_ssl: false
-  #   
-  #   # Connection settings
-  #   max_open_conns: 10
-  #   max_idle_conns: 5
-  #   dial_timeout: 30s
-  #   read_timeout: 5m
-  #   write_timeout: 1m
-  #   compression: lz4  # Options: none, zstd, lz4, gzip
+  # Badger-specific settings
+  max_memory_mb: 256           # Maximum memory for cache
+  value_log_max_mb: 100        # Maximum value log size
+  compact_on_close: true       # Compact database on close
+  gc_interval: 10m             # Garbage collection interval
+  gc_discard_ratio: 0.5        # GC discard ratio
+
+  # Cache TTL settings
+  default_ttl: 5m              # Default cache TTL
+  node_ttl: 15m                # Node data TTL
+  stats_ttl: 1h                # Statistics TTL
+  search_ttl: 5m               # Search results TTL
+  max_search_results: 500      # Maximum cached search results
+  warmup_on_start: false       # Pre-load cache on startup
+  clear_all_on_import: false   # Clear cache when importing data
+
+# ============================================================================
+# FTP SERVER (Server only - optional)
+# ============================================================================
+# Anonymous read-only FTP server for distributing nodelist files
+ftp:
+  enabled: false               # Enable FTP server
+  host: "0.0.0.0"              # Bind address (0.0.0.0 = all interfaces)
+  port: 2121                   # FTP port (2121 for non-root, 21 requires root)
+  nodelist_path: /home/dp/nodelists  # Base directory with nodelist files
+
+  # Connection limits
+  max_connections: 10          # Maximum concurrent connections
+  idle_timeout: 300s           # Connection idle timeout (5 minutes)
+
+  # Passive mode configuration (for NAT/firewalls)
+  passive_port_min: 50000      # Passive mode port range start
+  passive_port_max: 50100      # Passive mode port range end
+  public_host: ""              # Public IP for PASV (empty = auto-detect)
+
+# Security: Anonymous-only, read-only, chrooted to nodelist_path, no SSL
+
+# ============================================================================
+# TESTDAEMON CONFIGURATION (Testdaemon only - ignored by parser/server)
+# ============================================================================
+
+# Test Daemon Settings
+# ---------------------
+daemon:
+  test_interval: 72h           # Regular test interval for operational nodes
+  stale_test_threshold: 72h    # Consider test stale after this duration
+  failed_retry_interval: 24h   # Retry failed nodes after this duration
+  workers: 10                  # Number of concurrent test workers
+  batch_size: 100              # Batch size for processing nodes
+
+  # Command-line only flags (not in config):
+  # -run-once     : Run one test cycle and exit
+  # -dry-run      : Test without storing results
+  # -cli-only     : Only run CLI, no automatic testing
+  # -test <addr>  : Test specific node (e.g., "2:5053/56")
+
+# Protocol Testing
+# ----------------
+protocols:
+  # BinkP (IBN flag) - FTN mail protocol over TCP/IP
+  binkp:
+    enabled: true
+    port: 24554                # Default BinkP port
+    timeout: 10s               # Connection timeout
+    our_address: "2:5001/5001" # Your FidoNet address for handshake
+    system_name: "NodelistDB Test Daemon"  # System name (SYS)
+    sysop: "Test Operator"     # Sysop name (ZYZ)
+    location: "Test Location"  # Location (LOC)
+
+  # IFCICO/EMSI (IFC flag) - Legacy FTN mailer protocol
+  ifcico:
+    enabled: true
+    port: 60179                # Default IFCICO port
+    timeout: 30s               # Connection timeout (EMSI needs more time)
+    our_address: "2:5001/5001"
+    system_name: "NodelistDB Test Daemon"
+    sysop: "Test Operator"
+    location: "Test Location"
+
+  # Telnet (ITN flag) - BBS access
+  telnet:
+    enabled: false
+    port: 23                   # Standard telnet port
+    timeout: 5s
+
+  # FTP (IFT flag) - File transfer
+  ftp:
+    enabled: false
+    port: 21                   # Standard FTP port
+    timeout: 10s
+
+  # Virtual Modem (IVM flag) - Virtual modem over IP
+  vmodem:
+    enabled: false
+    port: 3141                 # No standard port
+    timeout: 10s
+
+# External Services
+# -----------------
+services:
+  # DNS resolution for hostnames
+  dns:
+    workers: 20                # Concurrent DNS resolution workers
+    timeout: 5s                # DNS query timeout
+    cache_ttl: 24h             # DNS result cache duration
+
+  # IP Geolocation
+  geolocation:
+    provider: ip-api           # Provider: ip-api, ipinfo, ipgeolocation
+    api_key: ""                # API key (required for ipgeolocation)
+    cache_ttl: 168h            # Cache duration (7 days)
+    rate_limit: 150            # Requests per minute
+
+# Testdaemon Cache (Persistent cache for testdaemon)
+# ------------------
+testdaemon_cache:
+  enabled: true
+  type: badger                 # Only badger supported for testdaemon
+  path: ./cache/badger-testdaemon  # Separate cache from server
+
+# Logging (Testdaemon only)
+# --------
+logging:
+  level: info                  # Log level: debug, info, warn, error
+  file: /var/log/nodetest-daemon.log  # Log file path
+  max_size: 100                # Max log file size (MB)
+  max_backups: 7               # Number of old log files to keep
+  max_age: 30                  # Days to retain old logs
+  console: true                # Also log to console
+
+# CLI Interface (Testdaemon only)
+# --------------
+cli:
+  enabled: true
+  host: 127.0.0.1              # Bind address (127.0.0.1 = localhost only)
+  port: 2323                   # CLI telnet port
+  max_clients: 5               # Maximum concurrent clients
+  timeout: 5m                  # Client idle timeout
+  prompt: "> "                 # CLI prompt
+  welcome_message: |
+    NodelistDB Test Daemon CLI v1.0.0
+    Type 'help' for available commands.
+
+# ============================================================================
+# COMMAND-LINE USAGE
+# ============================================================================
+# Parser:  ./bin/parser -config config.yaml -path /path/to/nodelists [options]
+# Server:  ./bin/server -config config.yaml [-host HOST] [-port PORT]
+# Daemon:  ./bin/testdaemon -config config.yaml [options]
+#
+# See README.md or run with -help for full command-line options

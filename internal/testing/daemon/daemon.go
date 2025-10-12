@@ -91,38 +91,29 @@ func New(cfg *Config) (*Daemon, error) {
 		return nil, fmt.Errorf("failed to initialize logging: %w", err)
 	}
 
-	// Initialize storage based on database type
-	var store storage.Storage
-	var err error
-	
-	switch cfg.Database.Type {
-	case "duckdb":
-		store, err = storage.NewDuckDBStorage(
-			cfg.Database.DuckDB.NodesPath,
-			cfg.Database.DuckDB.ResultsPath,
-		)
-	case "clickhouse":
-		chConfig := &storage.ClickHouseConfig{
-			MaxOpenConns:  cfg.Database.ClickHouse.MaxOpenConns,
-			MaxIdleConns:  cfg.Database.ClickHouse.MaxIdleConns,
-			DialTimeout:   cfg.Database.ClickHouse.DialTimeout,
-			ReadTimeout:   cfg.Database.ClickHouse.ReadTimeout,
-			WriteTimeout:  cfg.Database.ClickHouse.WriteTimeout,
-			Compression:   cfg.Database.ClickHouse.Compression,
-			BatchSize:     cfg.Database.ClickHouse.BatchSize,
-			FlushInterval: cfg.Database.ClickHouse.FlushInterval,
-		}
-		store, err = storage.NewClickHouseStorageWithConfig(
-			cfg.Database.ClickHouse.Host,
-			cfg.Database.ClickHouse.Port,
-			cfg.Database.ClickHouse.Database,
-			cfg.Database.ClickHouse.Username,
-			cfg.Database.ClickHouse.Password,
-			chConfig,
-		)
-	default:
-		return nil, fmt.Errorf("unsupported database type: %s", cfg.Database.Type)
+	// Initialize ClickHouse storage (only supported database type)
+	if cfg.ClickHouse == nil {
+		return nil, fmt.Errorf("ClickHouse configuration is required")
 	}
+
+	chConfig := &storage.ClickHouseConfig{
+		MaxOpenConns:  cfg.ClickHouse.MaxOpenConns,
+		MaxIdleConns:  cfg.ClickHouse.MaxIdleConns,
+		DialTimeout:   cfg.ClickHouse.DialTimeout,
+		ReadTimeout:   cfg.ClickHouse.ReadTimeout,
+		WriteTimeout:  cfg.ClickHouse.WriteTimeout,
+		Compression:   cfg.ClickHouse.Compression,
+		BatchSize:     cfg.ClickHouse.BatchSize,
+		FlushInterval: cfg.ClickHouse.FlushInterval,
+	}
+	store, err := storage.NewClickHouseStorageWithConfig(
+		cfg.ClickHouse.Host,
+		cfg.ClickHouse.Port,
+		cfg.ClickHouse.Database,
+		cfg.ClickHouse.Username,
+		cfg.ClickHouse.Password,
+		chConfig,
+	)
 	
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
