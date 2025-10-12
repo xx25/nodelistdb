@@ -28,21 +28,21 @@ type MockStorage struct {
 
 func (m *MockStorage) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMsg)
+		return nil, fmt.Errorf("%s", m.errorMsg)
 	}
 	return m.nodes, nil
 }
 
 func (m *MockStorage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMsg)
+		return nil, fmt.Errorf("%s", m.errorMsg)
 	}
 	return m.stats, nil
 }
 
 func (m *MockStorage) GetLatestStatsDate() (time.Time, error) {
 	if m.shouldError {
-		return time.Time{}, fmt.Errorf(m.errorMsg)
+		return time.Time{}, fmt.Errorf("%s", m.errorMsg)
 	}
 	if len(m.dates) > 0 {
 		return m.dates[len(m.dates)-1], nil
@@ -52,28 +52,28 @@ func (m *MockStorage) GetLatestStatsDate() (time.Time, error) {
 
 func (m *MockStorage) GetNearestAvailableDate(date time.Time) (time.Time, error) {
 	if m.shouldError {
-		return time.Time{}, fmt.Errorf(m.errorMsg)
+		return time.Time{}, fmt.Errorf("%s", m.errorMsg)
 	}
 	return date, nil
 }
 
 func (m *MockStorage) GetAvailableDates() ([]time.Time, error) {
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMsg)
+		return nil, fmt.Errorf("%s", m.errorMsg)
 	}
 	return m.dates, nil
 }
 
 func (m *MockStorage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMsg)
+		return nil, fmt.Errorf("%s", m.errorMsg)
 	}
 	return m.nodeHistory, nil
 }
 
 func (m *MockStorage) GetNodeDateRange(zone, net, node int) (time.Time, time.Time, error) {
 	if m.shouldError {
-		return time.Time{}, time.Time{}, fmt.Errorf(m.errorMsg)
+		return time.Time{}, time.Time{}, fmt.Errorf("%s", m.errorMsg)
 	}
 	first := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	last := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
@@ -82,21 +82,21 @@ func (m *MockStorage) GetNodeDateRange(zone, net, node int) (time.Time, time.Tim
 
 func (m *MockStorage) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMsg)
+		return nil, fmt.Errorf("%s", m.errorMsg)
 	}
 	return m.nodeChanges, nil
 }
 
 func (m *MockStorage) SearchNodesBySysop(sysopName string, limit int) ([]storage.NodeSummary, error) {
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMsg)
+		return nil, fmt.Errorf("%s", m.errorMsg)
 	}
 	return m.nodeSummary, nil
 }
 
 func (m *MockStorage) GetUniqueSysops(nameFilter string, limit, offset int) ([]storage.SysopInfo, error) {
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMsg)
+		return nil, fmt.Errorf("%s", m.errorMsg)
 	}
 	// Filter sysops by name if filter is provided
 	if nameFilter != "" {
@@ -122,7 +122,7 @@ func (m *MockStorage) GetUniqueSysops(nameFilter string, limit, offset int) ([]s
 
 func (m *MockStorage) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMsg)
+		return nil, fmt.Errorf("%s", m.errorMsg)
 	}
 	// Filter nodes by sysop name
 	var filtered []database.Node
