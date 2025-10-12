@@ -107,6 +107,23 @@ func (kg *KeyGenerator) DatesPattern() string {
 	return fmt.Sprintf("%s:dates:*", kg.Prefix)
 }
 
+// Analytics keys
+func (kg *KeyGenerator) FlagFirstAppearanceKey(flagName string) string {
+	return fmt.Sprintf("%s:analytics:flag:first:%s", kg.Prefix, flagName)
+}
+
+func (kg *KeyGenerator) FlagUsageByYearKey(flagName string) string {
+	return fmt.Sprintf("%s:analytics:flag:usage:%s", kg.Prefix, flagName)
+}
+
+func (kg *KeyGenerator) NetworkHistoryKey(zone, net int) string {
+	return fmt.Sprintf("%s:analytics:network:%d:%d", kg.Prefix, zone, net)
+}
+
+func (kg *KeyGenerator) AnalyticsPattern() string {
+	return fmt.Sprintf("%s:analytics:*", kg.Prefix)
+}
+
 // Helper function to create a filter hash
 func (kg *KeyGenerator) HashFilter(filter interface{}) string {
 	// Use JSON marshaling for consistent serialization

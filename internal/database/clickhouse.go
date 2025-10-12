@@ -166,28 +166,38 @@ func (db *ClickHouseDB) CreateSchema() error {
 		node_type LowCardinality(String),
 		region Nullable(Int32),
 		max_speed UInt32 DEFAULT 0,
-		
+
 		-- Boolean flags (computed from raw flags)
 		is_cm Bool DEFAULT false,
 		is_mo Bool DEFAULT false,
-		
+
 		-- Arrays for flexibility (ClickHouse native arrays)
 		flags Array(String) DEFAULT [],
 		modem_flags Array(String) DEFAULT [],
-		
+
 		-- Internet connectivity analysis
 		has_inet Bool DEFAULT false,
 		internet_config JSON DEFAULT '{}',
-		
+
 		-- Conflict tracking
 		conflict_sequence Int32 DEFAULT 0,
 		has_conflict Bool DEFAULT false,
-		
+
 		-- FTS unique identifier
 		fts_id String,
 
 		-- Raw nodelist line
-		raw_line String DEFAULT ''
+		raw_line String DEFAULT '',
+
+		-- Analytics optimization: materialized columns
+		year UInt16 MATERIALIZED toYear(nodelist_date),
+		json_protocols Array(String) MATERIALIZED extractAll(toString(internet_config), '"([A-Z]{3})"'),
+
+		-- Analytics optimization: bloom filter indexes
+		INDEX idx_year year TYPE minmax GRANULARITY 1,
+		INDEX idx_flags_bloom flags TYPE bloom_filter GRANULARITY 1,
+		INDEX idx_modem_flags_bloom modem_flags TYPE bloom_filter GRANULARITY 1,
+		INDEX idx_json_protocols_bloom json_protocols TYPE bloom_filter GRANULARITY 1
 	) ENGINE = MergeTree()
 	ORDER BY (zone, net, node, nodelist_date, conflict_sequence)
 	PARTITION BY toYYYYMM(nodelist_date)

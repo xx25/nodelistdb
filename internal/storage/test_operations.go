@@ -251,6 +251,15 @@ func (to *TestOperations) GetNodeTestHistory(zone, net, node int, days int) ([]N
 				vmodem_success,
 				vmodem_response_ms,
 				vmodem_error,
+				binkp_ipv6_tested,
+				binkp_ipv6_success,
+				binkp_ipv6_error,
+				ifcico_ipv6_tested,
+				ifcico_ipv6_success,
+				ifcico_ipv6_error,
+				telnet_ipv6_tested,
+				telnet_ipv6_success,
+				telnet_ipv6_error,
 				is_operational,
 				has_connectivity_issues,
 				address_validated,
@@ -317,9 +326,24 @@ func (to *TestOperations) GetNodeTestHistory(zone, net, node int, days int) ([]N
 				vmodem_success,
 				vmodem_response_ms,
 				vmodem_error,
+				binkp_ipv6_tested,
+				binkp_ipv6_success,
+				binkp_ipv6_error,
+				ifcico_ipv6_tested,
+				ifcico_ipv6_success,
+				ifcico_ipv6_error,
+				telnet_ipv6_tested,
+				telnet_ipv6_success,
+				telnet_ipv6_error,
 				is_operational,
 				has_connectivity_issues,
-				address_validated
+				address_validated,
+				tested_hostname,
+				hostname_index,
+				is_aggregated,
+				total_hostnames,
+				hostnames_tested,
+				hostnames_operational
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ?
 			AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
@@ -654,7 +678,6 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND length(resolved_ipv6) > 0
 					AND is_operational = true
-					AND is_aggregated = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
 				GROUP BY zone, net, node
@@ -689,7 +712,6 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			WHERE r.is_aggregated = true
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	} else {
@@ -703,7 +725,6 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND array_length(resolved_ipv6) > 0
 					AND is_operational = true
-					AND is_aggregated = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
 				GROUP BY zone, net, node
@@ -738,7 +759,6 @@ func (to *TestOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNo
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
 			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			WHERE r.is_aggregated = true
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
@@ -793,14 +813,38 @@ func (to *TestOperations) GetIPv6NonWorkingNodes(limit int, days int, includeZer
 	var query string
 	if _, isClickHouse := to.db.(*database.ClickHouseDB); isClickHouse {
 		query = fmt.Sprintf(`
-			WITH latest_tests AS (
+			WITH
+			-- Find nodes that have IPv6 addresses and were tested
+			nodes_with_ipv6 AS (
+				SELECT DISTINCT zone, net, node
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND length(resolved_ipv6) > 0
+					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
+					%s
+			),
+			-- Count successful IPv6 tests per node in the period
+			ipv6_success_counts AS (
+				SELECT
+					zone, net, node,
+					countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
+				FROM node_test_results
+				WHERE test_time >= now() - INTERVAL ? DAY
+					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
+				GROUP BY zone, net, node
+			),
+			-- Get latest test for nodes with zero successful IPv6 tests
+			latest_failed_tests AS (
 				SELECT
 					zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
-				WHERE test_time >= now() - INTERVAL ? DAY
-					AND is_aggregated = true
-					%s
+				WHERE (zone, net, node) IN (
+					SELECT zone, net, node
+					FROM ipv6_success_counts
+					WHERE success_count = 0
+				)
+				AND test_time >= now() - INTERVAL ? DAY
 				GROUP BY zone, net, node
 			),
 			latest_nodes AS (
@@ -830,26 +874,46 @@ func (to *TestOperations) GetIPv6NonWorkingNodes(limit int, days int, includeZer
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-				AND r.test_time = lt.latest_test_time
+			INNER JOIN latest_failed_tests lft ON r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
+				AND r.test_time = lft.latest_test_time
 			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			WHERE r.is_aggregated = true
-				AND length(r.resolved_ipv6) > 0
-				AND (r.binkp_ipv6_tested = true OR r.ifcico_ipv6_tested = true OR r.telnet_ipv6_tested = true)
-				AND NOT (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	} else {
 		// DuckDB query
 		query = fmt.Sprintf(`
-			WITH latest_tests AS (
+			WITH
+			-- Find nodes that have IPv6 addresses and were tested
+			nodes_with_ipv6 AS (
+				SELECT DISTINCT zone, net, node
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND array_length(resolved_ipv6) > 0
+					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
+					%s
+			),
+			-- Count successful IPv6 tests per node in the period
+			ipv6_success_counts AS (
+				SELECT
+					zone, net, node,
+					SUM(CASE WHEN (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) THEN 1 ELSE 0 END) as success_count
+				FROM node_test_results
+				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
+				GROUP BY zone, net, node
+			),
+			-- Get latest test for nodes with zero successful IPv6 tests
+			latest_failed_tests AS (
 				SELECT
 					zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
-				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-					AND is_aggregated = true
-					%s
+				WHERE (zone, net, node) IN (
+					SELECT zone, net, node
+					FROM ipv6_success_counts
+					WHERE success_count = 0
+				)
+				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 				GROUP BY zone, net, node
 			),
 			latest_nodes AS (
@@ -879,18 +943,15 @@ func (to *TestOperations) GetIPv6NonWorkingNodes(limit int, days int, includeZer
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
 			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-				AND r.test_time = lt.latest_test_time
+			INNER JOIN latest_failed_tests lft ON r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
+				AND r.test_time = lft.latest_test_time
 			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			WHERE r.is_aggregated = true
-				AND array_length(r.resolved_ipv6) > 0
-				AND (r.binkp_ipv6_tested = true OR r.ifcico_ipv6_tested = true OR r.telnet_ipv6_tested = true)
-				AND NOT (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
 
-	rows, err := conn.Query(query, days, limit)
+	// Query uses days parameter 3 times (for ClickHouse and DuckDB)
+	rows, err := conn.Query(query, days, days, days, limit)
 	if err != nil {
 		log.Printf("[ERROR] GetIPv6NonWorkingNodes: Query failed: %v", err)
 		return nil, fmt.Errorf("failed to search IPv6 non-working nodes: %w", err)
@@ -970,6 +1031,9 @@ func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroN
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1005,6 +1069,9 @@ func (to *TestOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroN
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1080,6 +1147,9 @@ func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1115,6 +1185,9 @@ func (to *TestOperations) GetIfcicoEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1190,6 +1263,9 @@ func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1225,6 +1301,9 @@ func (to *TestOperations) GetTelnetEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1300,6 +1379,9 @@ func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1335,6 +1417,9 @@ func (to *TestOperations) GetVModemEnabledNodes(limit int, days int, includeZero
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1410,6 +1495,9 @@ func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNod
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1445,6 +1533,9 @@ func (to *TestOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNod
 				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
@@ -1495,6 +1586,9 @@ func (to *TestOperations) SearchNodesByReachability(operational bool, limit int,
 				telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 				ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 				vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
+				binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_error,
+				ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_error,
+				telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_error,
 				is_operational, has_connectivity_issues, address_validated,
 				tested_hostname, hostname_index, is_aggregated,
 				total_hostnames, hostnames_tested, hostnames_operational
@@ -1521,6 +1615,9 @@ func (to *TestOperations) SearchNodesByReachability(operational bool, limit int,
 				telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 				ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 				vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
+				binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_error,
+				ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_error,
+				telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_error,
 				is_operational, has_connectivity_issues, address_validated,
 				tested_hostname, hostname_index, is_aggregated,
 				total_hostnames, hostnames_tested, hostnames_operational

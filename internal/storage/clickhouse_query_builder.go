@@ -639,43 +639,61 @@ func (cqb *ClickHouseQueryBuilder) UniqueSysopsSQL() string {
 }
 
 // FlagFirstAppearanceSQL returns SQL for finding the first appearance of a flag in ClickHouse
+// Optimized: First find MIN(date), then query that specific date only
 func (cqb *ClickHouseQueryBuilder) FlagFirstAppearanceSQL() string {
 	return `
-		SELECT 
+		WITH first_date AS (
+			SELECT min(nodelist_date) as d
+			FROM nodes
+			WHERE has(flags, ?) OR has(modem_flags, ?)
+				OR (has_inet = 1 AND positionCaseInsensitive(toString(internet_config), concat('"', ?, '"')) > 0)
+		)
+		SELECT
 			zone, net, node, nodelist_date, system_name, location, sysop_name
 		FROM nodes
-		WHERE (has(flags, ?) OR has(modem_flags, ?) 
-		   OR (has_inet = 1 AND JSON_EXISTS(toString(internet_config), concat('$.protocols.', ?))))
-		ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC
+		WHERE nodelist_date = (SELECT d FROM first_date)
+			AND (has(flags, ?) OR has(modem_flags, ?)
+				OR (has_inet = 1 AND positionCaseInsensitive(toString(internet_config), concat('"', ?, '"')) > 0))
+		ORDER BY zone ASC, net ASC, node ASC
 		LIMIT 1
 	`
 }
 
 // FlagUsageByYearSQL returns SQL for counting flag usage by year in ClickHouse
+// Optimized: Uses uniqExact for deduplication and positionCaseInsensitive instead of JSON_EXISTS
 func (cqb *ClickHouseQueryBuilder) FlagUsageByYearSQL() string {
 	return `
-		WITH node_years AS (
-			SELECT 
+		WITH
+		-- First, get all unique nodes per year (total counts)
+		total_nodes_per_year AS (
+			SELECT
 				toYear(nodelist_date) as year,
-				zone, net, node,
-				MAX(CASE WHEN has(flags, ?) OR has(modem_flags, ?) 
-					OR (has_inet = 1 AND JSON_EXISTS(toString(internet_config), concat('$.protocols.', ?)))
-					THEN 1 ELSE 0 END) as has_flag
+				uniqExact((zone, net, node)) as total_nodes
 			FROM nodes
-			GROUP BY year, zone, net, node
+			GROUP BY year
+		),
+		-- Then, get unique nodes WITH the flag per year
+		flagged_nodes_per_year AS (
+			SELECT
+				toYear(nodelist_date) as year,
+				uniqExact((zone, net, node)) as node_count
+			FROM nodes
+			WHERE has(flags, ?) OR has(modem_flags, ?)
+				OR (has_inet = 1 AND positionCaseInsensitive(toString(internet_config), concat('"', ?, '"')) > 0)
+			GROUP BY year
 		)
-		SELECT 
-			year,
-			COUNT(*) as total_nodes,
-			SUM(has_flag) as node_count,
-			CASE 
-				WHEN COUNT(*) > 0 
-				THEN round((SUM(has_flag) / COUNT(*)) * 100, 2)
-				ELSE 0 
+		SELECT
+			t.year,
+			t.total_nodes,
+			COALESCE(f.node_count, 0) as node_count,
+			CASE
+				WHEN t.total_nodes > 0
+				THEN round((COALESCE(f.node_count, 0) / t.total_nodes) * 100, 2)
+				ELSE 0
 			END as percentage
-		FROM node_years
-		GROUP BY year
-		ORDER BY year
+		FROM total_nodes_per_year t
+		LEFT JOIN flagged_nodes_per_year f ON t.year = f.year
+		ORDER BY t.year
 	`
 }
 

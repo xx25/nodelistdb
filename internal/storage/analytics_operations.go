@@ -78,7 +78,8 @@ func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string) (*FlagFirstAp
 	conn := ao.db.Conn()
 	query := ao.queryBuilder.FlagFirstAppearanceSQL()
 
-	row := conn.QueryRow(query, flag, flag, flag)
+	// Query needs flag 6 times: 3 in CTE, 3 in main query
+	row := conn.QueryRow(query, flag, flag, flag, flag, flag, flag)
 
 	var fa FlagFirstAppearance
 	err := row.Scan(
@@ -113,7 +114,8 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string) ([]FlagUsageByYea
 	conn := ao.db.Conn()
 	query := ao.queryBuilder.FlagUsageByYearSQL()
 
-	rows, err := conn.Query(query, flag, flag, flag, flag, flag, flag)
+	// Query needs flag 3 times: once per condition in WHERE clause
+	rows, err := conn.Query(query, flag, flag, flag)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query flag usage by year: %w", err)
 	}
