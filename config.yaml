@@ -39,10 +39,10 @@ clickhouse:
 # ============================================================================
 # CACHE (Server only - optional)
 # ============================================================================
+# Note: Only BadgerCache is supported (persistent BadgerDB backend)
 cache:
   enabled: false               # Enable caching for server
-  type: badger                 # Cache backend: badger or memory
-  path: ./cache/badger         # Cache directory (badger only)
+  path: ./cache/badger         # Cache directory
 
   # Badger-specific settings
   max_memory_mb: 256           # Maximum memory for cache

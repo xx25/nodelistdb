@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -20,12 +19,11 @@ func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
 	dist, err := s.storage.GetBinkPSoftwareDistribution(days)
 	if err != nil {
 		log.Printf("ERROR: GetBinkPSoftwareDistribution failed: %v", err)
-		http.Error(w, "Failed to get BinkP software distribution", http.StatusInternalServerError)
+		WriteJSONError(w, "Failed to get BinkP software distribution", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(dist)
+	WriteJSONSuccess(w, dist)
 }
 
 // GetIFCICOSoftwareStats returns IFCICO software distribution statistics
@@ -41,12 +39,11 @@ func (s *Server) GetIFCICOSoftwareStats(w http.ResponseWriter, r *http.Request) 
 	dist, err := s.storage.GetIFCICOSoftwareDistribution(days)
 	if err != nil {
 		log.Printf("ERROR: GetIFCICOSoftwareDistribution failed: %v", err)
-		http.Error(w, "Failed to get IFCICO software distribution", http.StatusInternalServerError)
+		WriteJSONError(w, "Failed to get IFCICO software distribution", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(dist)
+	WriteJSONSuccess(w, dist)
 }
 
 // GetBinkdDetailedStats returns detailed binkd statistics
@@ -62,12 +59,11 @@ func (s *Server) GetBinkdDetailedStats(w http.ResponseWriter, r *http.Request) {
 	dist, err := s.storage.GetBinkdDetailedStats(days)
 	if err != nil {
 		log.Printf("ERROR: GetBinkdDetailedStats failed: %v", err)
-		http.Error(w, "Failed to get detailed binkd statistics", http.StatusInternalServerError)
+		WriteJSONError(w, "Failed to get detailed binkd statistics", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(dist)
+	WriteJSONSuccess(w, dist)
 }
 
 // GetSoftwareTrends returns software usage trends over time
@@ -76,6 +72,5 @@ func (s *Server) GetSoftwareTrends(w http.ResponseWriter, r *http.Request) {
 	// Return empty response for now
 	emptyTrends := make(map[string]interface{})
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(emptyTrends)
+	WriteJSONSuccess(w, emptyTrends)
 }

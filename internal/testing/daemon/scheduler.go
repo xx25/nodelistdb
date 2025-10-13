@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"sort"
 	"sync"
@@ -37,13 +36,13 @@ type NodeSchedule struct {
 type Scheduler struct {
 	mu sync.RWMutex
 
-	baseInterval      time.Duration
-	minInterval       time.Duration
-	maxInterval       time.Duration
-	failureMultiplier float64
-	maxBackoffLevel   int
-	strategy          ScheduleStrategy
-	staleTestThreshold time.Duration  // Consider test stale after this duration
+	baseInterval        time.Duration
+	minInterval         time.Duration
+	maxInterval         time.Duration
+	failureMultiplier   float64
+	maxBackoffLevel     int
+	strategy            ScheduleStrategy
+	staleTestThreshold  time.Duration // Consider test stale after this duration
 	failedRetryInterval time.Duration // Retry failed nodes after this duration
 
 	schedules map[string]*NodeSchedule
@@ -54,15 +53,15 @@ type Scheduler struct {
 }
 
 type SchedulerConfig struct {
-	BaseInterval      time.Duration
-	MinInterval       time.Duration
-	MaxInterval       time.Duration
-	FailureMultiplier float64
-	MaxBackoffLevel   int
-	Strategy          ScheduleStrategy
-	JitterPercent     float64
-	PriorityBoost     int
-	StaleTestThreshold time.Duration
+	BaseInterval        time.Duration
+	MinInterval         time.Duration
+	MaxInterval         time.Duration
+	FailureMultiplier   float64
+	MaxBackoffLevel     int
+	Strategy            ScheduleStrategy
+	JitterPercent       float64
+	PriorityBoost       int
+	StaleTestThreshold  time.Duration
 	FailedRetryInterval time.Duration
 }
 
@@ -99,19 +98,24 @@ func NewScheduler(cfg SchedulerConfig, storage storage.Storage) *Scheduler {
 	}
 
 	return &Scheduler{
-		baseInterval:      cfg.BaseInterval,
-		minInterval:       cfg.MinInterval,
-		maxInterval:       cfg.MaxInterval,
-		failureMultiplier: cfg.FailureMultiplier,
-		maxBackoffLevel:   cfg.MaxBackoffLevel,
-		strategy:          cfg.Strategy,
-		staleTestThreshold: cfg.StaleTestThreshold,
+		baseInterval:        cfg.BaseInterval,
+		minInterval:         cfg.MinInterval,
+		maxInterval:         cfg.MaxInterval,
+		failureMultiplier:   cfg.FailureMultiplier,
+		maxBackoffLevel:     cfg.MaxBackoffLevel,
+		strategy:            cfg.Strategy,
+		staleTestThreshold:  cfg.StaleTestThreshold,
 		failedRetryInterval: cfg.FailedRetryInterval,
-		schedules:         make(map[string]*NodeSchedule),
-		storage:           storage,
-		jitterPercent:     cfg.JitterPercent,
-		priorityBoost:     cfg.PriorityBoost,
+		schedules:           make(map[string]*NodeSchedule),
+		storage:             storage,
+		jitterPercent:       cfg.JitterPercent,
+		priorityBoost:       cfg.PriorityBoost,
 	}
+}
+
+// timeNow returns the current time (extracted for testability)
+func (s *Scheduler) timeNow() time.Time {
+	return time.Now()
 }
 
 func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Node) error {
@@ -148,13 +152,13 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 		} else {
 			failedQueries++
 		}
-		
+
 		// Log progress every 100 nodes
-		if (i+1) % 100 == 0 {
+		if (i+1)%100 == 0 {
 			logging.Debugf("InitializeSchedules: Processed %d/%d nodes (with_history=%d, without=%d, failed=%d)",
 				i+1, len(nodes), nodesWithHistory, nodesWithoutHistory, failedQueries)
 		}
-		
+
 		schedule := &NodeSchedule{
 			Node:             node,
 			LastTestTime:     time.Time{},
@@ -168,7 +172,7 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 		if err == nil && lastResult != nil {
 			schedule.LastTestTime = lastResult.TestTime
 			schedule.LastTestSuccess = lastResult.IsOperational
-			
+
 			// Determine test reason based on history
 			timeSinceLastTest := time.Since(lastResult.TestTime)
 			if timeSinceLastTest > s.staleTestThreshold {
@@ -203,14 +207,14 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get nodes from database: %w", err)
 	}
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// Track which nodes are still in database
 	currentNodeKeys := make(map[string]bool)
 	nodesWithChangedConfig := 0
-	
+
 	for _, node := range nodes {
 		key := s.nodeKey(node)
 		currentNodeKeys[key] = true
@@ -237,7 +241,7 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 				ConsecutiveFails: 0,
 				Priority:         s.calculatePriority(node),
 				BackoffLevel:     0,
-				NextTestTime:     time.Now(), // Test new nodes immediately
+				NextTestTime:     s.timeNow(), // Test new nodes immediately
 				TestReason:       "new",
 			}
 			s.schedules[key] = schedule
@@ -249,87 +253,38 @@ func (s *Scheduler) RefreshNodes(ctx context.Context) error {
 			// Update existing node data (hostname, protocols might have changed)
 			existingSchedule.Node = node
 			existingSchedule.Priority = s.calculatePriority(node)
-			
+
 			// If internet configuration changed, schedule immediate retest
 			if configChanged {
-				existingSchedule.NextTestTime = time.Now()
-				existingSchedule.BackoffLevel = 0  // Reset backoff since config changed
+				existingSchedule.NextTestTime = s.timeNow()
+				existingSchedule.BackoffLevel = 0 // Reset backoff since config changed
 				existingSchedule.TestReason = "config_changed"
 				nodesWithChangedConfig++
-				
+
 				logging.Infof("Internet config changed for %s, scheduling immediate retest", key)
 			}
 		}
 	}
-	
+
 	// Remove schedules for nodes that no longer exist in database
 	for key := range s.schedules {
 		if !currentNodeKeys[key] {
 			delete(s.schedules, key)
 		}
 	}
-	
+
 	if nodesWithChangedConfig > 0 {
 		logging.Infof("Found %d nodes with changed internet configuration, scheduled for immediate retest", nodesWithChangedConfig)
 	}
-	
+
 	return nil
-}
-
-// hasInternetConfigChanged checks if the internet configuration has changed between old and new node
-func (s *Scheduler) hasInternetConfigChanged(oldNode, newNode *models.Node) bool {
-	// Check if inet status changed
-	if oldNode.HasInet != newNode.HasInet {
-		return true
-	}
-	
-	// Check if hostnames changed
-	if !stringSlicesEqual(oldNode.InternetHostnames, newNode.InternetHostnames) {
-		return true
-	}
-	
-	// Check if protocols changed
-	if !stringSlicesEqual(oldNode.InternetProtocols, newNode.InternetProtocols) {
-		return true
-	}
-	
-	// Check if protocol ports changed (if available)
-	if oldNode.ProtocolPorts != nil && newNode.ProtocolPorts != nil {
-		if len(oldNode.ProtocolPorts) != len(newNode.ProtocolPorts) {
-			return true
-		}
-		for proto, oldPort := range oldNode.ProtocolPorts {
-			newPort, exists := newNode.ProtocolPorts[proto]
-			if !exists || oldPort != newPort {
-				return true
-			}
-		}
-	} else if (oldNode.ProtocolPorts == nil) != (newNode.ProtocolPorts == nil) {
-		// One has ports, the other doesn't
-		return true
-	}
-	
-	return false
-}
-
-// stringSlicesEqual compares two string slices for equality
-func stringSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*models.Node {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	now := time.Now()
+	now := s.timeNow()
 	var readyNodes []*NodeSchedule
 	var allFutureNodes []*NodeSchedule
 	var notInCallWindow []*NodeSchedule
@@ -461,288 +416,4 @@ func (s *Scheduler) UpdateTestResult(ctx context.Context, node *models.Node, res
 	}
 
 	schedule.NextTestTime = s.calculateNextTestTime(schedule)
-}
-
-func (s *Scheduler) calculateNextTestTime(schedule *NodeSchedule) time.Time {
-	if schedule.LastTestTime.IsZero() {
-		// Node has no test history - schedule immediately with small jitter to prevent thundering herd
-		// Add 0-5 minutes of jitter
-		jitter := time.Duration(rand.Float64() * float64(5*time.Minute))
-		nextTime := time.Now().Add(jitter)
-		// Debug logging disabled
-		// if schedule.Node.Zone == 1 && schedule.Node.Net < 110 {
-		// 	fmt.Printf("DEBUG calculateNextTestTime: Node %s has no history, scheduling for %v (in %v)\n",
-		// 		s.nodeKey(schedule.Node), nextTime, jitter)
-		// }
-		return nextTime
-	}
-
-	var interval time.Duration
-
-	switch s.strategy {
-	case StrategyAdaptive:
-		interval = s.calculateAdaptiveInterval(schedule)
-	case StrategyPriority:
-		interval = s.calculatePriorityInterval(schedule)
-	default:
-		interval = s.calculateRegularInterval(schedule)
-	}
-
-	interval = s.addJitter(interval)
-	
-	if interval < s.minInterval {
-		interval = s.minInterval
-	} else if interval > s.maxInterval {
-		interval = s.maxInterval
-	}
-
-	nextTime := schedule.LastTestTime.Add(interval)
-	
-	// If the calculated next time is in the past (e.g., daemon was down), 
-	// calculate how many intervals have passed and schedule for the next one
-	now := time.Now()
-	if nextTime.Before(now) {
-		// Calculate how many intervals have elapsed since last test
-		timeSinceLastTest := now.Sub(schedule.LastTestTime)
-		intervalsElapsed := int(timeSinceLastTest / interval)
-		
-		// Schedule for the next interval boundary
-		nextTime = schedule.LastTestTime.Add(time.Duration(intervalsElapsed+1) * interval)
-		
-		// Add some jitter to avoid thundering herd after restart
-		jitter := time.Duration(rand.Float64() * float64(time.Hour))
-		nextTime = nextTime.Add(jitter)
-	}
-	
-	// Debug logging disabled
-	// if schedule.Node.Zone == 1 && schedule.Node.Net < 110 {
-	// 	fmt.Printf("DEBUG calculateNextTestTime: Node %s last_test=%v, interval=%v, next=%v\n",
-	// 		s.nodeKey(schedule.Node), schedule.LastTestTime, interval, nextTime)
-	// }
-	
-	return nextTime
-}
-
-func (s *Scheduler) calculateRegularInterval(schedule *NodeSchedule) time.Duration {
-	if schedule.LastTestSuccess {
-		return s.baseInterval
-	}
-
-	// For failed nodes, use the configured failed retry interval
-	return s.failedRetryInterval
-}
-
-func (s *Scheduler) calculateAdaptiveInterval(schedule *NodeSchedule) time.Duration {
-	// For both successful and failed nodes, use the regular interval
-	// which already handles the distinction:
-	// - Successful nodes: baseInterval (72h)
-	// - Failed nodes: failedRetryInterval (24h)
-	return s.calculateRegularInterval(schedule)
-}
-
-func (s *Scheduler) calculatePriorityInterval(schedule *NodeSchedule) time.Duration {
-	baseInterval := s.calculateRegularInterval(schedule)
-	
-	priorityFactor := 1.0 - (float64(schedule.Priority) / 100.0 * 0.5)
-	if priorityFactor < 0.5 {
-		priorityFactor = 0.5
-	}
-
-	return time.Duration(float64(baseInterval) * priorityFactor)
-}
-
-func (s *Scheduler) calculateBackoffLevel(consecutiveFails int) int {
-	if consecutiveFails <= 0 {
-		return 0
-	}
-
-	level := int(math.Log2(float64(consecutiveFails))) + 1
-	if level > s.maxBackoffLevel {
-		level = s.maxBackoffLevel
-	}
-
-	return level
-}
-
-func (s *Scheduler) calculatePriority(node *models.Node) int {
-	priority := 50
-
-	if node.HasProtocol("IBN") {
-		priority += s.priorityBoost
-	}
-	if node.HasProtocol("ITN") {
-		priority += s.priorityBoost / 2
-	}
-	if len(node.InternetHostnames) > 0 {
-		priority += s.priorityBoost
-	}
-
-	// Check for internet protocols
-	for _, protocol := range node.InternetProtocols {
-		switch protocol {
-		case "IBN":
-			priority += s.priorityBoost
-		case "IFC":
-			priority += s.priorityBoost
-		}
-	}
-
-	if priority > 100 {
-		priority = 100
-	}
-
-	return priority
-}
-
-func (s *Scheduler) getConsecutiveFailCount(ctx context.Context, node *models.Node) int {
-	results, err := s.storage.GetNodeTestHistory(ctx, node.Zone, node.Net, node.Node, 50)
-	if err != nil || len(results) == 0 {
-		return 0
-	}
-
-	count := 0
-	for _, result := range results {
-		if !result.IsOperational {
-			count++
-		} else {
-			break
-		}
-	}
-
-	return count
-}
-
-func (s *Scheduler) addJitter(interval time.Duration) time.Duration {
-	if s.jitterPercent <= 0 {
-		return interval
-	}
-
-	jitter := float64(interval) * s.jitterPercent
-	jitterRange := int64(jitter * 2)
-	if jitterRange > 0 {
-		randomJitter := rand.Int63n(jitterRange) - int64(jitter)
-		return interval + time.Duration(randomJitter)
-	}
-
-	return interval
-}
-
-func (s *Scheduler) sortByPriority(nodes []*NodeSchedule) {
-	for i := 0; i < len(nodes)-1; i++ {
-		for j := 0; j < len(nodes)-i-1; j++ {
-			if nodes[j].Priority < nodes[j+1].Priority {
-				nodes[j], nodes[j+1] = nodes[j+1], nodes[j]
-			}
-		}
-	}
-}
-
-func (s *Scheduler) sortByAdaptive(nodes []*NodeSchedule, now time.Time) {
-	for i := 0; i < len(nodes)-1; i++ {
-		for j := 0; j < len(nodes)-i-1; j++ {
-			score1 := s.calculateAdaptiveScore(nodes[j], now)
-			score2 := s.calculateAdaptiveScore(nodes[j+1], now)
-			if score1 < score2 {
-				nodes[j], nodes[j+1] = nodes[j+1], nodes[j]
-			}
-		}
-	}
-}
-
-func (s *Scheduler) calculateAdaptiveScore(schedule *NodeSchedule, now time.Time) float64 {
-	timeSinceLastTest := now.Sub(schedule.LastTestTime).Hours()
-	
-	score := float64(schedule.Priority)
-	
-	if !schedule.LastTestSuccess {
-		score += 20.0
-		
-		if schedule.ConsecutiveFails <= 3 {
-			score += 30.0
-		} else if schedule.ConsecutiveFails <= 10 {
-			score += 20.0
-		} else {
-			score -= float64(schedule.ConsecutiveFails)
-		}
-	}
-	
-	score += timeSinceLastTest * 0.5
-	
-	if now.After(schedule.NextTestTime) {
-		overdue := now.Sub(schedule.NextTestTime).Hours()
-		score += overdue * 2
-	}
-
-	return score
-}
-
-func (s *Scheduler) nodeKey(node *models.Node) string {
-	return fmt.Sprintf("%d:%d/%d", node.Zone, node.Net, node.Node)
-}
-
-func (s *Scheduler) GetScheduleStatus() map[string]interface{} {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	now := time.Now()
-	totalNodes := len(s.schedules)
-	readyNodes := 0
-	failingNodes := 0
-	pendingFirstTest := 0
-	avgBackoffLevel := 0.0
-
-	var nextTestTimes []time.Time
-
-	for _, schedule := range s.schedules {
-		if schedule.NextTestTime.Before(now) || schedule.NextTestTime.Equal(now) {
-			readyNodes++
-		}
-		// Check if node has never been tested
-		if schedule.LastTestTime.IsZero() {
-			pendingFirstTest++
-		} else if !schedule.LastTestSuccess {
-			// Only count as failing if it has been tested and failed
-			failingNodes++
-			avgBackoffLevel += float64(schedule.BackoffLevel)
-		}
-		nextTestTimes = append(nextTestTimes, schedule.NextTestTime)
-	}
-
-	if failingNodes > 0 {
-		avgBackoffLevel /= float64(failingNodes)
-	}
-
-	return map[string]interface{}{
-		"total_nodes":       totalNodes,
-		"ready_for_test":    readyNodes,
-		"failing_nodes":     failingNodes,
-		"pending_first_test": pendingFirstTest,
-		"avg_backoff_level": avgBackoffLevel,
-		"strategy":          s.strategy.String(),
-	}
-}
-
-func (s *Scheduler) ResetNodeSchedule(ctx context.Context, zone, net, node uint16) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	key := fmt.Sprintf("%d:%d/%d", zone, net, node)
-	if schedule, exists := s.schedules[key]; exists {
-		schedule.ConsecutiveFails = 0
-		schedule.BackoffLevel = 0
-		schedule.NextTestTime = time.Now()
-	}
-}
-
-func (st ScheduleStrategy) String() string {
-	switch st {
-	case StrategyRegular:
-		return "regular"
-	case StrategyAdaptive:
-		return "adaptive"
-	case StrategyPriority:
-		return "priority"
-	default:
-		return "unknown"
-	}
 }

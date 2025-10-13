@@ -31,7 +31,7 @@ func (s *Storage) GetDatabase() database.DatabaseInterface {
 // New creates a new Storage instance with ClickHouse-specific components
 func New(db database.DatabaseInterface) (*Storage, error) {
 	// Always use ClickHouse components (only supported database type)
-	queryBuilder := NewClickHouseQueryBuilder()
+	queryBuilder := NewQueryBuilder()
 	resultParser := NewClickHouseResultParser()
 
 	// Create the storage instance with ClickHouse components

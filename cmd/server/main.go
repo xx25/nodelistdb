@@ -97,45 +97,40 @@ func main() {
 	var finalStorage storage.Operations = storageLayer
 	var cacheImpl cache.Cache
 	if cfg.Cache.Enabled {
-		log.Printf("Initializing %s cache...", cfg.Cache.Type)
-		
-		// Create cache implementation
-		switch cfg.Cache.Type {
-		case "badger":
-			badgerConfig := &cache.BadgerConfig{
-				Path:              cfg.Cache.Path,
-				MaxMemoryMB:       cfg.Cache.MaxMemoryMB,
-				ValueLogMaxMB:     cfg.Cache.ValueLogMaxMB,
-				CompactL0OnClose:  cfg.Cache.CompactOnClose,
-				NumGoroutines:     4,
-				GCInterval:        cfg.Cache.GCInterval,
-				GCDiscardRatio:    cfg.Cache.GCDiscardRatio,
-			}
-			cacheImpl, err = cache.NewBadgerCache(badgerConfig)
-			if err != nil {
-				log.Fatalf("Failed to initialize Badger cache: %v", err)
-			}
-			defer cacheImpl.Close()
-			
-			// Wrap storage with cache
-			cacheStorageConfig := &storage.CacheStorageConfig{
-				Enabled:          true,
-				DefaultTTL:       cfg.Cache.DefaultTTL,
-				NodeTTL:          cfg.Cache.NodeTTL,
-				StatsTTL:         cfg.Cache.StatsTTL,
-				SearchTTL:        cfg.Cache.SearchTTL,
-				MaxSearchResults: cfg.Cache.MaxSearchResults,
-				WarmupOnStart:    cfg.Cache.WarmupOnStart,
-			}
-			cachedStorage := storage.NewCachedStorage(storageLayer, cacheImpl, cacheStorageConfig)
-			finalStorage = cachedStorage
-			
-			log.Printf("Cache initialized successfully at %s", cfg.Cache.Path)
-			log.Printf("Cache settings: Memory=%dMB, NodeTTL=%v, StatsTTL=%v, SearchTTL=%v",
-				cfg.Cache.MaxMemoryMB, cfg.Cache.NodeTTL, cfg.Cache.StatsTTL, cfg.Cache.SearchTTL)
-		default:
-			log.Printf("Unknown cache type: %s, cache disabled", cfg.Cache.Type)
+		log.Println("Initializing BadgerCache...")
+
+		// Create BadgerCache
+		badgerConfig := &cache.BadgerConfig{
+			Path:              cfg.Cache.Path,
+			MaxMemoryMB:       cfg.Cache.MaxMemoryMB,
+			ValueLogMaxMB:     cfg.Cache.ValueLogMaxMB,
+			CompactL0OnClose:  cfg.Cache.CompactOnClose,
+			NumGoroutines:     4,
+			GCInterval:        cfg.Cache.GCInterval,
+			GCDiscardRatio:    cfg.Cache.GCDiscardRatio,
 		}
+		cacheImpl, err = cache.NewBadgerCache(badgerConfig)
+		if err != nil {
+			log.Fatalf("Failed to initialize BadgerCache: %v", err)
+		}
+		defer cacheImpl.Close()
+
+		// Wrap storage with cache
+		cacheStorageConfig := &storage.CacheStorageConfig{
+			Enabled:          true,
+			DefaultTTL:       cfg.Cache.DefaultTTL,
+			NodeTTL:          cfg.Cache.NodeTTL,
+			StatsTTL:         cfg.Cache.StatsTTL,
+			SearchTTL:        cfg.Cache.SearchTTL,
+			MaxSearchResults: cfg.Cache.MaxSearchResults,
+			WarmupOnStart:    cfg.Cache.WarmupOnStart,
+		}
+		cachedStorage := storage.NewCachedStorage(storageLayer, cacheImpl, cacheStorageConfig)
+		finalStorage = cachedStorage
+
+		log.Printf("BadgerCache initialized successfully at %s", cfg.Cache.Path)
+		log.Printf("Cache settings: Memory=%dMB, NodeTTL=%v, StatsTTL=%v, SearchTTL=%v",
+			cfg.Cache.MaxMemoryMB, cfg.Cache.NodeTTL, cfg.Cache.StatsTTL, cfg.Cache.SearchTTL)
 	} else {
 		log.Println("Cache is disabled")
 	}

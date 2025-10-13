@@ -17,14 +17,14 @@ type ClickHouseStorage struct {
 	nodeOps      *ClickHouseNodeOperations
 	statsOps     *StatisticsOperations
 	searchOps    *SearchOperations
-	queryBuilder *ClickHouseQueryBuilder
+	queryBuilder *QueryBuilder
 	resultParser *ClickHouseResultParser
 	mu           sync.RWMutex
 }
 
 // NewClickHouseStorage creates a new ClickHouse-specific storage instance
 func NewClickHouseStorage(db database.DatabaseInterface) *ClickHouseStorage {
-	queryBuilder := NewClickHouseQueryBuilder()
+	queryBuilder := NewQueryBuilder()
 	resultParser := NewClickHouseResultParser()
 
 	storage := &ClickHouseStorage{
@@ -65,13 +65,13 @@ func (cs *ClickHouseStorage) SearchOperations() *SearchOperations {
 // ClickHouseNodeOperations handles ClickHouse-specific node operations
 type ClickHouseNodeOperations struct {
 	db           database.DatabaseInterface
-	queryBuilder *ClickHouseQueryBuilder
+	queryBuilder *QueryBuilder
 	resultParser *ClickHouseResultParser
 	mu           sync.RWMutex
 }
 
 // NewClickHouseNodeOperations creates a new ClickHouse-specific NodeOperations instance
-func NewClickHouseNodeOperations(db database.DatabaseInterface, queryBuilder *ClickHouseQueryBuilder, resultParser *ClickHouseResultParser) *ClickHouseNodeOperations {
+func NewClickHouseNodeOperations(db database.DatabaseInterface, queryBuilder *QueryBuilder, resultParser *ClickHouseResultParser) *ClickHouseNodeOperations {
 	return &ClickHouseNodeOperations{
 		db:           db,
 		queryBuilder: queryBuilder,
@@ -186,7 +186,7 @@ func (cno *ClickHouseNodeOperations) GetNodes(filter database.NodeFilter) ([]dat
 	conn := cno.db.Conn()
 
 	// Use ClickHouse-specific FTS query
-	query, args, usedFTS := cno.queryBuilder.BuildClickHouseFTSQuery(filter)
+	query, args, usedFTS := cno.queryBuilder.BuildFTSQuery(filter)
 	if !usedFTS {
 		// Fallback to base query builder if no FTS was used
 		query, args = cno.queryBuilder.BuildNodesQuery(filter)

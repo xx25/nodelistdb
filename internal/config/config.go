@@ -36,9 +36,9 @@ type Config struct {
 }
 
 // CacheConfig holds cache configuration
+// Note: Only BadgerCache is supported. MemoryCache and NoOpCache have been removed.
 type CacheConfig struct {
 	Enabled           bool          `yaml:"enabled"`
-	Type              string        `yaml:"type"` // "badger" or "memory"
 	Path              string        `yaml:"path"`
 	MaxMemoryMB       int           `yaml:"max_memory_mb"`
 	ValueLogMaxMB     int           `yaml:"value_log_max_mb"`
@@ -88,7 +88,6 @@ func DefaultClickHouseConfig() ClickHouseConfig {
 func DefaultCacheConfig() *CacheConfig {
 	return &CacheConfig{
 		Enabled:           false,
-		Type:              "badger",
 		Path:              "./cache/badger",
 		MaxMemoryMB:       256,
 		ValueLogMaxMB:     100,
@@ -168,13 +167,7 @@ func SaveConfig(config *Config, configPath string) error {
 
 // validate ensures the configuration is valid and sets defaults where needed
 func (c *Config) validate() error {
-	// Validate cache configuration
-	if c.Cache.Type == "" {
-		c.Cache.Type = "badger"
-	}
-	if c.Cache.Type != "badger" && c.Cache.Type != "memory" {
-		return fmt.Errorf("unsupported cache type: %s", c.Cache.Type)
-	}
+	// Validate cache configuration (BadgerCache only)
 	if c.Cache.Enabled && c.Cache.Path == "" {
 		c.Cache.Path = "./cache/badger"
 	}

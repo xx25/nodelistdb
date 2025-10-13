@@ -43,3 +43,36 @@ type Metrics struct {
 	Size       uint64
 	Keys       uint64
 }
+
+// HitRate calculates the cache hit rate percentage
+func (m *Metrics) HitRate() float64 {
+	total := m.Hits + m.Misses
+	if total == 0 {
+		return 0.0
+	}
+	return float64(m.Hits) / float64(total) * 100.0
+}
+
+// MissRate calculates the cache miss rate percentage
+func (m *Metrics) MissRate() float64 {
+	total := m.Hits + m.Misses
+	if total == 0 {
+		return 0.0
+	}
+	return float64(m.Misses) / float64(total) * 100.0
+}
+
+// ErrKeyNotFound is returned when a key is not found in the cache
+type ErrKeyNotFound struct {
+	Key string
+}
+
+func (e *ErrKeyNotFound) Error() string {
+	return "cache: key not found: " + e.Key
+}
+
+// IsKeyNotFound checks if an error is a key not found error
+func IsKeyNotFound(err error) bool {
+	_, ok := err.(*ErrKeyNotFound)
+	return ok
+}
