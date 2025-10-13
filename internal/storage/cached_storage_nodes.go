@@ -3,11 +3,12 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/logging"
 )
 
 // Node-related caching operations
@@ -15,12 +16,12 @@ import (
 // GetNodes with caching
 func (cs *CachedStorage) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodes(filter)
+		return cs.Storage.NodeOps().GetNodes(filter)
 	}
 
 	// Skip cache for large result sets
 	if filter.Limit > cs.config.MaxSearchResults {
-		return cs.Storage.GetNodes(filter)
+		return cs.Storage.NodeOps().GetNodes(filter)
 	}
 
 	// Generate cache key
@@ -34,14 +35,14 @@ func (cs *CachedStorage) GetNodes(filter database.NodeFilter) ([]database.Node, 
 			return nodes, nil
 		}
 		// JSON unmarshal failed but cache entry exists - shouldn't happen
-		log.Printf("Warning: Failed to unmarshal cached data for key %s: %v", key, err)
+		logging.Warn("Failed to unmarshal cached data", slog.String("key", key), slog.Any("error", err))
 	}
 
 	// Cache miss - need to fetch from database
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	nodes, err := cs.Storage.GetNodes(filter)
+	nodes, err := cs.Storage.NodeOps().GetNodes(filter)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +58,7 @@ func (cs *CachedStorage) GetNodes(filter database.NodeFilter) ([]database.Node, 
 // GetNodeHistory with caching
 func (cs *CachedStorage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodeHistory(zone, net, node)
+		return cs.Storage.NodeOps().GetNodeHistory(zone, net, node)
 	}
 
 	key := cs.keyGen.NodeHistoryKey(zone, net, node)
@@ -74,7 +75,7 @@ func (cs *CachedStorage) GetNodeHistory(zone, net, node int) ([]database.Node, e
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	history, err := cs.Storage.GetNodeHistory(zone, net, node)
+	history, err := cs.Storage.NodeOps().GetNodeHistory(zone, net, node)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func (cs *CachedStorage) GetNodeHistory(zone, net, node int) ([]database.Node, e
 // GetNodeChanges with caching
 func (cs *CachedStorage) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodeChanges(zone, net, node)
+		return cs.Storage.SearchOps().GetNodeChanges(zone, net, node)
 	}
 
 	key := cs.keyGen.NodeChangesKey(zone, net, node, "")
@@ -107,7 +108,7 @@ func (cs *CachedStorage) GetNodeChanges(zone, net, node int) ([]database.NodeCha
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	changes, err := cs.Storage.GetNodeChanges(zone, net, node)
+	changes, err := cs.Storage.SearchOps().GetNodeChanges(zone, net, node)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +124,7 @@ func (cs *CachedStorage) GetNodeChanges(zone, net, node int) ([]database.NodeCha
 // GetUniqueSysops with caching
 func (cs *CachedStorage) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetUniqueSysops(nameFilter, limit, offset)
+		return cs.Storage.SearchOps().GetUniqueSysops(nameFilter, limit, offset)
 	}
 
 	key := cs.keyGen.UniqueSysopsKey(nameFilter, limit, offset)
@@ -140,7 +141,7 @@ func (cs *CachedStorage) GetUniqueSysops(nameFilter string, limit, offset int) (
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	sysops, err := cs.Storage.GetUniqueSysops(nameFilter, limit, offset)
+	sysops, err := cs.Storage.SearchOps().GetUniqueSysops(nameFilter, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +157,7 @@ func (cs *CachedStorage) GetUniqueSysops(nameFilter string, limit, offset int) (
 // GetNodesBySysop with caching
 func (cs *CachedStorage) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodesBySysop(sysopName, limit)
+		return cs.Storage.SearchOps().GetNodesBySysop(sysopName, limit)
 	}
 
 	key := cs.keyGen.NodesBySysopKey(sysopName, limit)
@@ -173,7 +174,7 @@ func (cs *CachedStorage) GetNodesBySysop(sysopName string, limit int) ([]databas
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	nodes, err := cs.Storage.GetNodesBySysop(sysopName, limit)
+	nodes, err := cs.Storage.SearchOps().GetNodesBySysop(sysopName, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -191,25 +192,25 @@ func (cs *CachedStorage) GetNodesBySysop(sysopName string, limit int) ([]databas
 // GetNodeDateRange returns the first and last date a node appears in nodelists
 func (cs *CachedStorage) GetNodeDateRange(zone, net, node int) (firstDate, lastDate time.Time, err error) {
 	// Not cached as this is rarely called
-	return cs.Storage.GetNodeDateRange(zone, net, node)
+	return cs.Storage.NodeOps().GetNodeDateRange(zone, net, node)
 }
 
 // SearchNodesBySysop searches for nodes by sysop name
 func (cs *CachedStorage) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error) {
 	// Not cached as this overlaps with GetNodesBySysop
-	return cs.Storage.SearchNodesBySysop(sysopName, limit)
+	return cs.Storage.SearchOps().SearchNodesBySysop(sysopName, limit)
 }
 
 // SearchNodesWithLifetime searches for nodes with lifetime information
 func (cs *CachedStorage) SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error) {
 	// Not cached as this is similar to GetNodes but with extra processing
-	return cs.Storage.SearchNodesWithLifetime(filter)
+	return cs.Storage.SearchOps().SearchNodesWithLifetime(filter)
 }
 
 // InsertNodes inserts a batch of nodes into the database
 func (cs *CachedStorage) InsertNodes(nodes []database.Node) error {
 	// Invalidate relevant caches after insertion
-	err := cs.Storage.InsertNodes(nodes)
+	err := cs.Storage.NodeOps().InsertNodes(nodes)
 	if err == nil && len(nodes) > 0 {
 		// Get the nodelist date from the first node
 		nodelistDate := nodes[0].NodelistDate

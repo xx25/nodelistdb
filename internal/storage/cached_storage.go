@@ -1,10 +1,10 @@
 package storage
 
 import (
-	"log"
 	"time"
 
 	"github.com/nodelistdb/internal/cache"
+	"github.com/nodelistdb/internal/logging"
 )
 
 // CachedStorage wraps Storage with caching capabilities
@@ -63,10 +63,10 @@ func (cs *CachedStorage) GetCacheMetrics() *cache.Metrics {
 
 // warmupCache pre-populates cache with frequently accessed data
 func (cs *CachedStorage) warmupCache() {
-	log.Println("Starting cache warmup...")
+	logging.Info("Starting cache warmup")
 
 	// Pre-cache latest stats
-	if date, err := cs.Storage.GetLatestStatsDate(); err == nil {
+	if date, err := cs.Storage.StatsOps().GetLatestStatsDate(); err == nil {
 		_, _ = cs.GetStats(date)
 	}
 
@@ -84,7 +84,7 @@ func (cs *CachedStorage) warmupCache() {
 		_, _ = cs.GetNodeHistory(node.Zone, node.Net, node.Node)
 	}
 
-	log.Println("Cache warmup completed")
+	logging.Info("Cache warmup completed")
 }
 
 // Close closes the cache
@@ -100,5 +100,5 @@ func (cs *CachedStorage) SetTemporaryTTL(ttl time.Duration) {
 	// This would require a more complex implementation to track
 	// and restore the original TTL values
 	// For now, we'll just log the intent
-	log.Printf("Would set temporary TTL to %v (not implemented)", ttl)
+	logging.Warnf("Would set temporary TTL to %v (not implemented)", ttl)
 }

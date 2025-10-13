@@ -16,7 +16,7 @@ func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetBinkPSoftwareDistribution(days)
+	dist, err := s.storage.TestOps().GetBinkPSoftwareDistribution(days)
 	if err != nil {
 		log.Printf("ERROR: GetBinkPSoftwareDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get BinkP software distribution", http.StatusInternalServerError)
@@ -36,7 +36,7 @@ func (s *Server) GetIFCICOSoftwareStats(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetIFCICOSoftwareDistribution(days)
+	dist, err := s.storage.TestOps().GetIFCICOSoftwareDistribution(days)
 	if err != nil {
 		log.Printf("ERROR: GetIFCICOSoftwareDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get IFCICO software distribution", http.StatusInternalServerError)
@@ -56,7 +56,7 @@ func (s *Server) GetBinkdDetailedStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetBinkdDetailedStats(days)
+	dist, err := s.storage.TestOps().GetBinkdDetailedStats(days)
 	if err != nil {
 		log.Printf("ERROR: GetBinkdDetailedStats failed: %v", err)
 		WriteJSONError(w, "Failed to get detailed binkd statistics", http.StatusInternalServerError)

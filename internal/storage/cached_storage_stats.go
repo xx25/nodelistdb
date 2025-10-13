@@ -14,7 +14,7 @@ import (
 // GetStats with caching
 func (cs *CachedStorage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetStats(date)
+		return cs.Storage.StatsOps().GetStats(date)
 	}
 
 	key := cs.keyGen.StatsKey(date)
@@ -31,7 +31,7 @@ func (cs *CachedStorage) GetStats(date time.Time) (*database.NetworkStats, error
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	stats, err := cs.Storage.GetStats(date)
+	stats, err := cs.Storage.StatsOps().GetStats(date)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (cs *CachedStorage) GetStats(date time.Time) (*database.NetworkStats, error
 // GetLatestStatsDate with caching
 func (cs *CachedStorage) GetLatestStatsDate() (time.Time, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetLatestStatsDate()
+		return cs.Storage.StatsOps().GetLatestStatsDate()
 	}
 
 	key := cs.keyGen.LatestStatsDateKey()
@@ -64,7 +64,7 @@ func (cs *CachedStorage) GetLatestStatsDate() (time.Time, error) {
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	date, err := cs.Storage.GetLatestStatsDate()
+	date, err := cs.Storage.StatsOps().GetLatestStatsDate()
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -80,7 +80,7 @@ func (cs *CachedStorage) GetLatestStatsDate() (time.Time, error) {
 // GetAvailableDates with caching
 func (cs *CachedStorage) GetAvailableDates() ([]time.Time, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetAvailableDates()
+		return cs.Storage.StatsOps().GetAvailableDates()
 	}
 
 	key := cs.keyGen.AvailableDatesKey()
@@ -97,7 +97,7 @@ func (cs *CachedStorage) GetAvailableDates() ([]time.Time, error) {
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	dates, err := cs.Storage.GetAvailableDates()
+	dates, err := cs.Storage.StatsOps().GetAvailableDates()
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (cs *CachedStorage) GetAvailableDates() ([]time.Time, error) {
 // GetNearestAvailableDate with caching
 func (cs *CachedStorage) GetNearestAvailableDate(targetDate time.Time) (time.Time, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNearestAvailableDate(targetDate)
+		return cs.Storage.StatsOps().GetNearestAvailableDate(targetDate)
 	}
 
 	key := cs.keyGen.NearestDateKey(targetDate)
@@ -130,7 +130,7 @@ func (cs *CachedStorage) GetNearestAvailableDate(targetDate time.Time) (time.Tim
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	date, err := cs.Storage.GetNearestAvailableDate(targetDate)
+	date, err := cs.Storage.StatsOps().GetNearestAvailableDate(targetDate)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -148,19 +148,19 @@ func (cs *CachedStorage) GetNearestAvailableDate(targetDate time.Time) (time.Tim
 // IsNodelistProcessed checks if a nodelist for a specific date has been processed
 func (cs *CachedStorage) IsNodelistProcessed(nodelistDate time.Time) (bool, error) {
 	// Not cached as this is used during import operations
-	return cs.Storage.IsNodelistProcessed(nodelistDate)
+	return cs.Storage.NodeOps().IsNodelistProcessed(nodelistDate)
 }
 
 // FindConflictingNode checks if a node with the same address exists on a given date
 func (cs *CachedStorage) FindConflictingNode(zone, net, node int, date time.Time) (bool, error) {
 	// Not cached as this is used during import operations
-	return cs.Storage.FindConflictingNode(zone, net, node, date)
+	return cs.Storage.NodeOps().FindConflictingNode(zone, net, node, date)
 }
 
 // GetMaxNodelistDate returns the maximum nodelist date in the database
 func (cs *CachedStorage) GetMaxNodelistDate() (time.Time, error) {
 	// Could be cached but usually called alongside GetLatestStatsDate
-	return cs.Storage.GetMaxNodelistDate()
+	return cs.Storage.NodeOps().GetMaxNodelistDate()
 }
 
 // IsLatestNodelist checks if a date is the latest nodelist

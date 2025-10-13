@@ -292,7 +292,7 @@ func (p *Processor) insertBatchWithProgress(ctx context.Context, batch []databas
 	}
 
 	start := time.Now()
-	err := p.storage.InsertNodes(batch)
+	err := p.storage.NodeOps().InsertNodes(batch)
 	duration := time.Since(start)
 
 	if err != nil {

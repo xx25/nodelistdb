@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +14,7 @@ import (
 	"github.com/nodelistdb/internal/concurrent"
 	"github.com/nodelistdb/internal/config"
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/logging"
 	"github.com/nodelistdb/internal/parser"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
@@ -49,15 +49,31 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize logging
+	logLevel := "info"
+	if *verbose {
+		logLevel = "debug"
+	} else if *quiet {
+		logLevel = "error"
+	}
+
+	if err := logging.Initialize(&logging.Config{
+		Level:   logLevel,
+		Console: true,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Load configuration
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logging.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Verify database configuration
 	if cfg.ClickHouse.Host == "" {
-		log.Fatalf("ClickHouse configuration is missing in %s", *configPath)
+		logging.Fatalf("ClickHouse configuration is missing in %s", *configPath)
 	}
 
 	if !*quiet {
@@ -78,18 +94,16 @@ func main() {
 	}
 
 	// Initialize ClickHouse database
-	if *verbose {
-		log.Println("Initializing ClickHouse database...")
-	}
+	logging.Debug("Initializing ClickHouse database")
 
 	chConfig, err := cfg.ClickHouse.ToClickHouseDatabaseConfig()
 	if err != nil {
-		log.Fatalf("Invalid ClickHouse configuration: %v", err)
+		logging.Fatalf("Invalid ClickHouse configuration: %v", err)
 	}
 
 	db, err := database.NewClickHouse(chConfig)
 	if err != nil {
-		log.Fatalf("Failed to initialize ClickHouse database: %v", err)
+		logging.Fatalf("Failed to initialize ClickHouse database: %v", err)
 	}
 	defer db.Close()
 
@@ -100,12 +114,10 @@ func main() {
 
 	// Create schema
 	if err := db.CreateSchema(); err != nil {
-		log.Fatalf("Failed to create schema: %v", err)
+		logging.Fatalf("Failed to create schema: %v", err)
 	}
 
-	if *verbose {
-		log.Println("Database initialized successfully")
-	}
+	logging.Debug("Database initialized successfully")
 
 	// Handle FTS rebuild mode
 	if *rebuildFTSOnly {
@@ -115,12 +127,12 @@ func main() {
 
 		// Drop existing FTS indexes
 		if err := db.DropFTSIndexes(); err != nil {
-			log.Printf("Warning: Could not drop existing FTS indexes: %v", err)
+			logging.Warnf("Could not drop existing FTS indexes: %v", err)
 		}
 
 		// Create new FTS indexes
 		if err := db.CreateFTSIndexes(); err != nil {
-			log.Fatalf("Failed to create FTS indexes: %v", err)
+			logging.Fatalf("Failed to create FTS indexes: %v", err)
 		}
 
 		if !*quiet {
@@ -132,7 +144,7 @@ func main() {
 	// Initialize storage layer
 	storageLayer, err := storage.New(db)
 	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+		logging.Fatalf("Failed to initialize storage: %v", err)
 	}
 	defer storageLayer.Close()
 
@@ -142,7 +154,7 @@ func main() {
 	// Find nodelist files
 	files, err := findNodelistFiles(*path, *recursive)
 	if err != nil {
-		log.Fatalf("Failed to find nodelist files: %v", err)
+		logging.Fatalf("Failed to find nodelist files: %v", err)
 	}
 
 	if len(files) == 0 {
@@ -174,11 +186,13 @@ func main() {
 		if !*quiet {
 			fmt.Printf("Using concurrent processing with %d workers\n", *workers)
 		}
-		processor := concurrent.NewMultiProcessor(storageLayer, nodelistParser, *workers, *batchSize, *verbose, *quiet)
+		// Wrap storage with adapter for concurrent processing
+		storageAdapter := concurrent.NewStorageAdapter(storageLayer)
+		processor := concurrent.NewMultiProcessor(storageAdapter, nodelistParser, *workers, *batchSize, *verbose, *quiet)
 
 		err := processor.ProcessFiles(ctx, files)
 		if err != nil {
-			log.Fatalf("Concurrent processing failed: %v", err)
+			logging.Fatalf("Concurrent processing failed: %v", err)
 		}
 	} else {
 		// Use sequential processing

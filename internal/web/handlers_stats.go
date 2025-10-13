@@ -18,7 +18,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	var availableDates []time.Time
 
 	// Get available dates for the dropdown
-	availableDates, err = s.storage.GetAvailableDates()
+	availableDates, err = s.storage.StatsOps().GetAvailableDates()
 	if err != nil {
 		data := struct {
 			Title          string
@@ -56,7 +56,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		selectedDate, err = time.Parse("2006-01-02", dateStr)
 		if err != nil {
 			// Invalid date format, fall back to latest
-			actualDate, err = s.storage.GetLatestStatsDate()
+			actualDate, err = s.storage.StatsOps().GetLatestStatsDate()
 			if err != nil {
 				data := struct {
 					Title          string
@@ -90,7 +90,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			dateAdjusted = true
 		} else {
 			// Find the nearest available date
-			actualDate, err = s.storage.GetNearestAvailableDate(selectedDate)
+			actualDate, err = s.storage.StatsOps().GetNearestAvailableDate(selectedDate)
 			if err != nil {
 				data := struct {
 					Title          string
@@ -125,7 +125,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// No date specified, use latest
-		actualDate, err = s.storage.GetLatestStatsDate()
+		actualDate, err = s.storage.StatsOps().GetLatestStatsDate()
 		if err != nil {
 			data := struct {
 				Title          string
@@ -159,7 +159,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get stats for the actual date
-	stats, err := s.storage.GetStats(actualDate)
+	stats, err := s.storage.StatsOps().GetStats(actualDate)
 
 	data := struct {
 		Title          string

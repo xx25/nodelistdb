@@ -2,10 +2,11 @@ package storage
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/logging"
 )
 
 // IPv6QueryOperations handles IPv6-specific test result queries
@@ -204,7 +205,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
-		log.Printf("[ERROR] GetIPv6EnabledNodes: Query failed: %v", err)
+		logging.Error("GetIPv6EnabledNodes: Query failed", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to search IPv6 enabled nodes: %w", err)
 	}
 	defer rows.Close()
@@ -216,7 +217,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 		var r NodeTestResult
 		err := ipv6.resultParser.ParseTestResultRow(rows, &r)
 		if err != nil {
-			log.Printf("[ERROR] GetIPv6EnabledNodes: Failed to parse row %d: %v", rowCount, err)
+			logging.Error("GetIPv6EnabledNodes: Failed to parse row", slog.Int("row", rowCount), slog.Any("error", err))
 			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
 		}
 		results = append(results, r)
@@ -226,8 +227,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 	for i := range results {
 		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
 		if err != nil {
-			log.Printf("[WARNING] Failed to get all hostnames for node %d:%d/%d: %v",
-				results[i].Zone, results[i].Net, results[i].Node, err)
+			logging.Warn("Failed to get all hostnames for node",
+				slog.Int("zone", results[i].Zone),
+				slog.Int("net", results[i].Net),
+				slog.Int("node", results[i].Node),
+				slog.Any("error", err))
 		} else {
 			results[i].AllHostnames = hostnames
 		}
@@ -412,7 +416,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 
 	rows, err := conn.Query(query, days, days, days, limit)
 	if err != nil {
-		log.Printf("[ERROR] GetIPv6NonWorkingNodes: Query failed: %v", err)
+		logging.Error("GetIPv6NonWorkingNodes: Query failed", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to search IPv6 non-working nodes: %w", err)
 	}
 	defer rows.Close()
@@ -424,7 +428,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 		var r NodeTestResult
 		err := ipv6.resultParser.ParseTestResultRow(rows, &r)
 		if err != nil {
-			log.Printf("[ERROR] GetIPv6NonWorkingNodes: Failed to parse row %d: %v", rowCount, err)
+			logging.Error("GetIPv6NonWorkingNodes: Failed to parse row", slog.Int("row", rowCount), slog.Any("error", err))
 			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
 		}
 		results = append(results, r)
@@ -434,8 +438,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 	for i := range results {
 		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
 		if err != nil {
-			log.Printf("[WARNING] Failed to get all hostnames for node %d:%d/%d: %v",
-				results[i].Zone, results[i].Net, results[i].Node, err)
+			logging.Warn("Failed to get all hostnames for node",
+				slog.Int("zone", results[i].Zone),
+				slog.Int("net", results[i].Net),
+				slog.Int("node", results[i].Node),
+				slog.Any("error", err))
 		} else {
 			results[i].AllHostnames = hostnames
 		}

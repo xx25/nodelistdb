@@ -9,7 +9,9 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// Storage provides thread-safe database operations using specialized components
+// Storage provides thread-safe database operations using specialized components.
+// Instead of delegating all methods, Storage exposes sub-components directly via
+// accessor methods (NodeOps(), SearchOps(), etc.) to reduce boilerplate and improve maintainability.
 type Storage struct {
 	db                  database.DatabaseInterface
 	queryBuilder        QueryBuilderInterface
@@ -26,6 +28,31 @@ type Storage struct {
 // GetDatabase returns the underlying database interface
 func (s *Storage) GetDatabase() database.DatabaseInterface {
 	return s.db
+}
+
+// NodeOps returns the node operations component for CRUD operations on nodes
+func (s *Storage) NodeOps() *NodeOperations {
+	return s.nodeOperations
+}
+
+// SearchOps returns the search operations component for advanced search queries
+func (s *Storage) SearchOps() *SearchOperations {
+	return s.searchOperations
+}
+
+// StatsOps returns the statistics operations component for network statistics
+func (s *Storage) StatsOps() *StatisticsOperations {
+	return s.statsOperations
+}
+
+// AnalyticsOps returns the analytics operations component for historical analytics
+func (s *Storage) AnalyticsOps() *AnalyticsOperations {
+	return s.analyticsOperations
+}
+
+// TestOps returns the test operations component for node testing and reachability
+func (s *Storage) TestOps() *TestOperationsRefactored {
+	return s.testOperations
 }
 
 // New creates a new Storage instance with ClickHouse-specific components
@@ -61,197 +88,152 @@ func (s *Storage) Close() error {
 	return nil
 }
 
-// --- Node Operations (delegated to NodeOperations) ---
+// --- Legacy Delegation Methods for Operations Interface Compatibility ---
+// These methods provide backward compatibility for code using the Operations interface.
+// New code should use the component accessors directly (e.g., storage.NodeOps().GetNodes()).
 
-// InsertNodes inserts a batch of nodes using optimized batch processing
-func (s *Storage) InsertNodes(nodes []database.Node) error {
-	return s.nodeOperations.InsertNodes(nodes)
-}
-
-
-// GetNodes retrieves nodes based on filter criteria
+// Node Operations delegated methods
 func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
 	return s.nodeOperations.GetNodes(filter)
 }
 
-// GetNodeHistory retrieves all historical entries for a specific node
 func (s *Storage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
 	return s.nodeOperations.GetNodeHistory(zone, net, node)
 }
 
-// GetNodeDateRange returns the first and last date when a node was active
 func (s *Storage) GetNodeDateRange(zone, net, node int) (firstDate, lastDate time.Time, err error) {
 	return s.nodeOperations.GetNodeDateRange(zone, net, node)
 }
 
-// FindConflictingNode checks if a node already exists for the same date
-func (s *Storage) FindConflictingNode(zone, net, node int, date time.Time) (bool, error) {
-	return s.nodeOperations.FindConflictingNode(zone, net, node, date)
+func (s *Storage) InsertNodes(nodes []database.Node) error {
+	return s.nodeOperations.InsertNodes(nodes)
 }
 
-// IsNodelistProcessed checks if a nodelist has already been processed based on date
 func (s *Storage) IsNodelistProcessed(nodelistDate time.Time) (bool, error) {
 	return s.nodeOperations.IsNodelistProcessed(nodelistDate)
 }
 
-// GetMaxNodelistDate returns the most recent nodelist date in the database
+func (s *Storage) FindConflictingNode(zone, net, node int, date time.Time) (bool, error) {
+	return s.nodeOperations.FindConflictingNode(zone, net, node, date)
+}
+
 func (s *Storage) GetMaxNodelistDate() (time.Time, error) {
 	return s.nodeOperations.GetMaxNodelistDate()
 }
 
-// --- Search Operations (delegated to SearchOperations) ---
-
-// SearchNodesBySysop finds all nodes associated with a sysop name
+// Search Operations delegated methods
 func (s *Storage) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error) {
 	return s.searchOperations.SearchNodesBySysop(sysopName, limit)
 }
 
-// SearchNodesWithLifetime finds nodes based on filter criteria and returns them with lifetime information
-func (s *Storage) SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error) {
-	return s.searchOperations.SearchNodesWithLifetime(filter)
-}
-
-// GetUniqueSysops returns a list of unique sysops with their node counts
-func (s *Storage) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
-	return s.searchOperations.GetUniqueSysops(nameFilter, limit, offset)
-}
-
-// GetNodesBySysop returns all nodes for a specific sysop
-func (s *Storage) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
-	return s.searchOperations.GetNodesBySysop(sysopName, limit)
-}
-
-// GetNodeChanges analyzes the history of a node and returns detected changes
 func (s *Storage) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
 	return s.searchOperations.GetNodeChanges(zone, net, node)
 }
 
-// --- Statistics Operations (delegated to StatisticsOperations) ---
+func (s *Storage) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
+	return s.searchOperations.GetUniqueSysops(nameFilter, limit, offset)
+}
 
-// GetStats retrieves network statistics for a specific date
+func (s *Storage) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
+	return s.searchOperations.GetNodesBySysop(sysopName, limit)
+}
+
+func (s *Storage) SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error) {
+	return s.searchOperations.SearchNodesWithLifetime(filter)
+}
+
+// Analytics Operations delegated methods
+func (s *Storage) GetFlagFirstAppearance(flagName string) (*FlagFirstAppearance, error) {
+	return s.analyticsOperations.GetFlagFirstAppearance(flagName)
+}
+
+func (s *Storage) GetFlagUsageByYear(flagName string) ([]FlagUsageByYear, error) {
+	return s.analyticsOperations.GetFlagUsageByYear(flagName)
+}
+
+func (s *Storage) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
+	return s.analyticsOperations.GetNetworkHistory(zone, net)
+}
+
+// Statistics Operations delegated methods
 func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	return s.statsOperations.GetStats(date)
 }
 
-// GetLatestStatsDate retrieves the most recent date that has statistics
 func (s *Storage) GetLatestStatsDate() (time.Time, error) {
 	return s.statsOperations.GetLatestStatsDate()
 }
 
-// GetAvailableDates returns all unique dates that have nodelist data
 func (s *Storage) GetAvailableDates() ([]time.Time, error) {
 	return s.statsOperations.GetAvailableDates()
 }
 
-// GetNearestAvailableDate finds the closest available date to the requested date
 func (s *Storage) GetNearestAvailableDate(requestedDate time.Time) (time.Time, error) {
 	return s.statsOperations.GetNearestAvailableDate(requestedDate)
 }
 
-// --- Extended API Methods (new functionality) ---
-
-// InsertSingleNode inserts a single node (convenience method)
-func (s *Storage) InsertSingleNode(node database.Node) error {
-	return s.nodeOperations.InsertSingleNode(node)
+// Test Operations delegated methods
+func (s *Storage) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
+	return s.testOperations.GetNodeTestHistory(zone, net, node, days)
 }
 
-// NodeExists checks if a specific node exists in the database
-func (s *Storage) NodeExists(zone, net, node int) (bool, error) {
-	return s.nodeOperations.NodeExists(zone, net, node)
+func (s *Storage) GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error) {
+	return s.testOperations.GetDetailedTestResult(zone, net, node, testTime)
 }
 
-// GetLatestNodeVersion gets the most recent version of a specific node
-func (s *Storage) GetLatestNodeVersion(zone, net, node int) (*database.Node, error) {
-	return s.nodeOperations.GetLatestNodeVersion(zone, net, node)
+func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error) {
+	return s.testOperations.GetNodeReachabilityStats(zone, net, node, days)
 }
 
-// CountNodes returns the total number of nodes for a given date (or all if date is zero)
-func (s *Storage) CountNodes(date time.Time) (int, error) {
-	return s.nodeOperations.CountNodes(date)
+func (s *Storage) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
+	return s.testOperations.GetReachabilityTrends(days)
 }
 
-// DeleteNodesForDate removes all nodes for a specific date (for re-import scenarios)
-func (s *Storage) DeleteNodesForDate(date time.Time) error {
-	return s.nodeOperations.DeleteNodesForDate(date)
+func (s *Storage) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
+	return s.testOperations.SearchNodesByReachability(operational, limit, days)
 }
 
-// GetNodesByZone retrieves all nodes for a specific zone
-func (s *Storage) GetNodesByZone(zone int, limit int) ([]database.Node, error) {
-	return s.nodeOperations.GetNodesByZone(zone, limit)
+func (s *Storage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
 }
 
-// GetNodesByNet retrieves all nodes for a specific net within a zone
-func (s *Storage) GetNodesByNet(zone, net int, limit int) ([]database.Node, error) {
-	return s.nodeOperations.GetNodesByNet(zone, net, limit)
+func (s *Storage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
 }
 
-// SearchNodesBySystemName finds nodes by system name (case-insensitive partial match)
-func (s *Storage) SearchNodesBySystemName(systemName string, limit int) ([]database.Node, error) {
-	return s.searchOperations.SearchNodesBySystemName(systemName, limit)
+func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
 }
 
-// SearchNodesByLocation finds nodes by location (case-insensitive partial match)
-func (s *Storage) SearchNodesByLocation(location string, limit int) ([]database.Node, error) {
-	return s.searchOperations.SearchNodesByLocation(location, limit)
+func (s *Storage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetIfcicoEnabledNodes(limit, days, includeZeroNodes)
 }
 
-// SearchActiveNodes finds currently active nodes with optional filters
-func (s *Storage) SearchActiveNodes(filter database.NodeFilter) ([]database.Node, error) {
-	return s.searchOperations.SearchActiveNodes(filter)
+func (s *Storage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetTelnetEnabledNodes(limit, days, includeZeroNodes)
 }
 
-// SearchNodesWithProtocol finds nodes supporting a specific internet protocol
-func (s *Storage) SearchNodesWithProtocol(protocol string, limit int) ([]database.Node, error) {
-	return s.searchOperations.SearchNodesWithProtocol(protocol, limit)
+func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes)
 }
 
-// GetDateRangeStats returns statistics for a range of dates
-func (s *Storage) GetDateRangeStats(startDate, endDate time.Time) ([]database.NetworkStats, error) {
-	return s.statsOperations.GetDateRangeStats(startDate, endDate)
+func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes)
 }
 
-// GetZoneStats returns statistics for a specific zone across all dates
-func (s *Storage) GetZoneStats(zone int) (map[time.Time]int, error) {
-	return s.statsOperations.GetZoneStats(zone)
+func (s *Storage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+	return s.testOperations.GetBinkPSoftwareDistribution(days)
 }
 
-// GetNodeTypeDistribution returns the distribution of node types for a given date
-func (s *Storage) GetNodeTypeDistribution(date time.Time) (map[string]int, error) {
-	return s.statsOperations.GetNodeTypeDistribution(date)
+func (s *Storage) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+	return s.testOperations.GetIFCICOSoftwareDistribution(days)
 }
 
-// GetConnectivityStats returns connectivity statistics for a given date
-func (s *Storage) GetConnectivityStats(date time.Time) (*ConnectivityStats, error) {
-	return s.statsOperations.GetConnectivityStats(date)
+func (s *Storage) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
+	return s.testOperations.GetBinkdDetailedStats(days)
 }
 
-// GetTopSysops returns the sysops managing the most nodes for a given date
-func (s *Storage) GetTopSysops(date time.Time, limit int) ([]SysopStats, error) {
-	return s.statsOperations.GetTopSysops(date, limit)
-}
-
-// GetGrowthStats calculates growth statistics between two dates
-func (s *Storage) GetGrowthStats(startDate, endDate time.Time) (*GrowthStats, error) {
-	return s.statsOperations.GetGrowthStats(startDate, endDate)
-}
-
-// --- Direct Component Access (for advanced usage) ---
-
-// GetNodeOperations returns the node operations component for direct access
-func (s *Storage) GetNodeOperations() *NodeOperations {
-	return s.nodeOperations
-}
-
-// GetSearchOperations returns the search operations component for direct access
-func (s *Storage) GetSearchOperations() *SearchOperations {
-	return s.searchOperations
-}
-
-
-// GetStatisticsOperations returns the statistics operations component for direct access
-func (s *Storage) GetStatisticsOperations() *StatisticsOperations {
-	return s.statsOperations
-}
+// --- Utility Methods ---
 
 // GetQueryBuilder returns the query builder for direct access
 func (s *Storage) GetQueryBuilder() QueryBuilderInterface {
@@ -299,120 +281,16 @@ func (s *Storage) HealthCheck() error {
 // GetComponentInfo returns information about the storage components
 func (s *Storage) GetComponentInfo() map[string]interface{} {
 	return map[string]interface{}{
-		"version":             "2.0.0-refactored",
-		"architecture":        "component-based",
+		"version":             "3.0.0-refactored",
+		"architecture":        "component-based with direct access",
 		"query_builder":       "safe parameterized queries",
 		"result_parser":       "type-safe parsing",
 		"node_operations":     "CRUD operations with validation",
 		"search_operations":   "advanced search and change detection",
 		"stats_operations":    "comprehensive statistics",
+		"analytics_operations": "historical analytics",
+		"test_operations":     "node testing and reachability",
 		"thread_safety":       "mutex-protected operations",
-		"backward_compatible": true,
+		"boilerplate_removed": "~200 lines of delegation eliminated",
 	}
-}
-
-// --- Migration Helper (for transitioning from old storage.go) ---
-
-// MigrateFromLegacyStorage is a helper method for transitioning from the old storage implementation
-// This method is intended to be used during the migration period and can be removed later
-func (s *Storage) MigrateFromLegacyStorage() error {
-	// This method can be used to perform any necessary data migrations
-	// or validation checks when upgrading from the old storage implementation
-
-	// For now, just perform a health check
-	return s.HealthCheck()
-}
-
-// --- Analytics Operations (delegated to AnalyticsOperations) ---
-
-// GetFlagFirstAppearance finds the first node that used a specific flag
-func (s *Storage) GetFlagFirstAppearance(flag string) (*FlagFirstAppearance, error) {
-	return s.analyticsOperations.GetFlagFirstAppearance(flag)
-}
-
-// GetFlagUsageByYear returns the usage statistics of a flag by year
-func (s *Storage) GetFlagUsageByYear(flag string) ([]FlagUsageByYear, error) {
-	return s.analyticsOperations.GetFlagUsageByYear(flag)
-}
-
-// GetNetworkHistory returns the complete appearance history of a network
-func (s *Storage) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
-	return s.analyticsOperations.GetNetworkHistory(zone, net)
-}
-
-// --- Test Operations (delegated to TestOperations) ---
-
-// GetNodeTestHistory retrieves test history for a specific node
-func (s *Storage) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
-	return s.testOperations.GetNodeTestHistory(zone, net, node, days)
-}
-
-// GetDetailedTestResult retrieves a detailed test result for a specific node and timestamp
-func (s *Storage) GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error) {
-	return s.testOperations.GetDetailedTestResult(zone, net, node, testTime)
-}
-
-// GetNodeReachabilityStats calculates reachability statistics for a node
-func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error) {
-	return s.testOperations.GetNodeReachabilityStats(zone, net, node, days)
-}
-
-// GetReachabilityTrends gets daily reachability trends
-func (s *Storage) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
-	return s.testOperations.GetReachabilityTrends(days)
-}
-
-// SearchNodesByReachability searches for nodes by reachability status
-func (s *Storage) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
-	return s.testOperations.SearchNodesByReachability(operational, limit, days)
-}
-
-// GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6
-func (s *Storage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
-}
-
-// GetIPv6NonWorkingNodes returns nodes that have IPv6 addresses but no working IPv6 services
-func (s *Storage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
-}
-
-// GetBinkPEnabledNodes returns nodes that have been successfully tested with BinkP
-func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
-}
-
-// GetIfcicoEnabledNodes returns nodes that have been successfully tested with IFCICO
-func (s *Storage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetIfcicoEnabledNodes(limit, days, includeZeroNodes)
-}
-
-// GetTelnetEnabledNodes returns nodes that have been successfully tested with Telnet
-func (s *Storage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetTelnetEnabledNodes(limit, days, includeZeroNodes)
-}
-
-// GetVModemEnabledNodes returns nodes that have been successfully tested with VModem
-func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes)
-}
-
-// GetFTPEnabledNodes returns nodes that have been successfully tested with FTP
-func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes)
-}
-
-// GetBinkPSoftwareDistribution returns BinkP software distribution statistics
-func (s *Storage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	return s.testOperations.GetBinkPSoftwareDistribution(days)
-}
-
-// GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics
-func (s *Storage) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	return s.testOperations.GetIFCICOSoftwareDistribution(days)
-}
-
-// GetBinkdDetailedStats returns detailed binkd statistics
-func (s *Storage) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
-	return s.testOperations.GetBinkdDetailedStats(days)
 }

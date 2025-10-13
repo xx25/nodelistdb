@@ -190,31 +190,52 @@ func DefaultBatchInsertConfig() BatchInsertConfig {
 	}
 }
 
-// Operations interface defines the contract for storage operations
+// Operations interface defines the contract for storage operations.
+// After refactoring, this interface exposes component accessors for cleaner API organization.
+// Instead of having 60+ delegation methods, consumers access operations through:
+// - NodeOps() for node CRUD operations
+// - SearchOps() for search and queries
+// - StatsOps() for statistics
+// - AnalyticsOps() for historical analytics
+// - TestOps() for node testing and reachability
 type Operations interface {
-	// Node operations
+	// Component accessors - provides direct access to specialized operation components
+	NodeOps() *NodeOperations
+	SearchOps() *SearchOperations
+	StatsOps() *StatisticsOperations
+	AnalyticsOps() *AnalyticsOperations
+	TestOps() *TestOperationsRefactored
+
+	// Legacy delegation methods for backward compatibility
+	// These methods delegate to the appropriate component operations.
+	// New code should use the component accessors directly (e.g., storage.NodeOps().GetNodes())
+	// but these are kept for backward compatibility with existing code.
+
+	// Node operations (delegated to NodeOps())
 	GetNodes(filter database.NodeFilter) ([]database.Node, error)
 	GetNodeHistory(zone, net, node int) ([]database.Node, error)
 	GetNodeDateRange(zone, net, node int) (firstDate, lastDate time.Time, err error)
 	InsertNodes(nodes []database.Node) error
 
-	// Search operations
+	// Search operations (delegated to SearchOps())
 	SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error)
 	GetNodeChanges(zone, net, node int) ([]database.NodeChange, error)
 	GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error)
 	GetNodesBySysop(sysopName string, limit int) ([]database.Node, error)
 	SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error)
+
+	// Analytics operations (delegated to AnalyticsOps())
 	GetFlagFirstAppearance(flagName string) (*FlagFirstAppearance, error)
 	GetFlagUsageByYear(flagName string) ([]FlagUsageByYear, error)
 	GetNetworkHistory(zone, net int) (*NetworkHistory, error)
 
-	// Statistics operations
+	// Statistics operations (delegated to StatsOps())
 	GetStats(date time.Time) (*database.NetworkStats, error)
 	GetLatestStatsDate() (time.Time, error)
 	GetAvailableDates() ([]time.Time, error)
 	GetNearestAvailableDate(requestedDate time.Time) (time.Time, error)
 
-	// Test operations
+	// Test operations (delegated to TestOps())
 	GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error)
 	GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error)
 	GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error)
@@ -227,13 +248,11 @@ type Operations interface {
 	GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
-
-	// Software analytics operations (ClickHouse only)
 	GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error)
 	GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error)
 	GetBinkdDetailedStats(days int) (*SoftwareDistribution, error)
 
-	// Utility operations
+	// Utility operations (delegated to NodeOps())
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
 	FindConflictingNode(zone, net, node int, date time.Time) (bool, error)
 	GetMaxNodelistDate() (time.Time, error)

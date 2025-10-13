@@ -12,7 +12,7 @@ import (
 // GetNodeInfo retrieves detailed information about a node from the database
 func (d *Daemon) GetNodeInfo(ctx context.Context, zone, net, node uint16) (*cli.NodeInfo, error) {
 	// Try to find the node in our storage
-	nodes, err := d.storage.GetNodesByZone(ctx, int(zone))
+	nodes, err := d.storage.NodeOps().GetNodesByZone(ctx, int(zone))
 	if err != nil {
 		return &cli.NodeInfo{
 			Address:      fmt.Sprintf("%d:%d/%d", zone, net, node),
@@ -51,7 +51,7 @@ func (d *Daemon) TestNodeDirect(ctx context.Context, zone, net, node uint16, hos
 	// If no hostname provided, try to look up the node from database
 	if hostname == "" {
 		// Try to find the node in our storage
-		nodes, err := d.storage.GetNodesByZone(ctx, int(zone))
+		nodes, err := d.storage.NodeOps().GetNodesByZone(ctx, int(zone))
 		if err == nil {
 			// Find the specific node
 			for _, n := range nodes {

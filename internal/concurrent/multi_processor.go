@@ -10,11 +10,64 @@ import (
 	"github.com/nodelistdb/internal/parser"
 )
 
-// StorageInterface defines the interface for storage operations
+// StorageInterface defines the interface for storage operations needed by concurrent processing.
+// Provides direct method access without requiring component accessor pattern for simplicity.
 type StorageInterface interface {
 	InsertNodes([]database.Node) error
 	IsNodelistProcessed(time.Time) (bool, error)
 	FindConflictingNode(int, int, int, time.Time) (bool, error)
+}
+
+// StorageAdapter wraps a storage implementation that uses component-based API and adapts it
+// to the simpler StorageInterface for concurrent processing.
+type StorageAdapter struct {
+	nodeOps interface {
+		InsertNodes([]database.Node) error
+		IsNodelistProcessed(time.Time) (bool, error)
+		FindConflictingNode(int, int, int, time.Time) (bool, error)
+	}
+}
+
+// NewStorageAdapter creates an adapter that wraps storage with component-based API.
+// The storage parameter should have a NodeOps() method that returns a component
+// implementing the required node operations.
+func NewStorageAdapter(storage interface{}) *StorageAdapter {
+	// Use reflection to call NodeOps() method
+	// This avoids type system issues while still using the component API
+	type nodeOpsGetter interface {
+		NodeOps() interface {
+			InsertNodes([]database.Node) error
+			IsNodelistProcessed(time.Time) (bool, error)
+			FindConflictingNode(int, int, int, time.Time) (bool, error)
+		}
+	}
+
+	if getter, ok := storage.(nodeOpsGetter); ok {
+		return &StorageAdapter{nodeOps: getter.NodeOps()}
+	}
+
+	// Fallback: if storage itself implements the methods, use it directly
+	if ops, ok := storage.(interface {
+		InsertNodes([]database.Node) error
+		IsNodelistProcessed(time.Time) (bool, error)
+		FindConflictingNode(int, int, int, time.Time) (bool, error)
+	}); ok {
+		return &StorageAdapter{nodeOps: ops}
+	}
+
+	panic("storage does not implement required interface")
+}
+
+func (sa *StorageAdapter) InsertNodes(nodes []database.Node) error {
+	return sa.nodeOps.InsertNodes(nodes)
+}
+
+func (sa *StorageAdapter) IsNodelistProcessed(date time.Time) (bool, error) {
+	return sa.nodeOps.IsNodelistProcessed(date)
+}
+
+func (sa *StorageAdapter) FindConflictingNode(zone, net, node int, date time.Time) (bool, error) {
+	return sa.nodeOps.FindConflictingNode(zone, net, node, date)
 }
 
 // MultiProcessor manages concurrent file processing with generic storage interface

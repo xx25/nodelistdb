@@ -12,7 +12,7 @@ import (
 // GetFlagFirstAppearance returns when a flag first appeared in the nodelist
 func (cs *CachedStorage) GetFlagFirstAppearance(flagName string) (*FlagFirstAppearance, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetFlagFirstAppearance(flagName)
+		return cs.Storage.AnalyticsOps().GetFlagFirstAppearance(flagName)
 	}
 
 	key := cs.keyGen.FlagFirstAppearanceKey(flagName)
@@ -29,7 +29,7 @@ func (cs *CachedStorage) GetFlagFirstAppearance(flagName string) (*FlagFirstAppe
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	fa, err := cs.Storage.GetFlagFirstAppearance(flagName)
+	fa, err := cs.Storage.AnalyticsOps().GetFlagFirstAppearance(flagName)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (cs *CachedStorage) GetFlagFirstAppearance(flagName string) (*FlagFirstAppe
 // GetFlagUsageByYear returns flag usage statistics by year
 func (cs *CachedStorage) GetFlagUsageByYear(flagName string) ([]FlagUsageByYear, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetFlagUsageByYear(flagName)
+		return cs.Storage.AnalyticsOps().GetFlagUsageByYear(flagName)
 	}
 
 	key := cs.keyGen.FlagUsageByYearKey(flagName)
@@ -64,7 +64,7 @@ func (cs *CachedStorage) GetFlagUsageByYear(flagName string) ([]FlagUsageByYear,
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	usage, err := cs.Storage.GetFlagUsageByYear(flagName)
+	usage, err := cs.Storage.AnalyticsOps().GetFlagUsageByYear(flagName)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (cs *CachedStorage) GetFlagUsageByYear(flagName string) ([]FlagUsageByYear,
 // GetNetworkHistory returns historical network statistics
 func (cs *CachedStorage) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNetworkHistory(zone, net)
+		return cs.Storage.AnalyticsOps().GetNetworkHistory(zone, net)
 	}
 
 	key := cs.keyGen.NetworkHistoryKey(zone, net)
@@ -99,7 +99,7 @@ func (cs *CachedStorage) GetNetworkHistory(zone, net int) (*NetworkHistory, erro
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	history, err := cs.Storage.GetNetworkHistory(zone, net)
+	history, err := cs.Storage.AnalyticsOps().GetNetworkHistory(zone, net)
 	if err != nil {
 		return nil, err
 	}

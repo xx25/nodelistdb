@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +14,7 @@ import (
 	"github.com/nodelistdb/internal/config"
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/ftp"
+	"github.com/nodelistdb/internal/logging"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 	"github.com/nodelistdb/internal/web"
@@ -36,15 +37,24 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Initialize logging
+	if err := logging.Initialize(&logging.Config{
+		Level:   "info",
+		Console: true,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Load configuration
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logging.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Verify database configuration
 	if cfg.ClickHouse.Host == "" {
-		log.Fatalf("ClickHouse configuration is missing in %s", *configPath)
+		logging.Fatalf("ClickHouse configuration is missing in %s", *configPath)
 	}
 
 	fmt.Println("FidoNet Nodelist Server (ClickHouse)")
@@ -54,17 +64,17 @@ func main() {
 	fmt.Println()
 
 	// Initialize ClickHouse database
-	log.Println("Initializing ClickHouse database...")
+	logging.Info("Initializing ClickHouse database")
 
 	chConfig, err := cfg.ClickHouse.ToClickHouseDatabaseConfig()
 	if err != nil {
-		log.Fatalf("Invalid ClickHouse configuration: %v", err)
+		logging.Fatalf("Invalid ClickHouse configuration: %v", err)
 	}
 
 	db, err := database.NewClickHouse(chConfig)
 
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		logging.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
@@ -82,14 +92,14 @@ func main() {
 	}
 
 	// Skip schema creation in read-only mode
-	log.Println("Running in read-only mode - schema creation skipped")
+	logging.Info("Running in read-only mode - schema creation skipped")
 
-	log.Println("Database initialized successfully")
+	logging.Info("Database initialized successfully")
 
 	// Initialize storage layer
 	storageLayer, err := storage.New(db)
 	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+		logging.Fatalf("Failed to initialize storage: %v", err)
 	}
 	defer storageLayer.Close()
 
@@ -97,7 +107,7 @@ func main() {
 	var finalStorage storage.Operations = storageLayer
 	var cacheImpl cache.Cache
 	if cfg.Cache.Enabled {
-		log.Println("Initializing BadgerCache...")
+		logging.Info("Initializing BadgerCache")
 
 		// Create BadgerCache
 		badgerConfig := &cache.BadgerConfig{
@@ -111,7 +121,7 @@ func main() {
 		}
 		cacheImpl, err = cache.NewBadgerCache(badgerConfig)
 		if err != nil {
-			log.Fatalf("Failed to initialize BadgerCache: %v", err)
+			logging.Fatalf("Failed to initialize BadgerCache: %v", err)
 		}
 		defer cacheImpl.Close()
 
@@ -128,11 +138,14 @@ func main() {
 		cachedStorage := storage.NewCachedStorage(storageLayer, cacheImpl, cacheStorageConfig)
 		finalStorage = cachedStorage
 
-		log.Printf("BadgerCache initialized successfully at %s", cfg.Cache.Path)
-		log.Printf("Cache settings: Memory=%dMB, NodeTTL=%v, StatsTTL=%v, SearchTTL=%v",
-			cfg.Cache.MaxMemoryMB, cfg.Cache.NodeTTL, cfg.Cache.StatsTTL, cfg.Cache.SearchTTL)
+		logging.Info("BadgerCache initialized successfully",
+			slog.String("path", cfg.Cache.Path),
+			slog.Int("memory_mb", cfg.Cache.MaxMemoryMB),
+			slog.Duration("node_ttl", cfg.Cache.NodeTTL),
+			slog.Duration("stats_ttl", cfg.Cache.StatsTTL),
+			slog.Duration("search_ttl", cfg.Cache.SearchTTL))
 	} else {
-		log.Println("Cache is disabled")
+		logging.Info("Cache is disabled")
 	}
 
 	// Initialize FTP server if enabled
@@ -153,9 +166,11 @@ func main() {
 		var err error
 		ftpServer, err = ftp.New(ftpConfig)
 		if err != nil {
-			log.Fatalf("Failed to initialize FTP server: %v", err)
+			logging.Fatalf("Failed to initialize FTP server: %v", err)
 		}
-		log.Printf("FTP server configured on %s:%d", cfg.FTP.Host, cfg.FTP.Port)
+		logging.Info("FTP server configured",
+			slog.String("host", cfg.FTP.Host),
+			slog.Int("port", cfg.FTP.Port))
 	}
 
 	// Initialize API and Web servers
@@ -206,38 +221,37 @@ func main() {
 	if ftpServer != nil {
 		go func() {
 			if err := ftpServer.Start(); err != nil {
-				log.Fatalf("FTP server failed to start: %v", err)
+				logging.Fatalf("FTP server failed to start: %v", err)
 			}
 		}()
 	}
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Server starting on http://%s:%s", *host, *port)
-		log.Println("Available endpoints:")
-		log.Println("  Web Interface:")
-		log.Printf("    http://%s:%s/        - Home page\n", *host, *port)
-		log.Printf("    http://%s:%s/search  - Search nodes\n", *host, *port)
-		log.Printf("    http://%s:%s/stats   - Statistics\n", *host, *port)
-		log.Println("  REST API:")
-		log.Printf("    http://%s:%s/api/health          - API health check\n", *host, *port)
-		log.Printf("    http://%s:%s/api/nodes           - Search nodes\n", *host, *port)
-		log.Printf("    http://%s:%s/api/nodes/1/234/56  - Get specific node\n", *host, *port)
-		log.Printf("    http://%s:%s/api/sysops          - List sysops\n", *host, *port)
-		log.Printf("    http://%s:%s/api/sysops/{name}/nodes - Get nodes for sysop\n", *host, *port)
-		log.Printf("    http://%s:%s/api/stats           - Network statistics\n", *host, *port)
+		logging.Info("Server starting", slog.String("address", fmt.Sprintf("http://%s:%s", *host, *port)))
+		logging.Info("Available endpoints:")
+		logging.Info("  Web Interface:")
+		logging.Infof("    http://%s:%s/        - Home page", *host, *port)
+		logging.Infof("    http://%s:%s/search  - Search nodes", *host, *port)
+		logging.Infof("    http://%s:%s/stats   - Statistics", *host, *port)
+		logging.Info("  REST API:")
+		logging.Infof("    http://%s:%s/api/health          - API health check", *host, *port)
+		logging.Infof("    http://%s:%s/api/nodes           - Search nodes", *host, *port)
+		logging.Infof("    http://%s:%s/api/nodes/1/234/56  - Get specific node", *host, *port)
+		logging.Infof("    http://%s:%s/api/sysops          - List sysops", *host, *port)
+		logging.Infof("    http://%s:%s/api/sysops/{name}/nodes - Get nodes for sysop", *host, *port)
+		logging.Infof("    http://%s:%s/api/stats           - Network statistics", *host, *port)
 		if cfg.Cache.Enabled {
-			log.Printf("    http://%s:%s/api/cache/stats     - Cache statistics\n", *host, *port)
+			logging.Infof("    http://%s:%s/api/cache/stats     - Cache statistics", *host, *port)
 		}
 		if ftpServer != nil {
-			log.Printf("    http://%s:%s/api/ftp/stats       - FTP server statistics\n", *host, *port)
-			log.Println("  FTP Server:")
-			log.Printf("    ftp://%s:%d/                 - Anonymous FTP access (read-only)\n", *host, cfg.FTP.Port)
+			logging.Infof("    http://%s:%s/api/ftp/stats       - FTP server statistics", *host, *port)
+			logging.Info("  FTP Server:")
+			logging.Infof("    ftp://%s:%d/                 - Anonymous FTP access (read-only)", *host, cfg.FTP.Port)
 		}
-		log.Println()
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			logging.Fatalf("Server failed to start: %v", err)
 		}
 	}()
 
@@ -246,19 +260,19 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Server shutting down...")
+	logging.Info("Server shutting down")
 
 	// Stop FTP server first
 	if ftpServer != nil {
 		if err := ftpServer.Stop(); err != nil {
-			log.Printf("FTP server shutdown error: %v", err)
+			logging.Error("FTP server shutdown error", slog.Any("error", err))
 		}
 	}
 
 	// Stop HTTP server
 	if err := server.Close(); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		logging.Error("Server shutdown error", slog.Any("error", err))
 	}
 
-	log.Println("Server stopped")
+	logging.Info("Server stopped")
 }

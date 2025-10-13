@@ -4,11 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/logging"
 )
 
 // ResultParser handles parsing of database query results
@@ -322,7 +323,7 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 	)
 
 	if err != nil {
-		log.Printf("[ERROR] ParseTestResultRow: Scan failed with error: %v", err)
+		logging.Error("ParseTestResultRow: Scan failed", slog.Any("error", err))
 		// If scanning with new fields failed, mark as legacy data
 		result.HostnameIndex = -1
 		result.IsAggregated = true

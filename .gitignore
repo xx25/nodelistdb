@@ -103,3 +103,5 @@ scripts/analytics/.cache/
 
 scripts/
 /cache/
+LOGGING.md
+REFACTORING_ANALYSIS.md

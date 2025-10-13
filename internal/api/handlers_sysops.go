@@ -22,7 +22,7 @@ func (s *Server) SysopsHandler(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePaginationParams(query, 50, 200)
 
 	// Get unique sysops
-	sysops, err := s.storage.GetUniqueSysops(nameFilter, limit, offset)
+	sysops, err := s.storage.SearchOps().GetUniqueSysops(nameFilter, limit, offset)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get sysops: %v", err), http.StatusInternalServerError)
 		return
@@ -72,7 +72,7 @@ func (s *Server) SysopNodesHandler(w http.ResponseWriter, r *http.Request) {
 	limit, _ := parsePaginationParams(r.URL.Query(), 100, 1000)
 
 	// Get nodes for this sysop
-	nodes, err := s.storage.GetNodesBySysop(decodedName, limit)
+	nodes, err := s.storage.SearchOps().GetNodesBySysop(decodedName, limit)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get nodes: %v", err), http.StatusInternalServerError)
 		return

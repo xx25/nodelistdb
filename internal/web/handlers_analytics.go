@@ -172,7 +172,7 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 		data.Error = fmt.Errorf("Flag cannot be empty")
 	} else {
 		// Get first appearance
-		firstAppearance, err := s.storage.GetFlagFirstAppearance(flag)
+		firstAppearance, err := s.storage.AnalyticsOps().GetFlagFirstAppearance(flag)
 		if err != nil {
 			data.Error = fmt.Errorf("Failed to get first appearance: %v", err)
 		} else {
@@ -181,7 +181,7 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Get yearly usage
 		if data.Error == nil {
-			yearlyUsage, err := s.storage.GetFlagUsageByYear(flag)
+			yearlyUsage, err := s.storage.AnalyticsOps().GetFlagUsageByYear(flag)
 			if err != nil {
 				data.Error = fmt.Errorf("Failed to get yearly usage: %v", err)
 			} else {
@@ -231,7 +231,7 @@ func (s *Server) AnalyticsNetworkHandler(w http.ResponseWriter, r *http.Request)
 			data.Error = fmt.Errorf("Invalid network format. Use zone:net (e.g., 2:5000)")
 		} else {
 			// Get network history
-			history, err := s.storage.GetNetworkHistory(zone, net)
+			history, err := s.storage.AnalyticsOps().GetNetworkHistory(zone, net)
 			if err != nil {
 				data.Error = fmt.Errorf("Failed to fetch network history: %v", err)
 			} else if history == nil {
