@@ -1,8 +1,44 @@
 package storage
 
-// Statistics-related SQL query methods
+// StatsQueryBuilder handles statistics-related SQL queries
+type StatsQueryBuilder struct {
+	base *QueryBuilder
+}
+
+// NetworkStats returns SQL for network statistics
+func (sqb *StatsQueryBuilder) NetworkStats() string {
+	return sqb.base.StatsSQL()
+}
+
+// ZoneDistribution returns SQL for zone distribution stats
+func (sqb *StatsQueryBuilder) ZoneDistribution() string {
+	return sqb.base.ZoneDistributionSQL()
+}
+
+// LargestRegions returns SQL for largest regions stats
+func (sqb *StatsQueryBuilder) LargestRegions() string {
+	return sqb.base.LargestRegionsSQL()
+}
+
+// OptimizedLargestRegions returns optimized SQL for largest regions stats
+func (sqb *StatsQueryBuilder) OptimizedLargestRegions() string {
+	return sqb.base.OptimizedLargestRegionsSQL()
+}
+
+// LargestNets returns SQL for largest nets stats
+func (sqb *StatsQueryBuilder) LargestNets() string {
+	return sqb.base.LargestNetsSQL()
+}
+
+// OptimizedLargestNets returns optimized SQL for largest nets stats
+func (sqb *StatsQueryBuilder) OptimizedLargestNets() string {
+	return sqb.base.OptimizedLargestNetsSQL()
+}
+
+// LEGACY METHODS - Statistics-related SQL query methods (kept for backward compatibility)
 
 // StatsSQL returns SQL for network statistics
+// Deprecated: Use QueryBuilder.Stats().NetworkStats() instead
 func (qb *QueryBuilder) StatsSQL() string {
 	// ClickHouse-compatible statistics query using countIf instead of FILTER
 	return `

@@ -54,7 +54,7 @@ func (s *Scheduler) calculateBackoffLevel(consecutiveFails int) int {
 
 // getConsecutiveFailCount retrieves the number of consecutive failures from history
 func (s *Scheduler) getConsecutiveFailCount(ctx context.Context, node *models.Node) int {
-	results, err := s.storage.TestOps().GetNodeTestHistory(ctx, node.Zone, node.Net, node.Node, 50)
+	results, err := s.storage.GetNodeTestHistory(ctx, node.Zone, node.Net, node.Node, 50)
 	if err != nil || len(results) == 0 {
 		return 0
 	}

@@ -33,6 +33,7 @@ func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetupRoutes sets up HTTP routes for the API server
+// Deprecated: Use SetupRouter() instead which returns a chi.Router with better routing capabilities
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	// API routes
 	mux.HandleFunc("/api/health", s.HealthHandler)

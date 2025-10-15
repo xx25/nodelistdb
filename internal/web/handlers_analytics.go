@@ -319,6 +319,11 @@ func (s *Server) IPv6NonWorkingAnalyticsHandler(w http.ResponseWriter, r *http.R
 	s.renderIPv6Analytics(w, r, "IPv6 Non-Working Nodes", "ipv6_nonworking_analytics", s.storage.GetIPv6NonWorkingNodes)
 }
 
+// IPv6AdvertisedIPv4OnlyAnalyticsHandler shows nodes that advertise IPv6 but are only accessible via IPv4
+func (s *Server) IPv6AdvertisedIPv4OnlyAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	s.renderIPv6Analytics(w, r, "IPv6 Advertised, IPv4 Only", "ipv6_advertised_ipv4_only_analytics", s.storage.GetIPv6AdvertisedIPv4OnlyNodes)
+}
+
 // BinkPAnalyticsHandler shows BinkP enabled nodes analytics
 func (s *Server) BinkPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderProtocolAnalytics(w, r, "BinkP Enabled Nodes", "binkp_analytics", s.storage.GetBinkPEnabledNodes)
@@ -378,4 +383,81 @@ func (s *Server) VModemAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 // FTPAnalyticsHandler shows FTP enabled nodes analytics
 func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderProtocolAnalytics(w, r, "FTP Enabled Nodes", "ftp_analytics", s.storage.GetFTPEnabledNodes)
+}
+
+// IPv6WeeklyNewsHandler shows weekly IPv6 connectivity changes
+func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse common parameters
+	query := r.URL.Query()
+	var validationError string
+
+	// Limit parameter (default: 50, max: 1000)
+	limit := 50
+	if limitStr := query.Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		} else {
+			validationError = "Invalid 'limit' parameter (must be 1-1000)"
+		}
+	}
+
+	// Include /0 nodes parameter (default: false)
+	includeZeroNodes := query.Get("includeZero") == "true"
+
+	// Fetch weekly news (uses cached version if CachedStorage is in use)
+	news, err := s.storage.GetIPv6WeeklyNews(limit, includeZeroNodes)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] IPv6 Weekly News: Error fetching data: %v", err)
+		displayError = fmt.Errorf("Failed to fetch weekly IPv6 news. Please try again later")
+	} else if validationError != "" {
+		displayError = fmt.Errorf("%s", validationError)
+	}
+
+	// Build template data
+	data := struct {
+		Title                  string
+		ActivePage             string
+		Version                string
+		NewNodesWorking        []storage.NodeTestResult
+		NewNodesNonWorking     []storage.NodeTestResult
+		OldNodesLostIPv6       []storage.NodeTestResult
+		OldNodesGainedIPv6     []storage.NodeTestResult
+		Limit                  int
+		IncludeZeroNodes       bool
+		Error                  error
+	}{
+		Title:                  "Weekly IPv6 News",
+		ActivePage:             "analytics",
+		Version:                version.GetVersionInfo(),
+		NewNodesWorking:        []storage.NodeTestResult{},
+		NewNodesNonWorking:     []storage.NodeTestResult{},
+		OldNodesLostIPv6:       []storage.NodeTestResult{},
+		OldNodesGainedIPv6:     []storage.NodeTestResult{},
+		Limit:                  limit,
+		IncludeZeroNodes:       includeZeroNodes,
+		Error:                  displayError,
+	}
+
+	if news != nil {
+		data.NewNodesWorking = news.NewNodesWorking
+		data.NewNodesNonWorking = news.NewNodesNonWorking
+		data.OldNodesLostIPv6 = news.OldNodesLostIPv6
+		data.OldNodesGainedIPv6 = news.OldNodesGainedIPv6
+	}
+
+	// Check template exists before rendering
+	tmpl, exists := s.templates["ipv6_weekly_news"]
+	if !exists {
+		log.Printf("[ERROR] IPv6 Weekly News: Template 'ipv6_weekly_news' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Render template
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] IPv6 Weekly News: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }

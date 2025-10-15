@@ -29,6 +29,53 @@ type Config struct {
 	JSON       bool   `yaml:"json"`        // JSON format instead of text
 }
 
+// FromStruct creates a Config from any struct with matching fields (duck typing)
+// This allows conversion from config.LoggingConfig to logging.Config
+func FromStruct(src interface{}) *Config {
+	// Use type assertion for known config package type
+	type configLike struct {
+		Level      string
+		File       string
+		MaxSize    int
+		MaxBackups int
+		MaxAge     int
+		Console    bool
+		JSON       bool
+	}
+
+	// Try to convert via interface
+	if cfg, ok := src.(configLike); ok {
+		return &Config{
+			Level:      cfg.Level,
+			File:       cfg.File,
+			MaxSize:    cfg.MaxSize,
+			MaxBackups: cfg.MaxBackups,
+			MaxAge:     cfg.MaxAge,
+			Console:    cfg.Console,
+			JSON:       cfg.JSON,
+		}
+	}
+
+	// If direct conversion doesn't work, try pointer
+	if cfg, ok := src.(*configLike); ok {
+		return &Config{
+			Level:      cfg.Level,
+			File:       cfg.File,
+			MaxSize:    cfg.MaxSize,
+			MaxBackups: cfg.MaxBackups,
+			MaxAge:     cfg.MaxAge,
+			Console:    cfg.Console,
+			JSON:       cfg.JSON,
+		}
+	}
+
+	// Default config if conversion fails
+	return &Config{
+		Level:   "info",
+		Console: true,
+	}
+}
+
 var globalLogger *Logger
 
 // Initialize sets up the global logger

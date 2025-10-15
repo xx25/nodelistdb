@@ -540,53 +540,73 @@
                         <div class="stat-value">{{.Stats.TotalTests}}</div>
                     </div>
                     <div class="stat-card">
+                        <h4>Fully Successful</h4>
+                        <div class="stat-value success">{{.Stats.FullySuccessfulTests}}</div>
+                        <small style="color: #666;">All protocols passed (IPv4 & IPv6)</small>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Partially Failed</h4>
+                        <div class="stat-value warning">{{.Stats.PartiallyFailedTests}}</div>
+                        <small style="color: #666;">IPv4 works, IPv6 failed</small>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Fully Failed</h4>
+                        <div class="stat-value danger">{{.Stats.FailedTests}}</div>
+                        <small style="color: #666;">All protocols failed</small>
+                    </div>
+                    <div class="stat-card">
                         <h4>Success Rate</h4>
                         <div class="stat-value {{if ge .Stats.SuccessRate 80.0}}success{{else if ge .Stats.SuccessRate 50.0}}warning{{else}}danger{{end}}">
                             {{printf "%.1f" .Stats.SuccessRate}}%
                         </div>
-                    </div>
-                    <div class="stat-card">
-                        <h4>Successful Tests</h4>
-                        <div class="stat-value success">{{.Stats.SuccessfulTests}}</div>
-                    </div>
-                    <div class="stat-card">
-                        <h4>Failed Tests</h4>
-                        <div class="stat-value danger">{{.Stats.FailedTests}}</div>
+                        <small style="color: #666;">At least one protocol works</small>
                     </div>
                     <div class="stat-card">
                         <h4>Avg Response Time</h4>
                         <div class="stat-value">{{printf "%.0f" .Stats.AverageResponseMs}}ms</div>
                     </div>
-                    <div class="stat-card">
-                        <h4>Last Status</h4>
-                        <div class="stat-value">
-                            {{if eq .Stats.LastStatus "Operational"}}
-                            <span class="status-badge operational">{{.Stats.LastStatus}}</span>
-                            {{else}}
-                            <span class="status-badge failed">{{.Stats.LastStatus}}</span>
-                            {{end}}
-                        </div>
-                    </div>
                 </div>
 
-                <h3>Protocol Success Rates</h3>
+                <h3>IPv4 Protocol Success Rates</h3>
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <h4>BinkP</h4>
+                        <h4>BinkP (IPv4)</h4>
                         <div class="stat-value {{if ge .Stats.BinkPSuccessRate 80.0}}success{{else if ge .Stats.BinkPSuccessRate 50.0}}warning{{else}}danger{{end}}">
                             {{printf "%.1f" .Stats.BinkPSuccessRate}}%
                         </div>
                     </div>
                     <div class="stat-card">
-                        <h4>IFCICO</h4>
+                        <h4>IFCICO (IPv4)</h4>
                         <div class="stat-value {{if ge .Stats.IfcicoSuccessRate 80.0}}success{{else if ge .Stats.IfcicoSuccessRate 50.0}}warning{{else}}danger{{end}}">
                             {{printf "%.1f" .Stats.IfcicoSuccessRate}}%
                         </div>
                     </div>
                     <div class="stat-card">
-                        <h4>Telnet</h4>
+                        <h4>Telnet (IPv4)</h4>
                         <div class="stat-value {{if ge .Stats.TelnetSuccessRate 80.0}}success{{else if ge .Stats.TelnetSuccessRate 50.0}}warning{{else}}danger{{end}}">
                             {{printf "%.1f" .Stats.TelnetSuccessRate}}%
+                        </div>
+                    </div>
+                </div>
+
+                <h3>IPv6 Protocol Success Rates</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>BinkP (IPv6)</h4>
+                        <div class="stat-value {{if ge .Stats.BinkPIPv6SuccessRate 80.0}}success{{else if ge .Stats.BinkPIPv6SuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.BinkPIPv6SuccessRate}}%
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>IFCICO (IPv6)</h4>
+                        <div class="stat-value {{if ge .Stats.IfcicoIPv6SuccessRate 80.0}}success{{else if ge .Stats.IfcicoIPv6SuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.IfcicoIPv6SuccessRate}}%
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Telnet (IPv6)</h4>
+                        <div class="stat-value {{if ge .Stats.TelnetIPv6SuccessRate 80.0}}success{{else if ge .Stats.TelnetIPv6SuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.TelnetIPv6SuccessRate}}%
                         </div>
                     </div>
                 </div>
@@ -735,10 +755,10 @@
                                 <!-- BinkP IPv6 -->
                                 <td>
                                     {{if .ResolvedIPv6}}
-                                        {{if .BinkPSuccess}}
+                                        {{if .BinkPIPv6Success}}
                                         <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.BinkPResponseMs}}ms</span>
-                                        {{else if .BinkPError}}
-                                        <span class="protocol-status failed" title="{{.BinkPError}}">✗</span>
+                                        {{else if .BinkPIPv6Error}}
+                                        <span class="protocol-status failed" title="{{.BinkPIPv6Error}}">✗</span>
                                         {{else}}
                                         <span class="protocol-status untested">-</span>
                                         {{end}}
@@ -763,10 +783,10 @@
                                 <!-- IFCICO IPv6 -->
                                 <td>
                                     {{if .ResolvedIPv6}}
-                                        {{if .IfcicoSuccess}}
+                                        {{if .IfcicoIPv6Success}}
                                         <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.IfcicoResponseMs}}ms</span>
-                                        {{else if .IfcicoError}}
-                                        <span class="protocol-status failed" title="{{.IfcicoError}}">✗</span>
+                                        {{else if .IfcicoIPv6Error}}
+                                        <span class="protocol-status failed" title="{{.IfcicoIPv6Error}}">✗</span>
                                         {{else}}
                                         <span class="protocol-status untested">-</span>
                                         {{end}}
@@ -791,10 +811,10 @@
                                 <!-- Telnet IPv6 -->
                                 <td>
                                     {{if .ResolvedIPv6}}
-                                        {{if .TelnetSuccess}}
+                                        {{if .TelnetIPv6Success}}
                                         <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.TelnetResponseMs}}ms</span>
-                                        {{else if .TelnetError}}
-                                        <span class="protocol-status failed" title="{{.TelnetError}}">✗</span>
+                                        {{else if .TelnetIPv6Error}}
+                                        <span class="protocol-status failed" title="{{.TelnetIPv6Error}}">✗</span>
                                         {{else}}
                                         <span class="protocol-status untested">-</span>
                                         {{end}}

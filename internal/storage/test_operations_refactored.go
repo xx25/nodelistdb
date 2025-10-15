@@ -121,3 +121,13 @@ func (to *TestOperationsRefactored) GetIPv6EnabledNodes(limit int, days int, inc
 func (to *TestOperationsRefactored) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
 	return to.ipv6Ops.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
 }
+
+// GetIPv6AdvertisedIPv4OnlyNodes returns nodes that advertise IPv6 addresses but are only accessible via IPv4
+func (to *TestOperationsRefactored) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return to.ipv6Ops.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes)
+}
+
+// GetIPv6WeeklyNews returns weekly IPv6 connectivity changes
+func (to *TestOperationsRefactored) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
+	return to.ipv6Ops.GetIPv6WeeklyNews(limit, includeZeroNodes)
+}

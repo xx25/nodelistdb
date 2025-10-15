@@ -201,6 +201,14 @@ func (s *Storage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes b
 	return s.testOperations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
 }
 
+func (s *Storage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes)
+}
+
+func (s *Storage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
+	return s.testOperations.GetIPv6WeeklyNews(limit, includeZeroNodes)
+}
+
 func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
 	return s.testOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
 }

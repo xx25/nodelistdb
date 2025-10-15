@@ -3,8 +3,9 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"strings"
+	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/nodelistdb/internal/database"
 )
 
@@ -65,28 +66,22 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse path parameters
-	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/nodes/"), "/")
-	if len(pathParts) < 3 {
-		WriteJSONError(w, "Invalid path format. Expected: /api/nodes/{zone}/{net}/{node}", http.StatusBadRequest)
+	// Parse path parameters using Chi
+	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
+	if err != nil {
+		WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
 		return
 	}
 
-	zone, err := parsePathInt(pathParts[0], "zone")
+	net, err := strconv.Atoi(chi.URLParam(r, "net"))
 	if err != nil {
-		WriteJSONError(w, err.Error(), http.StatusBadRequest)
+		WriteJSONError(w, "Invalid net parameter", http.StatusBadRequest)
 		return
 	}
 
-	net, err := parsePathInt(pathParts[1], "net")
+	node, err := strconv.Atoi(chi.URLParam(r, "node"))
 	if err != nil {
-		WriteJSONError(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	node, err := parsePathInt(pathParts[2], "node")
-	if err != nil {
-		WriteJSONError(w, err.Error(), http.StatusBadRequest)
+		WriteJSONError(w, "Invalid node parameter", http.StatusBadRequest)
 		return
 	}
 
@@ -120,9 +115,22 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zone, net, node, err := parseNodeAddress(r.URL.Path, "/api/nodes/")
+	// Parse path parameters using Chi
+	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
 	if err != nil {
-		WriteJSONError(w, err.Error(), http.StatusBadRequest)
+		WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
+		return
+	}
+
+	net, err := strconv.Atoi(chi.URLParam(r, "net"))
+	if err != nil {
+		WriteJSONError(w, "Invalid net parameter", http.StatusBadRequest)
+		return
+	}
+
+	node, err := strconv.Atoi(chi.URLParam(r, "node"))
+	if err != nil {
+		WriteJSONError(w, "Invalid node parameter", http.StatusBadRequest)
 		return
 	}
 
@@ -166,9 +174,22 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zone, net, node, err := parseNodeAddress(r.URL.Path, "/api/nodes/")
+	// Parse path parameters using Chi
+	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
 	if err != nil {
-		WriteJSONError(w, err.Error(), http.StatusBadRequest)
+		WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
+		return
+	}
+
+	net, err := strconv.Atoi(chi.URLParam(r, "net"))
+	if err != nil {
+		WriteJSONError(w, "Invalid net parameter", http.StatusBadRequest)
+		return
+	}
+
+	node, err := strconv.Atoi(chi.URLParam(r, "node"))
+	if err != nil {
+		WriteJSONError(w, "Invalid node parameter", http.StatusBadRequest)
 		return
 	}
 
@@ -195,9 +216,22 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	zone, net, node, err := parseNodeAddress(r.URL.Path, "/api/nodes/")
+	// Parse path parameters using Chi
+	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
 	if err != nil {
-		WriteJSONError(w, err.Error(), http.StatusBadRequest)
+		WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
+		return
+	}
+
+	net, err := strconv.Atoi(chi.URLParam(r, "net"))
+	if err != nil {
+		WriteJSONError(w, "Invalid net parameter", http.StatusBadRequest)
+		return
+	}
+
+	node, err := strconv.Atoi(chi.URLParam(r, "node"))
+	if err != nil {
+		WriteJSONError(w, "Invalid node parameter", http.StatusBadRequest)
 		return
 	}
 
@@ -248,29 +282,4 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	WriteJSONSuccess(w, response)
-}
-
-// parseNodeAddress extracts zone, net, node from a URL path.
-func parseNodeAddress(path, prefix string) (zone, net, node int, err error) {
-	pathParts := strings.Split(strings.TrimPrefix(path, prefix), "/")
-	if len(pathParts) < 3 {
-		return 0, 0, 0, fmt.Errorf("invalid path format")
-	}
-
-	zone, err = parsePathInt(pathParts[0], "zone")
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	net, err = parsePathInt(pathParts[1], "net")
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	node, err = parsePathInt(pathParts[2], "node")
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	return zone, net, node, nil
 }

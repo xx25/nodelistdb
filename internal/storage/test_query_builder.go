@@ -113,9 +113,34 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 			SELECT
 				zone, net, node,
 				count(*) as total_tests,
-				countIf(is_operational) as successful_tests,
+
+				-- Fully successful tests: all tested protocols succeeded (IPv4 and IPv6 if available)
+				countIf(
+					is_operational AND
+					(length(resolved_ipv6) = 0 OR (
+						(NOT binkp_tested OR binkp_ipv6_success OR length(resolved_ipv6) = 0) AND
+						(NOT ifcico_tested OR ifcico_ipv6_success OR length(resolved_ipv6) = 0) AND
+						(NOT telnet_tested OR telnet_ipv6_success OR length(resolved_ipv6) = 0)
+					))
+				) as fully_successful_tests,
+
+				-- Partially failed tests: operational but some IPv6 tests failed
+				countIf(
+					is_operational AND
+					length(resolved_ipv6) > 0 AND (
+						(binkp_tested AND NOT binkp_ipv6_success) OR
+						(ifcico_tested AND NOT ifcico_ipv6_success) OR
+						(telnet_tested AND NOT telnet_ipv6_success)
+					)
+				) as partially_failed_tests,
+
+				-- Fully failed tests: not operational at all
 				countIf(NOT is_operational) as failed_tests,
+
+				-- For backward compatibility
+				countIf(is_operational) as successful_tests,
 				avg(is_operational) * 100 as success_rate,
+
 				avgIf(least(
 					if(binkp_response_ms > 0, binkp_response_ms, 999999),
 					if(ifcico_response_ms > 0, ifcico_response_ms, 999999),
@@ -127,9 +152,16 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 				) < 999999) as avg_response_ms,
 				max(test_time) as last_test_time,
 				argMax(is_operational, test_time) as last_status,
+
+				-- IPv4 success rates
 				avgIf(binkp_success, binkp_tested) * 100 as binkp_success_rate,
 				avgIf(ifcico_success, ifcico_tested) * 100 as ifcico_success_rate,
-				avgIf(telnet_success, telnet_tested) * 100 as telnet_success_rate
+				avgIf(telnet_success, telnet_tested) * 100 as telnet_success_rate,
+
+				-- IPv6 success rates
+				avgIf(binkp_ipv6_success, binkp_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as binkp_ipv6_success_rate,
+				avgIf(ifcico_ipv6_success, ifcico_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as ifcico_ipv6_success_rate,
+				avgIf(telnet_ipv6_success, telnet_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as telnet_ipv6_success_rate
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ?
 			AND test_time >= now() - INTERVAL ? DAY

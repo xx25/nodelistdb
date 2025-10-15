@@ -283,7 +283,7 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	// Try to parse as FTN address first (e.g., "2:5053/56")
 	if _, err := fmt.Sscanf(nodeSpec, "%d:%d/%d", &zone, &net, &node); err == nil {
 		// It's an FTN address - look up node in database
-		nodes, err := d.storage.NodeOps().GetNodesByZone(ctx, int(zone))
+		nodes, err := d.storage.GetNodesByZone(ctx, int(zone))
 		if err != nil {
 			return fmt.Errorf("failed to query nodes: %w", err)
 		}

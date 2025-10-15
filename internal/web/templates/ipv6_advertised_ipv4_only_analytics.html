@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPv6 Advertised, IPv4 Only - NodelistDB</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .compact-actions {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .compact-actions a {
+            padding: 0.125rem 0.25rem;
+            font-size: 0.875rem;
+        }
+
+        /* Make hostname badges show pointer cursor on hover */
+        .badge[title] {
+            cursor: help;
+            position: relative;
+        }
+
+        /* Optional: Add visual feedback when hovering */
+        .badge[title]:hover {
+            opacity: 0.8;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Red badge for failed IPv6 services */
+        .badge-danger {
+            background-color: #dc3545;
+            color: white;
+            cursor: help;
+        }
+
+        .badge-danger:hover {
+            background-color: #c82333;
+            box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4);
+        }
+
+        /* Green badge for working IPv4 services */
+        .badge-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .badge-success:hover {
+            background-color: #218838;
+            box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4);
+        }
+
+        /* Custom tooltip styling for IPv6 addresses */
+        .ipv6-tooltip {
+            position: relative;
+            cursor: help;
+        }
+
+        .ipv6-tooltip:hover::after {
+            content: attr(data-ipv6);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #0f0;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            white-space: pre;
+            z-index: 1000;
+            margin-bottom: 5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            min-width: max-content;
+        }
+
+        .ipv6-tooltip:hover::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: #333;
+            z-index: 1001;
+            margin-bottom: -1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>IPv6 Advertised, IPv4 Only</h1>
+            <p class="subtitle">Nodes advertising IPv6 capability but only accessible via IPv4</p>
+        </header>
+
+        {{template "nav" .}}
+
+        <div class="content">
+            <div class="search-container">
+                <form method="get" action="/analytics/ipv6-advertised-ipv4-only" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem;">
+                    <div class="form-group">
+                        <label for="days">Period:</label>
+                        <select name="days" id="days" class="form-control">
+                            <option value="7" {{if eq .Days 7}}selected{{end}}>Last 7 days</option>
+                            <option value="30" {{if eq .Days 30}}selected{{end}}>Last 30 days</option>
+                            <option value="90" {{if eq .Days 90}}selected{{end}}>Last 90 days</option>
+                            <option value="180" {{if eq .Days 180}}selected{{end}}>Last 180 days</option>
+                            <option value="365" {{if eq .Days 365}}selected{{end}}>Last year</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="limit">Limit:</label>
+                        <select name="limit" id="limit" class="form-control">
+                            <option value="50" {{if eq .Limit 50}}selected{{end}}>50</option>
+                            <option value="100" {{if eq .Limit 100}}selected{{end}}>100</option>
+                            <option value="200" {{if eq .Limit 200}}selected{{end}}>200</option>
+                            <option value="500" {{if eq .Limit 500}}selected{{end}}>500</option>
+                            <option value="1000" {{if eq .Limit 1000}}selected{{end}}>1000</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" name="includeZero" id="includeZero" value="true" {{if .IncludeZeroNodes}}checked{{end}}>
+                        <label for="includeZero" style="margin: 0;">Include /0 nodes</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                </form>
+            </div>
+
+            {{if .Error}}
+            <div class="alert alert-error">
+                <strong>Error:</strong> {{.Error}}
+            </div>
+            {{end}}
+
+            {{if .IPv6Nodes}}
+            <div class="stats-box">
+                <h3>Found {{len .IPv6Nodes}} IPv6-Advertised IPv4-Only Nodes</h3>
+            </div>
+
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Node Address</th>
+                            <th>Hostname</th>
+                            <th>Working IPv4 Protocols</th>
+                            <th>Failed IPv6 Protocols</th>
+                            <th>Location</th>
+                            <th>Last Tested</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .IPv6Nodes}}
+                        <tr>
+                            <td>
+                                <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                                    <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
+                                </a>
+                            </td>
+                            <td>
+                                {{if .AllHostnames}}
+                                    {{$ipv6List := .ResolvedIPv6}}
+                                    {{range $idx, $hostname := .AllHostnames}}
+                                        {{if $idx}}<br>{{end}}
+                                        <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $ipIdx, $ip := $ipv6List}}{{if $ipIdx}}&#10;{{end}}{{$ip}}{{end}}">
+                                            {{$hostname}}
+                                            {{if eq $idx 0}}
+                                                <small>(primary)</small>
+                                            {{else}}
+                                                <small>(backup #{{$idx}})</small>
+                                            {{end}}
+                                        </span>
+                                    {{end}}
+                                {{else if .TestedHostname}}
+                                    <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">
+                                        {{.TestedHostname}}
+                                        {{if and (gt .TotalHostnames 1) (ge .HostnameIndex 0)}}
+                                            {{if eq .HostnameIndex 0}}
+                                                <small>(primary)</small>
+                                            {{else}}
+                                                <small>(backup #{{.HostnameIndex}})</small>
+                                            {{end}}
+                                        {{end}}
+                                    </span>
+                                {{else if .Hostname}}
+                                    <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">{{.Hostname}}</span>
+                                {{else}}
+                                    <span class="text-muted ipv6-tooltip" data-ipv6="{{if .ResolvedIPv6}}{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}{{else}}No IPv6{{end}}">N/A</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if .BinkPTested}}
+                                    {{if .BinkPSuccess}}
+                                        <span class="badge badge-success">BinkP</span>
+                                    {{end}}
+                                {{end}}
+                                {{if .IfcicoTested}}
+                                    {{if .IfcicoSuccess}}
+                                        <span class="badge badge-success">IFCICO</span>
+                                    {{end}}
+                                {{end}}
+                                {{if .TelnetTested}}
+                                    {{if .TelnetSuccess}}
+                                        <span class="badge badge-success">Telnet</span>
+                                    {{end}}
+                                {{end}}
+                                {{if and (not .BinkPTested) (not .IfcicoTested) (not .TelnetTested)}}
+                                    <span class="text-muted" title="IPv4 was not tested in this specific result, but was tested and succeeded during the reporting period">Not tested in latest result</span>
+                                {{else if and (not .BinkPSuccess) (not .IfcicoSuccess) (not .TelnetSuccess)}}
+                                    <span class="text-muted">None working</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if .BinkPIPv6Tested}}
+                                    {{if not .BinkPIPv6Success}}
+                                        <span class="badge badge-danger" title="{{.BinkPIPv6Error}}">BinkP</span>
+                                    {{end}}
+                                {{end}}
+                                {{if .IfcicoIPv6Tested}}
+                                    {{if not .IfcicoIPv6Success}}
+                                        <span class="badge badge-danger" title="{{.IfcicoIPv6Error}}">IFCICO</span>
+                                    {{end}}
+                                {{end}}
+                                {{if .TelnetIPv6Tested}}
+                                    {{if not .TelnetIPv6Success}}
+                                        <span class="badge badge-danger" title="{{.TelnetIPv6Error}}">Telnet</span>
+                                    {{end}}
+                                {{end}}
+                                {{if and (not .BinkPIPv6Tested) (not .IfcicoIPv6Tested) (not .TelnetIPv6Tested)}}
+                                    <span class="text-muted" title="IPv6 was not tested in this specific result, but was tested and failed during the reporting period">Not tested in latest result</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                {{if .City}}
+                                    {{.City}}, {{.CountryCode}}
+                                    {{if .ISP}}
+                                        <br><small class="text-muted">{{.ISP}}</small>
+                                    {{end}}
+                                {{else if .Country}}
+                                    {{.Country}}
+                                {{else}}
+                                    <span class="text-muted">Unknown</span>
+                                {{end}}
+                            </td>
+                            <td>
+                                <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
+                            </td>
+                            <td>
+                                <a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05"}}" class="btn btn-sm btn-info" title="View test details">
+                                    Details
+                                </a>
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="info-box" style="margin-top: 2rem;">
+                <p><strong>Note:</strong> This report shows nodes that advertise IPv6 capability (either in the nodelist or via DNS resolution) but are currently only accessible via IPv4 over the last {{.Days}} days. These nodes have working IPv4 services (BinkP, IFCICO, or Telnet) but all IPv6 services are non-functional. This may indicate IPv6 misconfiguration, firewall issues, or incomplete IPv6 deployment.</p>
+            </div>
+            {{else}}
+            <div class="alert alert-warning">
+                <strong>No IPv6-advertised IPv4-only nodes found for the selected period.</strong><br>
+                This could mean that all nodes with IPv6 addresses have at least one working IPv6 service, or no nodes meet the criteria of having working IPv4 but failing IPv6 during this period.
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    {{template "footer" .}}
+</body>
+</html>

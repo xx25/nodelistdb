@@ -142,7 +142,7 @@ func (s *Scheduler) InitializeSchedules(ctx context.Context, nodes []*models.Nod
 		}
 
 		// Get last test result for this node
-		history, err := s.storage.TestOps().GetNodeTestHistory(ctx, node.Zone, node.Net, node.Node, 1)
+		history, err := s.storage.GetNodeTestHistory(ctx, node.Zone, node.Net, node.Node, 1)
 		var lastResult *models.TestResult
 		if err == nil && len(history) > 0 {
 			lastResult = history[0]

@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // SysopsHandler handles requests for listing sysops.
@@ -48,14 +49,8 @@ func (s *Server) SysopNodesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract sysop name from path
-	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/sysops/"), "/")
-	if len(pathParts) < 2 || pathParts[1] != "nodes" {
-		WriteJSONError(w, "Invalid path format. Expected: /api/sysops/{name}/nodes", http.StatusBadRequest)
-		return
-	}
-
-	sysopName := pathParts[0]
+	// Extract sysop name from path using Chi
+	sysopName := chi.URLParam(r, "name")
 	if sysopName == "" {
 		WriteJSONError(w, "Sysop name cannot be empty", http.StatusBadRequest)
 		return

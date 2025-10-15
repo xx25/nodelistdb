@@ -33,6 +33,18 @@ type Config struct {
 	ClickHouse ClickHouseConfig `yaml:"clickhouse"`
 	Cache      CacheConfig      `yaml:"cache"`
 	FTP        FTPConfig        `yaml:"ftp"`
+	Logging    LoggingConfig    `yaml:"logging"`
+}
+
+// LoggingConfig holds logging configuration
+type LoggingConfig struct {
+	Level      string `yaml:"level"`       // debug, info, warn, error
+	File       string `yaml:"file"`        // log file path (optional)
+	MaxSize    int    `yaml:"max_size"`    // megabytes
+	MaxBackups int    `yaml:"max_backups"` // number of old log files to keep
+	MaxAge     int    `yaml:"max_age"`     // days
+	Console    bool   `yaml:"console"`     // also log to console
+	JSON       bool   `yaml:"json"`        // JSON format instead of text
 }
 
 // CacheConfig holds cache configuration
@@ -118,6 +130,17 @@ func DefaultFTPConfig() *FTPConfig {
 	}
 }
 
+func DefaultLoggingConfig() *LoggingConfig {
+	return &LoggingConfig{
+		Level:      "info",
+		Console:    true,
+		JSON:       false,
+		MaxSize:    100,
+		MaxBackups: 3,
+		MaxAge:     28,
+	}
+}
+
 // LoadConfig loads configuration from a YAML file
 func LoadConfig(configPath string) (*Config, error) {
 	// If config file doesn't exist, return default database config
@@ -140,6 +163,11 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Validate and set defaults
 	if err := config.validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Run comprehensive validation
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
 	return &config, nil
@@ -248,6 +276,35 @@ func (c *Config) validate() error {
 		c.ClickHouse.Compression = "lz4"
 	}
 
+	// Validate logging configuration
+	if c.Logging.Level == "" {
+		c.Logging.Level = "info"
+	}
+	validLevels := []string{"debug", "info", "warn", "error"}
+	levelValid := false
+	for _, l := range validLevels {
+		if c.Logging.Level == l {
+			levelValid = true
+			break
+		}
+	}
+	if !levelValid {
+		return fmt.Errorf("logging.level must be one of: %v, got: %s", validLevels, c.Logging.Level)
+	}
+	// Set logging defaults if not configured
+	if !c.Logging.Console && c.Logging.File == "" {
+		c.Logging.Console = true // Default to console if neither configured
+	}
+	if c.Logging.MaxSize == 0 {
+		c.Logging.MaxSize = 100
+	}
+	if c.Logging.MaxBackups == 0 {
+		c.Logging.MaxBackups = 3
+	}
+	if c.Logging.MaxAge == 0 {
+		c.Logging.MaxAge = 28
+	}
+
 	return nil
 }
 
@@ -258,6 +315,7 @@ func CreateExampleConfig(dir string) error {
 		ClickHouse: DefaultClickHouseConfig(),
 		Cache:      *DefaultCacheConfig(),
 		FTP:        *DefaultFTPConfig(),
+		Logging:    *DefaultLoggingConfig(),
 	}
 
 	if err := SaveConfig(config, filepath.Join(dir, "config.example.yaml")); err != nil {
@@ -266,6 +324,7 @@ func CreateExampleConfig(dir string) error {
 
 	return nil
 }
+
 
 // ToClickHouseDatabaseConfig converts ClickHouseConfig to database.ClickHouseConfig
 func (c *ClickHouseConfig) ToClickHouseDatabaseConfig() (*database.ClickHouseConfig, error) {

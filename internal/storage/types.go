@@ -151,19 +151,24 @@ type NodeTestResult struct {
 
 // NodeReachabilityStats represents aggregated reachability statistics for a node
 type NodeReachabilityStats struct {
-	Zone                int     `json:"zone"`
-	Net                 int     `json:"net"`
-	Node                int     `json:"node"`
-	TotalTests          int     `json:"total_tests"`
-	SuccessfulTests     int     `json:"successful_tests"`
-	FailedTests         int     `json:"failed_tests"`
-	SuccessRate         float64 `json:"success_rate"`
-	AverageResponseMs   float64 `json:"average_response_ms"`
-	LastTestTime        time.Time `json:"last_test_time"`
-	LastStatus          string  `json:"last_status"`
-	BinkPSuccessRate    float64 `json:"binkp_success_rate"`
-	IfcicoSuccessRate   float64 `json:"ifcico_success_rate"`
-	TelnetSuccessRate   float64 `json:"telnet_success_rate"`
+	Zone                  int       `json:"zone"`
+	Net                   int       `json:"net"`
+	Node                  int       `json:"node"`
+	TotalTests            int       `json:"total_tests"`
+	FullySuccessfulTests  int       `json:"fully_successful_tests"`
+	PartiallyFailedTests  int       `json:"partially_failed_tests"`
+	FailedTests           int       `json:"failed_tests"`
+	SuccessfulTests       int       `json:"successful_tests"` // For backward compatibility (operational)
+	SuccessRate           float64   `json:"success_rate"`
+	AverageResponseMs     float64   `json:"average_response_ms"`
+	LastTestTime          time.Time `json:"last_test_time"`
+	LastStatus            string    `json:"last_status"`
+	BinkPSuccessRate      float64   `json:"binkp_success_rate"`
+	IfcicoSuccessRate     float64   `json:"ifcico_success_rate"`
+	TelnetSuccessRate     float64   `json:"telnet_success_rate"`
+	BinkPIPv6SuccessRate  float64   `json:"binkp_ipv6_success_rate"`
+	IfcicoIPv6SuccessRate float64   `json:"ifcico_ipv6_success_rate"`
+	TelnetIPv6SuccessRate float64   `json:"telnet_ipv6_success_rate"`
 }
 
 // ReachabilityTrend represents reachability trend over time
@@ -243,6 +248,8 @@ type Operations interface {
 	SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error)
 	GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error)
 	GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)

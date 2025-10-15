@@ -37,20 +37,22 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Initialize logging
-	if err := logging.Initialize(&logging.Config{
-		Level:   "info",
-		Console: true,
-	}); err != nil {
+	// Load configuration first
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize logging from configuration
+	if err := logging.Initialize(logging.FromStruct(&cfg.Logging)); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Load configuration
-	cfg, err := config.LoadConfig(*configPath)
-	if err != nil {
-		logging.Fatalf("Failed to load configuration: %v", err)
-	}
+	logging.Info("NodelistDB server starting",
+		slog.String("version", version.GetFullVersionInfo()),
+		slog.String("config", *configPath))
 
 	// Verify database configuration
 	if cfg.ClickHouse.Host == "" {
@@ -177,13 +179,16 @@ func main() {
 	apiServer := api.New(finalStorage)
 	webServer := web.New(finalStorage, web.TemplatesFS, web.StaticFS)
 
-	// Set up HTTP routes
+	// Set up HTTP routes using Chi router
+	apiRouter := apiServer.SetupRouter()
+
+	// Set up combined routes - wrap Chi router with ServeMux for web routes
 	mux := http.NewServeMux()
 
-	// API routes
-	apiServer.SetupRoutes(mux)
+	// Mount API routes under Chi router
+	mux.Handle("/api/", apiRouter)
 
-	// Web routes
+	// Web routes (keep existing setup)
 	webServer.SetupRoutes(mux)
 
 	// Cache stats endpoint if cache is enabled

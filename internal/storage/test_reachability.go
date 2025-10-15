@@ -41,8 +41,10 @@ func (r *ReachabilityOperations) GetNodeReachabilityStats(zone, net, node int, d
 		&stats.Net,
 		&stats.Node,
 		&stats.TotalTests,
-		&stats.SuccessfulTests,
+		&stats.FullySuccessfulTests,
+		&stats.PartiallyFailedTests,
 		&stats.FailedTests,
+		&stats.SuccessfulTests,
 		&stats.SuccessRate,
 		&stats.AverageResponseMs,
 		&stats.LastTestTime,
@@ -50,6 +52,9 @@ func (r *ReachabilityOperations) GetNodeReachabilityStats(zone, net, node int, d
 		&stats.BinkPSuccessRate,
 		&stats.IfcicoSuccessRate,
 		&stats.TelnetSuccessRate,
+		&stats.BinkPIPv6SuccessRate,
+		&stats.IfcicoIPv6SuccessRate,
+		&stats.TelnetIPv6SuccessRate,
 	)
 
 	if err != nil {

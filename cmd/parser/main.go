@@ -49,26 +49,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize logging
-	logLevel := "info"
-	if *verbose {
-		logLevel = "debug"
-	} else if *quiet {
-		logLevel = "error"
-	}
-
-	if err := logging.Initialize(&logging.Config{
-		Level:   logLevel,
-		Console: true,
-	}); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+	// Load configuration first
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Load configuration
-	cfg, err := config.LoadConfig(*configPath)
-	if err != nil {
-		logging.Fatalf("Failed to load configuration: %v", err)
+	// Initialize logging from config, but allow command line flags to override
+	logConfig := logging.FromStruct(&cfg.Logging)
+	if *verbose {
+		logConfig.Level = "debug"
+	} else if *quiet {
+		logConfig.Level = "error"
+	}
+	logConfig.Console = true // Parser always logs to console
+
+	if err := logging.Initialize(logConfig); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Verify database configuration
