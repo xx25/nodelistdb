@@ -308,15 +308,3 @@ func (so *SearchOperations) parseInternetConfig(data json.RawMessage) (*database
 
 	return config, nil
 }
-
-// formatProtocolDetail formats an InternetProtocolDetail for display (deprecated, use formatProtocolDetails)
-func formatProtocolDetail(detail database.InternetProtocolDetail) string {
-	if detail.Address != "" && detail.Port > 0 {
-		return fmt.Sprintf("%s:%d", detail.Address, detail.Port)
-	} else if detail.Address != "" {
-		return detail.Address
-	} else if detail.Port > 0 {
-		return fmt.Sprintf("port %d", detail.Port)
-	}
-	return ""
-}
