@@ -95,12 +95,11 @@ func (s *TelnetServer) acceptLoop() {
 			case <-s.ctx.Done():
 				return
 			default:
-				if ne, ok := err.(net.Error); ok && ne.Temporary() {
-					time.Sleep(100 * time.Millisecond)
-					continue
-				}
-				fmt.Printf("Accept error: %v\n", err)
-				return
+				// Retry on accept errors with backoff
+				// Most accept errors are transient network issues
+				fmt.Printf("Accept error: %v (retrying...)\n", err)
+				time.Sleep(100 * time.Millisecond)
+				continue
 			}
 		}
 
