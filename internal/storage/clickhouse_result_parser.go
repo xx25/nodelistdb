@@ -254,7 +254,7 @@ func (crp *ClickHouseResultParser) NodeToArgsClickHouse(node database.Node) []in
 	}
 
 	var configJSON string
-	if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
+	if len(node.InternetConfig) > 0 {
 		configJSON = string(node.InternetConfig)
 	}
 

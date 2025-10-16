@@ -195,7 +195,7 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 			node.ConflictSequence, node.HasConflict, node.HasInet))
 
 		// Internet config JSON
-		if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
+		if len(node.InternetConfig) > 0 {
 			buf.WriteString(fmt.Sprintf("'%s',", qb.escapeSQL(string(node.InternetConfig))))
 		} else {
 			buf.WriteString("'{}',")

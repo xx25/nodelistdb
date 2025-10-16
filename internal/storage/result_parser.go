@@ -428,7 +428,7 @@ func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
 
 	// Handle internet_config JSON
 	var configJSON interface{}
-	if node.InternetConfig != nil && len(node.InternetConfig) > 0 {
+	if len(node.InternetConfig) > 0 {
 		configJSON = string(node.InternetConfig)
 	}
 

@@ -46,7 +46,8 @@ func (nf *NodeFilter) FilterByTestLimit(nodes []*models.Node, testLimit string) 
 	if strings.HasSuffix(testLimit, "%") {
 		percentStr := strings.TrimSuffix(testLimit, "%")
 		var percent float64
-		if _, err := fmt.Sscanf(percentStr, "%f", &percent); err == nil {
+		_, err := fmt.Sscanf(percentStr, "%f", &percent)
+		if err == nil {
 			count := int(float64(len(nodes)) * percent / 100.0)
 			if count < 1 {
 				count = 1

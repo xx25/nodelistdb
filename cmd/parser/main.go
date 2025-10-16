@@ -382,9 +382,7 @@ func isNodelistFile(filePath string) bool {
 	filename := strings.ToLower(filepath.Base(filePath))
 
 	// Remove .gz extension for pattern matching
-	if strings.HasSuffix(filename, ".gz") {
-		filename = strings.TrimSuffix(filename, ".gz")
-	}
+	filename = strings.TrimSuffix(filename, ".gz")
 
 	// Common nodelist filename patterns
 	patterns := []string{

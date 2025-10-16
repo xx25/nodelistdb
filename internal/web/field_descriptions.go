@@ -55,9 +55,7 @@ func GetFieldDescriptionWithFlag(field string) FieldDescription {
 	if strings.HasPrefix(field, "inet_") {
 		// Extract flag name from field name (inet_IBN -> IBN, inet_flag_ICM -> ICM)
 		flagName := strings.TrimPrefix(field, "inet_")
-		if strings.HasPrefix(flagName, "flag_") {
-			flagName = strings.TrimPrefix(flagName, "flag_")
-		}
+		flagName = strings.TrimPrefix(flagName, "flag_")
 		
 		// Get flag description
 		flagDescs := flags.GetFlagDescriptions()

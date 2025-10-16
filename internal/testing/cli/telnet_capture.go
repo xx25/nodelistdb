@@ -88,9 +88,9 @@ func (tl *TeeLogger) Write(p []byte) (n int, err error) {
 	// Always write to original
 	n, err = tl.original.Write(p)
 
-	// Also write to capture if enabled
+	// Also write to capture if enabled (ignore errors from capture)
 	if tl.capture.IsEnabled() {
-		tl.capture.Write(p)
+		_, _ = tl.capture.Write(p)
 	}
 
 	return n, err
