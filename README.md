@@ -170,12 +170,33 @@ The REST API is available at `/api` when the server is running.
 
 ### Endpoints
 
+**Node Operations:**
 - `GET /api/nodes` - Search nodes with filtering
-  - Query params: `zone`, `net`, `node`, `system_name`, `location`, `sysop`, `has_inet`, `limit`, `offset`
-- `GET /api/nodes/:zone/:net/:node` - Get specific node details
+  - Query params: `zone`, `net`, `node`, `system_name`, `location`, `sysop_name`, `node_type`, `is_cm`, `date_from`, `date_to`, `limit`, `offset`
+- `GET /api/nodes/{zone}/{net}/{node}` - Get specific node details
+- `GET /api/nodes/{zone}/{net}/{node}/history` - Get complete node history
+- `GET /api/nodes/{zone}/{net}/{node}/changes` - Get node change log
+- `GET /api/nodes/{zone}/{net}/{node}/timeline` - Get node timeline visualization
+
+**Sysop Operations:**
+- `GET /api/sysops` - List sysops with filtering
+- `GET /api/sysops/{name}/nodes` - Get all nodes for a specific sysop
+
+**Statistics:**
 - `GET /api/stats` - Get network statistics
-- `GET /api/zones` - List all zones
-- `GET /api/networks/:zone` - List networks in a zone
+- `GET /api/stats/dates` - Get available nodelist dates
+
+**Software Analytics:**
+- `GET /api/software/binkp` - BinkP software distribution
+- `GET /api/software/ifcico` - IFCico software distribution
+- `GET /api/software/binkd` - Detailed Binkd statistics
+- `GET /api/software/trends` - Software usage trends (stub)
+
+**Reference & Documentation:**
+- `GET /api/flags` - Get FidoNet flag documentation
+- `GET /api/nodelist/latest` - Get latest nodelist information
+- `GET /api/openapi.yaml` - OpenAPI specification
+- `GET /api/docs` - Interactive Swagger UI documentation
 
 ### Example API Usage
 
@@ -186,8 +207,17 @@ curl "http://localhost:8080/api/nodes?has_inet=true&limit=10"
 # Get specific node details
 curl "http://localhost:8080/api/nodes/2/5001/100"
 
+# Get node history
+curl "http://localhost:8080/api/nodes/2/5001/100/history"
+
 # Get network statistics
 curl "http://localhost:8080/api/stats"
+
+# Get BinkP software distribution
+curl "http://localhost:8080/api/software/binkp?days=365"
+
+# Get all nodes for a sysop
+curl "http://localhost:8080/api/sysops/John_Doe/nodes"
 ```
 
 ## Architecture

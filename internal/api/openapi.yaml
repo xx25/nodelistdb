@@ -562,21 +562,109 @@ paths:
                     additionalProperties:
                       $ref: '#/components/schemas/FlagDefinition'
 
-  /api/download/database:
+  /api/software/binkp:
     get:
-      summary: Download Database
-      description: Download the complete DuckDB database file for offline analysis
-      operationId: downloadDatabase
+      summary: Get BinkP Software Distribution
+      description: |
+        Get statistical distribution of BinkP software implementations detected across the network.
+
+        Returns aggregated data showing which BinkP software versions are in use.
+      operationId: getBinkPSoftwareStats
       tags:
-        - Export
+        - Software Analytics
+      parameters:
+        - name: days
+          in: query
+          description: Number of days to include in analysis
+          schema:
+            type: integer
+            minimum: 1
+            default: 365
+            example: 365
       responses:
         '200':
-          description: Database file download
+          description: BinkP software distribution statistics
           content:
-            application/octet-stream:
+            application/json:
               schema:
-                type: string
-                format: binary
+                $ref: '#/components/schemas/SoftwareDistribution'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/software/ifcico:
+    get:
+      summary: Get IFCico Software Distribution
+      description: |
+        Get statistical distribution of IFCico/Telnet software implementations detected across the network.
+
+        Returns aggregated data showing which IFCico software versions are in use.
+      operationId: getIFCICOSoftwareStats
+      tags:
+        - Software Analytics
+      parameters:
+        - name: days
+          in: query
+          description: Number of days to include in analysis
+          schema:
+            type: integer
+            minimum: 1
+            default: 365
+            example: 365
+      responses:
+        '200':
+          description: IFCico software distribution statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftwareDistribution'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/software/binkd:
+    get:
+      summary: Get Binkd Detailed Statistics
+      description: |
+        Get detailed statistics for Binkd software implementations, including version breakdowns and trends.
+      operationId: getBinkdDetailedStats
+      tags:
+        - Software Analytics
+      parameters:
+        - name: days
+          in: query
+          description: Number of days to include in analysis
+          schema:
+            type: integer
+            minimum: 1
+            default: 365
+            example: 365
+      responses:
+        '200':
+          description: Detailed Binkd statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BinkdDetailedStats'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/software/trends:
+    get:
+      summary: Get Software Trends
+      description: |
+        Get software usage trends over time.
+
+        **Note:** This endpoint is currently a stub and returns empty data. Implementation pending.
+      operationId: getSoftwareTrends
+      tags:
+        - Software Analytics
+      responses:
+        '200':
+          description: Software trends (currently empty)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1010,6 +1098,71 @@ components:
           type: string
           example: "/download/nodelist/2024/nodelist.211"
 
+    SoftwareDistribution:
+      type: object
+      description: Software distribution statistics
+      properties:
+        protocol:
+          type: string
+          description: Protocol type (binkp, ifcico, telnet)
+          example: "binkp"
+        total_nodes:
+          type: integer
+          description: Total number of nodes tested
+          example: 1250
+        software_counts:
+          type: array
+          items:
+            type: object
+            properties:
+              software:
+                type: string
+                description: Software name and version
+                example: "binkd/1.1a-111"
+              count:
+                type: integer
+                description: Number of nodes using this software
+                example: 450
+              percentage:
+                type: number
+                format: float
+                description: Percentage of total
+                example: 36.0
+        period_days:
+          type: integer
+          description: Number of days included in the analysis
+          example: 365
+
+    BinkdDetailedStats:
+      type: object
+      description: Detailed Binkd software statistics
+      properties:
+        total_binkd_nodes:
+          type: integer
+          description: Total number of nodes running Binkd
+          example: 850
+        versions:
+          type: array
+          items:
+            type: object
+            properties:
+              version:
+                type: string
+                description: Binkd version
+                example: "1.1a-111"
+              count:
+                type: integer
+                description: Number of nodes
+                example: 450
+              percentage:
+                type: number
+                format: float
+                example: 52.9
+        period_days:
+          type: integer
+          description: Number of days included in the analysis
+          example: 365
+
     Error:
       type: object
       description: Standard error response
@@ -1117,10 +1270,10 @@ tags:
     description: System operator (sysop) information and queries
   - name: Statistics
     description: Network statistics and analytics
+  - name: Software Analytics
+    description: Software distribution and usage statistics from node testing
   - name: Reference
     description: Reference documentation and definitions
-  - name: Export
-    description: Data export and download endpoints
   - name: Nodelists
     description: Nodelist file information and metadata
   - name: Documentation
