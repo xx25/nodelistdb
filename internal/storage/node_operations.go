@@ -40,32 +40,6 @@ func (no *NodeOperations) InsertNodes(nodes []database.Node) error {
 	return no.queryBuilder.InsertNodesInChunks(no.db, nodes)
 }
 
-// insertChunkSafely inserts a chunk of nodes using direct SQL generation for performance
-func (no *NodeOperations) insertChunkSafely(tx *sql.Tx, chunk []database.Node) error {
-	if len(chunk) == 0 {
-		return nil
-	}
-
-	// Use direct SQL generation for bulk imports (much faster than parameterized queries)
-	// Need to get concrete ResultParser for SQL building
-	var rp *ResultParser
-	if parser, ok := no.resultParser.(*ResultParser); ok {
-		rp = parser
-	} else if chParser, ok := no.resultParser.(*ClickHouseResultParser); ok {
-		rp = chParser.ResultParser
-	} else {
-		return fmt.Errorf("unable to get result parser for SQL building")
-	}
-	insertSQL := no.queryBuilder.BuildDirectBatchInsertSQL(chunk, rp)
-
-	_, err := tx.Exec(insertSQL)
-	if err != nil {
-		return fmt.Errorf("failed to execute batch insert: %w", err)
-	}
-
-	return nil
-}
-
 // GetNodes retrieves nodes based on filter criteria using safe parameterized queries
 func (no *NodeOperations) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
 	// Validate filter
@@ -228,13 +202,6 @@ func (no *NodeOperations) FindConflictingNode(zone, net, node int, date time.Tim
 		return false, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return count > 0, nil
-}
-
-// markOriginalAsConflicted marks the original entry (conflict_sequence=0) as having conflict
-func (no *NodeOperations) markOriginalAsConflicted(conn *sql.DB, zone, net, node int, date time.Time) error {
-	query := no.queryBuilder.MarkConflictSQL()
-	_, err := conn.Exec(query, zone, net, node, date)
-	return err
 }
 
 // IsNodelistProcessed checks if a nodelist has already been processed based on date

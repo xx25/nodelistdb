@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -89,44 +88,6 @@ func (cno *ClickHouseNodeOperations) InsertNodes(nodes []database.Node) error {
 
 	// Use SQL connection for better compatibility with array formatting
 	return cno.insertNodesSQL(nodes)
-}
-
-// insertNodesNative uses ClickHouse native connection for optimal batch insertion
-func (cno *ClickHouseNodeOperations) insertNodesNative(chDB *database.ClickHouseDB, nodes []database.Node) error {
-	conn := chDB.NativeConn()
-	ctx := context.Background()
-
-	// Prepare batch insert
-	batch, err := conn.PrepareBatch(ctx, `
-		INSERT INTO nodes (
-			zone, net, node, nodelist_date, day_number,
-			system_name, location, sysop_name, phone, node_type, region, max_speed,
-			is_cm, is_mo,
-			flags, modem_flags,
-			conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare batch: %w", err)
-	}
-
-	// Add all nodes to batch
-	for _, node := range nodes {
-		if node.FtsId == "" {
-			node.ComputeFtsId()
-		}
-
-		args := cno.resultParser.NodeToArgsClickHouse(node)
-		if err := batch.Append(args...); err != nil {
-			return fmt.Errorf("failed to append to batch: %w", err)
-		}
-	}
-
-	// Execute batch
-	if err := batch.Send(); err != nil {
-		return fmt.Errorf("failed to send batch: %w", err)
-	}
-
-	return nil
 }
 
 // insertNodesSQL uses standard SQL interface with ClickHouse-specific query generation
