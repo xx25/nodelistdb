@@ -14,7 +14,7 @@ type Handler struct {
 	writer         *bufio.Writer
 	formatter      *Formatter
 	debugToTelnet  bool           // Whether to show debug output in telnet session
-	debugCapture   *DebugCapture  // Debug output capturer
+	debugCapture   *TelnetCapture // Debug output capturer
 }
 
 func NewHandler(daemon DaemonInterface, writer *bufio.Writer) *Handler {
@@ -25,7 +25,7 @@ func NewHandler(daemon DaemonInterface, writer *bufio.Writer) *Handler {
 		debugToTelnet: false,
 	}
 	// Setup debug capture
-	h.debugCapture = SetupDebugCapture(h)
+	h.debugCapture = SetupTelnetCapture(h)
 	return h
 }
 
