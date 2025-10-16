@@ -88,20 +88,6 @@ func parsePaginationParams(query url.Values, defaultLimit, maxLimit int) (limit,
 	return limit, offset
 }
 
-// parsePathInt extracts an integer from URL path.
-// Returns 0 and error if parsing fails.
-func parsePathInt(pathPart string, fieldName string) (int, error) {
-	n, err := strconv.Atoi(pathPart)
-	if err != nil {
-		return 0, &ParamError{
-			Field:   fieldName,
-			Value:   pathPart,
-			Message: "invalid " + fieldName + " number",
-		}
-	}
-	return n, nil
-}
-
 // parseNodeFilter builds a NodeFilter from query parameters.
 // Returns the filter and a boolean indicating if any specific constraint was provided.
 func parseNodeFilter(r *http.Request) (database.NodeFilter, bool, error) {
