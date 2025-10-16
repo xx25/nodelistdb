@@ -49,7 +49,7 @@ func GetLogger() *Logger {
 				Console: true,
 			},
 		}
-		globalLogger.configure()
+		_ = globalLogger.configure()
 	}
 	return globalLogger
 }

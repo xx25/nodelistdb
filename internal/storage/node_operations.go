@@ -224,7 +224,9 @@ func (no *NodeOperations) FindConflictingNode(zone, net, node int, date time.Tim
 		return false, fmt.Errorf("failed to find conflicting node: %w", queryErr)
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return count > 0, nil
 }
 

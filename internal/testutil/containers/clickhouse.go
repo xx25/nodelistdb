@@ -56,7 +56,7 @@ func NewClickHouseContainer(t *testing.T) (*ClickHouseContainer, error) {
 		if db, err := database.NewClickHouse(&config); err == nil {
 			conn := db.Conn()
 			if conn != nil {
-				conn.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+				_, _ = conn.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 			}
 			db.Close()
 		}

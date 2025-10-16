@@ -123,7 +123,7 @@ func (s *CLIServer) acceptLoop() {
 			s.mu.Lock()
 			if len(s.clients) >= s.maxClients {
 				s.mu.Unlock()
-				conn.Write([]byte("Server full, try again later\r\n"))
+				_, _ = conn.Write([]byte("Server full, try again later\r\n"))
 				conn.Close()
 				continue
 			}
@@ -150,15 +150,15 @@ func (s *CLIServer) handleClient(client *Client) {
 		client.conn.Close()
 	}()
 	
-	client.writer.WriteString(s.welcome)
-	client.writer.WriteString("\r\n")
-	client.writer.WriteString(s.prompt)
+	_, _ = client.writer.WriteString(s.welcome)
+	_, _ = client.writer.WriteString("\r\n")
+	_, _ = client.writer.WriteString(s.prompt)
 	client.writer.Flush()
 	
 	handler := NewHandler(s.daemon, client.writer)
 	
 	for {
-		client.conn.SetReadDeadline(time.Now().Add(s.timeout))
+		_ = client.conn.SetReadDeadline(time.Now().Add(s.timeout))
 		
 		line, err := client.reader.ReadString('\n')
 		if err != nil {

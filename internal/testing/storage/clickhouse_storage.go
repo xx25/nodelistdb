@@ -157,7 +157,8 @@ func (s *ClickHouseStorage) Close() error {
 	if len(s.resultsBatch) > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		s.flushBatch(ctx)
+		// Ignore flush errors during close - best effort
+		_ = s.flushBatch(ctx)
 	}
 
 	if s.conn != nil {

@@ -78,7 +78,7 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 		// Port in hostname overrides the port parameter
 		if len(parts) > 1 {
 			var p int
-			fmt.Sscanf(parts[1], "%d", &p)
+			_, _ = fmt.Sscanf(parts[1], "%d", &p)
 			if p > 0 {
 				port = p
 			}
