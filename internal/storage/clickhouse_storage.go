@@ -19,7 +19,6 @@ type ClickHouseStorage struct {
 	searchOps    *SearchOperations
 	queryBuilder *QueryBuilder
 	resultParser *ClickHouseResultParser
-	mu           sync.RWMutex
 }
 
 // NewClickHouseStorage creates a new ClickHouse-specific storage instance
