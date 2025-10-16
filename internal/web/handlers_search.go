@@ -36,43 +36,6 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// performNodeSearch handles the actual node search logic
-func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error) {
-	if r.Method != "POST" {
-		return nil, 0, nil
-	}
-
-	if err := r.ParseForm(); err != nil {
-		return nil, 0, fmt.Errorf("Failed to parse form: %v", err)
-	}
-
-	var filter database.NodeFilter
-	var err error
-
-	// Check if full address was provided
-	if fullAddress := r.FormValue("full_address"); fullAddress != "" {
-		filter, err = buildNodeFilterFromAddress(fullAddress)
-		if err != nil {
-			return nil, 0, fmt.Errorf("Invalid address format: %v", err)
-		}
-	} else {
-		// Build filter from individual fields
-		filter = buildNodeFilterFromForm(r)
-
-		// Check if search would be too resource-intensive
-		if filter.Limit == 0 {
-			return nil, 0, fmt.Errorf("Search requires more specific criteria. Please specify zone or net along with node number, or search by system name/location (minimum 2 characters)")
-		}
-	}
-
-	nodes, err := s.storage.NodeOps().GetNodes(filter)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return nodes, len(nodes), nil
-}
-
 // performNodeSearchWithLifetime handles the actual node search logic and returns NodeSummary with lifetime info
 func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeSummary, int, error) {
 	if r.Method != "POST" {
