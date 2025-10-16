@@ -150,11 +150,7 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// Note: Errors from GetNodeDateRange are not critical - if it fails,
 	// firstDate and lastDate will be zero values which is acceptable.
 	// The history data itself is sufficient for the response.
-	firstDate, lastDate, err := s.storage.NodeOps().GetNodeDateRange(zone, net, node)
-	if err != nil {
-		// Date range query failed, but we still have history data
-		// firstDate and lastDate will be zero values (time.Time{})
-	}
+	firstDate, lastDate, _ := s.storage.NodeOps().GetNodeDateRange(zone, net, node)
 
 	response := map[string]interface{}{
 		"address":    fmt.Sprintf("%d:%d/%d", zone, net, node),

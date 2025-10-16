@@ -324,15 +324,9 @@ func (no *NodeOperations) DeleteNodesForDate(date time.Time) error {
 	defer func() { _ = tx.Rollback() }()
 
 	query := "DELETE FROM nodes WHERE nodelist_date = ?"
-	result, err := tx.Exec(query, date)
+	_, err = tx.Exec(query, date)
 	if err != nil {
 		return fmt.Errorf("failed to delete nodes for date %v: %w", date, err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err == nil && rowsAffected > 0 {
-		// Log the deletion if verbose logging is enabled
-		// This would require access to a logger instance
 	}
 
 	return tx.Commit()

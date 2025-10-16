@@ -334,7 +334,6 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 			result.HostnamesOperational = 1
 		}
 		result.TestedHostname = result.Hostname
-	} else {
 	}
 
 	// Parse arrays (compatible with both DuckDB and ClickHouse)
