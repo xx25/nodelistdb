@@ -110,7 +110,7 @@ func (r *DNSResolver) Resolve(ctx context.Context, hostname string) *models.DNSR
 	
 	// Cache in persistent storage if available
 	if r.persistentCache != nil {
-		r.persistentCache.Set(hostname, result)
+		_ = r.persistentCache.Set(hostname, result)
 	}
 	
 	return result

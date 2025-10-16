@@ -46,12 +46,12 @@ func (s *Server) LatestNodelistAPIHandler(w http.ResponseWriter, r *http.Request
 			"download_url": fmt.Sprintf("/download/nodelist/%s/%s", latest.Year, latest.Name),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	} else {
 		// Return the file content directly
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", latest.Name))
-		io.Copy(w, file)
+		_, _ = io.Copy(w, file)
 	}
 }
 

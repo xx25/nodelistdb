@@ -272,7 +272,7 @@ func (d *Daemon) performTesting(ctx context.Context, node *models.Node, hostname
 func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) error {
 	// Enable debug mode if configured
 	if d.config.Logging.Level == "debug" {
-		d.SetDebugMode(true)
+		_ = d.SetDebugMode(true)
 	}
 
 	// Parse the node specification

@@ -133,7 +133,7 @@ func (g *Geolocation) GetLocation(ctx context.Context, ip string) *models.Geoloc
 	
 	// Cache in persistent storage if available
 	if g.persistentCache != nil {
-		g.persistentCache.Set(ip, result)
+		_ = g.persistentCache.Set(ip, result)
 	}
 	
 	return result
@@ -181,7 +181,7 @@ func (g *Geolocation) getFromIPAPI(ctx context.Context, ip string) (*models.Geol
 	// Extract ASN number from AS field (format: "AS12345 Provider Name")
 	var asn uint32
 	if data.AS != "" {
-		fmt.Sscanf(data.AS, "AS%d", &asn)
+		_, _ = fmt.Sscanf(data.AS, "AS%d", &asn)
 	}
 	
 	return &models.GeolocationResult{
@@ -234,7 +234,7 @@ func (g *Geolocation) getFromIPInfo(ctx context.Context, ip string) (*models.Geo
 	
 	// Parse location coordinates
 	var lat, lon float32
-	fmt.Sscanf(data.Loc, "%f,%f", &lat, &lon)
+	_, _ = fmt.Sscanf(data.Loc, "%f,%f", &lat, &lon)
 	
 	return &models.GeolocationResult{
 		IP:          ip,
@@ -286,8 +286,8 @@ func (g *Geolocation) getFromIPGeolocation(ctx context.Context, ip string) (*mod
 	
 	// Convert string coordinates to float32
 	var lat, lon float32
-	fmt.Sscanf(data.Latitude, "%f", &lat)
-	fmt.Sscanf(data.Longitude, "%f", &lon)
+	_, _ = fmt.Sscanf(data.Latitude, "%f", &lat)
+	_, _ = fmt.Sscanf(data.Longitude, "%f", &lon)
 	
 	return &models.GeolocationResult{
 		IP:          ip,

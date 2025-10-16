@@ -42,7 +42,7 @@ func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error
 		return nil, 0, nil
 	}
 
-	r.ParseForm()
+	_ = r.ParseForm()
 
 	var filter database.NodeFilter
 	var err error
@@ -77,7 +77,7 @@ func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeS
 		return nil, 0, nil
 	}
 
-	r.ParseForm()
+	_ = r.ParseForm()
 
 	var filter database.NodeFilter
 	var err error

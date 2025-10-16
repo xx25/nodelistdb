@@ -259,7 +259,7 @@ func createHealthHandler(mockStorage *MockStorage) http.HandlerFunc {
 			"time":   time.Now().UTC(),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -283,7 +283,7 @@ func createSearchNodesHandler(mockStorage *MockStorage) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -314,7 +314,7 @@ func createGetNodeHandler(mockStorage *MockStorage) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(nodes[0])
+		_ = json.NewEncoder(w).Encode(nodes[0])
 	}
 }
 
@@ -330,11 +330,11 @@ func createSysopsHandler(mockStorage *MockStorage) http.HandlerFunc {
 		nameFilter := query.Get("name")
 		limit := 50
 		if limitStr := query.Get("limit"); limitStr != "" {
-			fmt.Sscanf(limitStr, "%d", &limit)
+			_, _ = fmt.Sscanf(limitStr, "%d", &limit)
 		}
 		offset := 0
 		if offsetStr := query.Get("offset"); offsetStr != "" {
-			fmt.Sscanf(offsetStr, "%d", &offset)
+			_, _ = fmt.Sscanf(offsetStr, "%d", &offset)
 		}
 
 		sysops, err := mockStorage.GetUniqueSysops(nameFilter, limit, offset)
@@ -354,7 +354,7 @@ func createSysopsHandler(mockStorage *MockStorage) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -380,7 +380,7 @@ func createSysopNodesHandler(mockStorage *MockStorage) http.HandlerFunc {
 
 		limit := 100
 		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-			fmt.Sscanf(limitStr, "%d", &limit)
+			_, _ = fmt.Sscanf(limitStr, "%d", &limit)
 		}
 
 		nodes, err := mockStorage.GetNodesBySysop(sysopName, limit)
@@ -397,7 +397,7 @@ func createSysopNodesHandler(mockStorage *MockStorage) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -429,7 +429,7 @@ func createNodeChangesHandler(mockStorage *MockStorage) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 

@@ -306,7 +306,7 @@ func (s *Server) NodelistDownloadHandler(w http.ResponseWriter, r *http.Request)
 		// Note: We can't set Content-Length for decompressed data without reading it all first
 
 		// Stream the decompressed content
-		io.Copy(w, gzReader)
+		_, _ = io.Copy(w, gzReader)
 	} else {
 		// Serve the file as-is
 		w.Header().Set("Content-Type", "text/plain")
@@ -314,7 +314,7 @@ func (s *Server) NodelistDownloadHandler(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
 
 		// Stream the file
-		io.Copy(w, file)
+		_, _ = io.Copy(w, file)
 	}
 }
 

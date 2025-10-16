@@ -172,13 +172,13 @@ func (s *CLIServer) handleClient(client *Client) {
 		
 		line = strings.TrimSpace(line)
 		if line == "" {
-			client.writer.WriteString(s.prompt)
+			_, _ = client.writer.WriteString(s.prompt)
 			client.writer.Flush()
 			continue
 		}
 		
 		if line == "exit" || line == "quit" {
-			client.writer.WriteString("Goodbye!\r\n")
+			_, _ = client.writer.WriteString("Goodbye!\r\n")
 			client.writer.Flush()
 			return
 		}
@@ -187,11 +187,11 @@ func (s *CLIServer) handleClient(client *Client) {
 			if err == io.EOF {
 				return
 			}
-			client.writer.WriteString(fmt.Sprintf("Error: %v\r\n", err))
+			_, _ = client.writer.WriteString(fmt.Sprintf("Error: %v\r\n", err))
 			client.writer.Flush()
 		}
-		
-		client.writer.WriteString(s.prompt)
+
+		_, _ = client.writer.WriteString(s.prompt)
 		client.writer.Flush()
 	}
 }
@@ -209,7 +209,7 @@ func (s *CLIServer) cleanupLoop() {
 			now := time.Now()
 			for conn, client := range s.clients {
 				if now.Sub(client.lastSeen) > s.timeout {
-					client.writer.WriteString("\r\nSession timeout\r\n")
+					_, _ = client.writer.WriteString("\r\nSession timeout\r\n")
 					client.writer.Flush()
 					conn.Close()
 					delete(s.clients, conn)
@@ -225,7 +225,7 @@ func (s *CLIServer) shutdown() error {
 	defer s.mu.Unlock()
 	
 	for conn, client := range s.clients {
-		client.writer.WriteString("\r\nServer shutting down\r\n")
+		_, _ = client.writer.WriteString("\r\nServer shutting down\r\n")
 		client.writer.Flush()
 		conn.Close()
 	}
