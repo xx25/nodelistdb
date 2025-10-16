@@ -19,12 +19,13 @@ type Job struct {
 
 // Result represents the result of processing a job
 type Result struct {
-	JobID      int
-	FilePath   string
-	Nodes      []database.Node
-	Error      error
-	Duration   time.Duration
-	NodesCount int
+	JobID        int
+	FilePath     string
+	Nodes        []database.Node
+	Error        error
+	Duration     time.Duration
+	NodesCount   int
+	NodelistDate time.Time // Date of the nodelist for flag statistics updates
 }
 
 // Processor manages concurrent file processing
@@ -133,20 +134,22 @@ func (p *Processor) processJobWithParser(ctx context.Context, job Job, workerPar
 	}
 
 	// Parse the file with the worker's dedicated parser
-	nodes, err := workerParser.ParseFile(job.FilePath)
+	parseResult, err := workerParser.ParseFileWithCRC(job.FilePath)
 	duration := time.Since(start)
 
 	if err != nil {
 		fmt.Printf("[Job %d] ERROR: %v\n", job.JobID, err)
 		return Result{
-			JobID:      job.JobID,
-			FilePath:   job.FilePath,
-			Error:      err,
-			Duration:   duration,
-			NodesCount: 0,
+			JobID:        job.JobID,
+			FilePath:     job.FilePath,
+			Error:        err,
+			Duration:     duration,
+			NodesCount:   0,
+			NodelistDate: time.Time{},
 		}
 	}
 
+	nodes := parseResult.Nodes
 	if len(nodes) == 0 {
 		if !p.quiet {
 			fmt.Printf("[Job %d] No nodes found in file\n", job.JobID)
@@ -156,11 +159,12 @@ func (p *Processor) processJobWithParser(ctx context.Context, job Job, workerPar
 	}
 
 	return Result{
-		JobID:      job.JobID,
-		FilePath:   job.FilePath,
-		Nodes:      nodes,
-		Duration:   duration,
-		NodesCount: len(nodes),
+		JobID:        job.JobID,
+		FilePath:     job.FilePath,
+		Nodes:        nodes,
+		Duration:     duration,
+		NodesCount:   len(nodes),
+		NodelistDate: parseResult.NodelistDate,
 	}
 }
 
@@ -177,6 +181,9 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 	var avgInsertionTime time.Duration
 	var insertionCount int
 
+	// Track unique nodelist dates for flag statistics updates
+	uniqueDates := make(map[time.Time]bool)
+
 	if !p.quiet {
 		fmt.Printf("\n=== DATABASE INSERTION PHASE ===\n")
 		fmt.Printf("Collecting results from %d jobs and performing batch inserts...\n", expectedResults)
@@ -191,6 +198,11 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 
 		successfulJobs++
 		totalNodes += result.NodesCount
+
+		// Track nodelist date for flag statistics updates
+		if !result.NodelistDate.IsZero() {
+			uniqueDates[result.NodelistDate] = true
+		}
 
 		// Add nodes to batch
 		batch = append(batch, result.Nodes...)
@@ -276,6 +288,33 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 			batchCount, totalInserted, time.Since(startTime).Round(time.Second))
 		fmt.Printf("Concurrent processing complete: %d jobs processed, %d nodes imported, %d errors\n",
 			successfulJobs, totalNodes, totalErrors)
+	}
+
+	// Update flag statistics for all unique nodelist dates
+	if len(uniqueDates) > 0 {
+		if !p.quiet {
+			fmt.Printf("\nUpdating flag analytics for %d unique nodelist dates...\n", len(uniqueDates))
+		}
+		updateStart := time.Now()
+		updatedCount := 0
+		for date := range uniqueDates {
+			if p.verbose {
+				fmt.Printf("  Updating flag statistics for %s...\n", date.Format("2006-01-02"))
+			}
+			if err := p.storage.UpdateFlagStatistics(date); err != nil {
+				fmt.Printf("  Warning: Failed to update flag statistics for %s: %v\n", date.Format("2006-01-02"), err)
+				// Non-fatal error - continue with other dates
+			} else {
+				updatedCount++
+				if p.verbose {
+					fmt.Printf("  ✓ Flag statistics updated for %s\n", date.Format("2006-01-02"))
+				}
+			}
+		}
+		if !p.quiet {
+			fmt.Printf("✓ Flag analytics updated for %d/%d dates in %v\n",
+				updatedCount, len(uniqueDates), time.Since(updateStart).Round(time.Millisecond))
+		}
 	}
 
 	if totalErrors > 0 {

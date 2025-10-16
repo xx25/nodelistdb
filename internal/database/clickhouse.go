@@ -224,6 +224,41 @@ func (db *ClickHouseDB) CreateSchema() error {
 		}
 	}
 
+	// Create flag_statistics table for pre-aggregated analytics
+	flagStatsSQL := `
+	CREATE TABLE IF NOT EXISTS flag_statistics (
+		flag String,
+		year UInt16,
+		nodelist_date Date,
+		unique_nodes UInt32,
+		total_nodes_in_year UInt32,
+
+		-- First appearance node information (complete nodelist data)
+		first_zone Int32,
+		first_net Int32,
+		first_node Int32,
+		first_nodelist_date Date,
+		first_day_number Int32,
+		first_system_name String,
+		first_location String,
+		first_sysop_name String,
+		first_phone String,
+		first_node_type String,
+		first_region Nullable(Int32),
+		first_max_speed UInt32,
+		first_is_cm Bool,
+		first_is_mo Bool,
+		first_has_inet Bool,
+		first_raw_line String
+	) ENGINE = ReplacingMergeTree(nodelist_date)
+	ORDER BY (flag, year, nodelist_date)
+	PARTITION BY year
+	SETTINGS index_granularity = 8192`
+
+	if err := db.conn.Exec(ctx, flagStatsSQL); err != nil {
+		return fmt.Errorf("failed to create flag_statistics table: %w", err)
+	}
+
 	return nil
 }
 

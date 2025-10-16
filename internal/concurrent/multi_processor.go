@@ -16,6 +16,7 @@ type StorageInterface interface {
 	InsertNodes([]database.Node) error
 	IsNodelistProcessed(time.Time) (bool, error)
 	FindConflictingNode(int, int, int, time.Time) (bool, error)
+	UpdateFlagStatistics(time.Time) error
 }
 
 // StorageAdapter wraps a storage implementation that uses component-based API and adapts it
@@ -25,6 +26,9 @@ type StorageAdapter struct {
 		InsertNodes([]database.Node) error
 		IsNodelistProcessed(time.Time) (bool, error)
 		FindConflictingNode(int, int, int, time.Time) (bool, error)
+	}
+	storage interface {
+		UpdateFlagStatistics(time.Time) error
 	}
 }
 
@@ -42,20 +46,30 @@ func NewStorageAdapter(storage interface{}) *StorageAdapter {
 		}
 	}
 
-	if getter, ok := storage.(nodeOpsGetter); ok {
-		return &StorageAdapter{nodeOps: getter.NodeOps()}
-	}
+	adapter := &StorageAdapter{}
 
-	// Fallback: if storage itself implements the methods, use it directly
-	if ops, ok := storage.(interface {
+	if getter, ok := storage.(nodeOpsGetter); ok {
+		adapter.nodeOps = getter.NodeOps()
+	} else if ops, ok := storage.(interface {
 		InsertNodes([]database.Node) error
 		IsNodelistProcessed(time.Time) (bool, error)
 		FindConflictingNode(int, int, int, time.Time) (bool, error)
 	}); ok {
-		return &StorageAdapter{nodeOps: ops}
+		adapter.nodeOps = ops
+	} else {
+		panic("storage does not implement required node operations interface")
 	}
 
-	panic("storage does not implement required interface")
+	// Storage itself must implement UpdateFlagStatistics
+	if s, ok := storage.(interface {
+		UpdateFlagStatistics(time.Time) error
+	}); ok {
+		adapter.storage = s
+	} else {
+		panic("storage does not implement UpdateFlagStatistics")
+	}
+
+	return adapter
 }
 
 func (sa *StorageAdapter) InsertNodes(nodes []database.Node) error {
@@ -68,6 +82,10 @@ func (sa *StorageAdapter) IsNodelistProcessed(date time.Time) (bool, error) {
 
 func (sa *StorageAdapter) FindConflictingNode(zone, net, node int, date time.Time) (bool, error) {
 	return sa.nodeOps.FindConflictingNode(zone, net, node, date)
+}
+
+func (sa *StorageAdapter) UpdateFlagStatistics(date time.Time) error {
+	return sa.storage.UpdateFlagStatistics(date)
 }
 
 // MultiProcessor manages concurrent file processing with generic storage interface
@@ -132,6 +150,9 @@ func (p *MultiProcessor) ProcessFiles(ctx context.Context, files []string) error
 	processedFiles := 0
 	var errors []error
 
+	// Track unique nodelist dates for flag statistics updates
+	uniqueDates := make(map[time.Time]bool)
+
 	for result := range results {
 		if result.Error != nil {
 			if !p.quiet {
@@ -143,6 +164,11 @@ func (p *MultiProcessor) ProcessFiles(ctx context.Context, files []string) error
 
 		totalNodes += result.NodesCount
 		processedFiles++
+
+		// Track nodelist date for flag statistics updates
+		if !result.NodelistDate.IsZero() {
+			uniqueDates[result.NodelistDate] = true
+		}
 
 		// Calculate ETA
 		elapsed := time.Since(startTime)
@@ -172,6 +198,33 @@ func (p *MultiProcessor) ProcessFiles(ctx context.Context, files []string) error
 			fmt.Printf("Average: %.2f nodes/second\n", float64(totalNodes)/duration.Seconds())
 		}
 		fmt.Printf("Processing time: %v\n", duration)
+	}
+
+	// Update flag statistics for all unique nodelist dates
+	if len(uniqueDates) > 0 {
+		if !p.quiet {
+			fmt.Printf("\nUpdating flag analytics for %d unique nodelist dates...\n", len(uniqueDates))
+		}
+		updateStart := time.Now()
+		updatedCount := 0
+		for date := range uniqueDates {
+			if p.verbose {
+				fmt.Printf("  Updating flag statistics for %s...\n", date.Format("2006-01-02"))
+			}
+			if err := p.storage.UpdateFlagStatistics(date); err != nil {
+				fmt.Printf("  Warning: Failed to update flag statistics for %s: %v\n", date.Format("2006-01-02"), err)
+				// Non-fatal error - continue with other dates
+			} else {
+				updatedCount++
+				if p.verbose {
+					fmt.Printf("  ✓ Flag statistics updated for %s\n", date.Format("2006-01-02"))
+				}
+			}
+		}
+		if !p.quiet {
+			fmt.Printf("✓ Flag analytics updated for %d/%d dates in %v\n",
+				updatedCount, len(uniqueDates), time.Since(updateStart).Round(time.Millisecond))
+		}
 	}
 
 	if len(errors) > 0 {
@@ -274,6 +327,7 @@ func (p *MultiProcessor) processFile(ctx context.Context, job Job) Result {
 	}
 
 	result.NodesCount = totalInserted
+	result.NodelistDate = parseResult.NodelistDate
 	result.Duration = time.Since(startTime)
 	return result
 }

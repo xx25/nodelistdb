@@ -461,3 +461,58 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
+
+// GeoHostingAnalyticsHandler shows geographic hosting distribution
+func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse days parameter (default: 365 for current year view)
+	daysStr := r.URL.Query().Get("days")
+	days := 365
+	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 && d <= 3650 {
+		days = d
+	}
+
+	// Get geo distribution
+	dist, err := s.storage.TestOps().GetGeoHostingDistribution(days)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] Geo Hosting Analytics: Error fetching data: %v", err)
+		displayError = fmt.Errorf("Failed to fetch geo hosting distribution. Please try again later")
+	}
+
+	// Build template data
+	data := struct {
+		Title        string
+		ActivePage   string
+		Version      string
+		Days         int
+		Distribution *storage.GeoHostingDistribution
+		Updated      string
+		Error        error
+	}{
+		Title:        "Geographic Hosting Distribution",
+		ActivePage:   "analytics",
+		Version:      version.GetVersionInfo(),
+		Days:         days,
+		Distribution: dist,
+		Error:        displayError,
+	}
+
+	if dist != nil {
+		data.Updated = dist.LastUpdated.Format("2006-01-02 15:04:05")
+	}
+
+	// Check template exists before rendering
+	tmpl, exists := s.templates["geo_analytics"]
+	if !exists {
+		log.Printf("[ERROR] Geo Hosting Analytics: Template 'geo_analytics' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Render template
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Geo Hosting Analytics: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}

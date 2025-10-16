@@ -15,7 +15,7 @@ import (
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
-	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "ipv6_analytics", "ipv6_nonworking_analytics", "ipv6_advertised_ipv4_only_analytics", "ipv6_weekly_news", "binkp_analytics", "ifcico_analytics", "telnet_analytics", "vmodem_analytics", "ftp_analytics", "binkp_software", "ifcico_software"}
+	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "ipv6_analytics", "ipv6_nonworking_analytics", "ipv6_advertised_ipv4_only_analytics", "ipv6_weekly_news", "binkp_analytics", "ifcico_analytics", "telnet_analytics", "vmodem_analytics", "ftp_analytics", "binkp_software", "ifcico_software", "geo_analytics"}
 
 	// Create function map for template functions
 	funcMap := template.FuncMap{
@@ -250,6 +250,23 @@ func (s *Server) loadTemplates() {
 			default:
 				return 0
 			}
+		},
+		"countryFlag": func(countryCode string) string {
+			// Convert ISO 3166-1 alpha-2 country code to flag emoji
+			// Each letter is converted to regional indicator symbol (U+1F1E6 to U+1F1FF)
+			if len(countryCode) != 2 {
+				return ""
+			}
+			code := strings.ToUpper(countryCode)
+			flag := ""
+			for _, c := range code {
+				if c < 'A' || c > 'Z' {
+					return ""
+				}
+				// Regional indicator symbols start at U+1F1E6 (🇦)
+				flag += string(rune(0x1F1E6 + (c - 'A')))
+			}
+			return flag
 		},
 	}
 

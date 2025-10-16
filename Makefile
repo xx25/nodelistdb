@@ -74,6 +74,14 @@ build-daemon: ## Build testing daemon binary
 	go build -ldflags "$(LDFLAGS)" -o bin/testdaemon ./cmd/testdaemon
 	@echo "✓ Testing daemon built successfully"
 
+build-backfill-flags: ## Build flag statistics backfill tool
+	@echo "Building flag backfill tool..."
+	go build -ldflags "$(LDFLAGS)" -o bin/backfill_flags ./cmd/backfill_flags
+	@echo "✓ Flag backfill tool built successfully"
+
+run-backfill-flags: build-backfill-flags ## Run flag statistics backfill
+	./bin/backfill_flags -config config.yaml
+
 # Development targets
 test: ## Run tests
 	go test -v ./...

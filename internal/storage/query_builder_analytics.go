@@ -29,53 +29,49 @@ func (aqb *AnalyticsQueryBuilder) NetworkHistory() string {
 
 // FlagFirstAppearanceSQL returns SQL for finding the first appearance of a flag in ClickHouse
 // Deprecated: Use QueryBuilder.Analytics().FlagFirstAppearance() instead
-// Optimized: First find MIN(date), then query that specific date only
+// Optimized: Uses pre-aggregated flag_statistics table for instant lookups
 func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
 	return `
-		WITH first_date AS (
-			SELECT min(nodelist_date) as d
-			FROM nodes
-			WHERE has(flags, ?) OR has(modem_flags, ?)
-				OR (has_inet = 1 AND positionCaseInsensitive(toString(internet_config), concat('"', ?, '"')) > 0)
-		)
 		SELECT
-			zone, net, node, nodelist_date, system_name, location, sysop_name
-		FROM nodes
-		WHERE nodelist_date = (SELECT d FROM first_date)
-			AND (has(flags, ?) OR has(modem_flags, ?)
-				OR (has_inet = 1 AND positionCaseInsensitive(toString(internet_config), concat('"', ?, '"')) > 0))
-		ORDER BY zone ASC, net ASC, node ASC
+			first_zone as zone,
+			first_net as net,
+			first_node as node,
+			first_nodelist_date as nodelist_date,
+			first_system_name as system_name,
+			first_location as location,
+			first_sysop_name as sysop_name
+		FROM flag_statistics
+		WHERE flag = ?
+		ORDER BY first_nodelist_date ASC
 		LIMIT 1
 	`
 }
 
 // FlagUsageByYearSQL returns SQL for counting flag usage by year in ClickHouse
 // Deprecated: Use QueryBuilder.Analytics().FlagUsageByYear() instead
-// Optimized: Uses uniqExact for deduplication and positionCaseInsensitive instead of JSON_EXISTS
+// Optimized: Uses pre-aggregated flag_statistics table for instant lookups
 func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 	return `
 		WITH
-		-- First, get all unique nodes per year (total counts)
+		-- Get total nodes per year (using pre-calculated column)
 		total_nodes_per_year AS (
 			SELECT
-				toYear(nodelist_date) as year,
-				uniqExact((zone, net, node)) as total_nodes
-			FROM nodes
+				year,
+				any(total_nodes_in_year) as total_nodes
+			FROM flag_statistics
 			GROUP BY year
 		),
-		-- Then, get unique nodes WITH the flag per year
+		-- Get nodes with specific flag per year
 		flagged_nodes_per_year AS (
 			SELECT
-				toYear(nodelist_date) as year,
-				uniqExact((zone, net, node)) as node_count
-			FROM nodes
-			WHERE has(flags, ?) OR has(modem_flags, ?)
-				OR (has_inet = 1 AND positionCaseInsensitive(toString(internet_config), concat('"', ?, '"')) > 0)
-			GROUP BY year
+				year,
+				unique_nodes as node_count
+			FROM flag_statistics
+			WHERE flag = ?
 		)
 		SELECT
 			t.year,
-			t.total_nodes,
+			toUInt32(t.total_nodes) as total_nodes,
 			COALESCE(f.node_count, 0) as node_count,
 			CASE
 				WHEN t.total_nodes > 0

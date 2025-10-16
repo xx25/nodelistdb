@@ -50,6 +50,11 @@ func (s *Server) SetupRouter() http.Handler {
 		r.Get("/trends", s.GetSoftwareTrends)
 	})
 
+	// Geographic analytics routes
+	r.Route("/api/analytics", func(r chi.Router) {
+		r.Get("/geo-hosting", s.GetGeoHostingStats)
+	})
+
 	// Documentation routes
 	r.Get("/api/flags", s.FlagsDocumentationHandler)
 	r.Get("/api/openapi.yaml", s.OpenAPISpecHandler)

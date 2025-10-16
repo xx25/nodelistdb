@@ -61,6 +61,34 @@ type OSStats struct {
 	Percentage float64 `json:"percentage"`
 }
 
+// GeoHostingDistribution represents hosting distribution by geography
+type GeoHostingDistribution struct {
+	TotalNodes           int              `json:"total_nodes"`
+	CountryDistribution  []CountryStats   `json:"country_distribution"`
+	ProviderDistribution []ProviderStats  `json:"provider_distribution"`
+	TopCountries         []CountryStats   `json:"top_countries"`  // Top 20
+	TopProviders         []ProviderStats  `json:"top_providers"`  // Top 20
+	LastUpdated          time.Time        `json:"last_updated"`
+}
+
+// CountryStats represents statistics for a country
+type CountryStats struct {
+	Country     string  `json:"country"`
+	CountryCode string  `json:"country_code"`
+	NodeCount   int     `json:"node_count"`
+	Percentage  float64 `json:"percentage"`
+}
+
+// ProviderStats represents statistics for a hosting provider
+type ProviderStats struct {
+	Provider     string   `json:"provider"`      // ISP name
+	Organization string   `json:"organization"`  // Org name (optional)
+	ASN          uint32   `json:"asn"`           // AS number (optional)
+	NodeCount    int      `json:"node_count"`
+	Percentage   float64  `json:"percentage"`
+	Countries    []string `json:"countries"` // Countries where this provider hosts nodes
+}
+
 // NodeTestResult represents a test result for a node
 type NodeTestResult struct {
 	TestTime              time.Time `json:"test_time"`
@@ -258,6 +286,7 @@ type Operations interface {
 	GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error)
 	GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error)
 	GetBinkdDetailedStats(days int) (*SoftwareDistribution, error)
+	GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error)
 
 	// Utility operations (delegated to NodeOps())
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)

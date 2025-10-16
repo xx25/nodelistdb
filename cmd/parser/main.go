@@ -259,6 +259,7 @@ func main() {
 			}
 
 			// Process nodes in batches, but only from current file
+			batchErrors := false
 			for i := 0; i < len(nodes); i += *batchSize {
 				end := i + *batchSize
 				if end > len(nodes) {
@@ -268,9 +269,23 @@ func main() {
 				batch := nodes[i:end]
 				if err := insertBatch(storageLayer, batch, *verbose, *quiet); err != nil {
 					fmt.Printf("  ERROR inserting batch: %v\n", err)
+					batchErrors = true
 					break // Skip remaining batches from this file
 				}
 				totalNodes += len(batch)
+			}
+
+			// Update flag_statistics for this nodelist (if batches were successfully inserted)
+			if !batchErrors && len(nodes) > 0 && !parseResult.NodelistDate.IsZero() {
+				if *verbose {
+					fmt.Printf("  Updating flag analytics for %s...\n", parseResult.NodelistDate.Format("2006-01-02"))
+				}
+				if err := storageLayer.UpdateFlagStatistics(parseResult.NodelistDate); err != nil {
+					fmt.Printf("  Warning: Failed to update flag statistics: %v\n", err)
+					// Non-fatal error - continue processing
+				} else if *verbose {
+					fmt.Println("  ✓ Flag analytics updated")
+				}
 			}
 
 			filesProcessed++

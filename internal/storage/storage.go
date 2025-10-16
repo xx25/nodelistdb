@@ -155,6 +155,10 @@ func (s *Storage) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
 	return s.analyticsOperations.GetNetworkHistory(zone, net)
 }
 
+func (s *Storage) UpdateFlagStatistics(nodelistDate time.Time) error {
+	return s.analyticsOperations.UpdateFlagStatistics(nodelistDate)
+}
+
 // Statistics Operations delegated methods
 func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
 	return s.statsOperations.GetStats(date)
@@ -239,6 +243,10 @@ func (s *Storage) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution
 
 func (s *Storage) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
 	return s.testOperations.GetBinkdDetailedStats(days)
+}
+
+func (s *Storage) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error) {
+	return s.testOperations.GetGeoHostingDistribution(days)
 }
 
 // --- Utility Methods ---

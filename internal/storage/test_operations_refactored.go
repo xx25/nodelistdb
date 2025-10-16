@@ -17,6 +17,7 @@ type TestOperationsRefactored struct {
 	protocolOps        *ProtocolQueryOperations
 	ipv6Ops            *IPv6QueryOperations
 	softwareOps        *SoftwareAnalyticsOperations
+	geoOps             *GeoAnalyticsOperations
 	mu                 sync.RWMutex
 }
 
@@ -34,6 +35,7 @@ func NewTestOperationsRefactored(db database.DatabaseInterface, queryBuilder Que
 		protocolOps:        NewProtocolQueryOperations(db, testQueryBuilder, resultParser),
 		ipv6Ops:            NewIPv6QueryOperations(db, testQueryBuilder, resultParser),
 		softwareOps:        NewSoftwareAnalyticsOperations(db),
+		geoOps:             NewGeoAnalyticsOperations(db),
 	}
 }
 
@@ -108,6 +110,13 @@ func (to *TestOperationsRefactored) GetIFCICOSoftwareDistribution(days int) (*So
 // GetBinkdDetailedStats returns detailed binkd statistics
 func (to *TestOperationsRefactored) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
 	return to.softwareOps.GetBinkdDetailedStats(days)
+}
+
+// ===== Geo Analytics Operations (delegated to GeoAnalyticsOperations) =====
+
+// GetGeoHostingDistribution returns geographic hosting distribution statistics
+func (to *TestOperationsRefactored) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error) {
+	return to.geoOps.GetGeoHostingDistribution(days)
 }
 
 // ===== IPv6 Operations (delegated to IPv6QueryOperations) =====

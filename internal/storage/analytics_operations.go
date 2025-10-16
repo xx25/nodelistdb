@@ -78,8 +78,8 @@ func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string) (*FlagFirstAp
 	conn := ao.db.Conn()
 	query := ao.queryBuilder.FlagFirstAppearanceSQL()
 
-	// Query needs flag 6 times: 3 in CTE, 3 in main query
-	row := conn.QueryRow(query, flag, flag, flag, flag, flag, flag)
+	// Query uses pre-aggregated flag_statistics table
+	row := conn.QueryRow(query, flag)
 
 	var fa FlagFirstAppearance
 	err := row.Scan(
@@ -114,8 +114,8 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string) ([]FlagUsageByYea
 	conn := ao.db.Conn()
 	query := ao.queryBuilder.FlagUsageByYearSQL()
 
-	// Query needs flag 3 times: once per condition in WHERE clause
-	rows, err := conn.Query(query, flag, flag, flag)
+	// Query uses pre-aggregated flag_statistics table
+	rows, err := conn.Query(query, flag)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query flag usage by year: %w", err)
 	}
@@ -211,6 +211,165 @@ func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int) (*NetworkHistory
 		ActiveDays:  totalNodelistCount,
 		Appearances: appearances,
 	}, nil
+}
+
+// UpdateFlagStatistics updates flag_statistics table for a specific nodelist date.
+// This should be called after inserting new nodes to keep analytics up-to-date.
+func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time) error {
+	ao.mu.Lock()
+	defer ao.mu.Unlock()
+
+	if nodelistDate.IsZero() {
+		return fmt.Errorf("nodelist date cannot be zero")
+	}
+
+	conn := ao.db.Conn()
+
+	// Incremental update SQL - processes only nodes from the specific nodelist_date
+	updateSQL := `
+	INSERT INTO flag_statistics (
+		flag,
+		year,
+		nodelist_date,
+		unique_nodes,
+		total_nodes_in_year,
+		first_zone,
+		first_net,
+		first_node,
+		first_nodelist_date,
+		first_day_number,
+		first_system_name,
+		first_location,
+		first_sysop_name,
+		first_phone,
+		first_node_type,
+		first_region,
+		first_max_speed,
+		first_is_cm,
+		first_is_mo,
+		first_has_inet,
+		first_raw_line
+	)
+	WITH
+	-- Explode all flags from the new nodelist only
+	new_node_flags AS (
+		SELECT
+			zone,
+			net,
+			node,
+			nodelist_date,
+			day_number,
+			toYear(nodelist_date) AS year,
+			system_name,
+			location,
+			sysop_name,
+			phone,
+			node_type,
+			region,
+			max_speed,
+			is_cm,
+			is_mo,
+			has_inet,
+			raw_line,
+			arrayJoin(arrayConcat(
+				flags,
+				modem_flags,
+				extractAll(toString(internet_config), '"([A-Z]{3})"')
+			)) AS flag
+		FROM nodes
+		WHERE nodelist_date = ?
+		  AND (length(flags) > 0 OR length(modem_flags) > 0 OR length(extractAll(toString(internet_config), '"([A-Z]{3})"')) > 0)
+	),
+	-- Get unique flags from new nodelist
+	new_flags AS (
+		SELECT DISTINCT flag
+		FROM new_node_flags
+	),
+	-- Get the global first appearance of each flag (may be earlier than this nodelist)
+	flag_first_appearance AS (
+		SELECT
+			n.flag,
+			argMin((n.zone, n.net, n.node, n.nodelist_date, n.day_number, n.system_name, n.location, n.sysop_name, n.phone, n.node_type, n.region, n.max_speed, n.is_cm, n.is_mo, n.has_inet, n.raw_line), n.nodelist_date) AS first_node
+		FROM (
+			SELECT
+				zone,
+				net,
+				node,
+				nodelist_date,
+				day_number,
+				system_name,
+				location,
+				sysop_name,
+				phone,
+				node_type,
+				region,
+				max_speed,
+				is_cm,
+				is_mo,
+				has_inet,
+				raw_line,
+				arrayJoin(arrayConcat(
+					flags,
+					modem_flags,
+					extractAll(toString(internet_config), '"([A-Z]{3})"')
+				)) AS flag
+			FROM nodes
+		) AS n
+		INNER JOIN new_flags nf ON n.flag = nf.flag
+		GROUP BY n.flag
+	),
+	-- Aggregate unique nodes per flag and year from the new nodelist
+	flag_year_stats AS (
+		SELECT
+			flag,
+			year,
+			max(nodelist_date) AS nodelist_date,
+			uniqExact((zone, net, node)) AS unique_nodes
+		FROM new_node_flags
+		GROUP BY flag, year
+	),
+	-- Calculate total unique nodes per year (across ALL nodes in that year, not just the new nodelist)
+	total_nodes_per_year AS (
+		SELECT
+			toYear(nodelist_date) AS year,
+			uniqExact((zone, net, node)) AS total_nodes
+		FROM nodes
+		WHERE toYear(nodelist_date) IN (SELECT DISTINCT year FROM flag_year_stats)
+		GROUP BY year
+	)
+	SELECT
+		s.flag,
+		s.year,
+		s.nodelist_date,
+		s.unique_nodes,
+		t.total_nodes AS total_nodes_in_year,
+		tupleElement(f.first_node, 1) AS first_zone,
+		tupleElement(f.first_node, 2) AS first_net,
+		tupleElement(f.first_node, 3) AS first_node,
+		tupleElement(f.first_node, 4) AS first_nodelist_date,
+		tupleElement(f.first_node, 5) AS first_day_number,
+		tupleElement(f.first_node, 6) AS first_system_name,
+		tupleElement(f.first_node, 7) AS first_location,
+		tupleElement(f.first_node, 8) AS first_sysop_name,
+		tupleElement(f.first_node, 9) AS first_phone,
+		tupleElement(f.first_node, 10) AS first_node_type,
+		tupleElement(f.first_node, 11) AS first_region,
+		tupleElement(f.first_node, 12) AS first_max_speed,
+		tupleElement(f.first_node, 13) AS first_is_cm,
+		tupleElement(f.first_node, 14) AS first_is_mo,
+		tupleElement(f.first_node, 15) AS first_has_inet,
+		tupleElement(f.first_node, 16) AS first_raw_line
+	FROM flag_year_stats s
+	LEFT JOIN flag_first_appearance f ON s.flag = f.flag
+	LEFT JOIN total_nodes_per_year t ON s.year = t.year
+	`
+
+	_, err := conn.Exec(updateSQL, nodelistDate)
+	if err != nil {
+		return fmt.Errorf("failed to update flag_statistics for date %s: %w", nodelistDate.Format("2006-01-02"), err)
+	}
+
+	return nil
 }
 
 // Close closes the analytics operations
