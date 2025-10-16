@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/database"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // parseNodeFields extracts basic node fields from the comma-separated line.
@@ -89,7 +91,8 @@ func (p *Parser) parseSpecialNodeType(nodeTypeStr, nodeNumStr string) (string, i
 	var zone, net, node int
 	var region *int
 
-	switch strings.Title(strings.ToLower(nodeTypeStr)) {
+	caser := cases.Title(language.English)
+	switch caser.String(strings.ToLower(nodeTypeStr)) {
 	case "Zone":
 		nodeType = "Zone"
 		if z, err := ParseInt("zone", nodeNumStr); err == nil {
@@ -138,7 +141,8 @@ func (p *Parser) parseSpecialNodeType(nodeTypeStr, nodeNumStr string) (string, i
 		}
 
 	case "Pvt", "Hold", "Down":
-		nodeType = strings.Title(strings.ToLower(nodeTypeStr))
+		caser := cases.Title(language.English)
+		nodeType = caser.String(strings.ToLower(nodeTypeStr))
 		zone = p.Context.CurrentZone
 		net = p.Context.CurrentNet
 		if nodeNum, err := strconv.Atoi(nodeNumStr); err == nil {

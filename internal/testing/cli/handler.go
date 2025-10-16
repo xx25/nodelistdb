@@ -208,7 +208,7 @@ func (h *Handler) handleTestSimple(ctx context.Context, args []string) error {
 	h.writer.Flush()
 	
 	// Determine which protocols to test
-	protocols := []string{}
+	var protocols []string
 	if protocol != "" && protocol != "all" {
 		protocols = []string{protocol}
 	} else {

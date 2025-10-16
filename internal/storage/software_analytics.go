@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/database"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // Software info structure for parsing
@@ -482,7 +484,8 @@ func normalizeOS(os string) string {
 		return "macOS"
 	default:
 		if os != "" {
-			return strings.Title(strings.ToLower(os))
+			caser := cases.Title(language.English)
+			return caser.String(strings.ToLower(os))
 		}
 		return "Unknown"
 	}
