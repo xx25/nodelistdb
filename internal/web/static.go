@@ -51,5 +51,7 @@ func (s *Server) StaticHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=604800") // 1 week
 
 	// Serve the file content
-	io.Copy(w, file)
+	if _, err := io.Copy(w, file); err != nil {
+		http.Error(w, "Error serving file", http.StatusInternalServerError)
+	}
 }

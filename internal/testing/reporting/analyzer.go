@@ -431,16 +431,13 @@ func (a *ProblemAnalyzer) FormatReport(report *ProblemReport) string {
 	// Problem nodes by severity
 	criticalNodes := []ProblemSummary{}
 	warningNodes := []ProblemSummary{}
-	infoNodes := []ProblemSummary{}
-	
+
 	for _, summary := range report.Problems {
 		switch summary.Severity {
 		case "critical":
 			criticalNodes = append(criticalNodes, summary)
 		case "warning":
 			warningNodes = append(warningNodes, summary)
-		case "info":
-			infoNodes = append(infoNodes, summary)
 		}
 	}
 	

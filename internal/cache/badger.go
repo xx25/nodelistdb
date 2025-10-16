@@ -339,12 +339,3 @@ func (bc *BadgerCache) updateSizeMetrics() {
 	}
 }
 
-// Helper function to check if pattern matches string
-func matchPattern(pattern, str string) bool {
-	// Simple wildcard matching
-	if strings.HasSuffix(pattern, "*") {
-		prefix := strings.TrimSuffix(pattern, "*")
-		return strings.HasPrefix(str, prefix)
-	}
-	return pattern == str
-}

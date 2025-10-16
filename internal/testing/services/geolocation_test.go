@@ -332,21 +332,3 @@ func TestGeolocationConcurrency(t *testing.T) {
 	}
 }
 
-// Helper function to compare GeolocationResults
-func compareGeolocationResults(t *testing.T, expected, actual *models.GeolocationResult) {
-	if expected.IP != actual.IP {
-		t.Errorf("IP mismatch: expected %s, got %s", expected.IP, actual.IP)
-	}
-	if expected.Country != actual.Country {
-		t.Errorf("Country mismatch: expected %s, got %s", expected.Country, actual.Country)
-	}
-	if expected.CountryCode != actual.CountryCode {
-		t.Errorf("CountryCode mismatch: expected %s, got %s", expected.CountryCode, actual.CountryCode)
-	}
-	if expected.City != actual.City {
-		t.Errorf("City mismatch: expected %s, got %s", expected.City, actual.City)
-	}
-	if expected.Source != actual.Source {
-		t.Errorf("Source mismatch: expected %s, got %s", expected.Source, actual.Source)
-	}
-}

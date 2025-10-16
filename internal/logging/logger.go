@@ -12,10 +12,9 @@ import (
 
 // Logger wraps slog with configuration and lifecycle management
 type Logger struct {
-	handler *slog.Handler
-	config  *Config
-	file    io.WriteCloser
-	logger  *slog.Logger
+	config *Config
+	file   io.WriteCloser
+	logger *slog.Logger
 }
 
 // Config holds logging configuration

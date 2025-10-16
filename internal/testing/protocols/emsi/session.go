@@ -312,20 +312,7 @@ func (s *Session) sendEMSI_INQ() error {
 	if s.debug {
 		log.Printf("EMSI: sendEMSI_INQ: Successfully sent EMSI_INQ")
 	}
-	return nil}
-
-// sendEMSI_REQ sends EMSI request
-func (s *Session) sendEMSI_REQ() error {
-	if s.debug {
-		log.Printf("EMSI: Sending EMSI_REQ")
-	}
-
-	_ = s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
-	
-	if _, err := s.writer.WriteString(EMSI_REQ + "\r"); err != nil {
-		return err
-	}
-	return s.writer.Flush()
+	return nil
 }
 
 // sendEMSI_ACK sends EMSI acknowledgment

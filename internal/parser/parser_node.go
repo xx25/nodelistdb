@@ -25,9 +25,7 @@ func (p *Parser) parseNodeFields(line string) (string, string, string, string, s
 	nodeNumStr := strings.TrimSpace(fields[1])
 
 	// Strip leading "-" from node numbers (legacy format)
-	if strings.HasPrefix(nodeNumStr, "-") {
-		nodeNumStr = nodeNumStr[1:]
-	}
+	nodeNumStr = strings.TrimPrefix(nodeNumStr, "-")
 
 	systemName := strings.TrimSpace(fields[2])
 	location := strings.TrimSpace(fields[3])

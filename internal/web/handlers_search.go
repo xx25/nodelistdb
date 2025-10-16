@@ -42,7 +42,9 @@ func (s *Server) performNodeSearch(r *http.Request) ([]database.Node, int, error
 		return nil, 0, nil
 	}
 
-	_ = r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		return nil, 0, fmt.Errorf("Failed to parse form: %v", err)
+	}
 
 	var filter database.NodeFilter
 	var err error
@@ -77,7 +79,9 @@ func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeS
 		return nil, 0, nil
 	}
 
-	_ = r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		return nil, 0, fmt.Errorf("Failed to parse form: %v", err)
+	}
 
 	var filter database.NodeFilter
 	var err error
@@ -114,8 +118,11 @@ func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
 	var sysopName string
 
 	if r.Method == "POST" {
-		r.ParseForm()
-		sysopName = r.FormValue("sysop_name")
+		if err := r.ParseForm(); err != nil {
+			searchErr = fmt.Errorf("Failed to parse form: %v", err)
+		} else {
+			sysopName = r.FormValue("sysop_name")
+		}
 
 		if sysopName != "" {
 			nodes, searchErr = s.storage.SearchOps().SearchNodesBySysop(sysopName, 100)

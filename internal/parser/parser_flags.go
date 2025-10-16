@@ -331,12 +331,3 @@ func (p *Parser) hasFlag(flags []string, flag string) bool {
 	return false
 }
 
-// hasProtocol checks if a specific protocol exists in the protocols slice (case-insensitive).
-func (p *Parser) hasProtocol(protocols []string, protocol string) bool {
-	for _, p := range protocols {
-		if strings.EqualFold(p, protocol) {
-			return true
-		}
-	}
-	return false
-}

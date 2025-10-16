@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -147,64 +146,3 @@ func scanNodesNative(rows driver.Rows) ([]*models.Node, error) {
 	return nodes, nil
 }
 
-// scanNodes scans rows from SQL database (legacy support)
-func scanNodes(rows *sql.Rows) ([]*models.Node, error) {
-	var nodes []*models.Node
-	for rows.Next() {
-		node := &models.Node{}
-		var hostnames, protocols string
-
-		err := rows.Scan(
-			&node.Zone,
-			&node.Net,
-			&node.Node,
-			&node.SystemName,
-			&node.SysopName,
-			&node.Location,
-			&hostnames,
-			&protocols,
-			&node.HasInet,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
-
-		// Convert hostname string to array and handle addresses with embedded ports
-		if hostnames != "" {
-			// Check if the hostname contains a port (e.g., "185.22.236.179:2030" for IVM)
-			if strings.Contains(hostnames, ":") {
-				// Split hostname and port
-				parts := strings.SplitN(hostnames, ":", 2)
-				if len(parts) == 2 {
-					node.InternetHostnames = []string{parts[0]}
-					// Store the port for IVM protocol if it's the only protocol
-					if len(node.InternetProtocols) == 1 && node.InternetProtocols[0] == "IVM" {
-						if port, err := strconv.Atoi(parts[1]); err == nil {
-							node.ProtocolPorts["IVM"] = port
-						}
-					}
-				} else {
-					node.InternetHostnames = []string{hostnames}
-				}
-			} else {
-				node.InternetHostnames = []string{hostnames}
-			}
-		} else {
-			node.InternetHostnames = []string{}
-		}
-
-		// Parse protocols from comma-separated string
-		if protocols != "" {
-			node.InternetProtocols = strings.Split(protocols, ",")
-			// Trim spaces from each protocol
-			for i := range node.InternetProtocols {
-				node.InternetProtocols[i] = strings.TrimSpace(node.InternetProtocols[i])
-			}
-		} else {
-			node.InternetProtocols = []string{}
-		}
-
-		nodes = append(nodes, node)
-	}
-	return nodes, nil
-}
