@@ -372,7 +372,7 @@ func parseBinkPVersion(version string) *softwareInfo {
 
 	for _, pattern := range patterns {
 		matches := pattern.regex.FindStringSubmatch(version)
-		if matches != nil && len(matches) > 1 {
+		if len(matches) > 1 {
 			info.Software = pattern.software
 
 			// Extract values based on group names
@@ -449,7 +449,7 @@ func parseIFCICOMailerInfo(mailerInfo string) *softwareInfo {
 
 	for _, pattern := range patterns {
 		matches := pattern.regex.FindStringSubmatch(mailerInfo)
-		if matches != nil && len(matches) > 1 {
+		if len(matches) > 1 {
 			info.Software = pattern.software
 			if len(pattern.groups) > 0 && len(matches) > 1 {
 				info.Version = matches[1]
