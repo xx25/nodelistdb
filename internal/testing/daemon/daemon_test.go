@@ -16,12 +16,10 @@ func TestNodeResultAlignment(t *testing.T) {
 			Workers:      2,
 			BatchSize:    5,
 		},
-		Database: DatabaseConfig{
-			ClickHouse: &ClickHouseConfig{
-				Host:     "localhost",
-				Port:     9000,
-				Database: "nodelistdb_test",
-			},
+		ClickHouse: &ClickHouseConfig{
+			Host:     "localhost",
+			Port:     9000,
+			Database: "nodelistdb_test",
 		},
 		Protocols: ProtocolsConfig{
 			BinkP: ProtocolConfig{

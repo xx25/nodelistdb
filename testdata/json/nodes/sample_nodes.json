@@ -1,0 +1,36 @@
+[
+  {
+    "zone": 2,
+    "net": 5001,
+    "node": 100,
+    "system_name": "Test System 1",
+    "location": "Test City, State",
+    "sysop_name": "Test_Sysop",
+    "phone": "000-000-0000",
+    "node_type": "Pvt",
+    "max_speed": 33600,
+    "is_cm": true,
+    "is_mo": false,
+    "flags": ["CM", "INA:test.example.com", "IBN"],
+    "has_inet": true,
+    "nodelist_date": "2024-01-01T00:00:00Z",
+    "day_number": 1
+  },
+  {
+    "zone": 2,
+    "net": 5001,
+    "node": 101,
+    "system_name": "Test System 2",
+    "location": "Another City, State",
+    "sysop_name": "Another_Sysop",
+    "phone": "111-111-1111",
+    "node_type": "Pvt",
+    "max_speed": 115200,
+    "is_cm": false,
+    "is_mo": false,
+    "flags": [],
+    "has_inet": false,
+    "nodelist_date": "2024-01-01T00:00:00Z",
+    "day_number": 1
+  }
+]

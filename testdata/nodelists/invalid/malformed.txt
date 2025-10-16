@@ -1,0 +1,6 @@
+;A Invalid nodelist with malformed entries
+Zone,2,Invalid
+,1,Missing_Fields
+,2,Location,Only_Two_Fields
+Pvt,BadNode,Location,Name,Phone,Speed
+,3,Valid_Location,Valid_Name,-Unpublished-,9600

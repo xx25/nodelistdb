@@ -1,0 +1,11 @@
+clickhouse:
+  host: localhost
+  port: 9000
+  database: nodelistdb_test
+  username: default
+  password: ""
+
+logging:
+  level: debug
+  console: true
+  json: false

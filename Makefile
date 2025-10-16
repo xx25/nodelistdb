@@ -74,12 +74,32 @@ build-daemon: ## Build testing daemon binary
 	go build -ldflags "$(LDFLAGS)" -o bin/testdaemon ./cmd/testdaemon
 	@echo "✓ Testing daemon built successfully"
 
-# Development targets  
+# Development targets
 test: ## Run tests
 	go test -v ./...
 
+test-short: ## Run only short tests (skip integration)
+	go test -short -v ./...
+
+test-race: ## Run tests with race detection
+	go test -race -v ./...
+
 test-coverage: ## Run tests with coverage
 	go test -v -cover ./...
+
+test-coverage-html: ## Run tests with coverage and generate HTML report
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+test-integration: ## Run integration tests only
+	go test -tags=integration -v ./...
+
+test-bench: ## Run benchmark tests
+	go test -bench=. -benchmem ./...
+
+test-verbose: ## Run tests with verbose output
+	go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
 run-parser: ## Run parser (requires NODELIST_PATH)
 	@if [ -z "$(NODELIST_PATH)" ]; then \

@@ -1,0 +1,16 @@
+;A Friday, January 01, 2024 -- Day number 1 : 00001
+;
+;
+Zone,2,North_America,Beaverton_OR,Micro_Computing_Network,-Unpublished-,300
+;
+Region,20,North_America,Fairfield_CT,Andrew_Leary,-Unpublished-,300,CM,INA:region20.net,IBN
+;
+,1,Baltimore_MD,Test_System_1,Sam_Test,-Unpublished-,9600,CM,INA:test1.example.com,IBN,ITN
+,2,New_York_NY,Test_System_2,John_Doe,-Unpublished-,33600,CM,INA:test2.example.com,IBN
+,3,Boston_MA,Test_System_3,Jane_Smith,-Unpublished-,115200,CM,XX,INA:test3.example.com,IBN,V34,V42b
+Hold,4,Chicago_IL,Hold_System,Bob_Hold,-Unpublished-,300
+Down,5,Detroit_MI,Down_System,Alice_Down,-Unpublished-,300
+Pvt,6,Miami_FL,Private_System,Charlie_Pvt,-Unpublished-,9600
+Hub,100,Washington_DC,Hub_System,David_Hub,-Unpublished-,33600,CM,INA:hub.example.com,IBN
+,101,Arlington_VA,Hub_Node_1,Eve_Node,-Unpublished-,9600,INA:node1.example.com
+,102,Alexandria_VA,Hub_Node_2,Frank_Node,-Unpublished-,14400
