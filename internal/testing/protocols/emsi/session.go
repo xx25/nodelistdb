@@ -72,7 +72,7 @@ func (s *Session) Handshake() error {
 		log.Printf("EMSI: Our address: %s", s.localAddress)
 		log.Printf("EMSI: Sending initial CR to trigger remote EMSI")
 	}
-	s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
+	_ = s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
 	if _, err := s.writer.WriteString("\r"); err != nil {
 		if s.debug {
 			log.Printf("EMSI: ERROR sending initial CR: %v", err)
@@ -293,8 +293,8 @@ func (s *Session) sendEMSI_INQ() error {
 	}
 	
 	deadline := time.Now().Add(s.timeout)
-	s.conn.SetWriteDeadline(deadline)
-	
+	_ = s.conn.SetWriteDeadline(deadline)
+
 	if _, err := s.writer.WriteString(EMSI_INQ + "\r"); err != nil {
 		if s.debug {
 			log.Printf("EMSI: sendEMSI_INQ: ERROR writing: %v", err)
@@ -319,8 +319,8 @@ func (s *Session) sendEMSI_REQ() error {
 	if s.debug {
 		log.Printf("EMSI: Sending EMSI_REQ")
 	}
-	
-	s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
+
+	_ = s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
 	
 	if _, err := s.writer.WriteString(EMSI_REQ + "\r"); err != nil {
 		return err
@@ -333,8 +333,8 @@ func (s *Session) sendEMSI_ACK() error {
 	if s.debug {
 		log.Printf("EMSI: Sending EMSI_ACK")
 	}
-	
-	s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
+
+	_ = s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
 	
 	if _, err := s.writer.WriteString(EMSI_ACK + "\r"); err != nil {
 		return err
@@ -380,8 +380,8 @@ func (s *Session) sendEMSI_DAT() error {
 	}
 	
 	deadline := time.Now().Add(s.timeout)
-	s.conn.SetWriteDeadline(deadline)
-	
+	_ = s.conn.SetWriteDeadline(deadline)
+
 	if s.debug {
 		log.Printf("EMSI: sendEMSI_DAT: Sending packet with deadline %v...", deadline.Format("15:04:05.000"))
 	}
@@ -418,7 +418,7 @@ func (s *Session) sendEMSI_DAT() error {
 // readEMSIResponse reads and identifies EMSI response
 func (s *Session) readEMSIResponse() (string, string, error) {
 	deadline := time.Now().Add(s.timeout)
-	s.conn.SetReadDeadline(deadline)
+	_ = s.conn.SetReadDeadline(deadline)
 	
 	if s.debug {
 		log.Printf("EMSI: readEMSIResponse: Starting read with timeout %v (deadline: %v)", s.timeout, deadline.Format("15:04:05.000"))

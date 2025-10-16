@@ -64,7 +64,7 @@ func (t *VModemTester) Test(ctx context.Context, host string, port int, expected
 	}
 	
 	// Optionally try to read any initial response
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	buffer := make([]byte, 256)
 	n, err := conn.Read(buffer)
 	if err == nil && n > 0 {

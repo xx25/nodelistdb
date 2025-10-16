@@ -143,7 +143,7 @@ func (s *Session) sendPassword(password string) error {
 // receiveRemoteInfo receives and parses remote node information
 func (s *Session) receiveRemoteInfo() error {
 	// Set overall timeout for receiving all frames
-	s.conn.SetReadDeadline(time.Now().Add(s.timeout))
+	_ = s.conn.SetReadDeadline(time.Now().Add(s.timeout))
 	
 	receivedADR := false
 	frameCount := 0
@@ -289,7 +289,7 @@ func (s *Session) Close() error {
 		}
 		
 		// Wait briefly for remote's M_EOB (best effort)
-		s.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_ = s.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 		frame, err := ReadFrame(s.conn)
 		if err == nil && frame.Type == M_EOB {
 			if s.debug {

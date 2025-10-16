@@ -54,7 +54,7 @@ func (t *TelnetTester) Test(ctx context.Context, host string, port int, expected
 	defer conn.Close()
 	
 	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(t.timeout))
+	_ = conn.SetReadDeadline(time.Now().Add(t.timeout))
 	
 	// Try to read banner/welcome message
 	reader := bufio.NewReader(conn)

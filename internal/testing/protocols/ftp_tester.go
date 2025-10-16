@@ -54,7 +54,7 @@ func (t *FTPTester) Test(ctx context.Context, host string, port int, expectedAdd
 	defer conn.Close()
 	
 	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(t.timeout))
+	_ = conn.SetReadDeadline(time.Now().Add(t.timeout))
 	
 	// Read FTP banner (220 response)
 	reader := bufio.NewReader(conn)
@@ -74,8 +74,8 @@ func (t *FTPTester) Test(ctx context.Context, host string, port int, expectedAdd
 		result.Success = true
 		
 		// Try to send QUIT command for clean disconnect
-		conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-		fmt.Fprintf(conn, "QUIT\r\n")
+		_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+		_, _ = fmt.Fprintf(conn, "QUIT\r\n")
 	} else if responseCode != "" {
 		result.Error = fmt.Sprintf("unexpected FTP response code: %s", responseCode)
 	} else {

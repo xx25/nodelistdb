@@ -71,7 +71,7 @@ func (f *Frame) String() string {
 // ReadFrame reads a single BinkP frame from the connection
 func ReadFrame(conn net.Conn) (*Frame, error) {
 	// Set read timeout
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 	
 	// Read 2-byte header (network byte order)
 	header := make([]byte, 2)
@@ -127,7 +127,7 @@ func WriteFrame(conn net.Conn, frame *Frame) error {
 	}
 	
 	// Set write timeout
-	conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	
 	dataLen := len(frame.Data)
 	
