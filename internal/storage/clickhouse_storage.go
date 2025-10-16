@@ -138,7 +138,7 @@ func (cno *ClickHouseNodeOperations) insertNodesSQL(nodes []database.Node) error
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	chunkSize := DefaultBatchInsertConfig().ChunkSize
 	for i := 0; i < len(nodes); i += chunkSize {

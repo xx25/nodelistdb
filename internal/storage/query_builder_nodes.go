@@ -102,7 +102,7 @@ func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Create a ClickHouse result parser for proper array formatting
 	resultParser := NewClickHouseResultParser()

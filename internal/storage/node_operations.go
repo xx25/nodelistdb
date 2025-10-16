@@ -211,7 +211,7 @@ func (no *NodeOperations) FindConflictingNode(zone, net, node int, date time.Tim
 	if err != nil {
 		return false, fmt.Errorf("failed to begin transaction for conflict check: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var count int
 	query := no.queryBuilder.ConflictCheckSQL()
@@ -352,7 +352,7 @@ func (no *NodeOperations) DeleteNodesForDate(date time.Time) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := "DELETE FROM nodes WHERE nodelist_date = ?"
 	result, err := tx.Exec(query, date)
