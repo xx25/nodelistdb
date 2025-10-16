@@ -3,7 +3,6 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/nodelistdb/internal/database"
@@ -132,71 +131,6 @@ func (crp *ClickHouseResultParser) parseClickHouseInterfaceToStringArray(v inter
 	}
 }
 
-// parseClickHouseInterfaceToIntArray converts ClickHouse array results to []int
-func (crp *ClickHouseResultParser) parseClickHouseInterfaceToIntArray(v interface{}) []int {
-	if v == nil {
-		return []int{}
-	}
-
-	switch arr := v.(type) {
-	case []interface{}:
-		result := make([]int, 0, len(arr))
-		for _, item := range arr {
-			switch val := item.(type) {
-			case int:
-				result = append(result, val)
-			case int32:
-				result = append(result, int(val))
-			case int64:
-				result = append(result, int(val))
-			case float64:
-				result = append(result, int(val))
-			case string:
-				if intVal, err := strconv.Atoi(val); err == nil {
-					result = append(result, intVal)
-				}
-			}
-		}
-		return result
-	case []int:
-		// ClickHouse may return []int directly
-		return arr
-	case []int32:
-		// ClickHouse Int32 arrays
-		result := make([]int, len(arr))
-		for i, v := range arr {
-			result[i] = int(v)
-		}
-		return result
-	case string:
-		// Fallback for string representations
-		if arr == "[]" || arr == "" {
-			return []int{}
-		}
-		// Try JSON unmarshaling
-		var result []int
-		if err := json.Unmarshal([]byte(arr), &result); err == nil {
-			return result
-		}
-		// Simple split fallback
-		arr = strings.Trim(arr, "[]")
-		if arr == "" {
-			return []int{}
-		}
-		parts := strings.Split(arr, ",")
-		result = make([]int, 0, len(parts))
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if intVal, err := strconv.Atoi(part); err == nil {
-				result = append(result, intVal)
-			}
-		}
-		return result
-	default:
-		return []int{}
-	}
-}
-
 // formatArrayForDB formats a string array for ClickHouse database storage
 // Returns ClickHouse Array() literal
 func (crp *ClickHouseResultParser) formatArrayForDB(arr []string) interface{} {
@@ -216,28 +150,6 @@ func (crp *ClickHouseResultParser) formatArrayForDB(arr []string) interface{} {
 		// Escape single quotes for ClickHouse
 		buf.WriteString(strings.ReplaceAll(s, "'", "\\'"))
 		buf.WriteByte('\'')
-	}
-
-	buf.WriteByte(']')
-	return buf.String()
-}
-
-// formatIntArrayForDB formats an int array for ClickHouse database storage
-// Returns ClickHouse Array() literal
-func (crp *ClickHouseResultParser) formatIntArrayForDB(arr []int) interface{} {
-	if len(arr) == 0 {
-		return "[]"
-	}
-
-	// Pre-allocate buffer for better performance
-	var buf strings.Builder
-	buf.WriteByte('[')
-
-	for i, n := range arr {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteString(strconv.Itoa(n))
 	}
 
 	buf.WriteByte(']')

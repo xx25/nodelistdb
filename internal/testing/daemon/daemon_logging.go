@@ -8,34 +8,6 @@ import (
 	"github.com/nodelistdb/internal/testing/models"
 )
 
-// logProtocolResult logs the dual-stack test results for a protocol
-func (d *Daemon) logProtocolResult(nodeAddr, protocol string, result *models.ProtocolTestResult) {
-	if result == nil || !result.Tested {
-		return
-	}
-
-	var status string
-	if result.IPv4Success && result.IPv6Success {
-		status = fmt.Sprintf("✓ Dual-stack (IPv4=%dms, IPv6=%dms)",
-			result.IPv4ResponseMs, result.IPv6ResponseMs)
-	} else if result.IPv6Success {
-		status = fmt.Sprintf("✓ IPv6-only (%dms)", result.IPv6ResponseMs)
-	} else if result.IPv4Success {
-		status = fmt.Sprintf("✓ IPv4-only (%dms)", result.IPv4ResponseMs)
-	} else {
-		var tried []string
-		if result.IPv4Tested {
-			tried = append(tried, "IPv4")
-		}
-		if result.IPv6Tested {
-			tried = append(tried, "IPv6")
-		}
-		status = fmt.Sprintf("✗ Failed (tried: %s)", strings.Join(tried, ", "))
-	}
-
-	logging.Debugf("[%s]   %s: %s", nodeAddr, protocol, status)
-}
-
 // logConnectivitySummary logs a summary of the node's connectivity
 func (d *Daemon) logConnectivitySummary(nodeAddr string, node *models.Node, result *models.TestResult) {
 	var summary []string

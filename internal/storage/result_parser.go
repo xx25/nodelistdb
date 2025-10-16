@@ -470,28 +470,6 @@ func (rp *ResultParser) formatArrayForDB(arr []string) interface{} {
 	return buf.String()
 }
 
-// formatIntArrayForDB formats an int array for database storage
-// Returns optimized DuckDB ARRAY[] literal (faster than JSON casting)
-func (rp *ResultParser) formatIntArrayForDB(arr []int) interface{} {
-	if len(arr) == 0 {
-		return "ARRAY[]::INTEGER[]"
-	}
-
-	// Pre-allocate buffer for better performance
-	var buf strings.Builder
-	buf.WriteString("ARRAY[")
-
-	for i, n := range arr {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteString(strconv.Itoa(n))
-	}
-
-	buf.WriteByte(']')
-	return buf.String()
-}
-
 // ValidateNodeFilter validates a NodeFilter for basic sanity checks
 func (rp *ResultParser) ValidateNodeFilter(filter database.NodeFilter) error {
 	if filter.Zone != nil && (*filter.Zone < 1 || *filter.Zone > 65535) {
