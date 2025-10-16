@@ -137,32 +137,6 @@ func (m *MockStorage) GetNodesBySysop(sysopName string, limit int) ([]database.N
 	return filtered, nil
 }
 
-// testServer wraps Server to allow dependency injection for testing
-type testServer struct {
-	*Server
-}
-
-func newTestServer(mockStorage *MockStorage) *testServer {
-	server := &Server{}
-
-	// Create wrapper methods that use the mock storage
-	ts := &testServer{Server: server}
-
-	// Override the storage field using reflection-like approach
-	// For simplicity in tests, we'll create handlers that use the mock directly
-	return ts
-}
-
-// Create test handlers that use mock storage directly
-func createTestServer(mockStorage *MockStorage) *Server {
-	// We'll modify the handlers to accept a storage interface
-	// For now, let's use a simple approach where we inject the mock
-	server := &Server{}
-	// This is a test-only hack to inject the mock storage
-	server.storage = interface{}(mockStorage).(*storage.Storage)
-	return server
-}
-
 func newMockServer() (*Server, *MockStorage) {
 	mockStorage := &MockStorage{
 		nodes: []database.Node{
@@ -247,8 +221,8 @@ func newMockServer() (*Server, *MockStorage) {
 	}
 
 	// Create a test server that will use the mock for handlers
-	server := &testServer{Server: &Server{}}
-	return server.Server, mockStorage
+	server := &Server{}
+	return server, mockStorage
 }
 
 // Helper functions to create test handlers that use the mock storage
