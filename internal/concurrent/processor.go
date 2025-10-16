@@ -250,12 +250,8 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 
 			// Update average insertion time
 			insertionCount++
-			if insertionCount == 1 {
-				avgInsertionTime = insertDuration
-			} else {
-				// Running average
-				avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
-			}
+			// Running average
+			avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
 
 			totalInserted += len(batch)
 			batch = nil // Reset batch
@@ -274,11 +270,7 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 
 		// Update average insertion time for final batch
 		insertionCount++
-		if insertionCount == 1 {
-			avgInsertionTime = insertDuration
-		} else {
-			avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
-		}
+		avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
 
 		totalInserted += len(batch)
 	}
