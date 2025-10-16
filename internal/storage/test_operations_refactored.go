@@ -1,8 +1,6 @@
 package storage
 
 import (
-	"sync"
-
 	"github.com/nodelistdb/internal/database"
 )
 
@@ -18,7 +16,6 @@ type TestOperationsRefactored struct {
 	ipv6Ops            *IPv6QueryOperations
 	softwareOps        *SoftwareAnalyticsOperations
 	geoOps             *GeoAnalyticsOperations
-	mu                 sync.RWMutex
 }
 
 // NewTestOperationsRefactored creates a new refactored TestOperations instance
