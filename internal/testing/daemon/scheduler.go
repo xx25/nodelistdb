@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sort"
 	"sync"
 	"time"
@@ -66,9 +65,6 @@ type SchedulerConfig struct {
 }
 
 func NewScheduler(cfg SchedulerConfig, storage storage.Storage) *Scheduler {
-	// Seed random number generator for true randomness
-	rand.Seed(time.Now().UnixNano())
-
 	if cfg.BaseInterval == 0 {
 		cfg.BaseInterval = 1 * time.Hour
 	}
