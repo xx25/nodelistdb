@@ -18,57 +18,57 @@ func NewFormatter(writer *bufio.Writer) *Formatter {
 }
 
 func (f *Formatter) WriteHeader(text string) {
-	f.writer.WriteString("\r\n")
-	f.writer.WriteString(text)
-	f.writer.WriteString("\r\n")
-	f.writer.WriteString(strings.Repeat("=", len(text)))
-	f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString(text)
+	_, _ = f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString(strings.Repeat("=", len(text)))
+	_, _ = f.writer.WriteString("\r\n")
 }
 
 func (f *Formatter) WriteSubHeader(text string) {
-	f.writer.WriteString("\r\n")
-	f.writer.WriteString(text)
-	f.writer.WriteString("\r\n")
-	f.writer.WriteString(strings.Repeat("-", len(text)))
-	f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString(text)
+	_, _ = f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString(strings.Repeat("-", len(text)))
+	_, _ = f.writer.WriteString("\r\n")
 }
 
 func (f *Formatter) WriteKeyValue(key, value string) {
-	f.writer.WriteString(fmt.Sprintf("%-20s: %s\r\n", key, value))
+	_, _ = f.writer.WriteString(fmt.Sprintf("%-20s: %s\r\n", key, value))
 }
 
 func (f *Formatter) WriteInfo(text string) {
-	f.writer.WriteString(text)
-	f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString(text)
+	_, _ = f.writer.WriteString("\r\n")
 }
 
 func (f *Formatter) WriteSuccess(text string) {
-	f.writer.WriteString("[SUCCESS] ")
-	f.writer.WriteString(text)
-	f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString("[SUCCESS] ")
+	_, _ = f.writer.WriteString(text)
+	_, _ = f.writer.WriteString("\r\n")
 }
 
 func (f *Formatter) WriteError(text string) {
-	f.writer.WriteString("[ERROR] ")
-	f.writer.WriteString(text)
-	f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString("[ERROR] ")
+	_, _ = f.writer.WriteString(text)
+	_, _ = f.writer.WriteString("\r\n")
 }
 
 func (f *Formatter) WriteWarning(text string) {
-	f.writer.WriteString("[WARNING] ")
-	f.writer.WriteString(text)
-	f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString("[WARNING] ")
+	_, _ = f.writer.WriteString(text)
+	_, _ = f.writer.WriteString("\r\n")
 }
 
 func (f *Formatter) WriteDebug(text string) {
-	f.writer.WriteString("[DEBUG] ")
-	f.writer.WriteString(text)
-	f.writer.WriteString("\r\n")
+	_, _ = f.writer.WriteString("[DEBUG] ")
+	_, _ = f.writer.WriteString(text)
+	_, _ = f.writer.WriteString("\r\n")
 }
 
 func (f *Formatter) WriteTimestamp(text string) {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	f.writer.WriteString(fmt.Sprintf("[%s] %s\r\n", timestamp, text))
+	_, _ = f.writer.WriteString(fmt.Sprintf("[%s] %s\r\n", timestamp, text))
 }
 
 func (f *Formatter) FormatTestResult(result *TestResult) {
@@ -247,7 +247,7 @@ func (f *Formatter) FormatLiveTestOutput(output TestOutput) {
 	default:
 		f.WriteInfo(output.Message)
 	}
-	f.writer.Flush()
+	_ = f.writer.Flush()
 }
 
 func getDefaultPort(protocol string) int {

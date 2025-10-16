@@ -115,11 +115,11 @@ func (s *TelnetServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	// Set initial timeout
-	conn.SetDeadline(time.Now().Add(s.config.Timeout))
+	_ = conn.SetDeadline(time.Now().Add(s.config.Timeout))
 
 	// Send welcome message
-	fmt.Fprint(conn, s.config.Welcome)
-	fmt.Fprint(conn, s.config.Prompt)
+	_, _ = fmt.Fprint(conn, s.config.Welcome)
+	_, _ = fmt.Fprint(conn, s.config.Prompt)
 
 	// Create handler
 	writer := bufio.NewWriter(conn)
@@ -129,17 +129,17 @@ func (s *TelnetServer) handleConnection(conn net.Conn) {
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		// Reset timeout on each command
-		conn.SetDeadline(time.Now().Add(s.config.Timeout))
+		_ = conn.SetDeadline(time.Now().Add(s.config.Timeout))
 
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
-			fmt.Fprint(conn, s.config.Prompt)
+			_, _ = fmt.Fprint(conn, s.config.Prompt)
 			continue
 		}
 
 		// Handle exit commands
 		if line == "exit" || line == "quit" {
-			fmt.Fprintln(conn, "Goodbye!")
+			_, _ = fmt.Fprintln(conn, "Goodbye!")
 			return
 		}
 
@@ -148,14 +148,14 @@ func (s *TelnetServer) handleConnection(conn net.Conn) {
 			if err == io.EOF {
 				return
 			}
-			fmt.Fprintf(conn, "Error: %v\n", err)
+			_, _ = fmt.Fprintf(conn, "Error: %v\n", err)
 		}
-		
+
 		// Flush output
-		writer.Flush()
-		
+		_ = writer.Flush()
+
 		// Send prompt for next command
-		fmt.Fprint(conn, s.config.Prompt)
+		_, _ = fmt.Fprint(conn, s.config.Prompt)
 	}
 
 	if err := scanner.Err(); err != nil {

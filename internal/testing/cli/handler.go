@@ -105,7 +105,9 @@ Examples:
 
 Note: Tests automatically try both IPv4 and IPv6 when available.
 `
-	h.writer.WriteString(help)
+	if _, err := h.writer.WriteString(help); err != nil {
+		return err
+	}
 	return h.writer.Flush()
 }
 
@@ -163,8 +165,10 @@ including system name, sysop, location, and connectivity details.
 	default:
 		help = fmt.Sprintf("No detailed help available for '%s'\n", command)
 	}
-	
-	h.writer.WriteString(help)
+
+	if _, err := h.writer.WriteString(help); err != nil {
+		return err
+	}
 	return h.writer.Flush()
 }
 
@@ -578,7 +582,9 @@ func (h *Handler) handleDebug(args []string) error {
 }
 
 func (h *Handler) handleClear() error {
-	h.writer.WriteString("\033[2J\033[H")
+	if _, err := h.writer.WriteString("\033[2J\033[H"); err != nil {
+		return err
+	}
 	return h.writer.Flush()
 }
 
