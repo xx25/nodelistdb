@@ -52,7 +52,8 @@
                                 <th>Code</th>
                                 <th>Nodes</th>
                                 <th>Percentage</th>
-                                <th style="width: 30%;">Distribution</th>
+                                <th style="width: 25%;">Distribution</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -67,6 +68,9 @@
                                     <div class="progress-bar">
                                         <div class="progress-fill" style="width: {{$country.Percentage}}%"></div>
                                     </div>
+                                </td>
+                                <td>
+                                    <a href="/analytics/geo-hosting/country?code={{$country.CountryCode}}&days={{$.Days}}" class="btn btn-small">View Nodes</a>
                                 </td>
                             </tr>
                             {{end}}
@@ -88,7 +92,8 @@
                                 <th>Nodes</th>
                                 <th>Percentage</th>
                                 <th>Countries</th>
-                                <th style="width: 25%;">Distribution</th>
+                                <th style="width: 20%;">Distribution</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -116,6 +121,9 @@
                                     <div class="progress-bar">
                                         <div class="progress-fill" style="width: {{$provider.Percentage}}%"></div>
                                     </div>
+                                </td>
+                                <td>
+                                    <a href="/analytics/geo-hosting/provider?isp={{$provider.Provider}}&days={{$.Days}}" class="btn btn-small">View Nodes</a>
                                 </td>
                             </tr>
                             {{end}}

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - NodelistDB</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            {{if .CountryName}}
+            <h1>{{countryFlag .CountryCode}} {{.CountryName}}</h1>
+            <p class="subtitle">Operational FidoNet nodes in {{.CountryName}} (last {{.Days}} days)</p>
+            {{else if .ProviderName}}
+            <h1>{{.ProviderName}}</h1>
+            <p class="subtitle">Operational FidoNet nodes hosted by {{.ProviderName}} (last {{.Days}} days)</p>
+            {{end}}
+        </header>
+
+        {{template "nav" .}}
+
+        <div class="content">
+            <div class="info-actions">
+                <a href="/analytics/geo-hosting?days={{.Days}}" class="btn">← Back to Geographic Distribution</a>
+            </div>
+
+            {{if .Error}}
+            <div class="alert alert-error">
+                <strong>Error:</strong> {{.Error}}
+            </div>
+            {{end}}
+
+            {{if .Nodes}}
+            <!-- Summary Stats -->
+            <div class="stats-summary">
+                <div class="stat-box">
+                    <h3>Total Nodes</h3>
+                    <div class="stat-value">{{len .Nodes}}</div>
+                </div>
+                {{if .CountryName}}
+                <div class="stat-box">
+                    <h3>Country Code</h3>
+                    <div class="stat-value">{{.CountryCode}}</div>
+                </div>
+                {{end}}
+            </div>
+
+            <!-- Nodes Table -->
+            <div class="analytics-section">
+                <h2>📡 Node List</h2>
+                <div class="table-responsive">
+                    <table class="analytics-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 110px;">Address</th>
+                                <th>System / Sysop</th>
+                                {{if .CountryName}}
+                                <th style="width: 150px;">City</th>
+                                <th>Provider</th>
+                                {{else}}
+                                <th style="width: 150px;">Location</th>
+                                {{end}}
+                                <th style="width: 90px; text-align: center;">Protocols</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{range .Nodes}}
+                            <tr>
+                                <td style="white-space: nowrap;">
+                                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">
+                                        <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
+                                    </a>
+                                </td>
+                                <td>
+                                    {{if .BinkPSystemName}}
+                                        <strong>{{.BinkPSystemName}}</strong>
+                                        {{if .BinkPSysop}}<br><small>{{.BinkPSysop}}</small>{{end}}
+                                    {{else if .BinkPSysop}}
+                                        <strong>{{.BinkPSysop}}</strong>
+                                    {{else}}
+                                        <em>No info</em>
+                                    {{end}}
+                                </td>
+                                {{if $.CountryName}}
+                                <td>{{if .City}}{{.City}}{{else}}-{{end}}</td>
+                                <td>
+                                    {{if .ISP}}
+                                        {{.ISP}}
+                                        {{if ne .ASN 0}}<br><small>AS{{.ASN}}</small>{{end}}
+                                    {{else}}
+                                        -
+                                    {{end}}
+                                </td>
+                                {{else}}
+                                <td>
+                                    {{countryFlag .CountryCode}}
+                                    {{if .City}}{{.City}}, {{.CountryCode}}{{else}}{{.Country}}{{end}}
+                                </td>
+                                {{end}}
+                                <td style="text-align: center; white-space: nowrap;">
+                                    {{if or .BinkPSuccess .BinkPIPv6Success}}
+                                        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">B</span>
+                                    {{end}}
+                                    {{if or .IfcicoSuccess .IfcicoIPv6Success}}
+                                        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">I</span>
+                                    {{end}}
+                                    {{if or .TelnetSuccess .TelnetIPv6Success}}
+                                        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">T</span>
+                                    {{end}}
+                                    {{if or .BinkPIPv6Success .IfcicoIPv6Success .TelnetIPv6Success}}
+                                        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">6</span>
+                                    {{else if .ResolvedIPv6}}
+                                        <span class="badge badge-warning" style="font-size: 0.8em; padding: 2px 4px;">6?</span>
+                                    {{end}}
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                    <strong>Protocol Legend:</strong>
+                    <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">B</span> BinkP,
+                    <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">I</span> IFCICO,
+                    <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">T</span> Telnet,
+                    <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">6</span> IPv6 Working,
+                    <span class="badge badge-warning" style="font-size: 0.8em; padding: 2px 4px;">6?</span> IPv6 DNS Only
+                </div>
+            </div>
+
+            <!-- Time Period Selector -->
+            <div class="time-selector">
+                <p>View different time periods:</p>
+                {{if .CountryName}}
+                <a href="?code={{.CountryCode}}&days=30" class="btn {{if eq .Days 30}}active{{end}}">Last 30 Days</a>
+                <a href="?code={{.CountryCode}}&days=90" class="btn {{if eq .Days 90}}active{{end}}">Last 90 Days</a>
+                <a href="?code={{.CountryCode}}&days=365" class="btn {{if eq .Days 365}}active{{end}}">Last Year</a>
+                <a href="?code={{.CountryCode}}&days=730" class="btn {{if eq .Days 730}}active{{end}}">Last 2 Years</a>
+                {{else if .ProviderName}}
+                <a href="?isp={{.ProviderName}}&days=30" class="btn {{if eq .Days 30}}active{{end}}">Last 30 Days</a>
+                <a href="?isp={{.ProviderName}}&days=90" class="btn {{if eq .Days 90}}active{{end}}">Last 90 Days</a>
+                <a href="?isp={{.ProviderName}}&days=365" class="btn {{if eq .Days 365}}active{{end}}">Last Year</a>
+                <a href="?isp={{.ProviderName}}&days=730" class="btn {{if eq .Days 730}}active{{end}}">Last 2 Years</a>
+                {{end}}
+            </div>
+            {{else}}
+            <div class="alert alert-warning">
+                <strong>No nodes found.</strong><br>
+                No operational nodes found for the selected criteria and time period.
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    {{template "footer" .}}
+</body>
+</html>

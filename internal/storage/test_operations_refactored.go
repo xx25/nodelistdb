@@ -119,6 +119,16 @@ func (to *TestOperationsRefactored) GetGeoHostingDistribution(days int) (*GeoHos
 	return to.geoOps.GetGeoHostingDistribution(days)
 }
 
+// GetNodesByCountry returns all operational nodes for a specific country
+func (to *TestOperationsRefactored) GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error) {
+	return to.geoOps.GetNodesByCountry(countryCode, days)
+}
+
+// GetNodesByProvider returns all operational nodes for a specific provider
+func (to *TestOperationsRefactored) GetNodesByProvider(isp string, days int) ([]NodeTestResult, error) {
+	return to.geoOps.GetNodesByProvider(isp, days)
+}
+
 // ===== IPv6 Operations (delegated to IPv6QueryOperations) =====
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6

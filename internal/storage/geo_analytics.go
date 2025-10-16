@@ -181,3 +181,155 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int) (*GeoHost
 		LastUpdated:          time.Now(),
 	}, nil
 }
+
+// GetNodesByCountry returns all operational nodes for a specific country
+func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error) {
+	gao.mu.RLock()
+	defer gao.mu.RUnlock()
+
+	// This feature is only available for ClickHouse
+	if _, isClickHouse := gao.db.(*database.ClickHouseDB); !isClickHouse {
+		return []NodeTestResult{}, nil
+	}
+
+	conn := gao.db.Conn()
+
+	query := `
+		SELECT *
+		FROM (
+			SELECT
+				zone, net, node,
+				argMax(binkp_system_name, test_time) as binkp_system_name,
+				argMax(binkp_sysop, test_time) as binkp_sysop,
+				argMax(binkp_location, test_time) as binkp_location,
+				argMax(country, test_time) as country,
+				argMax(country_code, test_time) as country_code,
+				argMax(city, test_time) as city,
+				argMax(isp, test_time) as isp,
+				argMax(org, test_time) as org,
+				argMax(asn, test_time) as asn,
+				argMax(resolved_ipv4, test_time) as resolved_ipv4,
+				argMax(resolved_ipv6, test_time) as resolved_ipv6,
+				argMax(binkp_success, test_time) as binkp_success,
+				argMax(binkp_ipv6_success, test_time) as binkp_ipv6_success,
+				argMax(ifcico_success, test_time) as ifcico_success,
+				argMax(ifcico_ipv6_success, test_time) as ifcico_ipv6_success,
+				argMax(telnet_success, test_time) as telnet_success,
+				argMax(telnet_ipv6_success, test_time) as telnet_ipv6_success
+			FROM node_test_results
+			WHERE is_operational = true
+				AND test_date >= today() - ?
+			GROUP BY zone, net, node
+		) AS latest_nodes
+		WHERE country_code = ?
+		ORDER BY zone, net, node
+	`
+
+	rows, err := conn.Query(query, days, countryCode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query nodes by country: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var result NodeTestResult
+		var resolvedIPv4, resolvedIPv6 []string
+
+		err := rows.Scan(
+			&result.Zone, &result.Net, &result.Node,
+			&result.BinkPSystemName, &result.BinkPSysop, &result.BinkPLocation,
+			&result.Country, &result.CountryCode, &result.City,
+			&result.ISP, &result.Org, &result.ASN,
+			&resolvedIPv4, &resolvedIPv6,
+			&result.BinkPSuccess, &result.BinkPIPv6Success,
+			&result.IfcicoSuccess, &result.IfcicoIPv6Success,
+			&result.TelnetSuccess, &result.TelnetIPv6Success,
+		)
+		if err != nil {
+			continue
+		}
+
+		result.ResolvedIPv4 = resolvedIPv4
+		result.ResolvedIPv6 = resolvedIPv6
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// GetNodesByProvider returns all operational nodes for a specific provider
+func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int) ([]NodeTestResult, error) {
+	gao.mu.RLock()
+	defer gao.mu.RUnlock()
+
+	// This feature is only available for ClickHouse
+	if _, isClickHouse := gao.db.(*database.ClickHouseDB); !isClickHouse {
+		return []NodeTestResult{}, nil
+	}
+
+	conn := gao.db.Conn()
+
+	query := `
+		SELECT *
+		FROM (
+			SELECT
+				zone, net, node,
+				argMax(binkp_system_name, test_time) as binkp_system_name,
+				argMax(binkp_sysop, test_time) as binkp_sysop,
+				argMax(binkp_location, test_time) as binkp_location,
+				argMax(country, test_time) as country,
+				argMax(country_code, test_time) as country_code,
+				argMax(city, test_time) as city,
+				argMax(isp, test_time) as isp,
+				argMax(org, test_time) as org,
+				argMax(asn, test_time) as asn,
+				argMax(resolved_ipv4, test_time) as resolved_ipv4,
+				argMax(resolved_ipv6, test_time) as resolved_ipv6,
+				argMax(binkp_success, test_time) as binkp_success,
+				argMax(binkp_ipv6_success, test_time) as binkp_ipv6_success,
+				argMax(ifcico_success, test_time) as ifcico_success,
+				argMax(ifcico_ipv6_success, test_time) as ifcico_ipv6_success,
+				argMax(telnet_success, test_time) as telnet_success,
+				argMax(telnet_ipv6_success, test_time) as telnet_ipv6_success
+			FROM node_test_results
+			WHERE is_operational = true
+				AND test_date >= today() - ?
+			GROUP BY zone, net, node
+		) AS latest_nodes
+		WHERE isp = ?
+		ORDER BY zone, net, node
+	`
+
+	rows, err := conn.Query(query, days, isp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query nodes by provider: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var result NodeTestResult
+		var resolvedIPv4, resolvedIPv6 []string
+
+		err := rows.Scan(
+			&result.Zone, &result.Net, &result.Node,
+			&result.BinkPSystemName, &result.BinkPSysop, &result.BinkPLocation,
+			&result.Country, &result.CountryCode, &result.City,
+			&result.ISP, &result.Org, &result.ASN,
+			&resolvedIPv4, &resolvedIPv6,
+			&result.BinkPSuccess, &result.BinkPIPv6Success,
+			&result.IfcicoSuccess, &result.IfcicoIPv6Success,
+			&result.TelnetSuccess, &result.TelnetIPv6Success,
+		)
+		if err != nil {
+			continue
+		}
+
+		result.ResolvedIPv4 = resolvedIPv4
+		result.ResolvedIPv6 = resolvedIPv6
+		results = append(results, result)
+	}
+
+	return results, nil
+}

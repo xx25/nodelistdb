@@ -516,3 +516,134 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
+
+// GeoCountryNodesHandler shows nodes for a specific country
+func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) {
+	// Get country code from URL query
+	countryCode := r.URL.Query().Get("code")
+	if countryCode == "" {
+		http.Error(w, "Country code is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse days parameter (default: 365)
+	daysStr := r.URL.Query().Get("days")
+	days := 365
+	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 && d <= 3650 {
+		days = d
+	}
+
+	// Get nodes for country
+	nodes, err := s.storage.TestOps().GetNodesByCountry(countryCode, days)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] Geo Country Nodes: Error fetching data: %v", err)
+		displayError = fmt.Errorf("Failed to fetch nodes for country. Please try again later")
+	}
+
+	// Build template data
+	data := struct {
+		Title        string
+		ActivePage   string
+		Version      string
+		Days         int
+		CountryCode  string
+		CountryName  string
+		ProviderName string
+		Nodes        []storage.NodeTestResult
+		Error        error
+	}{
+		Title:        "Nodes in Country",
+		ActivePage:   "analytics",
+		Version:      version.GetVersionInfo(),
+		Days:         days,
+		CountryCode:  countryCode,
+		CountryName:  "", // Will be populated from first node if available
+		ProviderName: "", // Empty for country view
+		Nodes:        nodes,
+		Error:        displayError,
+	}
+
+	// Get country name from first node
+	if len(nodes) > 0 {
+		data.CountryName = nodes[0].Country
+	}
+
+	// Check template exists before rendering
+	tmpl, exists := s.templates["geo_nodes_list"]
+	if !exists {
+		log.Printf("[ERROR] Geo Country Nodes: Template 'geo_nodes_list' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Render template
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Geo Country Nodes: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+// GeoProviderNodesHandler shows nodes for a specific provider
+func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request) {
+	// Get provider from URL query
+	provider := r.URL.Query().Get("isp")
+	if provider == "" {
+		http.Error(w, "Provider is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse days parameter (default: 365)
+	daysStr := r.URL.Query().Get("days")
+	days := 365
+	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 && d <= 3650 {
+		days = d
+	}
+
+	// Get nodes for provider
+	nodes, err := s.storage.TestOps().GetNodesByProvider(provider, days)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] Geo Provider Nodes: Error fetching data: %v", err)
+		displayError = fmt.Errorf("Failed to fetch nodes for provider. Please try again later")
+	}
+
+	// Build template data
+	data := struct {
+		Title        string
+		ActivePage   string
+		Version      string
+		Days         int
+		CountryCode  string
+		CountryName  string
+		ProviderName string
+		Nodes        []storage.NodeTestResult
+		Error        error
+	}{
+		Title:        "Nodes by Provider",
+		ActivePage:   "analytics",
+		Version:      version.GetVersionInfo(),
+		Days:         days,
+		CountryCode:  "", // Empty for provider view
+		CountryName:  "", // Empty for provider view
+		ProviderName: provider,
+		Nodes:        nodes,
+		Error:        displayError,
+	}
+
+	// Check template exists before rendering
+	tmpl, exists := s.templates["geo_nodes_list"]
+	if !exists {
+		log.Printf("[ERROR] Geo Provider Nodes: Template 'geo_nodes_list' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Render template
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Geo Provider Nodes: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
