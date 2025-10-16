@@ -164,19 +164,6 @@ func (so *SearchOperations) equalStringSlices(a, b []string) bool {
 	return true
 }
 
-// equalIntSlices compares two int slices for equality
-func (so *SearchOperations) equalIntSlices(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // getAllNodelistDates loads all unique nodelist dates from the database
 func (so *SearchOperations) getAllNodelistDates() ([]time.Time, error) {
 	conn := so.db.Conn()
