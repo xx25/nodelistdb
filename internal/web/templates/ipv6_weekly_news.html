@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weekly IPv6 News - NodelistDB</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/sortable-table.js"></script>
     <style>
         .news-section {
             background: #f9f9f9;
@@ -210,14 +211,14 @@
 
                 {{if .NewNodesWorking}}
                 <div class="table-responsive">
-                    <table class="data-table">
+                    <table class="data-table sortable-table">
                         <thead>
                             <tr>
-                                <th>Node Address</th>
-                                <th>Hostname</th>
-                                <th>Working Protocols</th>
-                                <th>Location</th>
-                                <th>Last Tested</th>
+                                <th data-sortable data-type="address">Node Address</th>
+                                <th data-sortable data-type="string">Hostname</th>
+                                <th data-sortable data-type="string">Working Protocols</th>
+                                <th data-sortable data-type="string">Location</th>
+                                <th data-sortable data-type="date">Last Tested</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -247,7 +248,7 @@
                                 <td>
                                     {{if .City}}{{.City}}, {{.CountryCode}}{{else if .Country}}{{.Country}}{{else}}<span class="text-muted">Unknown</span>{{end}}
                                 </td>
-                                <td>
+                                <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
                                 <td>
@@ -273,14 +274,14 @@
 
                 {{if .NewNodesNonWorking}}
                 <div class="table-responsive">
-                    <table class="data-table">
+                    <table class="data-table sortable-table">
                         <thead>
                             <tr>
-                                <th>Node Address</th>
-                                <th>Hostname</th>
-                                <th>Tested Protocols</th>
-                                <th>Location</th>
-                                <th>Last Tested</th>
+                                <th data-sortable data-type="address">Node Address</th>
+                                <th data-sortable data-type="string">Hostname</th>
+                                <th data-sortable data-type="string">Tested Protocols</th>
+                                <th data-sortable data-type="string">Location</th>
+                                <th data-sortable data-type="date">Last Tested</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -309,7 +310,7 @@
                                 <td>
                                     {{if .City}}{{.City}}, {{.CountryCode}}{{else if .Country}}{{.Country}}{{else}}<span class="text-muted">Unknown</span>{{end}}
                                 </td>
-                                <td>
+                                <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
                                 <td>
@@ -335,14 +336,14 @@
 
                 {{if .OldNodesLostIPv6}}
                 <div class="table-responsive">
-                    <table class="data-table">
+                    <table class="data-table sortable-table">
                         <thead>
                             <tr>
-                                <th>Node Address</th>
-                                <th>Hostname</th>
-                                <th>Status</th>
-                                <th>Location</th>
-                                <th>Last Tested</th>
+                                <th data-sortable data-type="address">Node Address</th>
+                                <th data-sortable data-type="string">Hostname</th>
+                                <th data-sortable data-type="string">Status</th>
+                                <th data-sortable data-type="string">Location</th>
+                                <th data-sortable data-type="date">Last Tested</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -373,7 +374,7 @@
                                 <td>
                                     {{if .City}}{{.City}}, {{.CountryCode}}{{else if .Country}}{{.Country}}{{else}}<span class="text-muted">Unknown</span>{{end}}
                                 </td>
-                                <td>
+                                <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
                                 <td>
@@ -399,14 +400,14 @@
 
                 {{if .OldNodesGainedIPv6}}
                 <div class="table-responsive">
-                    <table class="data-table">
+                    <table class="data-table sortable-table">
                         <thead>
                             <tr>
-                                <th>Node Address</th>
-                                <th>Hostname</th>
-                                <th>Working Protocols</th>
-                                <th>Location</th>
-                                <th>Last Tested</th>
+                                <th data-sortable data-type="address">Node Address</th>
+                                <th data-sortable data-type="string">Hostname</th>
+                                <th data-sortable data-type="string">Working Protocols</th>
+                                <th data-sortable data-type="string">Location</th>
+                                <th data-sortable data-type="date">Last Tested</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -436,7 +437,7 @@
                                 <td>
                                     {{if .City}}{{.City}}, {{.CountryCode}}{{else if .Country}}{{.Country}}{{else}}<span class="text-muted">Unknown</span>{{end}}
                                 </td>
-                                <td>
+                                <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
                                 <td>

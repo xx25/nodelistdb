@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BinkP Enabled Nodes - NodelistDB</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/sortable-table.js"></script>
     <style>
         .compact-actions {
             display: flex;
@@ -40,6 +41,44 @@
             color: white;
             border-radius: 3px;
             font-size: 0.8rem;
+        }
+
+        /* IP address tooltip styling */
+        .ip-tooltip {
+            position: relative;
+            cursor: help;
+        }
+
+        .ip-tooltip:hover::after {
+            content: attr(data-ips);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #0f0;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            white-space: pre;
+            z-index: 1000;
+            margin-bottom: 5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            min-width: max-content;
+        }
+
+        .ip-tooltip:hover::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: #333;
+            z-index: 1001;
+            margin-bottom: -1px;
         }
     </style>
 </head>
@@ -98,14 +137,14 @@
             </div>
 
             <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table sortable-table">
                     <thead>
                         <tr>
-                            <th>Node Address</th>
-                            <th>Hostname</th>
-                            <th>Version</th>
-                            <th>Location</th>
-                            <th>Last Tested</th>
+                            <th data-sortable data-type="address">Node Address</th>
+                            <th data-sortable data-type="string">Hostname</th>
+                            <th data-sortable data-type="string">Version</th>
+                            <th data-sortable data-type="string">Location</th>
+                            <th data-sortable data-type="date">Last Tested</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -119,7 +158,19 @@
                             </td>
                             <td>
                                 {{if .Hostname}}
-                                    <span class="badge badge-info">{{.Hostname}}</span>
+                                    {{$allIPs := ""}}
+                                    {{if .ResolvedIPv4}}
+                                        {{range $idx, $ip := .ResolvedIPv4}}{{if $idx}}{{$allIPs = printf "%s\n%s" $allIPs $ip}}{{else}}{{$allIPs = printf "IPv4:\n%s" $ip}}{{end}}{{end}}
+                                    {{end}}
+                                    {{if .ResolvedIPv6}}
+                                        {{if $allIPs}}{{$allIPs = printf "%s\n\nIPv6:" $allIPs}}{{else}}{{$allIPs = "IPv6:"}}{{end}}
+                                        {{range $idx, $ip := .ResolvedIPv6}}{{$allIPs = printf "%s\n%s" $allIPs $ip}}{{end}}
+                                    {{end}}
+                                    {{if $allIPs}}
+                                        <span class="badge badge-info ip-tooltip" data-ips="{{$allIPs}}">{{.Hostname}}</span>
+                                    {{else}}
+                                        <span class="badge badge-info">{{.Hostname}}</span>
+                                    {{end}}
                                 {{else}}
                                     <span class="text-muted">N/A</span>
                                 {{end}}
@@ -143,13 +194,14 @@
                                     <span class="text-muted">Unknown</span>
                                 {{end}}
                             </td>
-                            <td>
+                            <td data-value="{{.TestTime.Unix}}">
                                 <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                             </td>
                             <td>
-                                <a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05"}}" class="btn btn-sm btn-info" title="View test details">
-                                    Details
-                                </a>
+                                <div class="compact-actions">
+                                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm btn-info">View</a>
+                                    <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>
+                                </div>
                             </td>
                         </tr>
                         {{end}}
