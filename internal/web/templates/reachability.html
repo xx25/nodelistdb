@@ -6,6 +6,7 @@
     <title>{{if .Address}}Node {{.Address}} - {{end}}Reachability History - NodelistDB</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/sortable-table.js"></script>
     <style>
         .reachability-section {
             background: #f9f9f9;
@@ -707,10 +708,10 @@
                 </script>
 
                 <div class="table-container">
-                    <table class="results-table">
+                    <table class="results-table sortable-table">
                         <thead>
                             <tr>
-                                <th rowspan="2">Test Time</th>
+                                <th rowspan="2" data-sortable data-type="date">Test Time</th>
                                 <th rowspan="2">Status</th>
                                 <th colspan="2">BinkP</th>
                                 <th colspan="2">IFCICO</th>
@@ -730,7 +731,7 @@
                         <tbody>
                             {{range .History}}
                             <tr>
-                                <td><a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05Z07:00"}}" style="text-decoration: none; color: #007bff;">{{.TestTime.Format "2006-01-02 15:04:05"}}</a></td>
+                                <td data-value="{{.TestTime.Unix}}"><a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05Z07:00"}}" style="text-decoration: none; color: #007bff;">{{.TestTime.Format "2006-01-02 15:04:05"}}</a></td>
                                 <td>
                                     {{if .IsOperational}}
                                     <span class="status-badge operational">Operational</span>

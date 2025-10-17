@@ -18,6 +18,9 @@
 
         if (!tbody) return;
 
+        let dateColumnIndex = -1;
+        let dateColumnHeader = null;
+
         headers.forEach((header, index) => {
             header.style.cursor = 'pointer';
             header.style.userSelect = 'none';
@@ -37,10 +40,9 @@
             // Check if this is the default sorted column (date type = Last Tested)
             const dataType = header.getAttribute('data-type');
             if (dataType === 'date') {
-                // Set initial sort state to descending (newest first)
-                header.setAttribute('data-order', 'desc');
-                indicator.innerHTML = '▼';
-                indicator.style.opacity = '1';
+                // Remember this column for initial sorting
+                dateColumnIndex = index;
+                dateColumnHeader = header;
             }
 
             // Add click handler
@@ -48,6 +50,13 @@
                 sortTable(table, tbody, index, header);
             });
         });
+
+        // Perform initial sort on date column (descending = newest first)
+        if (dateColumnIndex >= 0 && dateColumnHeader) {
+            // Set to 'asc' first so the sortTable function will toggle to 'desc'
+            dateColumnHeader.setAttribute('data-order', 'asc');
+            sortTable(table, tbody, dateColumnIndex, dateColumnHeader);
+        }
     }
 
     function sortTable(table, tbody, columnIndex, header) {
