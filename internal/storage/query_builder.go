@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/nodelistdb/internal/database"
@@ -27,25 +26,6 @@ func (qb *QueryBuilder) escapeSQL(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\") // Escape backslashes first
 	s = strings.ReplaceAll(s, "'", "\\'")   // Escape single quotes
 	return s
-}
-
-// formatArrayForDB formats a slice of strings as a ClickHouse array literal
-func (qb *QueryBuilder) formatArrayForDB(arr []string) string {
-	// Build array string directly without using result parser
-	// This is used for direct SQL generation in query builders
-	if len(arr) == 0 {
-		return "[]"
-	}
-	var buf strings.Builder
-	buf.WriteByte('[')
-	for i, item := range arr {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteString(fmt.Sprintf("'%s'", qb.escapeSQL(item)))
-	}
-	buf.WriteByte(']')
-	return buf.String()
 }
 
 // Nodes returns a NodeQueryBuilder for node-related queries

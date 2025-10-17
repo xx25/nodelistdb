@@ -266,11 +266,7 @@ func (p *Processor) collectResults(ctx context.Context, results <-chan Result, e
 		if err := p.insertBatchWithProgress(ctx, batch, batchCount, totalInserted, totalNodes); err != nil {
 			return fmt.Errorf("failed to insert final batch: %w", err)
 		}
-		insertDuration := time.Since(insertStart)
-
-		// Update average insertion time for final batch
-		insertionCount++
-		avgInsertionTime = (avgInsertionTime*time.Duration(insertionCount-1) + insertDuration) / time.Duration(insertionCount)
+		_ = time.Since(insertStart) // Track duration but no longer used for ETA after loop completes
 
 		totalInserted += len(batch)
 	}
