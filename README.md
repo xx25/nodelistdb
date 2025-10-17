@@ -311,31 +311,7 @@ make test-coverage
 go test -v ./internal/parser/...
 ```
 
-## Migration from DuckDB
-
-If you're migrating from a previous DuckDB-based installation, see `MIGRATION.md` for detailed instructions.
-
-Key changes:
-- Configuration simplified to ClickHouse-only
-- Removed `-db` flag from CLI tools (use `-config` instead)
-- All data stored in ClickHouse for better performance and scalability
-
 ## Production Deployment
-
-### ClickHouse Server
-
-For production deployments, use a dedicated ClickHouse server:
-
-```yaml
-database:
-  type: clickhouse
-  clickhouse:
-    host: 10.121.17.211  # Production server
-    port: 9000
-    database: nodelistdb
-    username: nodelistdb_user
-    password: "secure_password"
-```
 
 ### Performance Tuning
 
