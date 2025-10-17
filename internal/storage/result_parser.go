@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 
 	"github.com/nodelistdb/internal/database"
@@ -173,47 +172,6 @@ func (rp *ResultParser) parseInterfaceToStringArray(v interface{}) []string {
 	}
 }
 
-// parseInterfaceToIntArray converts array results to []int (supports both DuckDB and ClickHouse)
-func (rp *ResultParser) parseInterfaceToIntArray(v interface{}) []int {
-	if v == nil {
-		return []int{}
-	}
-
-	switch arr := v.(type) {
-	case []interface{}:
-		// DuckDB format
-		result := make([]int, 0, len(arr))
-		for _, item := range arr {
-			switch val := item.(type) {
-			case int:
-				result = append(result, val)
-			case int32:
-				result = append(result, int(val))
-			case int64:
-				result = append(result, int(val))
-			case float64:
-				result = append(result, int(val))
-			}
-		}
-		return result
-	case []int:
-		// ClickHouse native []int format
-		return arr
-	case []int32:
-		// ClickHouse Int32 arrays
-		result := make([]int, len(arr))
-		for i, v := range arr {
-			result[i] = int(v)
-		}
-		return result
-	case string:
-		// Fallback for string representations
-		return rp.parseIntArray(arr)
-	default:
-		return []int{}
-	}
-}
-
 // parseStringArray parses a string representation of a string array
 func (rp *ResultParser) parseStringArray(s string) []string {
 	if s == "[]" || s == "" {
@@ -344,129 +302,6 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 	result.IfcicoAddresses = rp.parseInterfaceToStringArray(ifcicoAddresses)
 
 	return nil
-}
-
-// parseIntArray parses a string representation of an int array
-func (rp *ResultParser) parseIntArray(s string) []int {
-	if s == "[]" || s == "" {
-		return []int{}
-	}
-
-	// Try JSON unmarshaling first
-	var result []int
-	if err := json.Unmarshal([]byte(s), &result); err == nil {
-		return result
-	}
-
-	// Fallback to simple parsing
-	s = strings.Trim(s, "[]")
-	if s == "" {
-		return []int{}
-	}
-
-	parts := strings.Split(s, ",")
-	result = make([]int, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if val, err := strconv.Atoi(part); err == nil {
-			result = append(result, val)
-		}
-	}
-
-	return result
-}
-
-// Helper functions for array formatting (DuckDB native array syntax)
-func (rp *ResultParser) formatArrayDuckDB(arr []string) string {
-	if len(arr) == 0 {
-		return "ARRAY[]::TEXT[]"
-	}
-
-	escaped := make([]string, len(arr))
-	for i, s := range arr {
-		escaped[i] = "'" + rp.escapeSingleQuotes(s) + "'"
-	}
-	return fmt.Sprintf("ARRAY[%s]", strings.Join(escaped, ","))
-}
-
-// formatIntArrayDuckDB formats an integer array for DuckDB
-func (rp *ResultParser) formatIntArrayDuckDB(arr []int) string {
-	if len(arr) == 0 {
-		return "ARRAY[]::INTEGER[]"
-	}
-
-	strs := make([]string, len(arr))
-	for i, n := range arr {
-		strs[i] = fmt.Sprintf("%d", n)
-	}
-	return fmt.Sprintf("ARRAY[%s]", strings.Join(strs, ","))
-}
-
-// formatNullableInt formats a nullable integer for SQL
-func (rp *ResultParser) formatNullableInt(val *int) string {
-	if val == nil {
-		return "NULL"
-	}
-	return fmt.Sprintf("%d", *val)
-}
-
-// escapeSingleQuotes escapes single quotes for SQL string literals
-func (rp *ResultParser) escapeSingleQuotes(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
-}
-
-// NodeToInsertArgs converts a Node to arguments for parameterized INSERT
-func (rp *ResultParser) NodeToInsertArgs(node database.Node) []interface{} {
-	// Compute FTS ID if not already set
-	if node.FtsId == "" {
-		// Create a mutable copy to compute FTS ID
-		nodeCopy := node
-		nodeCopy.ComputeFtsId()
-		node = nodeCopy
-	}
-
-	// Handle internet_config JSON
-	var configJSON interface{}
-	if len(node.InternetConfig) > 0 {
-		configJSON = string(node.InternetConfig)
-	}
-
-	return []interface{}{
-		node.Zone, node.Net, node.Node,
-		node.NodelistDate, node.DayNumber,
-		node.SystemName, node.Location, node.SysopName, node.Phone,
-		node.NodeType, node.Region, node.MaxSpeed,
-		node.IsCM, node.IsMO,
-		rp.formatArrayForDB(node.Flags),
-		rp.formatArrayForDB(node.ModemFlags),
-		node.ConflictSequence, node.HasConflict,
-		node.HasInet, configJSON, node.FtsId,
-	}
-}
-
-// formatArrayForDB formats a string array for database storage
-// Returns optimized DuckDB ARRAY[] literal (faster than JSON casting)
-func (rp *ResultParser) formatArrayForDB(arr []string) interface{} {
-	if len(arr) == 0 {
-		return "ARRAY[]::TEXT[]"
-	}
-
-	// Pre-allocate buffer for better performance
-	var buf strings.Builder
-	buf.WriteString("ARRAY[")
-
-	for i, s := range arr {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteByte('\'')
-		// Fast escape - only escape single quotes
-		buf.WriteString(strings.ReplaceAll(s, "'", "''"))
-		buf.WriteByte('\'')
-	}
-
-	buf.WriteByte(']')
-	return buf.String()
 }
 
 // ValidateNodeFilter validates a NodeFilter for basic sanity checks
