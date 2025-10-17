@@ -106,6 +106,7 @@ func (te *TestExecutor) performTesting(ctx context.Context, node *models.Node, h
 		TestDate:       time.Now().Truncate(24 * time.Hour),
 		Hostname:       hostname,
 		TestedHostname: hostname,
+		IPv4Skipped:    node.HasINO4(), // Mark if IPv4 testing will be skipped
 	}
 
 	nodeAddr := node.Address()

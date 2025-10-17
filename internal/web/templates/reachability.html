@@ -571,20 +571,20 @@
                 <div class="stats-grid">
                     <div class="stat-card">
                         <h4>BinkP (IPv4)</h4>
-                        <div class="stat-value {{if ge .Stats.BinkPSuccessRate 80.0}}success{{else if ge .Stats.BinkPSuccessRate 50.0}}warning{{else}}danger{{end}}">
-                            {{printf "%.1f" .Stats.BinkPSuccessRate}}%
+                        <div class="stat-value {{if ge .Stats.BinkPIPv4SuccessRate 80.0}}success{{else if ge .Stats.BinkPIPv4SuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.BinkPIPv4SuccessRate}}%
                         </div>
                     </div>
                     <div class="stat-card">
                         <h4>IFCICO (IPv4)</h4>
-                        <div class="stat-value {{if ge .Stats.IfcicoSuccessRate 80.0}}success{{else if ge .Stats.IfcicoSuccessRate 50.0}}warning{{else}}danger{{end}}">
-                            {{printf "%.1f" .Stats.IfcicoSuccessRate}}%
+                        <div class="stat-value {{if ge .Stats.IfcicoIPv4SuccessRate 80.0}}success{{else if ge .Stats.IfcicoIPv4SuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.IfcicoIPv4SuccessRate}}%
                         </div>
                     </div>
                     <div class="stat-card">
                         <h4>Telnet (IPv4)</h4>
-                        <div class="stat-value {{if ge .Stats.TelnetSuccessRate 80.0}}success{{else if ge .Stats.TelnetSuccessRate 50.0}}warning{{else}}danger{{end}}">
-                            {{printf "%.1f" .Stats.TelnetSuccessRate}}%
+                        <div class="stat-value {{if ge .Stats.TelnetIPv4SuccessRate 80.0}}success{{else if ge .Stats.TelnetIPv4SuccessRate 50.0}}warning{{else}}danger{{end}}">
+                            {{printf "%.1f" .Stats.TelnetIPv4SuccessRate}}%
                         </div>
                     </div>
                 </div>
@@ -741,10 +741,10 @@
                                 <!-- BinkP IPv4 -->
                                 <td>
                                     {{if .ResolvedIPv4}}
-                                        {{if .BinkPSuccess}}
-                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.BinkPResponseMs}}ms</span>
-                                        {{else if .BinkPError}}
-                                        <span class="protocol-status failed" title="{{.BinkPError}}">✗</span>
+                                        {{if .BinkPIPv4Success}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.BinkPIPv4ResponseMs}}ms</span>
+                                        {{else if .BinkPIPv4Error}}
+                                        <span class="protocol-status failed" title="{{.BinkPIPv4Error}}">✗</span>
                                         {{else}}
                                         <span class="protocol-status untested">-</span>
                                         {{end}}
@@ -756,7 +756,7 @@
                                 <td>
                                     {{if .ResolvedIPv6}}
                                         {{if .BinkPIPv6Success}}
-                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.BinkPResponseMs}}ms</span>
+                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.BinkPIPv6ResponseMs}}ms</span>
                                         {{else if .BinkPIPv6Error}}
                                         <span class="protocol-status failed" title="{{.BinkPIPv6Error}}">✗</span>
                                         {{else}}
@@ -769,10 +769,10 @@
                                 <!-- IFCICO IPv4 -->
                                 <td>
                                     {{if .ResolvedIPv4}}
-                                        {{if .IfcicoSuccess}}
-                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.IfcicoResponseMs}}ms</span>
-                                        {{else if .IfcicoError}}
-                                        <span class="protocol-status failed" title="{{.IfcicoError}}">✗</span>
+                                        {{if .IfcicoIPv4Success}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.IfcicoIPv4ResponseMs}}ms</span>
+                                        {{else if .IfcicoIPv4Error}}
+                                        <span class="protocol-status failed" title="{{.IfcicoIPv4Error}}">✗</span>
                                         {{else}}
                                         <span class="protocol-status untested">-</span>
                                         {{end}}
@@ -784,7 +784,7 @@
                                 <td>
                                     {{if .ResolvedIPv6}}
                                         {{if .IfcicoIPv6Success}}
-                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.IfcicoResponseMs}}ms</span>
+                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.IfcicoIPv6ResponseMs}}ms</span>
                                         {{else if .IfcicoIPv6Error}}
                                         <span class="protocol-status failed" title="{{.IfcicoIPv6Error}}">✗</span>
                                         {{else}}
@@ -797,10 +797,10 @@
                                 <!-- Telnet IPv4 -->
                                 <td>
                                     {{if .ResolvedIPv4}}
-                                        {{if .TelnetSuccess}}
-                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.TelnetResponseMs}}ms</span>
-                                        {{else if .TelnetError}}
-                                        <span class="protocol-status failed" title="{{.TelnetError}}">✗</span>
+                                        {{if .TelnetIPv4Success}}
+                                        <span class="protocol-status success" title="Test succeeded (IPv4 was available)">✓ {{.TelnetIPv4ResponseMs}}ms</span>
+                                        {{else if .TelnetIPv4Error}}
+                                        <span class="protocol-status failed" title="{{.TelnetIPv4Error}}">✗</span>
                                         {{else}}
                                         <span class="protocol-status untested">-</span>
                                         {{end}}
@@ -812,7 +812,7 @@
                                 <td>
                                     {{if .ResolvedIPv6}}
                                         {{if .TelnetIPv6Success}}
-                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.TelnetResponseMs}}ms</span>
+                                        <span class="protocol-status success" title="Test succeeded (IPv6 was available)">✓ {{.TelnetIPv6ResponseMs}}ms</span>
                                         {{else if .TelnetIPv6Error}}
                                         <span class="protocol-status failed" title="{{.TelnetIPv6Error}}">✗</span>
                                         {{else}}

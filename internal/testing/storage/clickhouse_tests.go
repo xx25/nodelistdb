@@ -66,12 +66,17 @@ func (s *ClickHouseStorage) flushBatch(ctx context.Context) error {
 		ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 		vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
 		is_operational, has_connectivity_issues, address_validated,
+		ipv4_skipped,
 		binkp_ipv4_tested, binkp_ipv4_success, binkp_ipv4_response_ms, binkp_ipv4_address, binkp_ipv4_error,
 		binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_response_ms, binkp_ipv6_address, binkp_ipv6_error,
 		ifcico_ipv4_tested, ifcico_ipv4_success, ifcico_ipv4_response_ms, ifcico_ipv4_address, ifcico_ipv4_error,
 		ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_response_ms, ifcico_ipv6_address, ifcico_ipv6_error,
 		telnet_ipv4_tested, telnet_ipv4_success, telnet_ipv4_response_ms, telnet_ipv4_address, telnet_ipv4_error,
 		telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_response_ms, telnet_ipv6_address, telnet_ipv6_error,
+		ftp_ipv4_tested, ftp_ipv4_success, ftp_ipv4_response_ms, ftp_ipv4_address, ftp_ipv4_error,
+		ftp_ipv6_tested, ftp_ipv6_success, ftp_ipv6_response_ms, ftp_ipv6_address, ftp_ipv6_error,
+		vmodem_ipv4_tested, vmodem_ipv4_success, vmodem_ipv4_response_ms, vmodem_ipv4_address, vmodem_ipv4_error,
+		vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
 		tested_hostname, hostname_index, is_aggregated, total_hostnames, hostnames_tested, hostnames_operational
 	)`)
 	if err != nil {
@@ -596,6 +601,42 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		telnetIPv6Error = r.TelnetResult.IPv6Error
 	}
 
+	var ftpIPv4Tested, ftpIPv4Success, ftpIPv6Tested, ftpIPv6Success bool
+	var ftpIPv4ResponseMs, ftpIPv6ResponseMs uint32
+	var ftpIPv4Address, ftpIPv4Error, ftpIPv6Address, ftpIPv6Error string
+
+	if r.FTPResult != nil {
+		ftpIPv4Tested = r.FTPResult.IPv4Tested
+		ftpIPv4Success = r.FTPResult.IPv4Success
+		ftpIPv4ResponseMs = r.FTPResult.IPv4ResponseMs
+		ftpIPv4Address = r.FTPResult.IPv4Address
+		ftpIPv4Error = r.FTPResult.IPv4Error
+
+		ftpIPv6Tested = r.FTPResult.IPv6Tested
+		ftpIPv6Success = r.FTPResult.IPv6Success
+		ftpIPv6ResponseMs = r.FTPResult.IPv6ResponseMs
+		ftpIPv6Address = r.FTPResult.IPv6Address
+		ftpIPv6Error = r.FTPResult.IPv6Error
+	}
+
+	var vmodemIPv4Tested, vmodemIPv4Success, vmodemIPv6Tested, vmodemIPv6Success bool
+	var vmodemIPv4ResponseMs, vmodemIPv6ResponseMs uint32
+	var vmodemIPv4Address, vmodemIPv4Error, vmodemIPv6Address, vmodemIPv6Error string
+
+	if r.VModemResult != nil {
+		vmodemIPv4Tested = r.VModemResult.IPv4Tested
+		vmodemIPv4Success = r.VModemResult.IPv4Success
+		vmodemIPv4ResponseMs = r.VModemResult.IPv4ResponseMs
+		vmodemIPv4Address = r.VModemResult.IPv4Address
+		vmodemIPv4Error = r.VModemResult.IPv4Error
+
+		vmodemIPv6Tested = r.VModemResult.IPv6Tested
+		vmodemIPv6Success = r.VModemResult.IPv6Success
+		vmodemIPv6ResponseMs = r.VModemResult.IPv6ResponseMs
+		vmodemIPv6Address = r.VModemResult.IPv6Address
+		vmodemIPv6Error = r.VModemResult.IPv6Error
+	}
+
 	// Handle legacy compatibility: set defaults if hostname_index not set
 	testedHostname := r.TestedHostname
 	if testedHostname == "" {
@@ -616,14 +657,20 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		ftpTested, ftpSuccess, ftpResponseMs, ftpError,
 		vmodemTested, vmodemSuccess, vmodemResponseMs, vmodemError,
 		r.IsOperational, r.HasConnectivityIssues, r.AddressValidated,
-		// IPv4/IPv6 specific fields (53-82)
+		// INO4 flag (FTS-1038)
+		r.IPv4Skipped,
+		// IPv4/IPv6 specific fields (54-83)
 		binkpIPv4Tested, binkpIPv4Success, binkpIPv4ResponseMs, binkpIPv4Address, binkpIPv4Error,
 		binkpIPv6Tested, binkpIPv6Success, binkpIPv6ResponseMs, binkpIPv6Address, binkpIPv6Error,
 		ifcicoIPv4Tested, ifcicoIPv4Success, ifcicoIPv4ResponseMs, ifcicoIPv4Address, ifcicoIPv4Error,
 		ifcicoIPv6Tested, ifcicoIPv6Success, ifcicoIPv6ResponseMs, ifcicoIPv6Address, ifcicoIPv6Error,
 		telnetIPv4Tested, telnetIPv4Success, telnetIPv4ResponseMs, telnetIPv4Address, telnetIPv4Error,
 		telnetIPv6Tested, telnetIPv6Success, telnetIPv6ResponseMs, telnetIPv6Address, telnetIPv6Error,
-		// New per-hostname testing fields (83-88)
+		ftpIPv4Tested, ftpIPv4Success, ftpIPv4ResponseMs, ftpIPv4Address, ftpIPv4Error,
+		ftpIPv6Tested, ftpIPv6Success, ftpIPv6ResponseMs, ftpIPv6Address, ftpIPv6Error,
+		vmodemIPv4Tested, vmodemIPv4Success, vmodemIPv4ResponseMs, vmodemIPv4Address, vmodemIPv4Error,
+		vmodemIPv6Tested, vmodemIPv6Success, vmodemIPv6ResponseMs, vmodemIPv6Address, vmodemIPv6Error,
+		// New per-hostname testing fields (85-90)
 		testedHostname, r.HostnameIndex, r.IsAggregated,
 		r.TotalHostnames, r.HostnamesTested, r.HostnamesOperational,
 	}

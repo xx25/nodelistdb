@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPv6 Enabled Nodes - NodelistDB</title>
+    <title>IPv6 Only Nodes - NodelistDB</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
         .compact-actions {
@@ -82,15 +82,15 @@
 <body>
     <div class="container">
         <header>
-            <h1>IPv6 Enabled Nodes</h1>
-            <p class="subtitle">Nodes that have been successfully tested with IPv6 connectivity</p>
+            <h1>IPv6 Only Nodes</h1>
+            <p class="subtitle">Nodes with working IPv6 services but NO working IPv4 services</p>
         </header>
 
         {{template "nav" .}}
 
         <div class="content">
             <div class="search-container">
-                <form method="get" action="/analytics/ipv6" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem;">
+                <form method="get" action="/analytics/ipv6-only" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem;">
                     <div class="form-group">
                         <label for="days">Period:</label>
                         <select name="days" id="days" class="form-control">
@@ -130,7 +130,7 @@
 
             {{if .IPv6Nodes}}
             <div class="stats-box">
-                <h3>Found {{len .IPv6Nodes}} IPv6 Enabled Nodes</h3>
+                <h3>Found {{len .IPv6Nodes}} IPv6 Only Nodes</h3>
             </div>
 
             <div class="table-responsive">
@@ -238,12 +238,12 @@
             </div>
 
             <div class="info-box" style="margin-top: 2rem;">
-                <p><strong>Note:</strong> This report shows nodes that have IPv6 addresses resolved and have been successfully tested with at least one protocol over the last {{.Days}} days. All listed nodes have working IPv6 connectivity.</p>
+                <p><strong>Note:</strong> This report shows nodes that have working IPv6 services (BinkP, IFCICO, or Telnet) but NO working IPv4 services over the last {{.Days}} days. These are true IPv6-only nodes.</p>
             </div>
             {{else}}
             <div class="alert alert-warning">
-                <strong>No IPv6 enabled nodes found for the selected period.</strong><br>
-                This could mean that either no nodes with IPv6 addresses were tested during this period, or none of them responded successfully to protocol tests.
+                <strong>No IPv6-only nodes found for the selected period.</strong><br>
+                This could mean that either no IPv6-only nodes were tested during this period, or all nodes with IPv6 also have working IPv4 services.
             </div>
             {{end}}
         </div>

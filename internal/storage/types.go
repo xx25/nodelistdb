@@ -152,16 +152,59 @@ type NodeTestResult struct {
 	VModemResponseMs uint32 `json:"vmodem_response_ms"`
 	VModemError      string `json:"vmodem_error"`
 
+	// IPv4-specific Test Results
+	BinkPIPv4Tested      bool   `json:"binkp_ipv4_tested"`
+	BinkPIPv4Success     bool   `json:"binkp_ipv4_success"`
+	BinkPIPv4ResponseMs  uint32 `json:"binkp_ipv4_response_ms"`
+	BinkPIPv4Address     string `json:"binkp_ipv4_address"`
+	BinkPIPv4Error       string `json:"binkp_ipv4_error"`
+	IfcicoIPv4Tested     bool   `json:"ifcico_ipv4_tested"`
+	IfcicoIPv4Success    bool   `json:"ifcico_ipv4_success"`
+	IfcicoIPv4ResponseMs uint32 `json:"ifcico_ipv4_response_ms"`
+	IfcicoIPv4Address    string `json:"ifcico_ipv4_address"`
+	IfcicoIPv4Error      string `json:"ifcico_ipv4_error"`
+	TelnetIPv4Tested     bool   `json:"telnet_ipv4_tested"`
+	TelnetIPv4Success    bool   `json:"telnet_ipv4_success"`
+	TelnetIPv4ResponseMs uint32 `json:"telnet_ipv4_response_ms"`
+	TelnetIPv4Address    string `json:"telnet_ipv4_address"`
+	TelnetIPv4Error      string `json:"telnet_ipv4_error"`
+	FTPIPv4Tested        bool   `json:"ftp_ipv4_tested"`
+	FTPIPv4Success       bool   `json:"ftp_ipv4_success"`
+	FTPIPv4ResponseMs    uint32 `json:"ftp_ipv4_response_ms"`
+	FTPIPv4Address       string `json:"ftp_ipv4_address"`
+	FTPIPv4Error         string `json:"ftp_ipv4_error"`
+	VModemIPv4Tested     bool   `json:"vmodem_ipv4_tested"`
+	VModemIPv4Success    bool   `json:"vmodem_ipv4_success"`
+	VModemIPv4ResponseMs uint32 `json:"vmodem_ipv4_response_ms"`
+	VModemIPv4Address    string `json:"vmodem_ipv4_address"`
+	VModemIPv4Error      string `json:"vmodem_ipv4_error"`
+
 	// IPv6-specific Test Results
-	BinkPIPv6Tested     bool   `json:"binkp_ipv6_tested"`
-	BinkPIPv6Success    bool   `json:"binkp_ipv6_success"`
-	BinkPIPv6Error      string `json:"binkp_ipv6_error"`
-	IfcicoIPv6Tested    bool   `json:"ifcico_ipv6_tested"`
-	IfcicoIPv6Success   bool   `json:"ifcico_ipv6_success"`
-	IfcicoIPv6Error     string `json:"ifcico_ipv6_error"`
-	TelnetIPv6Tested    bool   `json:"telnet_ipv6_tested"`
-	TelnetIPv6Success   bool   `json:"telnet_ipv6_success"`
-	TelnetIPv6Error     string `json:"telnet_ipv6_error"`
+	BinkPIPv6Tested      bool   `json:"binkp_ipv6_tested"`
+	BinkPIPv6Success     bool   `json:"binkp_ipv6_success"`
+	BinkPIPv6ResponseMs  uint32 `json:"binkp_ipv6_response_ms"`
+	BinkPIPv6Address     string `json:"binkp_ipv6_address"`
+	BinkPIPv6Error       string `json:"binkp_ipv6_error"`
+	IfcicoIPv6Tested     bool   `json:"ifcico_ipv6_tested"`
+	IfcicoIPv6Success    bool   `json:"ifcico_ipv6_success"`
+	IfcicoIPv6ResponseMs uint32 `json:"ifcico_ipv6_response_ms"`
+	IfcicoIPv6Address    string `json:"ifcico_ipv6_address"`
+	IfcicoIPv6Error      string `json:"ifcico_ipv6_error"`
+	TelnetIPv6Tested     bool   `json:"telnet_ipv6_tested"`
+	TelnetIPv6Success    bool   `json:"telnet_ipv6_success"`
+	TelnetIPv6ResponseMs uint32 `json:"telnet_ipv6_response_ms"`
+	TelnetIPv6Address    string `json:"telnet_ipv6_address"`
+	TelnetIPv6Error      string `json:"telnet_ipv6_error"`
+	FTPIPv6Tested        bool   `json:"ftp_ipv6_tested"`
+	FTPIPv6Success       bool   `json:"ftp_ipv6_success"`
+	FTPIPv6ResponseMs    uint32 `json:"ftp_ipv6_response_ms"`
+	FTPIPv6Address       string `json:"ftp_ipv6_address"`
+	FTPIPv6Error         string `json:"ftp_ipv6_error"`
+	VModemIPv6Tested     bool   `json:"vmodem_ipv6_tested"`
+	VModemIPv6Success    bool   `json:"vmodem_ipv6_success"`
+	VModemIPv6ResponseMs uint32 `json:"vmodem_ipv6_response_ms"`
+	VModemIPv6Address    string `json:"vmodem_ipv6_address"`
+	VModemIPv6Error      string `json:"vmodem_ipv6_error"`
 
 	IsOperational         bool `json:"is_operational"`
 	HasConnectivityIssues bool `json:"has_connectivity_issues"`
@@ -191,12 +234,15 @@ type NodeReachabilityStats struct {
 	AverageResponseMs     float64   `json:"average_response_ms"`
 	LastTestTime          time.Time `json:"last_test_time"`
 	LastStatus            string    `json:"last_status"`
-	BinkPSuccessRate      float64   `json:"binkp_success_rate"`
-	IfcicoSuccessRate     float64   `json:"ifcico_success_rate"`
-	TelnetSuccessRate     float64   `json:"telnet_success_rate"`
-	BinkPIPv6SuccessRate  float64   `json:"binkp_ipv6_success_rate"`
-	IfcicoIPv6SuccessRate float64   `json:"ifcico_ipv6_success_rate"`
-	TelnetIPv6SuccessRate float64   `json:"telnet_ipv6_success_rate"`
+	BinkPSuccessRate      float64   `json:"binkp_success_rate"`      // Combined (IPv4 OR IPv6)
+	IfcicoSuccessRate     float64   `json:"ifcico_success_rate"`     // Combined (IPv4 OR IPv6)
+	TelnetSuccessRate     float64   `json:"telnet_success_rate"`     // Combined (IPv4 OR IPv6)
+	BinkPIPv4SuccessRate  float64   `json:"binkp_ipv4_success_rate"` // IPv4-only
+	IfcicoIPv4SuccessRate float64   `json:"ifcico_ipv4_success_rate"`// IPv4-only
+	TelnetIPv4SuccessRate float64   `json:"telnet_ipv4_success_rate"`// IPv4-only
+	BinkPIPv6SuccessRate  float64   `json:"binkp_ipv6_success_rate"` // IPv6-only
+	IfcicoIPv6SuccessRate float64   `json:"ifcico_ipv6_success_rate"`// IPv6-only
+	TelnetIPv6SuccessRate float64   `json:"telnet_ipv6_success_rate"`// IPv6-only
 }
 
 // ReachabilityTrend represents reachability trend over time
@@ -277,6 +323,7 @@ type Operations interface {
 	GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error)
 	GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)

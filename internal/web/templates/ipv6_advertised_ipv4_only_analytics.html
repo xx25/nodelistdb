@@ -197,24 +197,24 @@
                                 {{end}}
                             </td>
                             <td>
-                                {{if .BinkPTested}}
-                                    {{if .BinkPSuccess}}
+                                {{if .BinkPIPv4Tested}}
+                                    {{if .BinkPIPv4Success}}
                                         <span class="badge badge-success">BinkP</span>
                                     {{end}}
                                 {{end}}
-                                {{if .IfcicoTested}}
-                                    {{if .IfcicoSuccess}}
+                                {{if .IfcicoIPv4Tested}}
+                                    {{if .IfcicoIPv4Success}}
                                         <span class="badge badge-success">IFCICO</span>
                                     {{end}}
                                 {{end}}
-                                {{if .TelnetTested}}
-                                    {{if .TelnetSuccess}}
+                                {{if .TelnetIPv4Tested}}
+                                    {{if .TelnetIPv4Success}}
                                         <span class="badge badge-success">Telnet</span>
                                     {{end}}
                                 {{end}}
-                                {{if and (not .BinkPTested) (not .IfcicoTested) (not .TelnetTested)}}
+                                {{if and (not .BinkPIPv4Tested) (not .IfcicoIPv4Tested) (not .TelnetIPv4Tested)}}
                                     <span class="text-muted" title="IPv4 was not tested in this specific result, but was tested and succeeded during the reporting period">Not tested in latest result</span>
-                                {{else if and (not .BinkPSuccess) (not .IfcicoSuccess) (not .TelnetSuccess)}}
+                                {{else if and (not .BinkPIPv4Success) (not .IfcicoIPv4Success) (not .TelnetIPv4Success)}}
                                     <span class="text-muted">None working</span>
                                 {{end}}
                             </td>
@@ -254,9 +254,10 @@
                                 <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                             </td>
                             <td>
-                                <a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05"}}" class="btn btn-sm btn-info" title="View test details">
-                                    Details
-                                </a>
+                                <div class="compact-actions">
+                                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm btn-info">View</a>
+                                    <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>
+                                </div>
                             </td>
                         </tr>
                         {{end}}

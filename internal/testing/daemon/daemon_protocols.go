@@ -70,9 +70,9 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 			}
 		}
 	}
-	
-	// Test IPv4 (if available)
-	if len(result.ResolvedIPv4) > 0 {
+
+	// Test IPv4 (if available and allowed)
+	if len(result.ResolvedIPv4) > 0 && node.ShouldTestIPv4() {
 		for _, ipv4 := range result.ResolvedIPv4 {
 			logging.Debugf("[%s]   Testing BinkP IPv4 %s:%d", node.Address(), ipv4, port)
 			testResult := d.binkpTester.Test(ctx, ipv4, port, node.Address())
@@ -109,6 +109,8 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 				}
 			}
 		}
+	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
+		logging.Infof("[%s]   Skipping BinkP IPv4 test: node has INO4 flag", node.Address())
 	}
 	
 	// Update operational status if either IPv4 or IPv6 succeeded
@@ -140,7 +142,7 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 		}
 	}
 	
-	// Test IPv6 first (if available)
+	// Test IPv6 first (if available and allowed)
 	if len(result.ResolvedIPv6) > 0 {
 		for _, ipv6 := range result.ResolvedIPv6 {
 			logging.Debugf("[%s]   Testing IFCICO IPv6 %s:%d", node.Address(), ipv6, port)
@@ -177,9 +179,9 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 			}
 		}
 	}
-	
-	// Test IPv4 (if available)
-	if len(result.ResolvedIPv4) > 0 {
+
+	// Test IPv4 (if available and allowed)
+	if len(result.ResolvedIPv4) > 0 && node.ShouldTestIPv4() {
 		for _, ipv4 := range result.ResolvedIPv4 {
 			logging.Debugf("[%s]   Testing IFCICO IPv4 %s:%d", node.Address(), ipv4, port)
 			testResult := d.ifcicoTester.Test(ctx, ipv4, port, node.Address())
@@ -214,6 +216,8 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 				}
 			}
 		}
+	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
+		logging.Infof("[%s]   Skipping IFCICO IPv4 test: node has INO4 flag", node.Address())
 	}
 	
 	// Update operational status if either IPv4 or IPv6 succeeded
@@ -245,11 +249,11 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 		}
 	}
 	
-	// Test IPv6 first (if available)
+	// Test IPv6 first (if available and allowed)
 	if len(result.ResolvedIPv6) > 0 {
 		for _, ipv6 := range result.ResolvedIPv6 {
 			testResult := d.telnetTester.Test(ctx, ipv6, port, node.Address())
-			
+
 			if telnetResult, ok := testResult.(*protocols.TelnetTestResult); ok {
 				result.TelnetResult.SetIPv6Result(
 					telnetResult.Success,
@@ -257,7 +261,7 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 					ipv6,
 					telnetResult.Error,
 				)
-				
+
 				// Store banner if successful
 				if telnetResult.Success && telnetResult.Banner != "" {
 					result.TelnetResult.Details["ipv6_banner"] = telnetResult.Banner
@@ -266,12 +270,12 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 			}
 		}
 	}
-	
-	// Test IPv4 (if available)
-	if len(result.ResolvedIPv4) > 0 {
+
+	// Test IPv4 (if available and allowed)
+	if len(result.ResolvedIPv4) > 0 && node.ShouldTestIPv4() {
 		for _, ipv4 := range result.ResolvedIPv4 {
 			testResult := d.telnetTester.Test(ctx, ipv4, port, node.Address())
-			
+
 			if telnetResult, ok := testResult.(*protocols.TelnetTestResult); ok {
 				result.TelnetResult.SetIPv4Result(
 					telnetResult.Success,
@@ -279,7 +283,7 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 					ipv4,
 					telnetResult.Error,
 				)
-				
+
 				// Store banner if successful
 				if telnetResult.Success && telnetResult.Banner != "" {
 					result.TelnetResult.Details["ipv4_banner"] = telnetResult.Banner
@@ -287,6 +291,8 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 				}
 			}
 		}
+	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
+		logging.Infof("[%s]   Skipping Telnet IPv4 test: node has INO4 flag", node.Address())
 	}
 	
 	// Update operational status if either IPv4 or IPv6 succeeded
@@ -295,7 +301,7 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 	}
 }
 
-// testFTP tests FTP connectivity
+// testFTP tests FTP connectivity on both IPv4 and IPv6
 func (d *Daemon) testFTP(ctx context.Context, node *models.Node, result *models.TestResult) {
 	if d.ftpTester == nil {
 		return
@@ -304,31 +310,85 @@ func (d *Daemon) testFTP(ctx context.Context, node *models.Node, result *models.
 	if len(node.InternetHostnames) == 0 {
 		return
 	}
-	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
-	}
-	
+
 	// Use custom port if specified, otherwise use default from config
 	port := node.GetProtocolPort("IFT")
 	if port == 0 {
 		port = d.config.Protocols.FTP.Port
 	}
-	
-	testResult := d.ftpTester.Test(ctx, ip, port, node.Address())
-	
-	if ftpResult, ok := testResult.(*protocols.FTPTestResult); ok {
-		result.SetFTPResult(ftpResult.Success, ftpResult.ResponseMs, ftpResult.Banner, ftpResult.Error)
+
+	// Initialize FTP result
+	if result.FTPResult == nil {
+		result.FTPResult = &models.ProtocolTestResult{
+			Details: make(map[string]interface{}),
+		}
+	}
+
+	// Test IPv6 first (if available)
+	if len(result.ResolvedIPv6) > 0 {
+		for _, ipv6 := range result.ResolvedIPv6 {
+			logging.Debugf("[%s]   Testing FTP IPv6 %s:%d", node.Address(), ipv6, port)
+			testResult := d.ftpTester.Test(ctx, ipv6, port, node.Address())
+
+			if ftpResult, ok := testResult.(*protocols.FTPTestResult); ok {
+				result.FTPResult.SetIPv6Result(
+					ftpResult.Success,
+					ftpResult.ResponseMs,
+					ipv6,
+					ftpResult.Error,
+				)
+
+				// Store banner if successful
+				if ftpResult.Success && ftpResult.Banner != "" {
+					logging.Debugf("[%s]     FTP IPv6 success: %s (%dms)", node.Address(), ftpResult.Banner, ftpResult.ResponseMs)
+					result.FTPResult.Details["ipv6_banner"] = ftpResult.Banner
+					break // First successful IPv6 is enough
+				} else if ftpResult.Error != "" {
+					logging.Debugf("[%s]     FTP IPv6 failed: %s", node.Address(), ftpResult.Error)
+				} else {
+					logging.Debugf("[%s]     FTP IPv6 failed: timeout or connection refused", node.Address())
+				}
+			}
+		}
+	}
+
+	// Test IPv4 (if available and allowed)
+	if len(result.ResolvedIPv4) > 0 && node.ShouldTestIPv4() {
+		for _, ipv4 := range result.ResolvedIPv4 {
+			logging.Debugf("[%s]   Testing FTP IPv4 %s:%d", node.Address(), ipv4, port)
+			testResult := d.ftpTester.Test(ctx, ipv4, port, node.Address())
+
+			if ftpResult, ok := testResult.(*protocols.FTPTestResult); ok {
+				result.FTPResult.SetIPv4Result(
+					ftpResult.Success,
+					ftpResult.ResponseMs,
+					ipv4,
+					ftpResult.Error,
+				)
+
+				// Store banner if successful
+				if ftpResult.Success && ftpResult.Banner != "" {
+					logging.Debugf("[%s]     FTP IPv4 success: %s (%dms)", node.Address(), ftpResult.Banner, ftpResult.ResponseMs)
+					result.FTPResult.Details["ipv4_banner"] = ftpResult.Banner
+					break // First successful IPv4 is enough
+				} else if ftpResult.Error != "" {
+					logging.Debugf("[%s]     FTP IPv4 failed: %s", node.Address(), ftpResult.Error)
+				} else {
+					logging.Debugf("[%s]     FTP IPv4 failed: timeout or connection refused", node.Address())
+				}
+			}
+		}
+	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
+		logging.Infof("[%s]   Skipping FTP IPv4 test: node has INO4 flag", node.Address())
+	}
+
+	// Update operational status if either IPv4 or IPv6 succeeded
+	if result.FTPResult.Success && !result.IsOperational {
+		result.IsOperational = true
 	}
 }
 
-// testVModem tests VModem connectivity
+// testVModem tests VModem connectivity on both IPv4 and IPv6
 func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *models.TestResult) {
 	if d.vmodemTester == nil {
 		return
@@ -337,20 +397,75 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 	if len(node.InternetHostnames) == 0 {
 		return
 	}
-	
-	// Get IP from DNS result
-	var ip string
-	if len(result.ResolvedIPv4) > 0 {
-		ip = result.ResolvedIPv4[0]
-	} else if len(result.ResolvedIPv6) > 0 {
-		ip = result.ResolvedIPv6[0]
-	} else {
-		return
+
+	// Get port from config
+	port := d.config.Protocols.VModem.Port
+
+	// Initialize VModem result
+	if result.VModemResult == nil {
+		result.VModemResult = &models.ProtocolTestResult{
+			Details: make(map[string]interface{}),
+		}
 	}
-	
-	testResult := d.vmodemTester.Test(ctx, ip, d.config.Protocols.VModem.Port, node.Address())
-	
-	if vmodemResult, ok := testResult.(*protocols.VModemTestResult); ok {
-		result.SetVModemResult(vmodemResult.Success, vmodemResult.ResponseMs, vmodemResult.Error)
+
+	// Test IPv6 first (if available)
+	if len(result.ResolvedIPv6) > 0 {
+		for _, ipv6 := range result.ResolvedIPv6 {
+			logging.Debugf("[%s]   Testing VModem IPv6 %s:%d", node.Address(), ipv6, port)
+			testResult := d.vmodemTester.Test(ctx, ipv6, port, node.Address())
+
+			if vmodemResult, ok := testResult.(*protocols.VModemTestResult); ok {
+				result.VModemResult.SetIPv6Result(
+					vmodemResult.Success,
+					vmodemResult.ResponseMs,
+					ipv6,
+					vmodemResult.Error,
+				)
+
+				// Log success or failure
+				if vmodemResult.Success {
+					logging.Debugf("[%s]     VModem IPv6 success (%dms)", node.Address(), vmodemResult.ResponseMs)
+					break // First successful IPv6 is enough
+				} else if vmodemResult.Error != "" {
+					logging.Debugf("[%s]     VModem IPv6 failed: %s", node.Address(), vmodemResult.Error)
+				} else {
+					logging.Debugf("[%s]     VModem IPv6 failed: timeout or connection refused", node.Address())
+				}
+			}
+		}
+	}
+
+	// Test IPv4 (if available and allowed)
+	if len(result.ResolvedIPv4) > 0 && node.ShouldTestIPv4() {
+		for _, ipv4 := range result.ResolvedIPv4 {
+			logging.Debugf("[%s]   Testing VModem IPv4 %s:%d", node.Address(), ipv4, port)
+			testResult := d.vmodemTester.Test(ctx, ipv4, port, node.Address())
+
+			if vmodemResult, ok := testResult.(*protocols.VModemTestResult); ok {
+				result.VModemResult.SetIPv4Result(
+					vmodemResult.Success,
+					vmodemResult.ResponseMs,
+					ipv4,
+					vmodemResult.Error,
+				)
+
+				// Log success or failure
+				if vmodemResult.Success {
+					logging.Debugf("[%s]     VModem IPv4 success (%dms)", node.Address(), vmodemResult.ResponseMs)
+					break // First successful IPv4 is enough
+				} else if vmodemResult.Error != "" {
+					logging.Debugf("[%s]     VModem IPv4 failed: %s", node.Address(), vmodemResult.Error)
+				} else {
+					logging.Debugf("[%s]     VModem IPv4 failed: timeout or connection refused", node.Address())
+				}
+			}
+		}
+	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
+		logging.Infof("[%s]   Skipping VModem IPv4 test: node has INO4 flag", node.Address())
+	}
+
+	// Update operational status if either IPv4 or IPv6 succeeded
+	if result.VModemResult.Success && !result.IsOperational {
+		result.IsOperational = true
 	}
 }

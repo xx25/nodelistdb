@@ -87,8 +87,6 @@ func GetFieldDescriptionWithFlag(field string) FieldDescription {
 				icon = "📧" // UUencoded
 			case "INO4":
 				icon = "🚫" // No IPv4
-			case "INO6":
-				icon = "🚫" // No IPv6
 			case "ICM":
 				icon = "📞" // Internet CM
 			}

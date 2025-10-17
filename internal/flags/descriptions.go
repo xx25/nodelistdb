@@ -89,8 +89,7 @@ func GetFlagDescriptions() map[string]FlagInfo {
 		
 		// Internet information flags
 		"ICM":  {Category: "internet", HasValue: false, Description: "Internet CM"},
-		"INO4": {Category: "internet", HasValue: false, Description: "No IPv4"},
-		"INO6": {Category: "internet", HasValue: false, Description: "No IPv6"},
+		"INO4": {Category: "internet", HasValue: false, Description: "No IPv4 incoming connections (FTS-1038)"},
 
 		// Capability flags
 		"CM": {Category: "capability", HasValue: false, Description: "Continuous Mail"},

@@ -260,15 +260,56 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 		&result.VModemSuccess,
 		&result.VModemResponseMs,
 		&result.VModemError,
+		&result.BinkPIPv4Tested,
+		&result.BinkPIPv4Success,
+		&result.BinkPIPv4ResponseMs,
+		&result.BinkPIPv4Address,
+		&result.BinkPIPv4Error,
 		&result.BinkPIPv6Tested,
 		&result.BinkPIPv6Success,
+		&result.BinkPIPv6ResponseMs,
+		&result.BinkPIPv6Address,
 		&result.BinkPIPv6Error,
+		&result.IfcicoIPv4Tested,
+		&result.IfcicoIPv4Success,
+		&result.IfcicoIPv4ResponseMs,
+		&result.IfcicoIPv4Address,
+		&result.IfcicoIPv4Error,
 		&result.IfcicoIPv6Tested,
 		&result.IfcicoIPv6Success,
+		&result.IfcicoIPv6ResponseMs,
+		&result.IfcicoIPv6Address,
 		&result.IfcicoIPv6Error,
+		&result.TelnetIPv4Tested,
+		&result.TelnetIPv4Success,
+		&result.TelnetIPv4ResponseMs,
+		&result.TelnetIPv4Address,
+		&result.TelnetIPv4Error,
 		&result.TelnetIPv6Tested,
 		&result.TelnetIPv6Success,
+		&result.TelnetIPv6ResponseMs,
+		&result.TelnetIPv6Address,
 		&result.TelnetIPv6Error,
+		&result.FTPIPv4Tested,
+		&result.FTPIPv4Success,
+		&result.FTPIPv4ResponseMs,
+		&result.FTPIPv4Address,
+		&result.FTPIPv4Error,
+		&result.FTPIPv6Tested,
+		&result.FTPIPv6Success,
+		&result.FTPIPv6ResponseMs,
+		&result.FTPIPv6Address,
+		&result.FTPIPv6Error,
+		&result.VModemIPv4Tested,
+		&result.VModemIPv4Success,
+		&result.VModemIPv4ResponseMs,
+		&result.VModemIPv4Address,
+		&result.VModemIPv4Error,
+		&result.VModemIPv6Tested,
+		&result.VModemIPv6Success,
+		&result.VModemIPv6ResponseMs,
+		&result.VModemIPv6Address,
+		&result.VModemIPv6Error,
 		&result.IsOperational,
 		&result.HasConnectivityIssues,
 		&result.AddressValidated,
@@ -282,16 +323,7 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 
 	if err != nil {
 		logging.Error("ParseTestResultRow: Scan failed", slog.Any("error", err))
-		// If scanning with new fields failed, mark as legacy data
-		result.HostnameIndex = -1
-		result.IsAggregated = true
-		result.TotalHostnames = 1
-		result.HostnamesTested = 1
-		result.HostnamesOperational = 0
-		if result.IsOperational {
-			result.HostnamesOperational = 1
-		}
-		result.TestedHostname = result.Hostname
+		return fmt.Errorf("failed to scan test result row: %w", err)
 	}
 
 	// Parse arrays (compatible with both DuckDB and ClickHouse)

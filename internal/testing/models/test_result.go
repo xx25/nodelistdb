@@ -44,6 +44,9 @@ type TestResult struct {
 	HasConnectivityIssues bool
 	AddressValidated      bool
 
+	// IP version restrictions (FTS-1038)
+	IPv4Skipped           bool   // IPv4 testing skipped due to INO4 flag
+
 	// Per-hostname testing fields (simplified migration)
 	HostnameIndex         int32  // -1=legacy, 0=primary, 1+=backup
 	IsAggregated          bool   // false=per-hostname, true=summary

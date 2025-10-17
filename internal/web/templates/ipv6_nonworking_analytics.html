@@ -220,9 +220,10 @@
                                 <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                             </td>
                             <td>
-                                <a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05"}}" class="btn btn-sm btn-info" title="View test details">
-                                    Details
-                                </a>
+                                <div class="compact-actions">
+                                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm btn-info">View</a>
+                                    <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>
+                                </div>
                             </td>
                         </tr>
                         {{end}}

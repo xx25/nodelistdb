@@ -71,6 +71,8 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 			has_connectivity_issues Bool,
 			address_validated Bool,
 
+			ipv4_skipped Bool DEFAULT false,
+
 			INDEX idx_date test_date TYPE minmax GRANULARITY 1,
 			INDEX idx_zone_net (zone, net) TYPE minmax GRANULARITY 1,
 			INDEX idx_operational is_operational TYPE minmax GRANULARITY 1

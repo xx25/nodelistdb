@@ -24,6 +24,7 @@ type Node struct {
 	TestReason        string             `db:"-"` // Reason for current test: "stale", "new", "config_changed", "scheduled", "failed_retry"
 	Availability      *timeavail.NodeAvailability `db:"-"` // Time availability windows for calling
 	Flags             []string           `db:"flags"` // Node flags from nodelist
+	InfoFlags         []string           `db:"-"` // Information flags from InternetConfig (INO4, ICM)
 }
 
 // Address returns the FidoNet address string
@@ -115,6 +116,29 @@ func (n *Node) FTPAddress() string {
 	}
 
 	return ""
+}
+
+// HasInfoFlag checks if node has a specific information flag (INO4, ICM, etc.)
+func (n *Node) HasInfoFlag(flag string) bool {
+	for _, f := range n.InfoFlags {
+		if f == flag {
+			return true
+		}
+	}
+	return false
+}
+
+// HasINO4 checks if node has the INO4 flag (no IPv4 incoming connections)
+// Per FTS-1038: "Indicates that an otherwise IP capable node is unable to
+// accept incoming connections over IPv4"
+func (n *Node) HasINO4() bool {
+	return n.HasInfoFlag("INO4")
+}
+
+// ShouldTestIPv4 determines if IPv4 connectivity should be tested
+// Returns false if the node has the INO4 flag set
+func (n *Node) ShouldTestIPv4() bool {
+	return !n.HasINO4()
 }
 
 // NodeTestRequest represents a request to test a node

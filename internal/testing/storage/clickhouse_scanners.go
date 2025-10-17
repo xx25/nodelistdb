@@ -138,6 +138,16 @@ func scanNodesNative(rows driver.Rows) ([]*models.Node, error) {
 						}
 					}
 				}
+
+				// Extract info_flags array (INO4, INO6, ICM)
+				if infoFlags, ok := config["info_flags"].([]interface{}); ok {
+					node.InfoFlags = make([]string, 0, len(infoFlags))
+					for _, flag := range infoFlags {
+						if flagStr, ok := flag.(string); ok {
+							node.InfoFlags = append(node.InfoFlags, flagStr)
+						}
+					}
+				}
 			}
 		}
 

@@ -127,8 +127,8 @@ func (p *Parser) parseFlagWithoutValue(
 		}
 		emailProtocols[part] = append(emailProtocols[part], database.EmailProtocolDetail{})
 
-	// Information flags
-	case "INO4", "INO6", "ICM":
+	// Information flags (FTS-1038)
+	case "INO4", "ICM":
 		*infoFlags = append(*infoFlags, part)
 
 	// Alternative protocol names

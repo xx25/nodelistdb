@@ -324,6 +324,11 @@ func (s *Server) IPv6AdvertisedIPv4OnlyAnalyticsHandler(w http.ResponseWriter, r
 	s.renderIPv6Analytics(w, r, "IPv6 Advertised, IPv4 Only", "ipv6_advertised_ipv4_only_analytics", s.storage.GetIPv6AdvertisedIPv4OnlyNodes)
 }
 
+// IPv6OnlyNodesHandler shows nodes that have working IPv6 services but NO working IPv4 services
+func (s *Server) IPv6OnlyNodesHandler(w http.ResponseWriter, r *http.Request) {
+	s.renderIPv6Analytics(w, r, "IPv6 Only Nodes", "ipv6_only_analytics", s.storage.GetIPv6OnlyNodes)
+}
+
 // BinkPAnalyticsHandler shows BinkP enabled nodes analytics
 func (s *Server) BinkPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderProtocolAnalytics(w, r, "BinkP Enabled Nodes", "binkp_analytics", s.storage.GetBinkPEnabledNodes)
