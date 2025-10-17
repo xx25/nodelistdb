@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weekly IPv6 News - NodelistDB</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/tooltip.js"></script>
     <script src="/static/sortable-table.js"></script>
     <style>
         .news-section {
@@ -65,46 +66,7 @@
         .badge-danger:hover {
             background-color: #c82333;
             box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4);
-        }
-
-        .ipv6-tooltip {
-            position: relative;
-            cursor: help;
-        }
-
-        .ipv6-tooltip:hover::after {
-            content: attr(data-ipv6);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #333;
-            color: #0f0;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-            font-weight: bold;
-            white-space: pre;
-            z-index: 1000;
-            margin-bottom: 5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            min-width: max-content;
-        }
-
-        .ipv6-tooltip:hover::before {
-            content: '';
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: #333;
-            z-index: 1001;
-            margin-bottom: -1px;
-        }
-
-        .stats-summary {
+        }.stats-summary {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
@@ -357,9 +319,9 @@
                                 </td>
                                 <td>
                                     {{if .TestedHostname}}
-                                        <span class="badge badge-secondary">{{.TestedHostname}}</span>
+                                        <span class="badge badge-secondary ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">{{.TestedHostname}}</span>
                                     {{else if .Hostname}}
-                                        <span class="badge badge-secondary">{{.Hostname}}</span>
+                                        <span class="badge badge-secondary ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">{{.Hostname}}</span>
                                     {{else}}
                                         <span class="text-muted">N/A</span>
                                     {{end}}

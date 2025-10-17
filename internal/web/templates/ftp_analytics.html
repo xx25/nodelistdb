@@ -6,6 +6,7 @@
     <title>FTP Enabled Nodes - NodelistDB</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/sortable-table.js"></script>
+    <script src="/static/tooltip.js"></script>
     <style>
         .compact-actions {
             display: flex;
@@ -27,46 +28,7 @@
         .protocol-info h3 {
             margin-top: 0;
             color: #2c3e50;
-        }
-
-        /* IP address tooltip styling */
-        .ip-tooltip {
-            position: relative;
-            cursor: help;
-        }
-
-        .ip-tooltip:hover::after {
-            content: attr(data-ips);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #333;
-            color: #0f0;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-            font-weight: bold;
-            white-space: pre;
-            z-index: 1000;
-            margin-bottom: 5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            min-width: max-content;
-        }
-
-        .ip-tooltip:hover::before {
-            content: '';
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: #333;
-            z-index: 1001;
-            margin-bottom: -1px;
-        }
-    </style>
+        }</style>
 </head>
 <body>
     <div class="container">

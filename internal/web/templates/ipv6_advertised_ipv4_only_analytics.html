@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPv6 Advertised, IPv4 Only - NodelistDB</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/tooltip.js"></script>
     <script src="/static/sortable-table.js"></script>
     <style>
         .compact-actions {
@@ -50,46 +51,7 @@
         .badge-success:hover {
             background-color: #218838;
             box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4);
-        }
-
-        /* Custom tooltip styling for IPv6 addresses */
-        .ipv6-tooltip {
-            position: relative;
-            cursor: help;
-        }
-
-        .ipv6-tooltip:hover::after {
-            content: attr(data-ipv6);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #333;
-            color: #0f0;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-            font-weight: bold;
-            white-space: pre;
-            z-index: 1000;
-            margin-bottom: 5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            min-width: max-content;
-        }
-
-        .ipv6-tooltip:hover::before {
-            content: '';
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: #333;
-            z-index: 1001;
-            margin-bottom: -1px;
-        }
-    </style>
+        }</style>
 </head>
 <body>
     <div class="container">
@@ -169,16 +131,17 @@
                             <td>
                                 {{if .AllHostnames}}
                                     {{$ipv6List := .ResolvedIPv6}}
+                                    {{$hostnameCount := len .AllHostnames}}
                                     {{range $idx, $hostname := .AllHostnames}}
                                         {{if $idx}}<br>{{end}}
-                                        <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $ipIdx, $ip := $ipv6List}}{{if $ipIdx}}&#10;{{end}}{{$ip}}{{end}}">
-                                            {{$hostname}}
+                                        <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $ipIdx, $ip := $ipv6List}}{{if $ipIdx}}&#10;{{end}}{{$ip}}{{end}}">{{$hostname}}</span>
+                                        {{if gt $hostnameCount 1}}
                                             {{if eq $idx 0}}
-                                                <small>(primary)</small>
+                                                <span class="tooltip-copy-group"><small>(primary)</small></span>
                                             {{else}}
-                                                <small>(backup #{{$idx}})</small>
+                                                <span class="tooltip-copy-group"><small>(backup #{{$idx}})</small></span>
                                             {{end}}
-                                        </span>
+                                        {{end}}
                                     {{end}}
                                 {{else if .TestedHostname}}
                                     <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">
