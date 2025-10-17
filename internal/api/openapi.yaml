@@ -389,7 +389,7 @@ paths:
       summary: List Sysops
       description: |
         Get a list of unique sysops with their node counts and activity statistics.
-        
+
         Results can be filtered by name and paginated for large datasets.
       operationId: listSysops
       tags:
@@ -665,6 +665,35 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/analytics/geo-hosting:
+    get:
+      summary: Get Geographic Hosting Distribution
+      description: |
+        Get geographic distribution statistics of node hosting by country and region.
+
+        Returns data showing where FidoNet nodes are physically hosted based on IP geolocation.
+      operationId: getGeoHostingStats
+      tags:
+        - Geographic Analytics
+      parameters:
+        - name: days
+          in: query
+          description: Number of days to include in analysis
+          schema:
+            type: integer
+            minimum: 1
+            default: 365
+            example: 365
+      responses:
+        '200':
+          description: Geographic hosting distribution statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoDistribution'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1163,6 +1192,41 @@ components:
           description: Number of days included in the analysis
           example: 365
 
+    GeoDistribution:
+      type: object
+      description: Geographic distribution statistics
+      properties:
+        total_nodes:
+          type: integer
+          description: Total number of nodes with geolocation data
+          example: 2450
+        countries:
+          type: array
+          items:
+            type: object
+            properties:
+              country_code:
+                type: string
+                description: ISO 3166-1 alpha-2 country code
+                example: "US"
+              country_name:
+                type: string
+                description: Country name
+                example: "United States"
+              node_count:
+                type: integer
+                description: Number of nodes hosted in this country
+                example: 450
+              percentage:
+                type: number
+                format: float
+                description: Percentage of total
+                example: 18.4
+        period_days:
+          type: integer
+          description: Number of days included in the analysis
+          example: 365
+
     Error:
       type: object
       description: Standard error response
@@ -1272,6 +1336,8 @@ tags:
     description: Network statistics and analytics
   - name: Software Analytics
     description: Software distribution and usage statistics from node testing
+  - name: Geographic Analytics
+    description: Geographic distribution and hosting statistics
   - name: Reference
     description: Reference documentation and definitions
   - name: Nodelists

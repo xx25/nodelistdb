@@ -76,17 +76,19 @@ nav {
 }
 
 .nav-container {
-    display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 0.05rem;
-    padding: 0 0.25rem;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    max-width: 1000px;
+    margin: 0 auto;
 }
 
 nav a {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    padding: 0.5rem 0.4rem;
+    justify-content: center;
+    padding: 0.75rem 1rem;
     color: var(--text-secondary);
     text-decoration: none;
     border-radius: var(--radius);
@@ -95,6 +97,7 @@ nav a {
     transition: all 0.2s ease;
     border: 1px solid transparent;
     white-space: nowrap;
+    text-align: center;
 }
 
 nav a:hover {
@@ -502,13 +505,13 @@ table a:hover {
     }
     
     .nav-container {
-        gap: 0.05rem;
-        justify-content: space-around;
-        padding: 0 0.25rem;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+        padding: 0.5rem;
     }
-    
+
     nav a {
-        padding: 0.4rem 0.3rem;
+        padding: 0.75rem 0.75rem;
         font-size: 1.1rem;
     }
     

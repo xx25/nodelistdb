@@ -45,7 +45,7 @@ func (tqb *TestQueryBuilder) BuildTestHistoryQuery() string {
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
 		AND test_time >= now() - INTERVAL ? DAY
-		ORDER BY test_time DESC, hostname_index`
+		ORDER BY test_time ASC, hostname_index`
 }
 
 // BuildDetailedTestResultQuery builds a query for a specific test result (ClickHouse)
@@ -184,7 +184,7 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 			avgIf(last_response_ms, last_status = 1 AND last_response_ms < 999999) as avg_response_ms
 		FROM daily_status
 		GROUP BY report_date
-		ORDER BY report_date ASC`
+		ORDER BY report_date DESC`
 }
 
 // BuildProtocolEnabledQuery builds a query for nodes with a specific protocol enabled (ClickHouse)

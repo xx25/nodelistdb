@@ -80,7 +80,7 @@ func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 			END as percentage
 		FROM total_nodes_per_year t
 		LEFT JOIN flagged_nodes_per_year f ON t.year = f.year
-		ORDER BY t.year
+		ORDER BY t.year ASC
 	`
 }
 
