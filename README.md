@@ -403,12 +403,6 @@ If imports are slow:
 - Check ClickHouse server resources
 - Review ClickHouse query logs
 
-## Documentation
-
-- `CLAUDE.md`: Developer guide for working with the codebase
-- `MIGRATION_STATUS.md`: DuckDB to ClickHouse migration progress
-- `IMPLEMENTATION_STATUS.md`: Feature implementation tracking
-
 ## License
 
 MIT
