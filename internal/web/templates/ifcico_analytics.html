@@ -27,7 +27,6 @@
                 <th data-sortable data-type="address">Node Address</th>
                 <th data-sortable data-type="string">Hostname</th>
                 <th data-sortable data-type="string">Mailer Info</th>
-                <th data-sortable data-type="string">Response Type</th>
                 <th data-sortable data-type="string">Location</th>
                 <th data-sortable data-type="date">Last Tested</th>
                 <th>Actions</th>
@@ -43,13 +42,6 @@
                         <span class="badge badge-info">{{.IfcicoMailerInfo}}</span>
                     {{else}}
                         <span class="text-muted">Unknown</span>
-                    {{end}}
-                </td>
-                <td>
-                    {{if .IfcicoResponseType}}
-                        <span class="badge badge-primary">{{.IfcicoResponseType}}</span>
-                    {{else}}
-                        <span class="text-muted">N/A</span>
                     {{end}}
                 </td>
                 {{template "location_cell" .}}

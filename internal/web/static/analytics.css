@@ -12,6 +12,9 @@
 .compact-actions {
     display: flex;
     gap: 0.25rem;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: center;
 }
 
 .compact-actions a,
@@ -20,6 +23,8 @@
     font-size: 0.875rem !important;
     line-height: 1.2 !important;
     min-width: auto !important;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 /* Badge tooltips */
@@ -225,6 +230,19 @@
 /* Table responsive */
 .table-responsive {
     overflow-x: auto;
+}
+
+/* Actions column styling - ensure consistent width across all analytics tables */
+table th:last-child,
+table td:last-child {
+    min-width: 145px;
+    width: 145px;
+}
+
+/* Ensure sortable tables maintain proper column widths */
+.sortable-table {
+    table-layout: auto;
+    width: 100%;
 }
 
 /* Tooltip helper classes */
