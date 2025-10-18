@@ -1,0 +1,31 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{block "title" .}}NodelistDB{{end}} - NodelistDB</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/analytics.css">
+    {{block "extra_css" .}}{{end}}
+    {{block "head_scripts" .}}{{end}}
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{{block "page_title" .}}NodelistDB{{end}}</h1>
+            {{block "page_subtitle" .}}{{end}}
+        </header>
+
+        {{template "nav" .}}
+
+        <div class="content">
+            {{block "content" .}}{{end}}
+        </div>
+    </div>
+
+    {{template "footer" .}}
+    {{block "footer_scripts" .}}{{end}}
+</body>
+</html>
+{{end}}

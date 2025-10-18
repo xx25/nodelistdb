@@ -1,0 +1,34 @@
+{{define "hostname_cell"}}
+<td>
+    {{if .AllHostnames}}
+        {{$ipv6List := .ResolvedIPv6}}
+        {{$hostnameCount := len .AllHostnames}}
+        {{range $idx, $hostname := .AllHostnames}}
+            {{if $idx}}<br>{{end}}
+            <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $ipIdx, $ip := $ipv6List}}{{if $ipIdx}}&#10;{{end}}{{$ip}}{{end}}">{{$hostname}}</span>
+            {{if gt $hostnameCount 1}}
+                {{if eq $idx 0}}
+                    <span class="tooltip-copy-group"><small>(primary)</small></span>
+                {{else}}
+                    <span class="tooltip-copy-group"><small>(backup #{{$idx}})</small></span>
+                {{end}}
+            {{end}}
+        {{end}}
+    {{else if .TestedHostname}}
+        <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">
+            {{.TestedHostname}}
+            {{if and (gt .TotalHostnames 1) (ge .HostnameIndex 0)}}
+                {{if eq .HostnameIndex 0}}
+                    <small>(primary)</small>
+                {{else}}
+                    <small>(backup #{{.HostnameIndex}})</small>
+                {{end}}
+            {{end}}
+        </span>
+    {{else if .Hostname}}
+        <span class="badge badge-info ipv6-tooltip" data-ipv6="{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}">{{.Hostname}}</span>
+    {{else}}
+        <span class="text-muted ipv6-tooltip" data-ipv6="{{if .ResolvedIPv6}}{{range $idx, $ip := .ResolvedIPv6}}{{if $idx}}&#10;{{end}}{{$ip}}{{end}}{{else}}No IPv6{{end}}">N/A</span>
+    {{end}}
+</td>
+{{end}}

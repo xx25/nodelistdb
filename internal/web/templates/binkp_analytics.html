@@ -1,188 +1,65 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BinkP Enabled Nodes - NodelistDB</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/sortable-table.js"></script>
-    <script src="/static/tooltip.js"></script>
-    <style>
-        .compact-actions {
-            display: flex;
-            gap: 0.25rem;
-        }
+{{template "base" .}}
 
-        .compact-actions a {
-            padding: 0.125rem 0.25rem;
-            font-size: 0.875rem;
-        }
+{{define "title"}}BinkP Enabled Nodes{{end}}
 
-        .protocol-info {
-            background: #e8f4f8;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
+{{define "page_title"}}BinkP Enabled Nodes{{end}}
 
-        .protocol-info h3 {
-            margin-top: 0;
-            color: #2c3e50;
-        }
+{{define "page_subtitle"}}<p class="subtitle">Nodes that have been successfully tested with BinkP protocol</p>{{end}}
 
-        .capabilities-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.25rem;
-        }
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+<script src="/static/tooltip.js"></script>
+{{end}}
 
-        .capability-badge {
-            padding: 0.125rem 0.5rem;
-            background: #17a2b8;
-            color: white;
-            border-radius: 3px;
-            font-size: 0.8rem;
-        }</style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>BinkP Enabled Nodes</h1>
-            <p class="subtitle">Nodes that have been successfully tested with BinkP protocol</p>
-        </header>
+{{define "content"}}
+{{template "analytics_filters" .}}
+{{template "error_display" .}}
 
-        {{template "nav" .}}
+{{if .ProtocolNodes}}
+<div class="stats-box">
+    <h3>Found {{len .ProtocolNodes}} BinkP Enabled Nodes</h3>
+</div>
 
-        <div class="content">
-            <div class="search-container">
-                <form method="get" action="/analytics/binkp" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem;">
-                    <div class="form-group">
-                        <label for="days">Period:</label>
-                        <select name="days" id="days" class="form-control">
-                            <option value="7" {{if eq .Days 7}}selected{{end}}>Last 7 days</option>
-                            <option value="30" {{if eq .Days 30}}selected{{end}}>Last 30 days</option>
-                            <option value="90" {{if eq .Days 90}}selected{{end}}>Last 90 days</option>
-                            <option value="180" {{if eq .Days 180}}selected{{end}}>Last 180 days</option>
-                            <option value="365" {{if eq .Days 365}}selected{{end}}>Last year</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="limit">Limit:</label>
-                        <select name="limit" id="limit" class="form-control">
-                            <option value="50" {{if eq .Limit 50}}selected{{end}}>50</option>
-                            <option value="100" {{if eq .Limit 100}}selected{{end}}>100</option>
-                            <option value="200" {{if eq .Limit 200}}selected{{end}}>200</option>
-                            <option value="500" {{if eq .Limit 500}}selected{{end}}>500</option>
-                            <option value="1000" {{if eq .Limit 1000}}selected{{end}}>1000</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
-                        <input type="checkbox" name="includeZero" id="includeZero" value="true" {{if .IncludeZeroNodes}}checked{{end}}>
-                        <label for="includeZero" style="margin: 0;">Include /0 nodes</label>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary">Apply Filters</button>
-                </form>
-            </div>
-
-            {{if .Error}}
-            <div class="alert alert-error">
-                <strong>Error:</strong> {{.Error}}
-            </div>
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">Hostname</th>
+                <th data-sortable data-type="string">Version</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .ProtocolNodes}}
+            <tr>
+                {{template "node_address_cell" .}}
+                {{template "hostname_cell_simple" .}}
+                <td>
+                    {{if .BinkPVersion}}
+                        <span class="badge badge-info">{{.BinkPVersion}}</span>
+                    {{else}}
+                        <span class="text-muted">Unknown</span>
+                    {{end}}
+                </td>
+                {{template "location_cell" .}}
+                {{template "timestamp_cell" .}}
+                {{template "action_buttons_cell" .}}
+            </tr>
             {{end}}
+        </tbody>
+    </table>
+</div>
 
-            {{if .ProtocolNodes}}
-            <div class="stats-box">
-                <h3>Found {{len .ProtocolNodes}} BinkP Enabled Nodes</h3>
-            </div>
-
-            <div class="table-responsive">
-                <table class="data-table sortable-table">
-                    <thead>
-                        <tr>
-                            <th data-sortable data-type="address">Node Address</th>
-                            <th data-sortable data-type="string">Hostname</th>
-                            <th data-sortable data-type="string">Version</th>
-                            <th data-sortable data-type="string">Location</th>
-                            <th data-sortable data-type="date">Last Tested</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range .ProtocolNodes}}
-                        <tr>
-                            <td>
-                                <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
-                                    <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
-                                </a>
-                            </td>
-                            <td>
-                                {{if .Hostname}}
-                                    {{$allIPs := ""}}
-                                    {{if .ResolvedIPv4}}
-                                        {{range $idx, $ip := .ResolvedIPv4}}{{if $idx}}{{$allIPs = printf "%s\n%s" $allIPs $ip}}{{else}}{{$allIPs = printf "IPv4:\n%s" $ip}}{{end}}{{end}}
-                                    {{end}}
-                                    {{if .ResolvedIPv6}}
-                                        {{if $allIPs}}{{$allIPs = printf "%s\n\nIPv6:" $allIPs}}{{else}}{{$allIPs = "IPv6:"}}{{end}}
-                                        {{range $idx, $ip := .ResolvedIPv6}}{{$allIPs = printf "%s\n%s" $allIPs $ip}}{{end}}
-                                    {{end}}
-                                    {{if $allIPs}}
-                                        <span class="badge badge-info ip-tooltip" data-ips="{{$allIPs}}">{{.Hostname}}</span>
-                                    {{else}}
-                                        <span class="badge badge-info">{{.Hostname}}</span>
-                                    {{end}}
-                                {{else}}
-                                    <span class="text-muted">N/A</span>
-                                {{end}}
-                            </td>
-                            <td>
-                                {{if .BinkPVersion}}
-                                    <span class="badge badge-info">{{.BinkPVersion}}</span>
-                                {{else}}
-                                    <span class="text-muted">Unknown</span>
-                                {{end}}
-                            </td>
-                            <td>
-                                {{if .City}}
-                                    {{.City}}, {{.CountryCode}}
-                                    {{if .ISP}}
-                                        <br><small class="text-muted">{{.ISP}}</small>
-                                    {{end}}
-                                {{else if .Country}}
-                                    {{.Country}}
-                                {{else}}
-                                    <span class="text-muted">Unknown</span>
-                                {{end}}
-                            </td>
-                            <td data-value="{{.TestTime.Unix}}">
-                                <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
-                            </td>
-                            <td>
-                                <div class="compact-actions">
-                                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm btn-info">View</a>
-                                    <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>
-                                </div>
-                            </td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="info-box" style="margin-top: 2rem;">
-                <p><strong>Note:</strong> This report shows nodes that have been successfully tested with BinkP protocol over the last {{.Days}} days. BinkP is a modern, efficient protocol for FidoNet mail exchange over TCP/IP.</p>
-            </div>
-            {{else}}
-            <div class="alert alert-warning">
-                <strong>No BinkP enabled nodes found for the selected period.</strong><br>
-                This could mean that either no nodes with BinkP support were tested during this period, or none of them responded successfully to protocol tests.
-            </div>
-            {{end}}
-        </div>
-    </div>
-
-    {{template "footer" .}}
-</body>
-</html>
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>Note:</strong> This report shows nodes that have been successfully tested with BinkP protocol over the last {{.Days}} days. BinkP is a modern, efficient protocol for FidoNet mail exchange over TCP/IP.</p>
+</div>
+{{else}}
+<div class="alert alert-warning">
+    <strong>No BinkP enabled nodes found for the selected period.</strong><br>
+    This could mean that either no nodes with BinkP support were tested during this period, or none of them responded successfully to protocol tests.
+</div>
+{{end}}
+{{end}}

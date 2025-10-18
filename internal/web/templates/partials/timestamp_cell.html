@@ -1,0 +1,5 @@
+{{define "timestamp_cell"}}
+<td data-value="{{.TestTime.Unix}}">
+    <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
+</td>
+{{end}}

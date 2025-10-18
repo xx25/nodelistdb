@@ -1,0 +1,14 @@
+{{define "location_cell"}}
+<td>
+    {{if .City}}
+        {{.City}}, {{.CountryCode}}
+        {{if .ISP}}
+            <br><small class="text-muted">{{.ISP}}</small>
+        {{end}}
+    {{else if .Country}}
+        {{.Country}}
+    {{else}}
+        <span class="text-muted">Unknown</span>
+    {{end}}
+</td>
+{{end}}

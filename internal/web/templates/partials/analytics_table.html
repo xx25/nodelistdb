@@ -1,0 +1,30 @@
+{{define "analytics_table"}}
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">Hostname</th>
+                {{block "table_columns" .}}{{end}}
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Nodes}}
+            <tr>
+                {{template "node_address_cell" .}}
+                {{block "hostname_cell_override" .}}
+                    {{template "hostname_cell" .}}
+                {{end}}
+                {{block "table_cells" .}}{{end}}
+                {{template "location_cell" .}}
+                {{template "timestamp_cell" .}}
+                {{template "action_buttons_cell" .}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

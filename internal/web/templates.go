@@ -295,6 +295,15 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 		tmpl = tmpl.Funcs(funcMap)
 	}
 
+	// Load base template if exists
+	baseContent, err := s.templatesFS.ReadFile("templates/base.html")
+	if err == nil {
+		tmpl, err = tmpl.Parse(string(baseContent))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse base template: %v", err)
+		}
+	}
+
 	// For main templates (not nav or footer), also load the nav and footer templates
 	if name != "nav" && name != "footer" {
 		navContent, err := s.templatesFS.ReadFile("templates/nav.html")
@@ -312,6 +321,31 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 			tmpl, err = tmpl.Parse(string(footerContent))
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse footer template: %v", err)
+			}
+		}
+	}
+
+	// Load partial templates from partials/ directory
+	partialFiles := []string{
+		"analytics_filters.html",
+		"analytics_table.html",
+		"error_display.html",
+		"node_address_cell.html",
+		"hostname_cell.html",
+		"hostname_cell_simple.html",
+		"location_cell.html",
+		"timestamp_cell.html",
+		"action_buttons_cell.html",
+	}
+
+	for _, partialFile := range partialFiles {
+		partialPath := filepath.Join("templates", "partials", partialFile)
+		partialContent, err := s.templatesFS.ReadFile(partialPath)
+		if err == nil {
+			tmpl, err = tmpl.Parse(string(partialContent))
+			if err != nil {
+				log.Printf("Warning: failed to parse partial %s: %v", partialFile, err)
+				// Continue loading other partials
 			}
 		}
 	}

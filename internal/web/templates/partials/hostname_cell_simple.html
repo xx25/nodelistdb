@@ -1,0 +1,21 @@
+{{define "hostname_cell_simple"}}
+<td>
+    {{if .Hostname}}
+        {{$allIPs := ""}}
+        {{if .ResolvedIPv4}}
+            {{range $idx, $ip := .ResolvedIPv4}}{{if $idx}}{{$allIPs = printf "%s\n%s" $allIPs $ip}}{{else}}{{$allIPs = printf "IPv4:\n%s" $ip}}{{end}}{{end}}
+        {{end}}
+        {{if .ResolvedIPv6}}
+            {{if $allIPs}}{{$allIPs = printf "%s\n\nIPv6:" $allIPs}}{{else}}{{$allIPs = "IPv6:"}}{{end}}
+            {{range $idx, $ip := .ResolvedIPv6}}{{$allIPs = printf "%s\n%s" $allIPs $ip}}{{end}}
+        {{end}}
+        {{if $allIPs}}
+            <span class="badge badge-info ip-tooltip" data-ips="{{$allIPs}}">{{.Hostname}}</span>
+        {{else}}
+            <span class="badge badge-info">{{.Hostname}}</span>
+        {{end}}
+    {{else}}
+        <span class="text-muted">N/A</span>
+    {{end}}
+</td>
+{{end}}
