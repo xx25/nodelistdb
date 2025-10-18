@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
+	"github.com/nodelistdb/internal/testing/logging"
 	"net"
 	"os"
 	"strings"
@@ -123,7 +123,7 @@ func ReadFrame(conn net.Conn) (*Frame, error) {
 func WriteFrame(conn net.Conn, frame *Frame) error {
 	// Debug: log what we're sending
 	if debug := os.Getenv("DEBUG_BINKP"); debug != "" {
-		log.Printf("BinkP: Writing frame type=0x%02X command=%v len=%d", frame.Type, frame.Command, len(frame.Data))
+		logging.Debugf("BinkP: Writing frame type=0x%02X command=%v len=%d", frame.Type, frame.Command, len(frame.Data))
 	}
 	
 	// Set write timeout

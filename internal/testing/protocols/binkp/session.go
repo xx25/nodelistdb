@@ -3,7 +3,7 @@ package binkp
 import (
 	"fmt"
 	"io"
-	"log"
+	"github.com/nodelistdb/internal/testing/logging"
 	"net"
 	"strings"
 	"time"
@@ -112,7 +112,7 @@ func (s *Session) sendOurInfo() error {
 	
 	for _, frame := range frames {
 		if s.debug {
-			log.Printf("BinkP: Sending %s", frame)
+			logging.Debugf("BinkP: Sending %s", frame)
 		}
 		if err := WriteFrame(s.conn, frame); err != nil {
 			return err
@@ -126,7 +126,7 @@ func (s *Session) sendOurInfo() error {
 func (s *Session) sendOurAddress() error {
 	frame := CreateM_ADR(s.localAddress)
 	if s.debug {
-		log.Printf("BinkP: Sending M_ADR %s", s.localAddress)
+		logging.Debugf("BinkP: Sending M_ADR %s", s.localAddress)
 	}
 	return WriteFrame(s.conn, frame)
 }
@@ -135,7 +135,7 @@ func (s *Session) sendOurAddress() error {
 func (s *Session) sendPassword(password string) error {
 	frame := CreateM_PWD(password)
 	if s.debug {
-		log.Printf("BinkP: Sending M_PWD")
+		logging.Debugf("BinkP: Sending M_PWD")
 	}
 	return WriteFrame(s.conn, frame)
 }
@@ -162,7 +162,7 @@ func (s *Session) receiveRemoteInfo() error {
 		frameCount++
 		
 		if s.debug {
-			log.Printf("BinkP: Received %s", frame)
+			logging.Debugf("BinkP: Received %s", frame)
 		}
 		
 		switch frame.Type {
@@ -170,7 +170,7 @@ func (s *Session) receiveRemoteInfo() error {
 			// Parse M_NUL frame
 			key, value := ParseM_NUL(frame.Data)
 			if s.debug {
-				log.Printf("BinkP: M_NUL parsed: key=[%s] value=[%s] (raw=%q)", key, value, frame.Data)
+				logging.Debugf("BinkP: M_NUL parsed: key=[%s] value=[%s] (raw=%q)", key, value, frame.Data)
 			}
 			s.parseM_NUL(key, value)
 			
@@ -179,7 +179,7 @@ func (s *Session) receiveRemoteInfo() error {
 			s.remoteInfo.Addresses = ParseAddresses(frame.Data)
 			receivedADR = true
 			if s.debug {
-				log.Printf("BinkP: Remote addresses: %v", s.remoteInfo.Addresses)
+				logging.Debugf("BinkP: Remote addresses: %v", s.remoteInfo.Addresses)
 			}
 			
 		case M_PWD:
@@ -189,7 +189,7 @@ func (s *Session) receiveRemoteInfo() error {
 		case M_OK:
 			// Remote accepts our handshake
 			if s.debug {
-				log.Printf("BinkP: Remote sent M_OK")
+				logging.Debugf("BinkP: Remote sent M_OK")
 			}
 			// Don't send anything in response - just note it
 			return nil
@@ -206,7 +206,7 @@ func (s *Session) receiveRemoteInfo() error {
 		case M_EOB:
 			// End of batch - remote has no files for us
 			if s.debug {
-				log.Printf("BinkP: Remote sent M_EOB (no files)")
+				logging.Debugf("BinkP: Remote sent M_EOB (no files)")
 			}
 			// DON'T send M_EOB in response here - the remote is already done
 			// Just acknowledge we received it
@@ -215,7 +215,7 @@ func (s *Session) receiveRemoteInfo() error {
 		default:
 			// Unknown or file transfer frame - skip for testing
 			if s.debug {
-				log.Printf("BinkP: Ignoring frame type 0x%02X", frame.Type)
+				logging.Debugf("BinkP: Ignoring frame type 0x%02X", frame.Type)
 			}
 		}
 		
@@ -262,7 +262,7 @@ func (s *Session) parseM_NUL(key, value string) {
 	default:
 		// Unknown key - ignore
 		if s.debug {
-			log.Printf("BinkP: Unknown M_NUL key: %s = %s", key, value)
+			logging.Debugf("BinkP: Unknown M_NUL key: %s = %s", key, value)
 		}
 	}
 }
@@ -282,10 +282,10 @@ func (s *Session) Close() error {
 			Data:    nil,
 		}); err != nil {
 			if s.debug {
-				log.Printf("BinkP: Failed to send M_EOB: %v", err)
+				logging.Debugf("BinkP: Failed to send M_EOB: %v", err)
 			}
 		} else if s.debug {
-			log.Printf("BinkP: Sent M_EOB")
+			logging.Debugf("BinkP: Sent M_EOB")
 		}
 		
 		// Wait briefly for remote's M_EOB (best effort)
@@ -293,7 +293,7 @@ func (s *Session) Close() error {
 		frame, err := ReadFrame(s.conn)
 		if err == nil && frame.Type == M_EOB {
 			if s.debug {
-				log.Printf("BinkP: Received remote M_EOB")
+				logging.Debugf("BinkP: Received remote M_EOB")
 			}
 		}
 		

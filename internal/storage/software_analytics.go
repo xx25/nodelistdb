@@ -200,6 +200,11 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int) 
 			continue
 		}
 
+		// Skip nodes that didn't send EMSI data
+		if mailerInfo == "[Unknown]" {
+			continue
+		}
+
 		info := parseIFCICOMailerInfo(mailerInfo)
 		if info == nil {
 			continue
@@ -339,9 +344,19 @@ func parseBinkPVersion(version string) *softwareInfo {
 		groups   []string // ["version", "os", "protocol"]
 	}{
 		{
-			regex:    regexp.MustCompile(`binkd/([0-9.a-zA-Z-]+)/(\w+)\s+binkp/([0-9.]+)`),
+			regex:    regexp.MustCompile(`binkd/([0-9.a-zA-Z-]+)/(.+?)\s+binkp/([0-9.]+)`),
 			software: "binkd",
 			groups:   []string{"version", "os", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`binkd/([0-9.a-zA-Z-]+)\s+(.+?)\s+binkp/([0-9.]+)`),
+			software: "binkd",
+			groups:   []string{"version", "extra", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`binkd/([0-9.a-zA-Z-]+)\s+binkp/([0-9.]+)`),
+			software: "binkd",
+			groups:   []string{"version", "protocol"},
 		},
 		{
 			regex:    regexp.MustCompile(`BinkIT/([0-9.]+),JSBinkP/([0-9.]+),sbbs([0-9.a-z]+)/(\w+)\s+binkp/([0-9.]+)`),
@@ -349,19 +364,24 @@ func parseBinkPVersion(version string) *softwareInfo {
 			groups:   []string{"binkit_ver", "jsbinkp_ver", "sbbs_ver", "os", "protocol"},
 		},
 		{
+			regex:    regexp.MustCompile(`BinkIT/([0-9.]+),JSBinkP/([0-9.]+)/(\w+)\s+binkp/([0-9.]+)`),
+			software: "BinkIT/Synchronet",
+			groups:   []string{"binkit_ver", "jsbinkp_ver", "os", "protocol"},
+		},
+		{
 			regex:    regexp.MustCompile(`Mystic/([0-9.A-Za-z]+)\s+binkp/([0-9.]+)`),
 			software: "Mystic",
 			groups:   []string{"version", "protocol"},
 		},
 		{
-			regex:    regexp.MustCompile(`mbcico/([0-9.a-z-]+)/([^/\s]+)\s+binkp/([0-9.]+)`),
+			regex:    regexp.MustCompile(`mbcico/([0-9.a-z-]+)/(.+?)\s+binkp/([0-9.]+)`),
 			software: "mbcico",
 			groups:   []string{"version", "os", "protocol"},
 		},
 		{
-			regex:    regexp.MustCompile(`Argus/([0-9.]+)/\s*binkp/([0-9.]+)`),
+			regex:    regexp.MustCompile(`Argus/([0-9.a-z]+)/([^/\s]*)/?\s*binkp/([0-9.]+)`),
 			software: "Argus",
-			groups:   []string{"version", "protocol"},
+			groups:   []string{"version", "os", "protocol"},
 		},
 		{
 			regex:    regexp.MustCompile(`InterMail/([0-9.]+)/\s*binkp/([0-9.]+)`),
@@ -419,9 +439,9 @@ func parseBinkPVersion(version string) *softwareInfo {
 			groups:   []string{"version", "release", "os", "protocol"},
 		},
 		{
-			regex:    regexp.MustCompile(`AmiBinkd\s+v([0-9.]+)\s+AmiBinkd`),
+			regex:    regexp.MustCompile(`AmiBinkd\s+v([0-9.]+)\s+(AmiBinkd|binkp/)`),
 			software: "AmiBinkd",
-			groups:   []string{"version"},
+			groups:   []string{"version", "protocol"},
 		},
 		{
 			regex:    regexp.MustCompile(`clrghouz/([0-9a-f]+)\s+binkp/([0-9.]+)`),
@@ -553,7 +573,7 @@ func parseIFCICOMailerInfo(mailerInfo string) *softwareInfo {
 			groups:   []string{"version"},
 		},
 		{
-			regex:    regexp.MustCompile(`ifcico\s+([0-9.a-z]+)`),
+			regex:    regexp.MustCompile(`ifcico\s+([0-9.a-z-]+)`),
 			software: "ifcico",
 			groups:   []string{"version"},
 		},
@@ -561,6 +581,11 @@ func parseIFCICOMailerInfo(mailerInfo string) *softwareInfo {
 			regex:    regexp.MustCompile(`T-Mail\s+([0-9]+)\.([A-Z0-9]+)/([^/]+)/([A-Z0-9]+)`),
 			software: "T-Mail",
 			groups:   []string{"version", "os", "proto", "license"},
+		},
+		{
+			regex:    regexp.MustCompile(`T-Mail\s+([0-9]+)(?:\s|$)`),
+			software: "T-Mail",
+			groups:   []string{"version"},
 		},
 		{
 			regex:    regexp.MustCompile(`Radius\s+([0-9.]+)/([^,]+)`),

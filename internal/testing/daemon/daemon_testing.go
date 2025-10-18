@@ -247,11 +247,16 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	// The testNode function expects to do DNS resolution, but we may have an IP directly
 	result := models.NewTestResult(testNode)
 
+	// Extract hostname and port for DNS resolution
+	// hostname might be "host:port" format
+	hostOnly := hostname
+	if parts := strings.Split(hostname, ":"); len(parts) > 1 {
+		hostOnly = parts[0]  // Strip port for DNS resolution
+	}
+
 	// Check if hostname is already an IP address
 	isIP := false
-	if parts := strings.Split(hostname, ":"); len(parts) > 0 {
-		// Remove port if present
-		hostOnly := parts[0]
+	if len(hostOnly) > 0 {
 		// Simple check for IP address (contains dots and all parts are numeric)
 		if strings.Count(hostOnly, ".") == 3 {
 			ipParts := strings.Split(hostOnly, ".")
@@ -273,18 +278,18 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 
 	// If it's an IP, skip DNS resolution and set it directly
 	if isIP {
-		parts := strings.Split(hostname, ":")
-		ip := parts[0]
-		result.ResolvedIPv4 = []string{ip}
+		result.ResolvedIPv4 = []string{hostOnly}
 		result.Hostname = hostname
 
 		// Get geolocation for the IP
-		if geo := d.geolocator.GetLocation(ctx, ip); geo != nil {
+		if geo := d.geolocator.GetLocation(ctx, hostOnly); geo != nil {
 			result.SetGeolocation(geo)
 		}
 	} else {
-		// Do DNS resolution
-		if dnsResult := d.dnsResolver.Resolve(ctx, hostname); dnsResult != nil {
+		// Do DNS resolution (on hostname without port)
+		logging.Debugf("Resolving DNS for hostname: %s (stripped from %s)", hostOnly, hostname)
+		if dnsResult := d.dnsResolver.Resolve(ctx, hostOnly); dnsResult != nil {
+			logging.Debugf("DNS resolution result: IPv4=%v, IPv6=%v", dnsResult.IPv4Addresses, dnsResult.IPv6Addresses)
 			result.SetDNSResult(dnsResult)
 
 			// Get geolocation for first resolved IP
@@ -293,18 +298,26 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 					result.SetGeolocation(geo)
 				}
 			}
+		} else {
+			logging.Debugf("DNS resolution returned nil for hostname: %s", hostname)
 		}
 	}
 
 	// Test the requested protocol
+	logging.Debugf("Testing protocol: %s, DNS result - IPv4: %v, IPv6: %v", protocol, result.ResolvedIPv4, result.ResolvedIPv6)
+
 	switch protocol {
 	case "binkp":
 		if d.config.Protocols.BinkP.Enabled && d.binkpTester != nil {
+			logging.Debugf("Calling testBinkP")
 			d.testBinkP(ctx, testNode, result)
 		}
 	case "ifcico":
 		if d.config.Protocols.Ifcico.Enabled && d.ifcicoTester != nil {
+			logging.Debugf("Calling testIfcico with node hostnames: %v", testNode.InternetHostnames)
 			d.testIfcico(ctx, testNode, result)
+		} else {
+			logging.Debugf("NOT calling testIfcico - Enabled: %v, Tester nil: %v", d.config.Protocols.Ifcico.Enabled, d.ifcicoTester == nil)
 		}
 	case "telnet":
 		if d.config.Protocols.Telnet.Enabled && d.telnetTester != nil {

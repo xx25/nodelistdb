@@ -192,8 +192,8 @@ parser_logging:
 # Testdaemon Logging (Node testing daemon)
 # -----------------------------------------
 testdaemon_logging:
-  level: info                  # Log level: debug, info, warn, error
-  file: /var/log/nodetest-daemon.log  # Log file path
+  level: debug                 # Log level: debug, info, warn, error
+  file: /home/dp/nodelistdb/logs/nodetest-daemon.log  # Log file path
   max_size: 100                # Max log file size (MB)
   max_backups: 7               # Number of old log files to keep
   max_age: 30                  # Days to retain old logs

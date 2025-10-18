@@ -3,11 +3,11 @@ package protocols
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"strings"
 	"time"
-	
+
+	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/protocols/emsi"
 )
 
@@ -73,13 +73,13 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	}
 	
 	// Always log for debugging
-	log.Printf("IFCICO: Testing %s:%d (expected address: %s) [debug=%v]", host, port, expectedAddress, t.debug)
-	
+	logging.Debugf("IFCICO: Testing %s:%d (expected address: %s) [debug=%v]", host, port, expectedAddress, t.debug)
+
 	if t.debug {
-		log.Printf("IFCICO: Debug mode is ON")
-		log.Printf("IFCICO: Our system info: Address=%s, System='%s', Sysop='%s', Location='%s'",
+		logging.Debugf("IFCICO: Debug mode is ON")
+		logging.Debugf("IFCICO: Our system info: Address=%s, System='%s', Sysop='%s', Location='%s'",
 			t.ourAddress, t.systemName, t.sysop, t.location)
-		log.Printf("IFCICO: Connection timeout: %v", t.timeout)
+		logging.Debugf("IFCICO: Connection timeout: %v", t.timeout)
 	}
 	
 	// Create connection with timeout
@@ -88,7 +88,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	}
 	
 	if t.debug {
-		log.Printf("IFCICO: Attempting TCP connection to %s:%d...", host, port)
+		logging.Debugf("IFCICO: Attempting TCP connection to %s:%d...", host, port)
 	}
 	
 	connStart := time.Now()
@@ -97,7 +97,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	
 	if err != nil {
 		if t.debug {
-			log.Printf("IFCICO: Connection failed after %v: %v", connDuration, err)
+			logging.Debugf("IFCICO: Connection failed after %v: %v", connDuration, err)
 		}
 		return &IfcicoTestResult{
 			BaseTestResult: BaseTestResult{
@@ -111,25 +111,25 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	defer conn.Close()
 	
 	if t.debug {
-		log.Printf("IFCICO: TCP connection established in %v", connDuration)
+		logging.Debugf("IFCICO: TCP connection established in %v", connDuration)
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
 			localAddr := tcpConn.LocalAddr()
 			remoteAddr := tcpConn.RemoteAddr()
-			log.Printf("IFCICO: Local: %s -> Remote: %s", localAddr, remoteAddr)
+			logging.Debugf("IFCICO: Local: %s -> Remote: %s", localAddr, remoteAddr)
 		}
 	}
 	
 	// Create EMSI session with custom system info
 	if t.debug {
-		log.Printf("IFCICO: Creating EMSI session...")
+		logging.Debugf("IFCICO: Creating EMSI session...")
 	}
 	session := emsi.NewSessionWithInfo(conn, t.ourAddress, t.systemName, t.sysop, t.location)
 	session.SetTimeout(t.timeout)
 	session.SetDebug(t.debug)
-	
+
 	// Perform EMSI handshake
 	if t.debug {
-		log.Printf("IFCICO: Starting EMSI handshake...")
+		logging.Debugf("IFCICO: Starting EMSI handshake...")
 	}
 	
 	handshakeStart := time.Now()
@@ -138,7 +138,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	
 	if err != nil {
 		if t.debug {
-			log.Printf("IFCICO: Handshake failed after %v: %v", handshakeDuration, err)
+			logging.Debugf("IFCICO: Handshake failed after %v: %v", handshakeDuration, err)
 		}
 		return &IfcicoTestResult{
 			BaseTestResult: BaseTestResult{
@@ -151,7 +151,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	}
 	
 	if t.debug {
-		log.Printf("IFCICO: Handshake completed successfully in %v", handshakeDuration)
+		logging.Debugf("IFCICO: Handshake completed successfully in %v", handshakeDuration)
 	}
 	
 	// Get remote node information
@@ -181,23 +181,23 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		
 		// Debug log the details we got
 		if t.debug || (result.SystemName == "" && result.MailerInfo == " ") {
-			log.Printf("IFCICO remote info for %s: SystemName=%s, MailerName=%s, MailerVersion=%s, Location=%s, Addresses=%v",
-				expectedAddress, remoteInfo.SystemName, remoteInfo.MailerName, remoteInfo.MailerVersion, 
+			logging.Debugf("IFCICO remote info for %s: SystemName=%s, MailerName=%s, MailerVersion=%s, Location=%s, Addresses=%v",
+				expectedAddress, remoteInfo.SystemName, remoteInfo.MailerName, remoteInfo.MailerVersion,
 				remoteInfo.Location, remoteInfo.Addresses)
 		}
-		
+
 		// Validate address if expected
 		if expectedAddress != "" {
 			result.AddressValid = session.ValidateAddress(expectedAddress)
 			if t.debug {
-				log.Printf("IFCICO: Address validation: expected=%s, received=%v, valid=%v",
+				logging.Debugf("IFCICO: Address validation: expected=%s, received=%v, valid=%v",
 					expectedAddress, remoteInfo.Addresses, result.AddressValid)
 			}
 		}
 	} else {
 		if t.debug {
-			log.Printf("IFCICO: WARNING: Handshake completed but no remote info received for %s", expectedAddress)
-			log.Printf("IFCICO: This may indicate the remote system didn't send valid EMSI_DAT")
+			logging.Debugf("IFCICO: WARNING: Handshake completed but no remote info received for %s", expectedAddress)
+			logging.Debugf("IFCICO: This may indicate the remote system didn't send valid EMSI_DAT")
 		}
 		// Mark as partial success - connection worked but no data exchanged
 		result.SystemName = "[No EMSI data received]"
@@ -206,15 +206,15 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	
 	// Close session gracefully
 	if t.debug {
-		log.Printf("IFCICO: Closing session gracefully...")
+		logging.Debugf("IFCICO: Closing session gracefully...")
 	}
 	session.Close()
-	
+
 	if t.debug {
 		totalDuration := time.Since(startTime)
-		log.Printf("IFCICO: Test completed in %v, Success=%v", totalDuration, result.Success)
+		logging.Debugf("IFCICO: Test completed in %v, Success=%v", totalDuration, result.Success)
 		if result.Success {
-			log.Printf("IFCICO: Result: System='%s', Mailer='%s', Addresses=%v",
+			logging.Debugf("IFCICO: Result: System='%s', Mailer='%s', Addresses=%v",
 				result.SystemName, result.MailerInfo, result.Addresses)
 		}
 	}

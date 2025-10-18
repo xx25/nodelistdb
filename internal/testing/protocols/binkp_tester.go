@@ -3,12 +3,12 @@ package protocols
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/protocols/binkp"
 )
 
@@ -88,7 +88,7 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 	address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	
 	if t.debug {
-		log.Printf("BinkP: Testing %s (expected address: %s)", address, expectedAddress)
+		logging.Debugf("BinkP: Testing %s (expected address: %s)", address, expectedAddress)
 	}
 	
 	// Create connection with timeout
@@ -136,7 +136,7 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 		addressValid = session.ValidateAddress(expectedAddress)
 		
 		if t.debug {
-			log.Printf("BinkP: Address validation: expected=%s, received=%v, valid=%v",
+			logging.Debugf("BinkP: Address validation: expected=%s, received=%v, valid=%v",
 				expectedAddress, nodeInfo.Addresses, addressValid)
 		}
 	}

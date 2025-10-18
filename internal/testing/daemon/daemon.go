@@ -89,6 +89,10 @@ func New(cfg *Config) (*Daemon, error) {
 		return nil, fmt.Errorf("failed to initialize logging: %w", err)
 	}
 
+	// Log the configured log level for verification
+	logging.Infof("Logging initialized with level: %s", cfg.Logging.Level)
+	logging.Debugf("Debug logging test - if you see this, debug mode is working!")
+
 	// Initialize ClickHouse storage (only supported database type)
 	if cfg.ClickHouse == nil {
 		return nil, fmt.Errorf("ClickHouse configuration is required")
