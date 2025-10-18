@@ -379,7 +379,12 @@ func parseBinkPVersion(version string) *softwareInfo {
 			groups:   []string{"variant", "version", "os", "protocol"},
 		},
 		{
-			regex:    regexp.MustCompile(`Radius/([0-9.]+)/([^/]+)/(\w+)\s+binkp/([0-9.]+)`),
+			regex:    regexp.MustCompile(`Radius/([0-9.-]+)\s+\([^)]+\)/\s+binkp/([0-9.]+)`),
+			software: "Radius",
+			groups:   []string{"version", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`Radius/([0-9.-]+)/([^/]+)/(\w*)\s+binkp/([0-9.]+)`),
 			software: "Radius",
 			groups:   []string{"version", "release", "os", "protocol"},
 		},
