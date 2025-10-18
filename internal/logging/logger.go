@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -32,47 +33,71 @@ type Config struct {
 // This allows conversion from config.LoggingConfig to logging.Config
 func FromStruct(src interface{}) *Config {
 	// Use type assertion for known config package type
-	type configLike struct {
-		Level      string
-		File       string
-		MaxSize    int
-		MaxBackups int
-		MaxAge     int
-		Console    bool
-		JSON       bool
+	type configLike interface {
+		GetLevel() string
+		GetFile() string
+		GetMaxSize() int
+		GetMaxBackups() int
+		GetMaxAge() int
+		GetConsole() bool
+		GetJSON() bool
 	}
 
-	// Try to convert via interface
-	if cfg, ok := src.(configLike); ok {
+	// Try to use reflection to extract fields directly
+	// This works with any struct that has matching field names
+	if src == nil {
 		return &Config{
-			Level:      cfg.Level,
-			File:       cfg.File,
-			MaxSize:    cfg.MaxSize,
-			MaxBackups: cfg.MaxBackups,
-			MaxAge:     cfg.MaxAge,
-			Console:    cfg.Console,
-			JSON:       cfg.JSON,
+			Level:   "info",
+			Console: true,
 		}
 	}
 
-	// If direct conversion doesn't work, try pointer
-	if cfg, ok := src.(*configLike); ok {
-		return &Config{
-			Level:      cfg.Level,
-			File:       cfg.File,
-			MaxSize:    cfg.MaxSize,
-			MaxBackups: cfg.MaxBackups,
-			MaxAge:     cfg.MaxAge,
-			Console:    cfg.Console,
-			JSON:       cfg.JSON,
-		}
-	}
-
-	// Default config if conversion fails
-	return &Config{
+	// Use reflection to copy fields
+	result := &Config{
 		Level:   "info",
 		Console: true,
 	}
+
+	// Try to extract fields using reflection
+	switch v := src.(type) {
+	case *Config:
+		return v
+	default:
+		// Use reflection to copy matching fields
+		srcVal := reflect.ValueOf(src)
+		if srcVal.Kind() == reflect.Ptr {
+			srcVal = srcVal.Elem()
+		}
+
+		if srcVal.Kind() != reflect.Struct {
+			return result
+		}
+
+		// Copy fields by name
+		if field := srcVal.FieldByName("Level"); field.IsValid() && field.Kind() == reflect.String {
+			result.Level = field.String()
+		}
+		if field := srcVal.FieldByName("File"); field.IsValid() && field.Kind() == reflect.String {
+			result.File = field.String()
+		}
+		if field := srcVal.FieldByName("MaxSize"); field.IsValid() && field.Kind() == reflect.Int {
+			result.MaxSize = int(field.Int())
+		}
+		if field := srcVal.FieldByName("MaxBackups"); field.IsValid() && field.Kind() == reflect.Int {
+			result.MaxBackups = int(field.Int())
+		}
+		if field := srcVal.FieldByName("MaxAge"); field.IsValid() && field.Kind() == reflect.Int {
+			result.MaxAge = int(field.Int())
+		}
+		if field := srcVal.FieldByName("Console"); field.IsValid() && field.Kind() == reflect.Bool {
+			result.Console = field.Bool()
+		}
+		if field := srcVal.FieldByName("JSON"); field.IsValid() && field.Kind() == reflect.Bool {
+			result.JSON = field.Bool()
+		}
+	}
+
+	return result
 }
 
 var globalLogger *Logger

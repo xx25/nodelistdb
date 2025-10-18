@@ -56,8 +56,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize logging from config, but allow command line flags to override
-	logConfig := logging.FromStruct(&cfg.Logging)
+	// Initialize logging from config (using parser-specific logging config)
+	// Allow command line flags to override
+	logConfig := logging.FromStruct(&cfg.ParserLogging)
 	if *verbose {
 		logConfig.Level = "debug"
 	} else if *quiet {

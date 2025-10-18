@@ -368,6 +368,66 @@ func parseBinkPVersion(version string) *softwareInfo {
 			software: "InterMail",
 			groups:   []string{"version", "protocol"},
 		},
+		{
+			regex:    regexp.MustCompile(`BBBS/(Li[0-9]+|LiR)\s+v([0-9.]+)\s+([A-Za-z0-9-]+)\s+binkp/([0-9.]+)`),
+			software: "BBBS",
+			groups:   []string{"variant", "version", "package", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`qico-?([a-z0-9-]*)-?([0-9.a-z]+)/([^/\s]+)\s+binkp/([0-9.]+)`),
+			software: "qico",
+			groups:   []string{"variant", "version", "os", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`Radius/([0-9.]+)/([^/]+)/(\w+)\s+binkp/([0-9.]+)`),
+			software: "Radius",
+			groups:   []string{"version", "release", "os", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`jNode\s+ver\.\s+([0-9.]+)\s+binkp/([0-9.]+)`),
+			software: "jNode",
+			groups:   []string{"version", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`ROSBink/([0-9.a-z]+)/([A-Z-]+)\s+binkp/([0-9.]+)`),
+			software: "ROSBink",
+			groups:   []string{"version", "os", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`networkb/([0-9.a-z]+)\s+binkp/([0-9.]+)`),
+			software: "WWIV",
+			groups:   []string{"version", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`binkleyforce/([0-9.a-z.]+)/([a-z-]+)\s+binkp/([0-9.]+)`),
+			software: "binkleyforce",
+			groups:   []string{"version", "os", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`FTNMail/([0-9._a-z]+)/(\w+)\s+binkp/([0-9.]+)`),
+			software: "FTNMail",
+			groups:   []string{"version", "license", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`Taurus/([0-9.]+)/([^/]+)/(.+?)\s+binkp/([0-9.]+)`),
+			software: "Taurus",
+			groups:   []string{"version", "release", "os", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`AmiBinkd\s+v([0-9.]+)\s+AmiBinkd`),
+			software: "AmiBinkd",
+			groups:   []string{"version"},
+		},
+		{
+			regex:    regexp.MustCompile(`clrghouz/([0-9a-f]+)\s+binkp/([0-9.]+)`),
+			software: "clrghouz",
+			groups:   []string{"version", "protocol"},
+		},
+		{
+			regex:    regexp.MustCompile(`Internet Rex ([0-9.]+)\s+(\w+)\s+\(binkp/([0-9.]+)\)`),
+			software: "Internet Rex",
+			groups:   []string{"version", "os", "protocol"},
+		},
 	}
 
 	for _, pattern := range patterns {
@@ -389,6 +449,29 @@ func parseBinkPVersion(version string) *softwareInfo {
 						info.OS = normalizeOS(matches[i+1])
 					case "protocol":
 						info.Protocol = "binkp/" + matches[i+1]
+					case "variant":
+						// For software with variants (e.g., qico-m19, BBBS Li6)
+						if matches[i+1] != "" {
+							info.Version = matches[i+1]
+						}
+					case "release":
+						// For software with release names (e.g., Radius Final-Release)
+						if info.Version == "" {
+							info.Version = matches[i+1]
+						} else {
+							info.Version += " " + matches[i+1]
+						}
+					case "package":
+						// For software with package names (e.g., BBBS Toy-7)
+						if info.Version != "" {
+							info.Version += " " + matches[i+1]
+						}
+					case "license":
+						// For software with license info (e.g., FTNMail Freeware)
+						// Store in OS field for now
+						if info.OS == "" {
+							info.OS = matches[i+1]
+						}
 					}
 				}
 			}
@@ -396,6 +479,25 @@ func parseBinkPVersion(version string) *softwareInfo {
 			// Special handling for BinkIT/Synchronet
 			if pattern.software == "BinkIT/Synchronet" && len(matches) > 3 {
 				info.Version = "sbbs" + matches[3] + "/BinkIT" + matches[1]
+			}
+
+			// Special handling for BBBS - combine variant and version
+			if pattern.software == "BBBS" && len(matches) > 2 {
+				info.Version = matches[2] + " " + matches[3] // e.g., "4.10 Toy-7"
+			}
+
+			// Special handling for qico variants
+			if pattern.software == "qico" && len(matches) > 2 {
+				if matches[1] != "" {
+					info.Version = matches[1] + "-" + matches[2] // e.g., "m19-0.59"
+				} else {
+					info.Version = matches[2] // e.g., "0.59.1"
+				}
+			}
+
+			// Special handling for Radius
+			if pattern.software == "Radius" && len(matches) > 2 {
+				info.Version = matches[1] + "/" + matches[2] // e.g., "4.010/Final-Release"
 			}
 
 			return info
@@ -445,15 +547,60 @@ func parseIFCICOMailerInfo(mailerInfo string) *softwareInfo {
 			software: "Argus",
 			groups:   []string{"version"},
 		},
+		{
+			regex:    regexp.MustCompile(`ifcico\s+([0-9.a-z]+)`),
+			software: "ifcico",
+			groups:   []string{"version"},
+		},
+		{
+			regex:    regexp.MustCompile(`T-Mail\s+([0-9]+)\.([A-Z0-9]+)/([^/]+)/([A-Z0-9]+)`),
+			software: "T-Mail",
+			groups:   []string{"version", "os", "proto", "license"},
+		},
+		{
+			regex:    regexp.MustCompile(`Radius\s+([0-9.]+)/([^,]+)`),
+			software: "Radius",
+			groups:   []string{"version", "release"},
+		},
+		{
+			regex:    regexp.MustCompile(`Taurus\s+([0-9.]+)/([^/]+)`),
+			software: "Taurus",
+			groups:   []string{"version", "release"},
+		},
 	}
 
 	for _, pattern := range patterns {
 		matches := pattern.regex.FindStringSubmatch(mailerInfo)
 		if len(matches) > 1 {
 			info.Software = pattern.software
-			if len(pattern.groups) > 0 && len(matches) > 1 {
-				info.Version = matches[1]
+
+			// Extract values based on group names
+			for i, groupName := range pattern.groups {
+				if i+1 < len(matches) {
+					switch groupName {
+					case "version":
+						info.Version = matches[i+1]
+					case "os":
+						info.OS = normalizeOS(matches[i+1])
+					case "release":
+						if info.Version != "" {
+							info.Version += "/" + matches[i+1]
+						} else {
+							info.Version = matches[i+1]
+						}
+					case "proto":
+						// Skip proto info for now
+					case "license":
+						// Skip license info for now
+					}
+				}
 			}
+
+			// Special handling for T-Mail
+			if pattern.software == "T-Mail" && len(matches) > 2 {
+				info.Version = matches[1] + "." + matches[2]
+			}
+
 			return info
 		}
 	}

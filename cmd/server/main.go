@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/nodelistdb/internal/api"
 	"github.com/nodelistdb/internal/cache"
@@ -19,6 +21,72 @@ import (
 	"github.com/nodelistdb/internal/version"
 	"github.com/nodelistdb/internal/web"
 )
+
+// loggingMiddleware wraps an http.Handler to log all HTTP requests
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Wrap response writer to capture status code
+		wrapped := &loggingResponseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+		}
+
+		// Call the next handler
+		next.ServeHTTP(wrapped, r)
+
+		// Get real client IP (handles reverse proxy headers)
+		clientIP := getRealIP(r)
+
+		// Log the request
+		logging.Info("HTTP request",
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.Int("status", wrapped.statusCode),
+			slog.Duration("duration", time.Since(start)),
+			slog.String("ip", clientIP),
+		)
+	})
+}
+
+// getRealIP extracts the real client IP from request headers when behind a reverse proxy
+// Checks common proxy headers in order of preference
+func getRealIP(r *http.Request) string {
+	// X-Real-IP is set by many reverse proxies (including Caddy by default)
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+
+	// X-Forwarded-For may contain multiple IPs (client, proxy1, proxy2...)
+	// The first one is the original client
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Take the first IP if there are multiple
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+
+	// Cloudflare uses CF-Connecting-IP
+	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+		return ip
+	}
+
+	// Fallback to RemoteAddr (direct connection or proxy not configured)
+	return r.RemoteAddr
+}
+
+// loggingResponseWriter wraps http.ResponseWriter to capture the status code
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
+}
 
 func main() {
 	// Command line flags
@@ -44,8 +112,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize logging from configuration
-	if err := logging.Initialize(logging.FromStruct(&cfg.Logging)); err != nil {
+	// Initialize logging from configuration (using server-specific logging config)
+	if err := logging.Initialize(logging.FromStruct(&cfg.ServerLogging)); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
 		os.Exit(1)
 	}
@@ -216,10 +284,13 @@ func main() {
 		})
 	}
 
+	// Wrap entire mux with logging middleware to capture all requests (API + Web)
+	loggingHandler := loggingMiddleware(mux)
+
 	// Server configuration
 	server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", *host, *port),
-		Handler: mux,
+		Handler: loggingHandler,
 	}
 
 	// Start FTP server if enabled

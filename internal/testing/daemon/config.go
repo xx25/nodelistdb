@@ -16,7 +16,7 @@ type Config struct {
 	Services        ServicesConfig     `yaml:"services"`
 	Cache           CacheConfig        `yaml:"cache"` // Not used by testdaemon
 	TestdaemonCache CacheConfig        `yaml:"testdaemon_cache"` // Required cache config for testdaemon
-	Logging         LoggingConfig      `yaml:"logging"`
+	Logging         LoggingConfig      `yaml:"testdaemon_logging"` // Testdaemon-specific logging config
 	CLI             CLIConfig          `yaml:"cli"`
 	ConfigPath      string             `yaml:"-"` // Path to config file, set when loading
 	Version         string             `yaml:"-"` // Version string, set from main

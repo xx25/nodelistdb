@@ -17,8 +17,8 @@ func (s *Server) SetupRouter() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
 
-	// Custom middleware
-	r.Use(s.LoggingMiddleware)
+	// Note: LoggingMiddleware is now applied at the top level in cmd/server/main.go
+	// to capture both API and web routes, so we don't need it here anymore
 
 	// Health check endpoint
 	r.Get("/api/health", s.HealthHandler)

@@ -30,10 +30,15 @@ type ClickHouseConfig struct {
 
 // Config represents the complete application configuration
 type Config struct {
-	ClickHouse ClickHouseConfig `yaml:"clickhouse"`
-	Cache      CacheConfig      `yaml:"cache"`
-	FTP        FTPConfig        `yaml:"ftp"`
-	Logging    LoggingConfig    `yaml:"logging"`
+	ClickHouse       ClickHouseConfig `yaml:"clickhouse"`
+	Cache            CacheConfig      `yaml:"cache"`
+	FTP              FTPConfig        `yaml:"ftp"`
+	ServerLogging    LoggingConfig    `yaml:"server_logging"`
+	ParserLogging    LoggingConfig    `yaml:"parser_logging"`
+	TestdaemonLogging LoggingConfig   `yaml:"testdaemon_logging"`
+
+	// Deprecated: Use component-specific logging configs instead
+	Logging LoggingConfig `yaml:"logging,omitempty"`
 }
 
 // LoggingConfig holds logging configuration
@@ -276,33 +281,63 @@ func (c *Config) validate() error {
 		c.ClickHouse.Compression = "lz4"
 	}
 
-	// Validate logging configuration
-	if c.Logging.Level == "" {
-		c.Logging.Level = "info"
-	}
+	// Validate logging configurations for all components
 	validLevels := []string{"debug", "info", "warn", "error"}
-	levelValid := false
-	for _, l := range validLevels {
-		if c.Logging.Level == l {
-			levelValid = true
-			break
+
+	// Helper function to validate and set defaults for a logging config
+	validateLogging := func(cfg *LoggingConfig, componentName string) error {
+		if cfg.Level == "" {
+			cfg.Level = "info"
 		}
+		levelValid := false
+		for _, l := range validLevels {
+			if cfg.Level == l {
+				levelValid = true
+				break
+			}
+		}
+		if !levelValid {
+			return fmt.Errorf("%s.level must be one of: %v, got: %s", componentName, validLevels, cfg.Level)
+		}
+		// Set logging defaults if not configured
+		if !cfg.Console && cfg.File == "" {
+			cfg.Console = true // Default to console if neither configured
+		}
+		if cfg.MaxSize == 0 {
+			cfg.MaxSize = 100
+		}
+		if cfg.MaxBackups == 0 {
+			cfg.MaxBackups = 3
+		}
+		if cfg.MaxAge == 0 {
+			cfg.MaxAge = 28
+		}
+		return nil
 	}
-	if !levelValid {
-		return fmt.Errorf("logging.level must be one of: %v, got: %s", validLevels, c.Logging.Level)
+
+	// Validate each component's logging config
+	if err := validateLogging(&c.ServerLogging, "server_logging"); err != nil {
+		return err
 	}
-	// Set logging defaults if not configured
-	if !c.Logging.Console && c.Logging.File == "" {
-		c.Logging.Console = true // Default to console if neither configured
+	if err := validateLogging(&c.ParserLogging, "parser_logging"); err != nil {
+		return err
 	}
-	if c.Logging.MaxSize == 0 {
-		c.Logging.MaxSize = 100
+	if err := validateLogging(&c.TestdaemonLogging, "testdaemon_logging"); err != nil {
+		return err
 	}
-	if c.Logging.MaxBackups == 0 {
-		c.Logging.MaxBackups = 3
-	}
-	if c.Logging.MaxAge == 0 {
-		c.Logging.MaxAge = 28
+
+	// Handle deprecated 'logging' field for backward compatibility
+	if c.Logging.Level != "" || c.Logging.File != "" {
+		// If old 'logging' field is present and new ones are empty, copy to all
+		if c.ServerLogging.Level == "" && c.ServerLogging.File == "" {
+			c.ServerLogging = c.Logging
+		}
+		if c.ParserLogging.Level == "" && c.ParserLogging.File == "" {
+			c.ParserLogging = c.Logging
+		}
+		if c.TestdaemonLogging.Level == "" && c.TestdaemonLogging.File == "" {
+			c.TestdaemonLogging = c.Logging
+		}
 	}
 
 	return nil

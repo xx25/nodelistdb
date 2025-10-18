@@ -164,15 +164,41 @@ testdaemon_cache:
   type: badger                 # Only badger supported for testdaemon
   path: ./cache/badger-testdaemon  # Separate cache from server
 
-# Logging (Testdaemon only)
-# --------
-logging:
+# Logging Configuration (Separate for each component)
+# ========================================================
+
+# Server Logging (Web server and API)
+# ------------------------------------
+server_logging:
+  level: info                  # Log level: debug, info, warn, error
+  file: /var/log/nodelistdb-server.log  # Log file path
+  max_size: 100                # Max log file size (MB)
+  max_backups: 7               # Number of old log files to keep
+  max_age: 30                  # Days to retain old logs
+  console: true                # Also log to console
+  json: false                  # Use JSON format (false = text)
+
+# Parser Logging (Nodelist import tool)
+# --------------------------------------
+parser_logging:
+  level: info                  # Log level: debug, info, warn, error
+  file: /var/log/nodelistdb-parser.log  # Log file path
+  max_size: 50                 # Max log file size (MB)
+  max_backups: 3               # Number of old log files to keep
+  max_age: 30                  # Days to retain old logs
+  console: true                # Also log to console
+  json: false                  # Use JSON format (false = text)
+
+# Testdaemon Logging (Node testing daemon)
+# -----------------------------------------
+testdaemon_logging:
   level: info                  # Log level: debug, info, warn, error
   file: /var/log/nodetest-daemon.log  # Log file path
   max_size: 100                # Max log file size (MB)
   max_backups: 7               # Number of old log files to keep
   max_age: 30                  # Days to retain old logs
   console: true                # Also log to console
+  json: false                  # Use JSON format (false = text)
 
 # CLI Interface (Testdaemon only)
 # --------------
