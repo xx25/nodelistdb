@@ -49,13 +49,16 @@ jobs:
         echo "" >> RELEASE_NOTES.md
         echo "### Features" >> RELEASE_NOTES.md
         echo "- FidoNet nodelist parsing and storage system" >> RELEASE_NOTES.md
-        echo "- DuckDB-based high-performance storage engine" >> RELEASE_NOTES.md
+        echo "- ClickHouse-based high-performance storage engine" >> RELEASE_NOTES.md
         echo "- REST API for node search and statistics" >> RELEASE_NOTES.md
         echo "- Web interface for browsing nodelist data" >> RELEASE_NOTES.md
+        echo "- Node connectivity testing (BinkP, IFCICO/EMSI, Telnet)" >> RELEASE_NOTES.md
+        echo "- FTP server for nodelist distribution" >> RELEASE_NOTES.md
         echo "- Command-line tools for parsing and serving" >> RELEASE_NOTES.md
-        echo "- Multi-platform support (Linux, Windows, macOS, FreeBSD)" >> RELEASE_NOTES.md
+        echo "- Multi-platform support (Linux, Windows, macOS)" >> RELEASE_NOTES.md
         echo "" >> RELEASE_NOTES.md
         echo "### Architecture" >> RELEASE_NOTES.md
+        echo "- ClickHouse backend for high-performance analytics" >> RELEASE_NOTES.md
         echo "- Component-based storage layer with improved security" >> RELEASE_NOTES.md
         echo "- Parameterized queries prevent SQL injection" >> RELEASE_NOTES.md
         echo "- Thread-safe operations with optimized batch processing" >> RELEASE_NOTES.md
@@ -63,14 +66,15 @@ jobs:
         echo "" >> RELEASE_NOTES.md
         echo "### Installation" >> RELEASE_NOTES.md
         echo "Download the appropriate binary for your platform from the assets below." >> RELEASE_NOTES.md
+        echo "Requires a ClickHouse server (version 21.3 or later)." >> RELEASE_NOTES.md
         echo "" >> RELEASE_NOTES.md
         echo "### Usage" >> RELEASE_NOTES.md
         echo "\`\`\`bash" >> RELEASE_NOTES.md
         echo "# Parse nodelist files" >> RELEASE_NOTES.md
-        echo "./parser -path /path/to/nodelists -db nodelist.duckdb" >> RELEASE_NOTES.md
+        echo "./parser -config config.yaml -path /path/to/nodelists" >> RELEASE_NOTES.md
         echo "" >> RELEASE_NOTES.md
         echo "# Start web server" >> RELEASE_NOTES.md
-        echo "./server -db nodelist.duckdb -port 8080" >> RELEASE_NOTES.md
+        echo "./server -config config.yaml -port 8080" >> RELEASE_NOTES.md
         echo "\`\`\`" >> RELEASE_NOTES.md
 
     - name: Create Release
@@ -184,9 +188,11 @@ jobs:
         if [ "${{ matrix.goos }}" = "windows" ]; then
           go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/parser.exe ./cmd/parser
           go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/server.exe ./cmd/server
+          go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/testdaemon.exe ./cmd/testdaemon
         else
           go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/parser ./cmd/parser
           go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/server ./cmd/server
+          go build -ldflags="${LDFLAGS}" -o dist/${{ matrix.name }}/testdaemon ./cmd/testdaemon
         fi
       shell: bash
 
@@ -199,72 +205,75 @@ jobs:
         [ -f LICENSE ] && cp LICENSE dist/${{ matrix.name }}/
         
         # Copy configuration examples
-        [ -f config.sample.json ] && cp config.sample.json dist/${{ matrix.name }}/config-duckdb-example.json
-        [ -f config-clickhouse-test.json ] && cp config-clickhouse-test.json dist/${{ matrix.name }}/config-clickhouse-example.json
-        
+        [ -f config.example.yaml ] && cp config.example.yaml dist/${{ matrix.name }}/
+
         # Create a simple usage file
         cat > dist/${{ matrix.name }}/USAGE.txt << 'EOF'
         NodelistDB - FidoNet Nodelist Database System
-        
+
+        REQUIREMENTS:
+        - ClickHouse server (version 21.3 or later)
+
         PARSER USAGE:
-        # DuckDB (default)
-        ./parser -path <nodelist-path> -db <database-file> [options]
-        
-        # ClickHouse
-        ./parser -path <nodelist-path> -config <config-file> -dbtype clickhouse [options]
-        
+        ./parser -config <config-file> -path <nodelist-path> [options]
+
         Options:
+          -config string   Path to configuration file (default: config.yaml)
           -path string     Path to nodelist file or directory (required)
-          -db string       Path to DuckDB database file (default: ./nodelist.duckdb)
-          -config string   Path to configuration file (default: config.json)
-          -dbtype string   Database type: 'duckdb' or 'clickhouse' (overrides config)
           -recursive       Scan directories recursively
           -verbose         Verbose output
           -batch int       Batch size for bulk inserts (default: 1000)
           -workers int     Number of concurrent workers (default: 4)
           -concurrent      Enable concurrent processing
-        
+          -create-fts      Create Full-Text Search indexes (default: true)
+          -rebuild-fts     Only rebuild FTS indexes without data import
+
         SERVER USAGE:
-        # DuckDB (default)
-        ./server -db <database-file> [options]
-        
-        # ClickHouse
         ./server -config <config-file> [options]
-        
+
         Options:
-          -db string       Path to DuckDB database file (default: ./nodelist.duckdb)
-          -config string   Path to configuration file (default: config.json)
+          -config string   Path to configuration file (default: config.yaml)
           -host string     Host to bind to (default: localhost)
           -port int        Port to listen on (default: 8080)
-        
+
+        TESTDAEMON USAGE:
+        ./testdaemon -config <config-file> [options]
+
+        Options:
+          -config string   Path to configuration file (default: config.yaml)
+
         EXAMPLES:
-        # Parse a single nodelist file (DuckDB)
-        ./parser -path nodelist.216 -db nodelist.duckdb -verbose
-        
-        # Parse all nodelists in a directory (DuckDB)
-        ./parser -path /path/to/nodelists -db nodelist.duckdb -recursive -concurrent
-        
-        # Parse with ClickHouse
-        ./parser -path nodelist.216 -config config-clickhouse-example.json -dbtype clickhouse -verbose
-        
-        # Start the web server (DuckDB)
-        ./server -db nodelist.duckdb -host 0.0.0.0 -port 8080
-        
-        # Start the web server (ClickHouse)
-        ./server -config config-clickhouse-example.json -host 0.0.0.0 -port 8080
-        
+        # Parse a single nodelist file
+        ./parser -config config.yaml -path nodelist.216 -verbose
+
+        # Parse all nodelists in a directory
+        ./parser -config config.yaml -path /path/to/nodelists -recursive -concurrent
+
+        # Start the web server
+        ./server -config config.yaml -host 0.0.0.0 -port 8080
+
+        # Start the testing daemon
+        ./testdaemon -config config.yaml
+
         CONFIGURATION:
-        Copy one of the example configuration files to config.json and edit as needed:
-        - config-duckdb-example.json    (for DuckDB usage)
-        - config-clickhouse-example.json (for ClickHouse usage)
-        
-        For ClickHouse, ensure your ClickHouse server is running and accessible.
-        The default config connects to localhost:9000 with no authentication.
-        
+        Copy config.example.yaml to config.yaml and edit with your settings:
+
+        clickhouse:
+          host: localhost
+          port: 9000
+          database: nodelistdb
+          username: default
+          password: ""
+
+        Ensure your ClickHouse server is running and accessible.
+        The parser will automatically create the necessary database schema.
+
         API Endpoints:
+        GET /api/health             - Health check
         GET /api/nodes              - Search nodes
         GET /api/nodes/{z}/{n}/{n}  - Get specific node
         GET /api/stats              - Network statistics
+        GET /api/software           - Software analytics
         GET /                       - Web interface
         EOF
 

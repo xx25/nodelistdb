@@ -34,11 +34,11 @@ jobs:
           mingw-w64-ucrt-x86_64-gcc
           mingw-w64-ucrt-x86_64-pkg-config
           
-    - name: Configure Windows CGO environment  
+    - name: Configure Windows CGO environment
       if: matrix.os == 'windows-latest'
       shell: powershell
       run: |
-        Write-Output "Configuring CGO environment for go-duckdb"
+        Write-Output "Configuring CGO environment for ClickHouse driver"
         # Add MSYS2 to PATH for CGO compilation
         echo "C:\msys64\ucrt64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         echo "CGO_ENABLED=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
