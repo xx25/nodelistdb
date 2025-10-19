@@ -142,8 +142,29 @@
             });
             contentWrapper.className = badgeClasses.join(' ');
 
+            // Copy tooltip classes to the wrapper for Safari pseudo-element compatibility
+            const tooltipClasses = Array.from(element.classList).filter(function(cls) {
+                return cls.includes('tooltip');
+            });
+            tooltipClasses.forEach(function(cls) {
+                contentWrapper.classList.add(cls);
+            });
+
+            // Copy data-ipv6 attribute to wrapper for tooltip content
+            const ipv6Data = element.getAttribute('data-ipv6');
+            if (ipv6Data) {
+                contentWrapper.setAttribute('data-ipv6', ipv6Data);
+            }
+            const ipsData = element.getAttribute('data-ips');
+            if (ipsData) {
+                contentWrapper.setAttribute('data-ips', ipsData);
+            }
+
             // Ensure the wrapper displays as inline-block to properly show badge styling
+            // and maintain compatibility with CSS pseudo-elements in Safari
             contentWrapper.style.display = 'inline-block';
+            contentWrapper.style.position = 'relative';
+            contentWrapper.style.cursor = 'help';
 
             // Clear element and rebuild structure
             element.innerHTML = '';
@@ -153,6 +174,11 @@
             if (copyGroup) {
                 element.appendChild(copyGroup);
             }
+
+            // Remove tooltip classes from parent element (now on wrapper)
+            tooltipClasses.forEach(function(cls) {
+                element.classList.remove(cls);
+            });
 
             // Style the parent element as flex container
             element.style.display = 'inline-flex';
@@ -167,6 +193,46 @@
             element.setAttribute('data-tooltip-processed', 'true');
         } else if (copyGroup) {
             // Standard handling for non-badge elements (only if there are copy buttons)
+
+            // For Safari compatibility, wrap content in a span to preserve tooltip pseudo-elements
+            const originalContent = element.innerHTML;
+            const contentWrapper = document.createElement('span');
+            contentWrapper.innerHTML = originalContent;
+
+            // Copy tooltip-related classes and attributes to wrapper
+            const tooltipClasses = Array.from(element.classList).filter(function(cls) {
+                return cls.includes('tooltip');
+            });
+            tooltipClasses.forEach(function(cls) {
+                contentWrapper.classList.add(cls);
+            });
+
+            // Copy data attributes for tooltip content
+            const ipv6Data = element.getAttribute('data-ipv6');
+            if (ipv6Data) {
+                contentWrapper.setAttribute('data-ipv6', ipv6Data);
+            }
+            const ipsData = element.getAttribute('data-ips');
+            if (ipsData) {
+                contentWrapper.setAttribute('data-ips', ipsData);
+            }
+
+            // Style wrapper for tooltip compatibility
+            contentWrapper.style.display = 'inline-block';
+            contentWrapper.style.position = 'relative';
+            contentWrapper.style.cursor = 'help';
+
+            // Rebuild element structure
+            element.innerHTML = '';
+            element.appendChild(contentWrapper);
+            element.appendChild(copyGroup);
+
+            // Remove tooltip classes from parent
+            tooltipClasses.forEach(function(cls) {
+                element.classList.remove(cls);
+            });
+
+            // Style parent as flex container
             const computedDisplay = window.getComputedStyle(element).display;
             if (computedDisplay === 'inline' || computedDisplay === 'inline-block') {
                 element.style.display = 'inline-flex';
@@ -174,9 +240,6 @@
                 element.style.gap = '0.35rem';
                 element.style.flexWrap = 'wrap';
             }
-
-            // Append copy group to element
-            element.appendChild(copyGroup);
 
             // Mark as processed
             element.setAttribute('data-tooltip-processed', 'true');

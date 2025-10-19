@@ -213,6 +213,10 @@ func (s *Storage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) (
 	return s.testOperations.GetIPv6OnlyNodes(limit, days, includeZeroNodes)
 }
 
+func (s *Storage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes)
+}
+
 func (s *Storage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
 	return s.testOperations.GetIPv6WeeklyNews(limit, includeZeroNodes)
 }

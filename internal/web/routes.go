@@ -22,6 +22,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/ipv6-nonworking", s.IPv6NonWorkingAnalyticsHandler)
 	mux.HandleFunc("/analytics/ipv6-advertised-ipv4-only", s.IPv6AdvertisedIPv4OnlyAnalyticsHandler)
 	mux.HandleFunc("/analytics/ipv6-only", s.IPv6OnlyNodesHandler)
+	mux.HandleFunc("/analytics/pure-ipv6-only", s.PureIPv6OnlyNodesHandler)
 	mux.HandleFunc("/analytics/ipv6-weekly-news", s.IPv6WeeklyNewsHandler)
 	mux.HandleFunc("/analytics/binkp", s.BinkPAnalyticsHandler)
 	mux.HandleFunc("/analytics/ifcico", s.IfcicoAnalyticsHandler)

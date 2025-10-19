@@ -1,10 +1,10 @@
 {{template "base" .}}
 
-{{define "title"}}IPv6 Only Nodes{{end}}
+{{define "title"}}Pure IPv6 Only Nodes{{end}}
 
-{{define "page_title"}}IPv6 Only Nodes{{end}}
+{{define "page_title"}}Pure IPv6 Only Nodes{{end}}
 
-{{define "page_subtitle"}}<p class="subtitle">Nodes with working IPv6 services but NO working IPv4 services (IPv4 may be configured but not working)</p>{{end}}
+{{define "page_subtitle"}}<p class="subtitle">Nodes that ONLY advertise IPv6 addresses (no IPv4 addresses configured)</p>{{end}}
 
 {{define "head_scripts"}}
 <script src="/static/tooltip.js"></script>
@@ -17,7 +17,7 @@
 
 {{if .IPv6Nodes}}
 <div class="stats-box">
-    <h3>Found {{len .IPv6Nodes}} IPv6 Only Nodes</h3>
+    <h3>Found {{len .IPv6Nodes}} Pure IPv6 Only Nodes</h3>
 </div>
 
 <div class="table-responsive">
@@ -73,13 +73,13 @@
 </div>
 
 <div class="info-box" style="margin-top: 2rem;">
-    <p><strong>Note:</strong> This report shows nodes that have working IPv6 connectivity but NO working IPv4 services over the last {{.Days}} days. These nodes may have IPv4 addresses configured, but the IPv4 protocols failed or were not tested.</p>
-    <p>For nodes that ONLY advertise IPv6 addresses (no IPv4 at all), see "Pure IPv6 Only Nodes".</p>
+    <p><strong>Note:</strong> This report shows nodes that ONLY advertise IPv6 addresses (no IPv4 addresses configured at all) over the last {{.Days}} days. These are true pure IPv6-only nodes.</p>
+    <p>This is different from "IPv6 Only Nodes (Non-Working IPv4)" which shows nodes that have IPv4 addresses configured but the IPv4 services don't work.</p>
 </div>
 {{else}}
 <div class="alert alert-warning">
-    <strong>No IPv6-only nodes found for the selected period.</strong><br>
-    This could mean that all nodes with working IPv6 also have working IPv4 services, or no IPv6 nodes were tested during this period.
+    <strong>No pure IPv6-only nodes found for the selected period.</strong><br>
+    This could mean that all IPv6 nodes also have IPv4 addresses configured, or no such nodes were tested during this period.
 </div>
 {{end}}
 {{end}}

@@ -324,6 +324,7 @@ type Operations interface {
 	GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error)
 	GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
