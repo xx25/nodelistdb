@@ -62,23 +62,27 @@ type ProtocolTestResult struct {
 	Success     bool   // Success on ANY IP version
 	ResponseMs  uint32 // Best response time from any IP version
 	Error       string
-	
+
 	// IPv4 specific results
 	IPv4Tested     bool
 	IPv4Success    bool
 	IPv4ResponseMs uint32
 	IPv4Error      string
 	IPv4Address    string // Which IPv4 address was used/succeeded
-	
+
 	// IPv6 specific results
 	IPv6Tested     bool
 	IPv6Success    bool
 	IPv6ResponseMs uint32
 	IPv6Error      string
 	IPv6Address    string // Which IPv6 address was used/succeeded
-	
+
 	// Protocol-specific details
 	Details map[string]interface{}
+
+	// SoftwareSource indicates where software info came from
+	// Values: "emsi_dat", "banner", ""
+	SoftwareSource string
 }
 
 // BinkPTestDetails contains BinkP-specific test details

@@ -292,7 +292,7 @@ func TestNormalizeOS(t *testing.T) {
 		{
 			name:     "Empty string",
 			input:    "",
-			expected: "Unknown",
+			expected: "",
 		},
 		{
 			name:     "Unknown OS",
@@ -972,7 +972,7 @@ func TestNormalizeOSComprehensive(t *testing.T) {
 		{"MAC", "macOS"},
 
 		// Unknown/other
-		{"", "Unknown"},
+		{"", ""},
 		{"haiku", "Haiku"},
 		{"plan9", "Plan9"},
 	}

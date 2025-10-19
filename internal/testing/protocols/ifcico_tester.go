@@ -173,17 +173,27 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		result.SystemName = remoteInfo.SystemName
 		result.MailerInfo = fmt.Sprintf("%s %s", remoteInfo.MailerName, remoteInfo.MailerVersion)
 		result.Addresses = remoteInfo.Addresses
-		
+
+		// Determine software source
+		if remoteInfo.SystemName == "[Extracted from banner]" {
+			result.SoftwareSource = "banner"
+			if t.debug {
+				logging.Debugf("IFCICO: Software info extracted from banner text")
+			}
+		} else {
+			result.SoftwareSource = "emsi_dat"
+		}
+
 		// Additional info - don't duplicate location if it's already in system name
 		if remoteInfo.Location != "" && !strings.Contains(result.SystemName, remoteInfo.Location) {
 			result.SystemName = fmt.Sprintf("%s (%s)", result.SystemName, remoteInfo.Location)
 		}
-		
+
 		// Debug log the details we got
 		if t.debug || (result.SystemName == "" && result.MailerInfo == " ") {
-			logging.Debugf("IFCICO remote info for %s: SystemName=%s, MailerName=%s, MailerVersion=%s, Location=%s, Addresses=%v",
+			logging.Debugf("IFCICO remote info for %s: SystemName=%s, MailerName=%s, MailerVersion=%s, Location=%s, Addresses=%v, Source=%s",
 				expectedAddress, remoteInfo.SystemName, remoteInfo.MailerName, remoteInfo.MailerVersion,
-				remoteInfo.Location, remoteInfo.Addresses)
+				remoteInfo.Location, remoteInfo.Addresses, result.SoftwareSource)
 		}
 
 		// Validate address if expected

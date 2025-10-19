@@ -22,6 +22,7 @@ type Session struct {
 	remoteInfo   *EMSIData
 	timeout      time.Duration
 	debug        bool
+	bannerText   string // Capture full banner text during handshake
 }
 
 // NewSession creates a new EMSI session
@@ -213,11 +214,28 @@ func (s *Session) Handshake() error {
 				continue
 			}
 		}
-		
+
 		if s.remoteInfo == nil {
 			if s.debug {
 				logging.Debugf("EMSI: WARNING: Failed to receive remote DAT after %d attempts", maxAttempts)
-				logging.Debugf("EMSI: Handshake incomplete - no remote data received")
+				logging.Debugf("EMSI: Attempting banner text extraction as fallback...")
+			}
+
+			// Try to extract software from banner text
+			if software := s.extractSoftwareFromBanner(); software != nil {
+				s.remoteInfo = &EMSIData{
+					MailerName:    software.Name,
+					MailerVersion: software.Version,
+					SystemName:    "[Extracted from banner]",
+				}
+				if software.Platform != "" {
+					s.remoteInfo.MailerSerial = software.Platform
+				}
+				if s.debug {
+					logging.Debugf("EMSI: Successfully extracted software from banner: %s %s", software.Name, software.Version)
+				}
+			} else if s.debug {
+				logging.Debugf("EMSI: Handshake incomplete - no remote data received and banner extraction failed")
 			}
 		} else if s.debug {
 			logging.Debugf("EMSI: Handshake completed successfully after REQ exchange")
@@ -407,11 +425,11 @@ func (s *Session) sendEMSI_DAT() error {
 func (s *Session) readEMSIResponse() (string, string, error) {
 	deadline := time.Now().Add(s.timeout)
 	_ = s.conn.SetReadDeadline(deadline)
-	
+
 	if s.debug {
 		logging.Debugf("EMSI: readEMSIResponse: Starting read with timeout %v (deadline: %v)", s.timeout, deadline.Format("15:04:05.000"))
 	}
-	
+
 	// Accumulate response data, some systems send banner first
 	var response strings.Builder
 	buffer := make([]byte, 4096)
@@ -445,9 +463,9 @@ func (s *Session) readEMSIResponse() (string, string, error) {
 		chunk := string(buffer[:n])
 		response.WriteString(chunk)
 		totalBytesRead += n
-		
+
 		if s.debug {
-			logging.Debugf("EMSI: readEMSIResponse: Received %d bytes (attempt %d, total: %d, elapsed: %v)", 
+			logging.Debugf("EMSI: readEMSIResponse: Received %d bytes (attempt %d, total: %d, elapsed: %v)",
 				n, attempts+1, totalBytesRead, elapsed)
 			if n < 200 {
 				logging.Debugf("EMSI: readEMSIResponse: Data: %q", chunk)
@@ -455,8 +473,14 @@ func (s *Session) readEMSIResponse() (string, string, error) {
 				logging.Debugf("EMSI: readEMSIResponse: Data (first 200): %q...", chunk[:200])
 			}
 		}
-		
+
 		responseStr := response.String()
+
+		// Always update banner text with accumulated response to capture initial banner
+		// The first real response often contains the banner along with EMSI_REQ
+		if len(responseStr) > len(s.bannerText) {
+			s.bannerText = responseStr
+		}
 		
 		// Check if we have EMSI sequences
 		if strings.Contains(responseStr, "EMSI_NAK") {

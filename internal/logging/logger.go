@@ -32,18 +32,7 @@ type Config struct {
 // FromStruct creates a Config from any struct with matching fields (duck typing)
 // This allows conversion from config.LoggingConfig to logging.Config
 func FromStruct(src interface{}) *Config {
-	// Use type assertion for known config package type
-	type configLike interface {
-		GetLevel() string
-		GetFile() string
-		GetMaxSize() int
-		GetMaxBackups() int
-		GetMaxAge() int
-		GetConsole() bool
-		GetJSON() bool
-	}
-
-	// Try to use reflection to extract fields directly
+	// Use reflection to extract fields directly
 	// This works with any struct that has matching field names
 	if src == nil {
 		return &Config{

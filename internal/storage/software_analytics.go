@@ -200,11 +200,8 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int) 
 			continue
 		}
 
-		// Skip nodes that didn't send EMSI data
-		if mailerInfo == "[Unknown]" {
-			continue
-		}
-
+		// Parse mailer info - now includes banner-extracted software
+		// Don't skip [Unknown] - we want to show how many nodes lack software info
 		info := parseIFCICOMailerInfo(mailerInfo)
 		if info == nil {
 			continue
@@ -547,6 +544,13 @@ func parseIFCICOMailerInfo(mailerInfo string) *softwareInfo {
 		Protocol: "IFCICO/EMSI",
 	}
 
+	// Handle special cases for nodes without EMSI data
+	if mailerInfo == "[Unknown]" || mailerInfo == "[No EMSI data received]" {
+		info.Software = "Unknown"
+		info.Version = ""
+		return info
+	}
+
 	patterns := []struct {
 		regex    *regexp.Regexp
 		software string
@@ -641,6 +645,11 @@ func parseIFCICOMailerInfo(mailerInfo string) *softwareInfo {
 }
 
 func normalizeOS(os string) string {
+	// Return empty string if input is empty - don't convert to "Unknown"
+	if os == "" {
+		return ""
+	}
+
 	os = strings.ToLower(os)
 
 	// Normalize common OS names
@@ -660,11 +669,8 @@ func normalizeOS(os string) string {
 	case strings.Contains(os, "darwin") || strings.Contains(os, "mac"):
 		return "macOS"
 	default:
-		if os != "" {
-			caser := cases.Title(language.English)
-			return caser.String(strings.ToLower(os))
-		}
-		return "Unknown"
+		caser := cases.Title(language.English)
+		return caser.String(strings.ToLower(os))
 	}
 }
 

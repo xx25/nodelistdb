@@ -62,11 +62,12 @@ type BinkPTestResult struct {
 // IfcicoTestResult contains IFCICO-specific test results
 type IfcicoTestResult struct {
 	BaseTestResult
-	MailerInfo   string
-	SystemName   string
-	Addresses    []string
-	ResponseType string // REQ/ACK/NAK/CLI/HBT
-	AddressValid bool
+	MailerInfo     string
+	SystemName     string
+	Addresses      []string
+	ResponseType   string // REQ/ACK/NAK/CLI/HBT
+	AddressValid   bool
+	SoftwareSource string // "emsi_dat", "banner", or ""
 }
 
 // TelnetTestResult contains Telnet-specific test results
