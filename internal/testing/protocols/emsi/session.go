@@ -342,12 +342,12 @@ func (s *Session) sendEMSI_DAT() error {
 		Location:      s.location,
 		Sysop:         s.sysop,
 		Phone:         "-Unpublished-",
-		Speed:         "TCP/IP",
-		Flags:         "XA",  // Mail only
+		Speed:         "9600",  // Numeric baud for compatibility
+		Flags:         "CM,IFC,XA",  // Traditional flags: Continuous Mail, IFCICO, Mail only
 		MailerName:    "NodelistDB",
 		MailerVersion: "1.0",
-		MailerSerial:  "TEST",
-		Addresses:     []string{s.localAddress + "@fidonet"},
+		MailerSerial:  "LNX",  // Traditional OS identifier
+		Addresses:     []string{s.localAddress},  // Bare address without @fidonet suffix
 		Protocols:     []string{"ZMO", "ZAP"}, // Zmodem protocols (even though we don't transfer files)
 		Password:      "",  // Empty password
 	}
@@ -362,8 +362,8 @@ func (s *Session) sendEMSI_DAT() error {
 		} else {
 			logging.Debugf("EMSI: sendEMSI_DAT: DAT packet: %q", packet)
 		}
-		// Also log what we're actually writing including CR and XON
-		fullPacket := packet + "\r\x11\r"
+		// Also log what we're actually writing including CRs
+		fullPacket := packet + "\r\r"
 		logging.Debugf("EMSI: sendEMSI_DAT: Full packet with terminators (%d bytes)", len(fullPacket))
 	}
 	
@@ -374,14 +374,14 @@ func (s *Session) sendEMSI_DAT() error {
 		logging.Debugf("EMSI: sendEMSI_DAT: Sending packet with deadline %v...", deadline.Format("15:04:05.000"))
 	}
 	
-	// Send the packet with CR and XON (like ifmail does)
-	if _, err := s.writer.WriteString(packet + "\r\x11"); err != nil {
+	// Send the packet with CR (binkleyforce-compatible, ifcico drops XON anyway)
+	if _, err := s.writer.WriteString(packet + "\r"); err != nil {
 		if s.debug {
 			logging.Debugf("EMSI: sendEMSI_DAT: ERROR writing packet: %v", err)
 		}
 		return fmt.Errorf("failed to write EMSI_DAT: %w", err)
 	}
-	
+
 	// Send additional CR (some mailers expect double CR)
 	if _, err := s.writer.WriteString("\r"); err != nil {
 		if s.debug {
