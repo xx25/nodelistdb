@@ -1,0 +1,22 @@
+{{define "ipv6_failed_protocols_cell"}}
+<td>
+    {{if .BinkPIPv6Tested}}
+        {{if not .BinkPIPv6Success}}
+            <span class="badge badge-danger" title="{{.BinkPIPv6Error}}">BinkP</span>
+        {{end}}
+    {{end}}
+    {{if .IfcicoIPv6Tested}}
+        {{if not .IfcicoIPv6Success}}
+            <span class="badge badge-danger" title="{{.IfcicoIPv6Error}}">IFCICO</span>
+        {{end}}
+    {{end}}
+    {{if .TelnetIPv6Tested}}
+        {{if not .TelnetIPv6Success}}
+            <span class="badge badge-danger" title="{{.TelnetIPv6Error}}">Telnet</span>
+        {{end}}
+    {{end}}
+    {{if and (not .BinkPIPv6Tested) (not .IfcicoIPv6Tested) (not .TelnetIPv6Tested)}}
+        <span class="text-muted" title="IPv6 was not tested in this specific result, but was tested and failed during the reporting period">Not tested in latest result</span>
+    {{end}}
+</td>
+{{end}}

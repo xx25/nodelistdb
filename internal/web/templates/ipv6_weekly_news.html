@@ -207,9 +207,7 @@
                                     {{if .TelnetIPv6Success}}<span class="badge badge-success">Telnet</span>{{end}}
                                     {{if .FTPSuccess}}<span class="badge badge-success">FTP</span>{{end}}
                                 </td>
-                                <td>
-                                    {{if .City}}{{.City}}, {{.CountryCode}}{{else if .Country}}{{.Country}}{{else}}<span class="text-muted">Unknown</span>{{end}}
-                                </td>
+                                {{template "location_cell" .}}
                                 <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
@@ -269,9 +267,7 @@
                                     {{if .IfcicoIPv6Tested}}<span class="badge badge-danger" title="{{.IfcicoIPv6Error}}">IFCICO</span>{{end}}
                                     {{if .TelnetIPv6Tested}}<span class="badge badge-danger" title="{{.TelnetIPv6Error}}">Telnet</span>{{end}}
                                 </td>
-                                <td>
-                                    {{if .City}}{{.City}}, {{.CountryCode}}{{else if .Country}}{{.Country}}{{else}}<span class="text-muted">Unknown</span>{{end}}
-                                </td>
+                                {{template "location_cell" .}}
                                 <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
@@ -333,9 +329,7 @@
                                         <span class="badge badge-danger">IPv6 Lost</span>
                                     {{end}}
                                 </td>
-                                <td>
-                                    {{if .City}}{{.City}}, {{.CountryCode}}{{else if .Country}}{{.Country}}{{else}}<span class="text-muted">Unknown</span>{{end}}
-                                </td>
+                                {{template "location_cell" .}}
                                 <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
@@ -396,9 +390,7 @@
                                     {{if .TelnetIPv6Success}}<span class="badge badge-success">Telnet</span>{{end}}
                                     {{if .FTPSuccess}}<span class="badge badge-success">FTP</span>{{end}}
                                 </td>
-                                <td>
-                                    {{if .City}}{{.City}}, {{.CountryCode}}{{else if .Country}}{{.Country}}{{else}}<span class="text-muted">Unknown</span>{{end}}
-                                </td>
+                                {{template "location_cell" .}}
                                 <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
@@ -424,6 +416,7 @@
                     <li><strong>Existing Nodes:</strong> Nodes that have been in the nodelist for more than 14 days</li>
                     <li><strong>Working IPv6:</strong> At least one service (BinkP, IFCICO, Telnet, or FTP) successfully responds on IPv6</li>
                     <li><strong>Changes:</strong> Compared between 7-14 days ago and the last 7 days</li>
+                    <li><strong>Location:</strong> The "Location" column shows the geographic location determined from the node's IP address (via GeoIP lookup), not the location specified in the nodelist. This represents the actual physical location where the node's server is hosted.</li>
                 </ul>
             </div>
         </div>

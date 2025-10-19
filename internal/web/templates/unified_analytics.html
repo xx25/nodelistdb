@@ -1,0 +1,83 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+<script src="/static/tooltip.js"></script>
+{{end}}
+
+{{define "content"}}
+{{template "analytics_filters" .}}
+{{template "error_display" .}}
+
+{{if .ProtocolNodes}}
+<div class="stats-box">
+    <h3>Found {{len .ProtocolNodes}} {{.Config.StatsHeading}} Nodes</h3>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">Hostname</th>
+
+                {{/* Version column for protocols that support it (BinkP, IFCICO) */}}
+                {{if .Config.ShowVersion}}
+                    <th data-sortable data-type="string">Version</th>
+                {{end}}
+
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .ProtocolNodes}}
+            <tr>
+                {{template "node_address_cell" .}}
+                {{template "hostname_cell_simple" .}}
+
+                {{/* Version column rendering */}}
+                {{if $.Config.ShowVersion}}
+                    <td>
+                        {{$version := ""}}
+                        {{if eq $.Config.VersionField "BinkPVersion"}}{{$version = .BinkPVersion}}{{end}}
+                        {{if eq $.Config.VersionField "IfcicoMailerInfo"}}{{$version = .IfcicoMailerInfo}}{{end}}
+
+                        {{if $version}}
+                            <span class="badge badge-info">{{$version}}</span>
+                        {{else}}
+                            <span class="text-muted">Unknown</span>
+                        {{end}}
+                    </td>
+                {{end}}
+
+                {{template "location_cell" .}}
+                {{template "timestamp_cell" .}}
+                {{template "action_buttons_cell" .}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    {{range .ProcessedInfo}}
+    <p>{{.}}</p>
+    {{end}}
+    <p><strong>Note about Location:</strong> The "Location" column shows the geographic location determined from the node's IP address (via GeoIP lookup), not the location specified in the nodelist. This represents the actual physical location where the node's server is hosted.</p>
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>{{.Config.EmptyStateTitle}}</strong><br>
+    {{.Config.EmptyStateDesc}}
+</div>
+{{end}}
+{{end}}

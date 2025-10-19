@@ -1,0 +1,32 @@
+{{define "ipv6_protocols_cell"}}
+<td>
+    {{if .BinkPIPv6Tested}}
+        {{if .BinkPIPv6Success}}
+            <span class="badge badge-success">BinkP</span>
+        {{else}}
+            <span class="badge badge-danger" title="{{.BinkPIPv6Error}}">BinkP</span>
+        {{end}}
+    {{end}}
+    {{if .IfcicoIPv6Tested}}
+        {{if .IfcicoIPv6Success}}
+            <span class="badge badge-success">IFCICO</span>
+        {{else}}
+            <span class="badge badge-danger" title="{{.IfcicoIPv6Error}}">IFCICO</span>
+        {{end}}
+    {{end}}
+    {{if .TelnetIPv6Tested}}
+        {{if .TelnetIPv6Success}}
+            <span class="badge badge-success">Telnet</span>
+        {{else}}
+            <span class="badge badge-danger" title="{{.TelnetIPv6Error}}">Telnet</span>
+        {{end}}
+    {{end}}
+    {{if .FTPIPv6Tested}}
+        {{if .FTPIPv6Success}}
+            <span class="badge badge-success">FTP</span>
+        {{else}}
+            <span class="badge badge-danger" title="{{.FTPIPv6Error}}">FTP</span>
+        {{end}}
+    {{end}}
+</td>
+{{end}}

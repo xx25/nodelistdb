@@ -15,7 +15,7 @@ import (
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
-	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "ipv6_analytics", "ipv6_nonworking_analytics", "ipv6_advertised_ipv4_only_analytics", "ipv6_only_analytics", "pure_ipv6_only_analytics", "ipv6_weekly_news", "binkp_analytics", "ifcico_analytics", "telnet_analytics", "vmodem_analytics", "ftp_analytics", "binkp_software", "ifcico_software", "geo_analytics", "geo_nodes_list"}
+	templates := []string{"index", "search", "stats", "sysop_search", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "ipv6_analytics_generic", "ipv6_weekly_news", "unified_analytics", "binkp_software", "ifcico_software", "geo_analytics", "geo_nodes_list"}
 
 	// Create function map for template functions
 	funcMap := template.FuncMap{
@@ -336,6 +336,9 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 		"location_cell.html",
 		"timestamp_cell.html",
 		"action_buttons_cell.html",
+		"ipv6_protocols_cell.html",
+		"ipv4_protocols_cell.html",
+		"ipv6_failed_protocols_cell.html",
 	}
 
 	for _, partialFile := range partialFiles {

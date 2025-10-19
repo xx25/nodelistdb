@@ -1,0 +1,24 @@
+{{define "ipv4_protocols_cell"}}
+<td>
+    {{if .BinkPIPv4Tested}}
+        {{if .BinkPIPv4Success}}
+            <span class="badge badge-success">BinkP</span>
+        {{end}}
+    {{end}}
+    {{if .IfcicoIPv4Tested}}
+        {{if .IfcicoIPv4Success}}
+            <span class="badge badge-success">IFCICO</span>
+        {{end}}
+    {{end}}
+    {{if .TelnetIPv4Tested}}
+        {{if .TelnetIPv4Success}}
+            <span class="badge badge-success">Telnet</span>
+        {{end}}
+    {{end}}
+    {{if and (not .BinkPIPv4Tested) (not .IfcicoIPv4Tested) (not .TelnetIPv4Tested)}}
+        <span class="text-muted" title="IPv4 was not tested in this specific result, but was tested and succeeded during the reporting period">Not tested in latest result</span>
+    {{else if and (not .BinkPIPv4Success) (not .IfcicoIPv4Success) (not .TelnetIPv4Success)}}
+        <span class="text-muted">None working</span>
+    {{end}}
+</td>
+{{end}}
