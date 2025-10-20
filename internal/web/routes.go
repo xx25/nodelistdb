@@ -6,7 +6,6 @@ import "net/http"
 func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", s.IndexHandler)
 	mux.HandleFunc("/search", s.SearchHandler)
-	mux.HandleFunc("/search/sysop", s.SysopSearchHandler)
 	mux.HandleFunc("/stats", s.StatsHandler)
 	mux.HandleFunc("/nodelists", s.NodelistHandler)
 	mux.HandleFunc("/download/nodelist/", s.NodelistDownloadHandler)
@@ -34,6 +33,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/geo-hosting", s.GeoHostingAnalyticsHandler)
 	mux.HandleFunc("/analytics/geo-hosting/country", s.GeoCountryNodesHandler)
 	mux.HandleFunc("/analytics/geo-hosting/provider", s.GeoProviderNodesHandler)
+	mux.HandleFunc("/analytics/pioneers", s.PioneersHandler)
 	mux.HandleFunc("/reachability", s.ReachabilityHandler)
 	mux.HandleFunc("/reachability/node", s.ReachabilityNodeHandler)
 	mux.HandleFunc("/reachability/test", s.TestResultDetailHandler)

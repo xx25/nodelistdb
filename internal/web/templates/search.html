@@ -10,7 +10,7 @@
     <div class="container">
         <header>
             <h1>{{.Title}}</h1>
-            <p class="subtitle">Find FidoNet nodes by address, system name, or location</p>
+            <p class="subtitle">Find FidoNet nodes by address, system name, location, or SysOp</p>
         </header>
         
         {{template "nav" .}}
@@ -58,7 +58,12 @@
                         <label for="location">Location:</label>
                         <input type="text" id="location" name="location" placeholder="e.g. New York, NY">
                     </div>
-                    
+
+                    <div class="form-group">
+                        <label for="sysop_name">SysOp Name:</label>
+                        <input type="text" id="sysop_name" name="sysop_name" value="{{.SysopName}}" placeholder="e.g. John Doe">
+                    </div>
+
                     <div class="form-group">
                         <label for="include_historical">
                             <input type="checkbox" id="include_historical" name="include_historical" value="1" checked>

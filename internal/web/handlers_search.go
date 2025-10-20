@@ -11,9 +11,31 @@ import (
 	"github.com/nodelistdb/internal/version"
 )
 
-// SearchHandler handles node search
+// SearchHandler handles unified node and sysop search
 func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
-	nodes, count, searchErr := s.performNodeSearchWithLifetime(r)
+	var nodes []storage.NodeSummary
+	var count int
+	var searchErr error
+	var sysopName string
+
+	// Only perform search on POST
+	if r.Method == "POST" {
+		if err := r.ParseForm(); err != nil {
+			searchErr = fmt.Errorf("Failed to parse form: %v", err)
+		} else {
+			// Check if sysop_name field is filled
+			sysopName = r.FormValue("sysop_name")
+
+			if sysopName != "" {
+				// Perform sysop search
+				nodes, searchErr = s.storage.SearchOps().SearchNodesBySysop(sysopName, 100)
+				count = len(nodes)
+			} else {
+				// Perform node search
+				nodes, count, searchErr = s.performNodeSearchWithLifetime(r)
+			}
+		}
+	}
 
 	data := struct {
 		Title      string
@@ -21,13 +43,15 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		Nodes      []storage.NodeSummary
 		Count      int
 		Error      error
+		SysopName  string
 		Version    string
 	}{
-		Title:      "Search Nodes",
+		Title:      "Search",
 		ActivePage: "search",
 		Nodes:      nodes,
 		Count:      count,
 		Error:      searchErr,
+		SysopName:  sysopName,
 		Version:    version.GetVersionInfo(),
 	}
 
@@ -71,49 +95,6 @@ func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeS
 	}
 
 	return nodes, len(nodes), nil
-}
-
-// SysopSearchHandler handles sysop search
-func (s *Server) SysopSearchHandler(w http.ResponseWriter, r *http.Request) {
-	var nodes []storage.NodeSummary
-	var count int
-	var searchErr error
-	var sysopName string
-
-	if r.Method == "POST" {
-		if err := r.ParseForm(); err != nil {
-			searchErr = fmt.Errorf("Failed to parse form: %v", err)
-		} else {
-			sysopName = r.FormValue("sysop_name")
-		}
-
-		if sysopName != "" {
-			nodes, searchErr = s.storage.SearchOps().SearchNodesBySysop(sysopName, 100)
-			count = len(nodes)
-		}
-	}
-
-	data := struct {
-		Title      string
-		ActivePage string
-		Nodes      []storage.NodeSummary
-		Count      int
-		Error      error
-		SysopName  string
-		Version    string
-	}{
-		Title:      "Search by Sysop",
-		ActivePage: "sysop",
-		Nodes:      nodes,
-		Count:      count,
-		Error:      searchErr,
-		SysopName:  sysopName,
-		Version:    version.GetVersionInfo(),
-	}
-
-	if err := s.templates["sysop_search"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 // NodeHistoryHandler handles node history view

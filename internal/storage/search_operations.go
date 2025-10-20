@@ -203,3 +203,90 @@ func (so *SearchOperations) buildNodeSummaryArgs(filter database.NodeFilter) []i
 
 	return args
 }
+
+// PioneerNode represents a pioneer FidoNet node (first appearance in a region)
+type PioneerNode struct {
+	Zone         int
+	Net          int
+	Node         int
+	Region       int
+	SysopName    string
+	SystemName   string
+	Location     string
+	NodelistDate string
+	DayNumber    int
+	RawLine      string // The original nodelist line
+}
+
+// GetPioneersByRegion retrieves the first N nodes that appeared in a specific FidoNet region
+// A region is identified by zone:region (e.g., zone=2, region=50 means Region 50 in Zone 2)
+func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int) ([]PioneerNode, error) {
+	so.mu.RLock()
+	defer so.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	query := `
+		SELECT
+			zone,
+			net,
+			node,
+			region,
+			sysop_name,
+			system_name,
+			location,
+			formatDateTime(nodelist_date, '%Y-%m-%d') as nodelist_date,
+			day_number,
+			concat(
+				if(node_type != '', node_type, ''),
+				if(node_type != '', ',', ''),
+				toString(node), ',',
+				system_name, ',',
+				location, ',',
+				sysop_name, ',',
+				phone, ',',
+				toString(max_speed),
+				if(length(flags) > 0, ',', ''),
+				arrayStringConcat(flags, ',')
+			) as raw_line
+		FROM nodes
+		WHERE zone = ? AND region = ?
+		ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC
+		LIMIT ?
+	`
+
+	rows, err := so.db.Conn().Query(query, zone, region, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pioneers: %w", err)
+	}
+	defer rows.Close()
+
+	var pioneers []PioneerNode
+	for rows.Next() {
+		var p PioneerNode
+		err := rows.Scan(
+			&p.Zone,
+			&p.Net,
+			&p.Node,
+			&p.Region,
+			&p.SysopName,
+			&p.SystemName,
+			&p.Location,
+			&p.NodelistDate,
+			&p.DayNumber,
+			&p.RawLine,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan pioneer row: %w", err)
+		}
+		pioneers = append(pioneers, p)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating pioneer rows: %w", err)
+	}
+
+	return pioneers, nil
+}

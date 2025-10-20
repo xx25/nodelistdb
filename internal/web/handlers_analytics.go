@@ -809,3 +809,66 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
+
+// PioneersHandler displays the first nodes (pioneers) in a FidoNet region
+func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
+	// Get zone and region parameters from query string
+	zoneStr := r.URL.Query().Get("zone")
+	regionStr := r.URL.Query().Get("region")
+	var zone, region int
+	var pioneers []storage.PioneerNode
+	var err error
+
+	if zoneStr != "" && regionStr != "" {
+		var zoneErr, regionErr error
+		zone, zoneErr = strconv.Atoi(zoneStr)
+		region, regionErr = strconv.Atoi(regionStr)
+
+		if zoneErr != nil || regionErr != nil || zone < 1 || zone > 6 || region < 1 {
+			err = fmt.Errorf("invalid zone or region parameters")
+		} else {
+			// Get pioneers for this zone:region (default to 50)
+			pioneers, err = s.storage.SearchOps().GetPioneersByRegion(zone, region, 50)
+		}
+	}
+
+	var displayError error
+	if err != nil {
+		log.Printf("[ERROR] Pioneers: Error fetching data: %v", err)
+		displayError = fmt.Errorf("Failed to fetch pioneer data. Please try again later")
+		pioneers = []storage.PioneerNode{}
+	}
+
+	// Build template data
+	data := struct {
+		Title      string
+		ActivePage string
+		Version    string
+		Zone       int
+		Region     int
+		Pioneers   []storage.PioneerNode
+		Error      error
+	}{
+		Title:      "FidoNet Region Pioneers",
+		ActivePage: "analytics",
+		Version:    version.GetVersionInfo(),
+		Zone:       zone,
+		Region:     region,
+		Pioneers:   pioneers,
+		Error:      displayError,
+	}
+
+	// Check template exists before rendering
+	tmpl, exists := s.templates["pioneers"]
+	if !exists {
+		log.Printf("[ERROR] Pioneers: Template 'pioneers' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Render template
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Pioneers: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}

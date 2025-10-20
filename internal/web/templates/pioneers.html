@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{{.Title}}</h1>
+            <p class="subtitle">First nodes to appear in FidoNet regions - the pioneers</p>
+        </header>
+
+        {{template "nav" .}}
+
+        <div class="content">
+            <!-- Region Search Form -->
+            <div class="card">
+                <h2>Search Region Pioneers</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Enter zone and region to see the first 50 nodes (e.g., Zone 2, Region 50 for 2:50).
+                </p>
+                <form method="get" action="/analytics/pioneers" style="display: flex; gap: 10px; align-items: flex-end;">
+                    <div class="form-group" style="flex: 1; max-width: 200px; margin: 0;">
+                        <label for="zone">Zone:</label>
+                        <select id="zone" name="zone" required style="width: 100%;">
+                            <option value="">Select Zone</option>
+                            <option value="1" {{if eq .Zone 1}}selected{{end}}>Zone 1</option>
+                            <option value="2" {{if eq .Zone 2}}selected{{end}}>Zone 2</option>
+                            <option value="3" {{if eq .Zone 3}}selected{{end}}>Zone 3</option>
+                            <option value="4" {{if eq .Zone 4}}selected{{end}}>Zone 4</option>
+                            <option value="5" {{if eq .Zone 5}}selected{{end}}>Zone 5</option>
+                            <option value="6" {{if eq .Zone 6}}selected{{end}}>Zone 6</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; max-width: 200px; margin: 0;">
+                        <label for="region">Region:</label>
+                        <input type="number" id="region" name="region" value="{{.Region}}" placeholder="e.g., 50" min="1" required style="width: 100%;">
+                    </div>
+                    <button type="submit" class="btn" style="margin: 0;">🔍 Show Pioneers</button>
+                </form>
+            </div>
+
+            {{if .Error}}
+                <div class="alert alert-error">
+                    <strong>Error:</strong> {{.Error}}
+                </div>
+            {{end}}
+
+            {{if .Pioneers}}
+                <div class="card">
+                    <h2>Zone {{.Zone}} Region {{.Region}} Pioneers - First {{len .Pioneers}} Nodes</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                        These are the first nodes that appeared in {{.Zone}}:{{.Region}} nodelists, ordered by their first appearance.
+                    </p>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Node Address</th>
+                                    <th>SysOp Name</th>
+                                    <th>System Name</th>
+                                    <th>Location</th>
+                                    <th>First Seen</th>
+                                    <th>Day Number</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range $index, $pioneer := .Pioneers}}
+                                <tr>
+                                    <td style="text-align: center; font-weight: bold;">{{add $index 1}}</td>
+                                    <td>
+                                        <strong>
+                                            <a href="/node/{{$pioneer.Zone}}/{{$pioneer.Net}}/{{$pioneer.Node}}">
+                                                {{$pioneer.Zone}}:{{$pioneer.Net}}/{{$pioneer.Node}}
+                                            </a>
+                                        </strong>
+                                    </td>
+                                    <td>{{if $pioneer.SysopName}}{{replaceUnderscores $pioneer.SysopName}}{{else}}<em>-</em>{{end}}</td>
+                                    <td>{{if $pioneer.SystemName}}{{replaceUnderscores $pioneer.SystemName}}{{else}}<em>-</em>{{end}}</td>
+                                    <td>{{if $pioneer.Location}}{{replaceUnderscores $pioneer.Location}}{{else}}<em>-</em>{{end}}</td>
+                                    <td>{{$pioneer.NodelistDate}}</td>
+                                    <td style="font-family: monospace; color: var(--text-secondary);">{{$pioneer.DayNumber}}</td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: var(--radius);">
+                        <h3 style="margin-top: 0; font-size: 1rem;">📜 Historical Nodelist Entries</h3>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 0.75rem;">
+                            These are the original nodelist lines as they first appeared:
+                        </p>
+                        <div style="background: #1f2937; color: #e5e7eb; padding: 1rem; border-radius: 4px; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+                            {{range $pioneer := .Pioneers}}
+                            <div style="padding: 0.25rem 0;">{{$pioneer.RawLine}}</div>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+            {{else if and .Zone .Region}}
+                <div class="card">
+                    <p style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                        No pioneer data available for {{.Zone}}:{{.Region}}
+                    </p>
+                </div>
+            {{end}}
+        </div>
+
+        {{template "footer" .}}
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>
