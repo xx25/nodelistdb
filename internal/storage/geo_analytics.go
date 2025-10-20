@@ -195,11 +195,29 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 	conn := gao.db.Conn()
 
 	query := `
-		SELECT *
+		WITH latest_nodes AS (
+			SELECT
+				zone, net, node,
+				argMax(system_name, nodelist_date) as system_name,
+				argMax(sysop_name, nodelist_date) as sysop_name
+			FROM nodes
+			GROUP BY zone, net, node
+		)
+		SELECT
+			r.zone, r.net, r.node,
+			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
+			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
+			r.binkp_location,
+			r.country, r.country_code, r.city, r.isp, r.org, r.asn,
+			r.resolved_ipv4, r.resolved_ipv6,
+			r.binkp_success, r.binkp_ipv6_success,
+			r.ifcico_success, r.ifcico_ipv6_success,
+			r.telnet_success, r.telnet_ipv6_success
 		FROM (
 			SELECT
 				zone, net, node,
 				argMax(binkp_system_name, test_time) as binkp_system_name,
+				argMax(ifcico_system_name, test_time) as ifcico_system_name,
 				argMax(binkp_sysop, test_time) as binkp_sysop,
 				argMax(binkp_location, test_time) as binkp_location,
 				argMax(country, test_time) as country,
@@ -220,9 +238,10 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 			WHERE is_operational = true
 				AND test_date >= today() - ?
 			GROUP BY zone, net, node
-		) AS latest_nodes
-		WHERE country_code = ?
-		ORDER BY zone, net, node
+		) AS r
+		LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+		WHERE r.country_code = ?
+		ORDER BY r.zone, r.net, r.node
 	`
 
 	rows, err := conn.Query(query, days, countryCode)
@@ -271,11 +290,29 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int) ([]N
 	conn := gao.db.Conn()
 
 	query := `
-		SELECT *
+		WITH latest_nodes AS (
+			SELECT
+				zone, net, node,
+				argMax(system_name, nodelist_date) as system_name,
+				argMax(sysop_name, nodelist_date) as sysop_name
+			FROM nodes
+			GROUP BY zone, net, node
+		)
+		SELECT
+			r.zone, r.net, r.node,
+			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
+			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
+			r.binkp_location,
+			r.country, r.country_code, r.city, r.isp, r.org, r.asn,
+			r.resolved_ipv4, r.resolved_ipv6,
+			r.binkp_success, r.binkp_ipv6_success,
+			r.ifcico_success, r.ifcico_ipv6_success,
+			r.telnet_success, r.telnet_ipv6_success
 		FROM (
 			SELECT
 				zone, net, node,
 				argMax(binkp_system_name, test_time) as binkp_system_name,
+				argMax(ifcico_system_name, test_time) as ifcico_system_name,
 				argMax(binkp_sysop, test_time) as binkp_sysop,
 				argMax(binkp_location, test_time) as binkp_location,
 				argMax(country, test_time) as country,
@@ -296,9 +333,10 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int) ([]N
 			WHERE is_operational = true
 				AND test_date >= today() - ?
 			GROUP BY zone, net, node
-		) AS latest_nodes
-		WHERE isp = ?
-		ORDER BY zone, net, node
+		) AS r
+		LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+		WHERE r.isp = ?
+		ORDER BY r.zone, r.net, r.node
 	`
 
 	rows, err := conn.Query(query, days, isp)
