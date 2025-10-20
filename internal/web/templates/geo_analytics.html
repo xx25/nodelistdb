@@ -1,22 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geographic Hosting Distribution - NodelistDB</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Geographic Hosting Distribution</h1>
-            <p class="subtitle">Analysis of FidoNet node hosting by country and provider (last {{.Days}} days)</p>
-            {{if .Updated}}<p class="last-updated">Last Updated: {{.Updated}}</p>{{end}}
-        </header>
+{{template "base" .}}
 
-        {{template "nav" .}}
+{{define "title"}}Geographic Hosting Distribution{{end}}
 
-        <div class="content">
+{{define "page_title"}}Geographic Hosting Distribution{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Analysis of FidoNet node hosting by country and provider (last {{.Days}} days)</p>
+{{if .Updated}}<p class="last-updated">Last Updated: {{.Updated}}</p>{{end}}
+{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
             {{if .Error}}
             <div class="alert alert-error">
                 <strong>Error:</strong> {{.Error}}
@@ -40,126 +37,121 @@
                 </div>
             </div>
 
-            <!-- Top Countries Section -->
-            <div class="analytics-section">
-                <h2>🌍 Top Countries by Node Count</h2>
-                <div class="table-responsive">
-                    <table class="analytics-table">
-                        <thead>
-                            <tr>
-                                <th>Rank</th>
-                                <th>Country</th>
-                                <th>Code</th>
-                                <th>Nodes</th>
-                                <th>Percentage</th>
-                                <th style="width: 25%;">Distribution</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
+<!-- Top Countries Section -->
+<div class="analytics-section">
+    <h2>🌍 Top Countries by Node Count</h2>
+    <div class="table-responsive">
+        <table class="data-table sortable-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="number">Rank</th>
+                    <th data-sortable data-type="string">Country</th>
+                    <th data-sortable data-type="string">Code</th>
+                    <th data-sortable data-type="number" data-default-sort="desc">Nodes</th>
+                    <th data-sortable data-type="number">Percentage</th>
+                    <th style="width: 25%;">Distribution</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
                         <tbody>
-                            {{range $index, $country := .Distribution.TopCountries}}
-                            <tr>
-                                <td>{{add $index 1}}</td>
-                                <td><strong>{{countryFlag $country.CountryCode}} {{$country.Country}}</strong></td>
-                                <td>{{$country.CountryCode}}</td>
-                                <td>{{$country.NodeCount}}</td>
-                                <td>{{printf "%.1f" $country.Percentage}}%</td>
-                                <td>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" style="width: {{$country.Percentage}}%"></div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <a href="/analytics/geo-hosting/country?code={{$country.CountryCode}}&days={{$.Days}}" class="btn btn-small">View Nodes</a>
-                                </td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Top Providers Section -->
-            <div class="analytics-section">
-                <h2>🏢 Top Hosting Providers by Node Count</h2>
-                <div class="table-responsive">
-                    <table class="analytics-table">
-                        <thead>
-                            <tr>
-                                <th>Rank</th>
-                                <th>Provider</th>
-                                <th>ASN</th>
-                                <th>Nodes</th>
-                                <th>Percentage</th>
-                                <th>Countries</th>
-                                <th style="width: 20%;">Distribution</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {{range $index, $provider := .Distribution.TopProviders}}
-                            <tr>
-                                <td>{{add $index 1}}</td>
-                                <td><strong>{{$provider.Provider}}</strong></td>
-                                <td>
-                                    {{if ne $provider.ASN 0}}
-                                        AS{{$provider.ASN}}
-                                    {{else}}
-                                        -
-                                    {{end}}
-                                </td>
-                                <td>{{$provider.NodeCount}}</td>
-                                <td>{{printf "%.1f" $provider.Percentage}}%</td>
-                                <td>
-                                    <span class="country-tags">
-                                        {{range $provider.Countries}}
-                                            <span class="tag">{{countryFlag .}} {{.}}</span>
-                                        {{end}}
-                                    </span>
-                                </td>
-                                <td>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" style="width: {{$provider.Percentage}}%"></div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <a href="/analytics/geo-hosting/provider?isp={{$provider.Provider}}&days={{$.Days}}" class="btn btn-small">View Nodes</a>
-                                </td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Time Period Selector -->
-            <div class="time-selector">
-                <p>View different time periods:</p>
-                <a href="?days=30" class="btn {{if eq .Days 30}}active{{end}}">Last 30 Days</a>
-                <a href="?days=90" class="btn {{if eq .Days 90}}active{{end}}">Last 90 Days</a>
-                <a href="?days=365" class="btn {{if eq .Days 365}}active{{end}}">Last Year</a>
-                <a href="?days=730" class="btn {{if eq .Days 730}}active{{end}}">Last 2 Years</a>
-            </div>
-
-            <!-- Notes -->
-            <div class="info-box">
-                <h3>ℹ️ About This Report</h3>
-                <ul>
-                    <li>Shows geographic distribution of operational FidoNet nodes (any working server: BinkP, IFCICO, Telnet, FTP, or VModem)</li>
-                    <li>Geolocation data resolved via external services (ip-api.com, ipinfo.io, ipgeolocation.io)</li>
-                    <li>Provider information based on ISP/Organization from IP geolocation</li>
-                    <li>Data updated based on most recent test results per node</li>
-                </ul>
-            </div>
-            {{else}}
-            <div class="alert alert-warning">
-                <strong>No data available.</strong><br>
-                No operational nodes with geolocation data found for the selected period.
-            </div>
-            {{end}}
-        </div>
+                {{range $index, $country := .Distribution.TopCountries}}
+                <tr>
+                    <td>{{add $index 1}}</td>
+                    <td><strong>{{countryFlag $country.CountryCode}} {{$country.Country}}</strong></td>
+                    <td>{{$country.CountryCode}}</td>
+                    <td>{{$country.NodeCount}}</td>
+                    <td>{{printf "%.1f" $country.Percentage}}%</td>
+                    <td>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: {{$country.Percentage}}%"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <a href="/analytics/geo-hosting/country?code={{$country.CountryCode}}&days={{$.Days}}" class="btn btn-small">View Nodes</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
     </div>
+</div>
 
-    {{template "footer" .}}
-</body>
-</html>
+<!-- Top Providers Section -->
+<div class="analytics-section">
+    <h2>🏢 Top Hosting Providers by Node Count</h2>
+    <div class="table-responsive">
+        <table class="data-table sortable-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="number">Rank</th>
+                    <th data-sortable data-type="string">Provider</th>
+                    <th data-sortable data-type="string">ASN</th>
+                    <th data-sortable data-type="number" data-default-sort="desc">Nodes</th>
+                    <th data-sortable data-type="number">Percentage</th>
+                    <th>Countries</th>
+                    <th style="width: 20%;">Distribution</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+                        <tbody>
+                {{range $index, $provider := .Distribution.TopProviders}}
+                <tr>
+                    <td>{{add $index 1}}</td>
+                    <td><strong>{{$provider.Provider}}</strong></td>
+                    <td>
+                        {{if ne $provider.ASN 0}}
+                            AS{{$provider.ASN}}
+                        {{else}}
+                            -
+                        {{end}}
+                    </td>
+                    <td>{{$provider.NodeCount}}</td>
+                    <td>{{printf "%.1f" $provider.Percentage}}%</td>
+                    <td>
+                        <span class="country-tags">
+                            {{range $provider.Countries}}
+                                <span class="tag">{{countryFlag .}} {{.}}</span>
+                            {{end}}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: {{$provider.Percentage}}%"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <a href="/analytics/geo-hosting/provider?isp={{$provider.Provider}}&days={{$.Days}}" class="btn btn-small">View Nodes</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Time Period Selector -->
+<div class="time-selector">
+    <p>View different time periods:</p>
+    <a href="?days=30" class="btn {{if eq .Days 30}}active{{end}}">Last 30 Days</a>
+    <a href="?days=90" class="btn {{if eq .Days 90}}active{{end}}">Last 90 Days</a>
+    <a href="?days=365" class="btn {{if eq .Days 365}}active{{end}}">Last Year</a>
+    <a href="?days=730" class="btn {{if eq .Days 730}}active{{end}}">Last 2 Years</a>
+</div>
+
+<!-- Notes -->
+<div class="info-box">
+    <h3>ℹ️ About This Report</h3>
+    <ul>
+        <li>Shows geographic distribution of operational FidoNet nodes (any working server: BinkP, IFCICO, Telnet, FTP, or VModem)</li>
+        <li>Geolocation data resolved via external services (ip-api.com, ipinfo.io, ipgeolocation.io)</li>
+        <li>Provider information based on ISP/Organization from IP geolocation</li>
+        <li>Data updated based on most recent test results per node</li>
+    </ul>
+</div>
+{{else}}
+<div class="alert alert-warning">
+    <strong>No data available.</strong><br>
+    No operational nodes with geolocation data found for the selected period.
+</div>
+{{end}}
+{{end}}

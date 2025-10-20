@@ -18,8 +18,9 @@
 
         if (!tbody) return;
 
-        let dateColumnIndex = -1;
-        let dateColumnHeader = null;
+        let defaultColumnIndex = -1;
+        let defaultColumnHeader = null;
+        let defaultOrder = 'desc'; // Default to descending
 
         headers.forEach((header, index) => {
             header.style.cursor = 'pointer';
@@ -37,12 +38,21 @@
             indicator.style.fontSize = '14px';
             header.appendChild(indicator);
 
-            // Check if this is the default sorted column (date type = Last Tested)
-            const dataType = header.getAttribute('data-type');
-            if (dataType === 'date') {
-                // Remember this column for initial sorting
-                dateColumnIndex = index;
-                dateColumnHeader = header;
+            // Check if this column has data-default-sort attribute
+            if (header.hasAttribute('data-default-sort')) {
+                defaultColumnIndex = index;
+                defaultColumnHeader = header;
+                defaultOrder = header.getAttribute('data-default-sort') || 'desc';
+            }
+            // Otherwise check if this is a date column (default sort behavior)
+            else {
+                const dataType = header.getAttribute('data-type');
+                if (dataType === 'date' && defaultColumnIndex === -1) {
+                    // Remember this column for initial sorting (only if no explicit default set)
+                    defaultColumnIndex = index;
+                    defaultColumnHeader = header;
+                    defaultOrder = 'desc'; // Newest first for dates
+                }
             }
 
             // Add click handler
@@ -51,11 +61,11 @@
             });
         });
 
-        // Perform initial sort on date column (descending = newest first)
-        if (dateColumnIndex >= 0 && dateColumnHeader) {
-            // Set to 'asc' first so the sortTable function will toggle to 'desc'
-            dateColumnHeader.setAttribute('data-order', 'asc');
-            sortTable(table, tbody, dateColumnIndex, dateColumnHeader);
+        // Perform initial sort on default column
+        if (defaultColumnIndex >= 0 && defaultColumnHeader) {
+            // Set opposite order first so sortTable will toggle to desired order
+            defaultColumnHeader.setAttribute('data-order', defaultOrder === 'desc' ? 'asc' : 'desc');
+            sortTable(table, tbody, defaultColumnIndex, defaultColumnHeader);
         }
     }
 
