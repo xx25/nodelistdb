@@ -50,7 +50,7 @@
                     <th data-sortable data-type="number" data-default-sort="desc">Nodes</th>
                     <th data-sortable data-type="number">Percentage</th>
                     <th style="width: 25%;">Distribution</th>
-                    <th>Actions</th>
+                    <th style="width: 100px;">Actions</th>
                 </tr>
             </thead>
                         <tbody>
@@ -66,8 +66,8 @@
                             <div class="progress-fill" style="width: {{$country.Percentage}}%"></div>
                         </div>
                     </td>
-                    <td>
-                        <a href="/analytics/geo-hosting/country?code={{$country.CountryCode}}&days={{$.Days}}" class="btn btn-small">View Nodes</a>
+                    <td style="white-space: nowrap;">
+                        <a href="/analytics/geo-hosting/country?code={{$country.CountryCode}}&days={{$.Days}}" class="btn btn-small" style="font-size: 0.85em; padding: 5px 10px;">View</a>
                     </td>
                 </tr>
                 {{end}}
@@ -90,7 +90,7 @@
                     <th data-sortable data-type="number">Percentage</th>
                     <th>Countries</th>
                     <th style="width: 20%;">Distribution</th>
-                    <th>Actions</th>
+                    <th style="width: 100px;">Actions</th>
                 </tr>
             </thead>
                         <tbody>
@@ -119,8 +119,8 @@
                             <div class="progress-fill" style="width: {{$provider.Percentage}}%"></div>
                         </div>
                     </td>
-                    <td>
-                        <a href="/analytics/geo-hosting/provider?isp={{$provider.Provider}}&days={{$.Days}}" class="btn btn-small">View Nodes</a>
+                    <td style="white-space: nowrap;">
+                        <a href="/analytics/geo-hosting/provider?isp={{$provider.Provider}}&days={{$.Days}}" class="btn btn-small" style="font-size: 0.85em; padding: 5px 10px;">View</a>
                     </td>
                 </tr>
                 {{end}}

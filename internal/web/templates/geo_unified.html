@@ -93,7 +93,13 @@
                     {{if or .TelnetSuccess .TelnetIPv6Success}}
                         <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">T</span>
                     {{end}}
-                    {{if or .BinkPIPv6Success .IfcicoIPv6Success .TelnetIPv6Success}}
+                    {{if or .FTPSuccess .FTPIPv6Success}}
+                        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">F</span>
+                    {{end}}
+                    {{if or .VModemSuccess .VModemIPv6Success}}
+                        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">V</span>
+                    {{end}}
+                    {{if or .BinkPIPv6Success .IfcicoIPv6Success .TelnetIPv6Success .FTPIPv6Success .VModemIPv6Success}}
                         <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">6</span>
                     {{else if .ResolvedIPv6}}
                         <span class="badge badge-warning" style="font-size: 0.8em; padding: 2px 4px;">6?</span>
@@ -113,6 +119,8 @@
         <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">B</span> BinkP,
         <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">I</span> IFCICO,
         <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">T</span> Telnet,
+        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">F</span> FTP,
+        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">V</span> VModem,
         <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">6</span> IPv6 Working,
         <span class="badge badge-warning" style="font-size: 0.8em; padding: 2px 4px;">6?</span> IPv6 DNS Only
     </p>
