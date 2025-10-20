@@ -3,7 +3,6 @@ package ftp
 import (
 	"crypto/tls"
 	"errors"
-	"os"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
 	"github.com/spf13/afero"
@@ -11,19 +10,18 @@ import (
 
 // Driver implements the ftpserver.MainDriver interface for nodelist serving
 type Driver struct {
-	baseDir  string // Base directory for nodelist files
+	rootFs   afero.Fs // Root filesystem (mount-based)
 	settings *ftpserver.Settings
 }
 
 // NewDriver creates a new FTP driver
-func NewDriver(baseDir string, settings *ftpserver.Settings) (*Driver, error) {
-	// Verify base directory exists
-	if _, err := os.Stat(baseDir); err != nil {
-		return nil, err
+func NewDriver(rootFs afero.Fs, settings *ftpserver.Settings) (*Driver, error) {
+	if rootFs == nil {
+		return nil, errors.New("root filesystem cannot be nil")
 	}
 
 	return &Driver{
-		baseDir:  baseDir,
+		rootFs:   rootFs,
 		settings: settings,
 	}, nil
 }
@@ -50,14 +48,8 @@ func (d *Driver) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpser
 		return nil, errors.New("only anonymous access is allowed")
 	}
 
-	// Create a chrooted filesystem that:
-	// 1. Is read-only (using ReadOnlyFs)
-	// 2. Is restricted to baseDir (using BasePathFs)
-	baseFs := afero.NewOsFs()
-	basePath := afero.NewBasePathFs(baseFs, d.baseDir)
-	readOnlyFs := afero.NewReadOnlyFs(basePath)
-
-	return readOnlyFs, nil
+	// Return the root filesystem (already configured with mounts and read-only)
+	return d.rootFs, nil
 }
 
 // GetTLSConfig returns nil as we don't support TLS (anonymous read-only)

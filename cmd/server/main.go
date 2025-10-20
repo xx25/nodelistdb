@@ -221,16 +221,26 @@ func main() {
 	// Initialize FTP server if enabled
 	var ftpServer *ftp.Server
 	if cfg.FTP.Enabled {
+		// Convert mounts configuration
+		mounts := make([]ftp.MountConfig, len(cfg.FTP.Mounts))
+		for i, m := range cfg.FTP.Mounts {
+			mounts[i] = ftp.MountConfig{
+				VirtualPath: m.VirtualPath,
+				RealPath:    m.RealPath,
+			}
+		}
+
 		ftpConfig := &ftp.Config{
-			Enabled:        cfg.FTP.Enabled,
-			Host:           cfg.FTP.Host,
-			Port:           cfg.FTP.Port,
-			NodelistPath:   cfg.FTP.NodelistPath,
-			MaxConnections: cfg.FTP.MaxConnections,
-			PassivePortMin: cfg.FTP.PassivePortMin,
-			PassivePortMax: cfg.FTP.PassivePortMax,
-			IdleTimeout:    cfg.FTP.IdleTimeout,
-			PublicHost:     cfg.FTP.PublicHost,
+			Enabled:              cfg.FTP.Enabled,
+			Host:                 cfg.FTP.Host,
+			Port:                 cfg.FTP.Port,
+			Mounts:               mounts,
+			MaxConnections:       cfg.FTP.MaxConnections,
+			PassivePortMin:       cfg.FTP.PassivePortMin,
+			PassivePortMax:       cfg.FTP.PassivePortMax,
+			IdleTimeout:          cfg.FTP.IdleTimeout,
+			PublicHost:           cfg.FTP.PublicHost,
+			DisableActiveIPCheck: cfg.FTP.DisableActiveIPCheck,
 		}
 
 		var err error
@@ -240,7 +250,8 @@ func main() {
 		}
 		logging.Info("FTP server configured",
 			slog.String("host", cfg.FTP.Host),
-			slog.Int("port", cfg.FTP.Port))
+			slog.Int("port", cfg.FTP.Port),
+			slog.Int("mounts", len(mounts)))
 	}
 
 	// Initialize API and Web servers

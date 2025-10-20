@@ -68,7 +68,18 @@ ftp:
   enabled: false               # Enable FTP server
   host: "0.0.0.0"              # Bind address (0.0.0.0 = all interfaces)
   port: 2121                   # FTP port (2121 for non-root, 21 requires root)
-  nodelist_path: /home/dp/nodelists  # Base directory with nodelist files
+
+  # Virtual path mounts (recommended - supports multiple directories)
+  # If not specified, falls back to nodelist_path mounted at /fidonet/nodelists
+  mounts:
+    - virtual_path: /fidonet/nodelists  # Path in FTP filesystem
+      real_path: /home/dp/nodelists     # Real filesystem path
+    # Add more mounts here for additional directories:
+    # - virtual_path: /fidonet/files
+    #   real_path: /home/dp/files
+
+  # Legacy: Single directory mount (deprecated - use mounts instead)
+  # nodelist_path: /home/dp/nodelists  # Auto-mounted at /fidonet/nodelists if mounts is empty
 
   # Connection limits
   max_connections: 10          # Maximum concurrent connections
@@ -78,6 +89,11 @@ ftp:
   passive_port_min: 50000      # Passive mode port range start
   passive_port_max: 50100      # Passive mode port range end
   public_host: ""              # Public IP for PASV (empty = auto-detect)
+
+  # Security settings
+  disable_active_ip_check: false  # Disable IP matching for active mode (PORT/EPRT)
+                                  # Set to true if clients behind NAT need active mode
+                                  # Default: false (security enabled)
 
 # Security: Anonymous-only, read-only, chrooted to nodelist_path, no SSL
 

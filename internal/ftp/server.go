@@ -6,6 +6,7 @@ import (
 	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
+	"github.com/spf13/afero"
 )
 
 // Server represents an FTP server instance
@@ -17,17 +18,24 @@ type Server struct {
 	maxClients int
 }
 
+// MountConfig represents a virtual path mount
+type MountConfig struct {
+	VirtualPath string
+	RealPath    string
+}
+
 // Config holds FTP server configuration
 type Config struct {
-	Enabled         bool
-	Host            string
-	Port            int
-	NodelistPath    string
-	MaxConnections  int
-	PassivePortMin  int
-	PassivePortMax  int
-	IdleTimeout     time.Duration
-	PublicHost      string // For passive mode (external IP/hostname)
+	Enabled              bool
+	Host                 string
+	Port                 int
+	Mounts               []MountConfig // Virtual path mounts
+	MaxConnections       int
+	PassivePortMin       int
+	PassivePortMax       int
+	IdleTimeout          time.Duration
+	PublicHost           string // For passive mode (external IP/hostname)
+	DisableActiveIPCheck bool   // Disable IP matching for active mode (PORT/EPRT)
 }
 
 // New creates a new FTP server
@@ -38,12 +46,20 @@ func New(cfg *Config) (*Server, error) {
 
 	// Prepare FTP settings
 	settings := &ftpserver.Settings{
-		ListenAddr:  fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		PublicHost:  cfg.PublicHost,
-		IdleTimeout: int(cfg.IdleTimeout.Seconds()),
-		DisableMLSD: false,
-		DisableMLST: false,
-		DisableMFMT: false,
+		ListenAddr:              fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		PublicHost:              cfg.PublicHost,
+		IdleTimeout:             int(cfg.IdleTimeout.Seconds()),
+		DisableMLSD:             false,
+		DisableMLST:             false,
+		DisableMFMT:             false,
+		ActiveTransferPortNon20: true, // Allow active mode without root (don't require port 20)
+	}
+
+	// Configure IP matching for active mode connections
+	if cfg.DisableActiveIPCheck {
+		settings.ActiveConnectionsCheck = ftpserver.IPMatchDisabled
+	} else {
+		settings.ActiveConnectionsCheck = ftpserver.IPMatchRequired
 	}
 
 	// Configure passive mode port range if specified
@@ -54,8 +70,24 @@ func New(cfg *Config) (*Server, error) {
 		}
 	}
 
+	// Create mount filesystem from configured mounts
+	mounts := make([]Mount, 0, len(cfg.Mounts))
+	for _, mountCfg := range cfg.Mounts {
+		// Create a read-only, chrooted filesystem for each mount
+		baseFs := afero.NewOsFs()
+		basePath := afero.NewBasePathFs(baseFs, mountCfg.RealPath)
+		readOnlyFs := afero.NewReadOnlyFs(basePath)
+
+		mounts = append(mounts, Mount{
+			VirtualPath: mountCfg.VirtualPath,
+			Fs:          readOnlyFs,
+		})
+	}
+
+	mountFs := NewMountFs(mounts)
+
 	// Create driver
-	driver, err := NewDriver(cfg.NodelistPath, settings)
+	driver, err := NewDriver(mountFs, settings)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create FTP driver: %w", err)
 	}

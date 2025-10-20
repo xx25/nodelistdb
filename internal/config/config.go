@@ -71,17 +71,25 @@ type CacheConfig struct {
 	GCDiscardRatio    float64       `yaml:"gc_discard_ratio"`
 }
 
+// FTPMount represents a virtual path mount in the FTP server
+type FTPMount struct {
+	VirtualPath string `yaml:"virtual_path"` // Virtual path in FTP (e.g., /fidonet/nodelists)
+	RealPath    string `yaml:"real_path"`    // Real filesystem path
+}
+
 // FTPConfig holds FTP server configuration
 type FTPConfig struct {
-	Enabled        bool          `yaml:"enabled"`
-	Host           string        `yaml:"host"`
-	Port           int           `yaml:"port"`
-	NodelistPath   string        `yaml:"nodelist_path"`
-	MaxConnections int           `yaml:"max_connections"`
-	PassivePortMin int           `yaml:"passive_port_min"`
-	PassivePortMax int           `yaml:"passive_port_max"`
-	IdleTimeout    time.Duration `yaml:"idle_timeout"`
-	PublicHost     string        `yaml:"public_host"`
+	Enabled                    bool          `yaml:"enabled"`
+	Host                       string        `yaml:"host"`
+	Port                       int           `yaml:"port"`
+	NodelistPath               string        `yaml:"nodelist_path"`               // Deprecated: use mounts instead
+	Mounts                     []FTPMount    `yaml:"mounts,omitempty"`            // Virtual path mounts
+	MaxConnections             int           `yaml:"max_connections"`
+	PassivePortMin             int           `yaml:"passive_port_min"`
+	PassivePortMax             int           `yaml:"passive_port_max"`
+	IdleTimeout                time.Duration `yaml:"idle_timeout"`
+	PublicHost                 string        `yaml:"public_host"`
+	DisableActiveIPCheck       bool          `yaml:"disable_active_ip_check"` // Disable IP matching for active mode (PORT/EPRT)
 }
 
 // Default configurations
@@ -123,15 +131,16 @@ func DefaultCacheConfig() *CacheConfig {
 
 func DefaultFTPConfig() *FTPConfig {
 	return &FTPConfig{
-		Enabled:        false,
-		Host:           "0.0.0.0",
-		Port:           2121,
-		NodelistPath:   "/home/dp/nodelists",
-		MaxConnections: 10,
-		PassivePortMin: 50000,
-		PassivePortMax: 50100,
-		IdleTimeout:    300 * time.Second,
-		PublicHost:     "",
+		Enabled:              false,
+		Host:                 "0.0.0.0",
+		Port:                 2121,
+		NodelistPath:         "/home/dp/nodelists",
+		MaxConnections:       10,
+		PassivePortMin:       50000,
+		PassivePortMax:       50100,
+		IdleTimeout:          300 * time.Second,
+		PublicHost:           "",
+		DisableActiveIPCheck: false, // Security enabled by default
 	}
 }
 
@@ -245,6 +254,18 @@ func (c *Config) validate() error {
 			c.FTP.NodelistPath = path
 		} else {
 			c.FTP.NodelistPath = "/home/dp/nodelists"
+		}
+	}
+
+	// Handle mounts configuration
+	// For backward compatibility: if mounts is empty but nodelist_path is set,
+	// create a default mount at /fidonet/nodelists
+	if len(c.FTP.Mounts) == 0 && c.FTP.NodelistPath != "" {
+		c.FTP.Mounts = []FTPMount{
+			{
+				VirtualPath: "/fidonet/nodelists",
+				RealPath:    c.FTP.NodelistPath,
+			},
 		}
 	}
 
