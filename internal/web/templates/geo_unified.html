@@ -1,0 +1,144 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_title"}}
+{{if eq .Config.ViewType "country"}}
+    {{countryFlag .Config.CountryCode}} {{.Config.CountryName}}
+{{else if eq .Config.ViewType "provider"}}
+    {{.Config.ProviderName}}
+{{end}}
+{{end}}
+
+{{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+<div class="info-actions">
+    <a href="/analytics/geo-hosting?days={{.Days}}" class="btn">← Back to Geographic Distribution</a>
+</div>
+
+{{if .Error}}
+<div class="alert alert-error">
+    <strong>Error:</strong> {{.Error}}
+</div>
+{{end}}
+
+{{if .GeoNodes}}
+<!-- Summary Stats -->
+<div class="stats-box">
+    <h3>Found {{len .GeoNodes}} {{.Config.StatsHeading}}</h3>
+</div>
+
+<!-- Nodes Table -->
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Address</th>
+                <th data-sortable data-type="string">System / Sysop</th>
+                {{if eq .Config.ViewType "country"}}
+                    <th data-sortable data-type="string">City</th>
+                    <th data-sortable data-type="string">Provider</th>
+                {{else}}
+                    <th data-sortable data-type="string">Location</th>
+                {{end}}
+                <th>Protocols</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .GeoNodes}}
+            <tr>
+                <td style="white-space: nowrap;">
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">
+                        <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
+                    </a>
+                </td>
+                <td>
+                    {{if .BinkPSystemName}}
+                        <strong>{{.BinkPSystemName}}</strong>
+                        {{if .BinkPSysop}}<br><small>{{.BinkPSysop}}</small>{{end}}
+                    {{else if .BinkPSysop}}
+                        <strong>{{.BinkPSysop}}</strong>
+                    {{else}}
+                        <span class="text-muted">-</span>
+                    {{end}}
+                </td>
+                {{if eq $.Config.ViewType "country"}}
+                <td>{{if .City}}{{.City}}{{else}}-{{end}}</td>
+                <td>
+                    {{if .ISP}}
+                        {{.ISP}}
+                        {{if ne .ASN 0}}<br><small class="text-muted">AS{{.ASN}}</small>{{end}}
+                    {{else}}
+                        -
+                    {{end}}
+                </td>
+                {{else}}
+                <td>
+                    {{countryFlag .CountryCode}}
+                    {{if .City}}{{.City}}, {{.CountryCode}}{{else}}{{.Country}}{{end}}
+                </td>
+                {{end}}
+                <td style="text-align: center; white-space: nowrap;">
+                    {{if or .BinkPSuccess .BinkPIPv6Success}}
+                        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">B</span>
+                    {{end}}
+                    {{if or .IfcicoSuccess .IfcicoIPv6Success}}
+                        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">I</span>
+                    {{end}}
+                    {{if or .TelnetSuccess .TelnetIPv6Success}}
+                        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">T</span>
+                    {{end}}
+                    {{if or .BinkPIPv6Success .IfcicoIPv6Success .TelnetIPv6Success}}
+                        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">6</span>
+                    {{else if .ResolvedIPv6}}
+                        <span class="badge badge-warning" style="font-size: 0.8em; padding: 2px 4px;">6?</span>
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    {{range .ProcessedInfo}}
+    <p>{{.}}</p>
+    {{end}}
+    <p><strong>Protocol Legend:</strong>
+        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">B</span> BinkP,
+        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">I</span> IFCICO,
+        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">T</span> Telnet,
+        <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">6</span> IPv6 Working,
+        <span class="badge badge-warning" style="font-size: 0.8em; padding: 2px 4px;">6?</span> IPv6 DNS Only
+    </p>
+    <p><strong>Note about Location:</strong> The "Location" column shows the geographic location determined from the node's IP address (via GeoIP lookup), not the location specified in the nodelist. This represents the actual physical location where the node's server is hosted.</p>
+</div>
+
+<!-- Time Period Selector -->
+<div class="time-selector">
+    <p>View different time periods:</p>
+    {{if eq .Config.ViewType "country"}}
+    <a href="?code={{.Config.CountryCode}}&days=30" class="btn {{if eq .Days 30}}active{{end}}">Last 30 Days</a>
+    <a href="?code={{.Config.CountryCode}}&days=90" class="btn {{if eq .Days 90}}active{{end}}">Last 90 Days</a>
+    <a href="?code={{.Config.CountryCode}}&days=365" class="btn {{if eq .Days 365}}active{{end}}">Last Year</a>
+    <a href="?code={{.Config.CountryCode}}&days=730" class="btn {{if eq .Days 730}}active{{end}}">Last 2 Years</a>
+    {{else if eq .Config.ViewType "provider"}}
+    <a href="?isp={{.Config.ProviderName}}&days=30" class="btn {{if eq .Days 30}}active{{end}}">Last 30 Days</a>
+    <a href="?isp={{.Config.ProviderName}}&days=90" class="btn {{if eq .Days 90}}active{{end}}">Last 90 Days</a>
+    <a href="?isp={{.Config.ProviderName}}&days=365" class="btn {{if eq .Days 365}}active{{end}}">Last Year</a>
+    <a href="?isp={{.Config.ProviderName}}&days=730" class="btn {{if eq .Days 730}}active{{end}}">Last 2 Years</a>
+    {{end}}
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>{{.Config.EmptyStateTitle}}</strong><br>
+    {{.Config.EmptyStateDesc}}
+</div>
+{{end}}
+{{end}}

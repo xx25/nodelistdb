@@ -702,40 +702,54 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		log.Printf("[ERROR] Geo Country Nodes: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch nodes for country. Please try again later")
+		nodes = []storage.NodeTestResult{}
+	}
+
+	// Get country name from first node
+	countryName := ""
+	if len(nodes) > 0 {
+		countryName = nodes[0].Country
+	}
+
+	// Build page config
+	config := GeoPageConfig{
+		PageTitle:       fmt.Sprintf("Nodes in %s", countryName),
+		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FidoNet nodes in %s (last %d days)</p>`, countryName, days)),
+		StatsHeading:    "Nodes",
+		ViewType:        "country",
+		CountryCode:     countryCode,
+		CountryName:     countryName,
+		Days:            days,
+		InfoText:        []string{},
+		EmptyStateTitle: "No nodes found.",
+		EmptyStateDesc:  "No operational nodes found for the selected country and time period.",
 	}
 
 	// Build template data
 	data := struct {
-		Title        string
-		ActivePage   string
-		Version      string
-		Days         int
-		CountryCode  string
-		CountryName  string
-		ProviderName string
-		Nodes        []storage.NodeTestResult
-		Error        error
+		Title         string
+		ActivePage    string
+		Version       string
+		Days          int
+		GeoNodes      []storage.NodeTestResult
+		Error         error
+		Config        GeoPageConfig
+		ProcessedInfo []template.HTML
 	}{
-		Title:        "Nodes in Country",
-		ActivePage:   "analytics",
-		Version:      version.GetVersionInfo(),
-		Days:         days,
-		CountryCode:  countryCode,
-		CountryName:  "", // Will be populated from first node if available
-		ProviderName: "", // Empty for country view
-		Nodes:        nodes,
-		Error:        displayError,
-	}
-
-	// Get country name from first node
-	if len(nodes) > 0 {
-		data.CountryName = nodes[0].Country
+		Title:         config.PageTitle,
+		ActivePage:    "analytics",
+		Version:       version.GetVersionInfo(),
+		Days:          days,
+		GeoNodes:      nodes,
+		Error:         displayError,
+		Config:        config,
+		ProcessedInfo: config.processInfoText(),
 	}
 
 	// Check template exists before rendering
-	tmpl, exists := s.templates["geo_nodes_list"]
+	tmpl, exists := s.templates["geo_unified"]
 	if !exists {
-		log.Printf("[ERROR] Geo Country Nodes: Template 'geo_nodes_list' not found")
+		log.Printf("[ERROR] Geo Country Nodes: Template 'geo_unified' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -770,35 +784,47 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		log.Printf("[ERROR] Geo Provider Nodes: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch nodes for provider. Please try again later")
+		nodes = []storage.NodeTestResult{}
+	}
+
+	// Build page config
+	config := GeoPageConfig{
+		PageTitle:       provider,
+		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FidoNet nodes hosted by %s (last %d days)</p>`, provider, days)),
+		StatsHeading:    "Nodes",
+		ViewType:        "provider",
+		ProviderName:    provider,
+		Days:            days,
+		InfoText:        []string{},
+		EmptyStateTitle: "No nodes found.",
+		EmptyStateDesc:  "No operational nodes found for the selected provider and time period.",
 	}
 
 	// Build template data
 	data := struct {
-		Title        string
-		ActivePage   string
-		Version      string
-		Days         int
-		CountryCode  string
-		CountryName  string
-		ProviderName string
-		Nodes        []storage.NodeTestResult
-		Error        error
+		Title         string
+		ActivePage    string
+		Version       string
+		Days          int
+		GeoNodes      []storage.NodeTestResult
+		Error         error
+		Config        GeoPageConfig
+		ProcessedInfo []template.HTML
 	}{
-		Title:        "Nodes by Provider",
-		ActivePage:   "analytics",
-		Version:      version.GetVersionInfo(),
-		Days:         days,
-		CountryCode:  "", // Empty for provider view
-		CountryName:  "", // Empty for provider view
-		ProviderName: provider,
-		Nodes:        nodes,
-		Error:        displayError,
+		Title:         config.PageTitle,
+		ActivePage:    "analytics",
+		Version:       version.GetVersionInfo(),
+		Days:          days,
+		GeoNodes:      nodes,
+		Error:         displayError,
+		Config:        config,
+		ProcessedInfo: config.processInfoText(),
 	}
 
 	// Check template exists before rendering
-	tmpl, exists := s.templates["geo_nodes_list"]
+	tmpl, exists := s.templates["geo_unified"]
 	if !exists {
-		log.Printf("[ERROR] Geo Provider Nodes: Template 'geo_nodes_list' not found")
+		log.Printf("[ERROR] Geo Provider Nodes: Template 'geo_unified' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

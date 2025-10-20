@@ -367,6 +367,9 @@ func (rp *ResultParser) ValidateNodeFilter(filter database.NodeFilter) error {
 
 // SanitizeStringInput sanitizes string input for database operations
 func (rp *ResultParser) SanitizeStringInput(input string) string {
+	// Trim leading and trailing whitespace
+	input = strings.TrimSpace(input)
+
 	// Remove null bytes and control characters
 	cleaned := strings.Map(func(r rune) rune {
 		if r == 0 || (r < 32 && r != 9 && r != 10 && r != 13) {
