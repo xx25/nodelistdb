@@ -189,9 +189,9 @@ func (s *Session) receiveRemoteInfo() error {
 		case M_OK:
 			// Remote accepts our handshake
 			if s.debug {
-				logging.Debugf("BinkP: Remote sent M_OK")
+				logging.Debugf("BinkP: Remote sent M_OK - handshake complete")
 			}
-			// Don't send anything in response - just note it
+			// Handshake complete - authentication accepted
 			return nil
 			
 		case M_ERR:
@@ -206,10 +206,9 @@ func (s *Session) receiveRemoteInfo() error {
 		case M_EOB:
 			// End of batch - remote has no files for us
 			if s.debug {
-				logging.Debugf("BinkP: Remote sent M_EOB (no files)")
+				logging.Debugf("BinkP: Remote sent M_EOB - handshake complete (no files)")
 			}
-			// DON'T send M_EOB in response here - the remote is already done
-			// Just acknowledge we received it
+			// Handshake complete - no files to transfer
 			return nil
 			
 		default:
@@ -218,19 +217,21 @@ func (s *Session) receiveRemoteInfo() error {
 				logging.Debugf("BinkP: Ignoring frame type 0x%02X", frame.Type)
 			}
 		}
-		
-		// If we have received address and basic info, we have enough info for testing
-		if receivedADR && s.remoteInfo.SystemName != "" {
-			// Don't send M_OK here - it confuses the remote
-			// Just return to indicate we have the info we need
-			return nil
-		}
 	}
-	
+
+	// If we hit maxFrames limit but got valid data, accept it
+	// This handles non-compliant implementations
+	if receivedADR && s.remoteInfo.SystemName != "" {
+		if s.debug {
+			logging.Debugf("BinkP: maxFrames limit reached, but have valid data - accepting")
+		}
+		return nil
+	}
+
 	if !receivedADR {
 		return fmt.Errorf("no M_ADR received from remote")
 	}
-	
+
 	return nil
 }
 
