@@ -229,34 +229,37 @@ func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int)
 		limit = 50
 	}
 
-	// Use argMin to get the first appearance of each unique sysop
+	// Use ROW_NUMBER() window function to get the first appearance of each unique sysop
+	// The inner query assigns row numbers partitioned by sysop, ordered by date
+	// The outer query filters to keep only the first appearance (rn = 1)
 	query := `
 		SELECT
-			argMin(zone, nodelist_date) as zone,
-			argMin(net, nodelist_date) as net,
-			argMin(node, nodelist_date) as node,
-			argMin(region, nodelist_date) as region,
-			sysop_name,
-			argMin(system_name, nodelist_date) as system_name,
-			argMin(location, nodelist_date) as location,
-			formatDateTime(min(nodelist_date), '%Y-%m-%d') as nodelist_date,
-			argMin(day_number, nodelist_date) as day_number,
-			argMin(concat(
-				if(node_type != '', node_type, ''),
-				if(node_type != '', ',', ''),
-				toString(node), ',',
-				system_name, ',',
-				location, ',',
-				sysop_name, ',',
-				phone, ',',
-				toString(max_speed),
-				if(length(flags) > 0, ',', ''),
-				arrayStringConcat(flags, ',')
-			), nodelist_date) as raw_line
-		FROM nodes
-		WHERE zone = ? AND region = ?
-		GROUP BY sysop_name
-		ORDER BY min(nodelist_date) ASC, argMin(zone, nodelist_date) ASC, argMin(net, nodelist_date) ASC, argMin(node, nodelist_date) ASC
+			zone, net, node, region, sysop_name, system_name, location,
+			formatDateTime(nodelist_date, '%Y-%m-%d') as nodelist_date,
+			day_number, raw_line
+		FROM (
+			SELECT
+				zone, net, node, region, sysop_name, system_name, location,
+				nodelist_date,
+				day_number,
+				concat(
+					if(node_type != '', node_type, ''),
+					if(node_type != '', ',', ''),
+					toString(node), ',',
+					system_name, ',',
+					location, ',',
+					sysop_name, ',',
+					phone, ',',
+					toString(max_speed),
+					if(length(flags) > 0, ',', ''),
+					arrayStringConcat(flags, ',')
+				) as raw_line,
+				ROW_NUMBER() OVER (PARTITION BY sysop_name ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
+			FROM nodes
+			WHERE zone = ? AND region = ?
+		) AS first_appearances
+		WHERE rn = 1
+		ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC
 		LIMIT ?
 	`
 
