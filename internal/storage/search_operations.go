@@ -218,8 +218,9 @@ type PioneerNode struct {
 	RawLine      string // The original nodelist line
 }
 
-// GetPioneersByRegion retrieves the first N nodes that appeared in a specific FidoNet region
+// GetPioneersByRegion retrieves the first N unique sysops that appeared in a specific FidoNet region
 // A region is identified by zone:region (e.g., zone=2, region=50 means Region 50 in Zone 2)
+// Each sysop appears only once, showing their first node in the region
 func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int) ([]PioneerNode, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
@@ -228,18 +229,19 @@ func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int)
 		limit = 50
 	}
 
+	// Use argMin to get the first appearance of each unique sysop
 	query := `
 		SELECT
-			zone,
-			net,
-			node,
-			region,
+			argMin(zone, nodelist_date) as zone,
+			argMin(net, nodelist_date) as net,
+			argMin(node, nodelist_date) as node,
+			argMin(region, nodelist_date) as region,
 			sysop_name,
-			system_name,
-			location,
-			formatDateTime(nodelist_date, '%Y-%m-%d') as nodelist_date,
-			day_number,
-			concat(
+			argMin(system_name, nodelist_date) as system_name,
+			argMin(location, nodelist_date) as location,
+			formatDateTime(min(nodelist_date), '%Y-%m-%d') as nodelist_date,
+			argMin(day_number, nodelist_date) as day_number,
+			argMin(concat(
 				if(node_type != '', node_type, ''),
 				if(node_type != '', ',', ''),
 				toString(node), ',',
@@ -250,10 +252,11 @@ func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int)
 				toString(max_speed),
 				if(length(flags) > 0, ',', ''),
 				arrayStringConcat(flags, ',')
-			) as raw_line
+			), nodelist_date) as raw_line
 		FROM nodes
 		WHERE zone = ? AND region = ?
-		ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC
+		GROUP BY sysop_name
+		ORDER BY min(nodelist_date) ASC, argMin(zone, nodelist_date) ASC, argMin(net, nodelist_date) ASC, argMin(node, nodelist_date) ASC
 		LIMIT ?
 	`
 
