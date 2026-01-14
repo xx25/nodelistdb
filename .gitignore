@@ -52,7 +52,8 @@ debug_*.go
 check_*.go
 CLAUDE.md
 test.db
-sync_nodelists.sh
+# Sync script configuration (contains credentials)
+sync_config.conf
 
 # Python files and cache
 __pycache__/
