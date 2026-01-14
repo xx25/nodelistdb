@@ -34,6 +34,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/geo-hosting/country", s.GeoCountryNodesHandler)
 	mux.HandleFunc("/analytics/geo-hosting/provider", s.GeoProviderNodesHandler)
 	mux.HandleFunc("/analytics/pioneers", s.PioneersHandler)
+	mux.HandleFunc("/analytics/on-this-day", s.OnThisDayHandler)
 	mux.HandleFunc("/reachability", s.ReachabilityHandler)
 	mux.HandleFunc("/reachability/node", s.ReachabilityNodeHandler)
 	mux.HandleFunc("/reachability/test", s.TestResultDetailHandler)

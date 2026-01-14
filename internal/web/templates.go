@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/flags"
@@ -15,7 +16,7 @@ import (
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
-	templates := []string{"index", "search", "stats", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "ipv6_analytics_generic", "ipv6_weekly_news", "unified_analytics", "binkp_software", "ifcico_software", "geo_analytics", "geo_nodes_list", "geo_unified", "pioneers"}
+	templates := []string{"index", "search", "stats", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "ipv6_analytics_generic", "ipv6_weekly_news", "unified_analytics", "binkp_software", "ifcico_software", "geo_analytics", "geo_nodes_list", "geo_unified", "pioneers", "on_this_day"}
 
 	// Create function map for template functions
 	funcMap := template.FuncMap{
@@ -239,6 +240,52 @@ func (s *Server) loadTemplates() {
 		},
 		"add": func(a, b int) int {
 			return a + b
+		},
+		"sub": func(a, b int) int {
+			return a - b
+		},
+		"dateDuration": func(start, end time.Time) string {
+			if end.Before(start) {
+				start, end = end, start
+			}
+			years := end.Year() - start.Year()
+			months := int(end.Month()) - int(start.Month())
+			days := end.Day() - start.Day()
+
+			if days < 0 {
+				months--
+				// Get days in previous month
+				prevMonth := end.AddDate(0, -1, 0)
+				days += time.Date(prevMonth.Year(), prevMonth.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
+			}
+			if months < 0 {
+				years--
+				months += 12
+			}
+
+			var parts []string
+			if years > 0 {
+				if years == 1 {
+					parts = append(parts, "1 year")
+				} else {
+					parts = append(parts, fmt.Sprintf("%d years", years))
+				}
+			}
+			if months > 0 {
+				if months == 1 {
+					parts = append(parts, "1 month")
+				} else {
+					parts = append(parts, fmt.Sprintf("%d months", months))
+				}
+			}
+			if days > 0 || len(parts) == 0 {
+				if days == 1 {
+					parts = append(parts, "1 day")
+				} else {
+					parts = append(parts, fmt.Sprintf("%d days", days))
+				}
+			}
+			return strings.Join(parts, ", ")
 		},
 		"len": func(v interface{}) int {
 			if v == nil {

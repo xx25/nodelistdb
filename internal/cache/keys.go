@@ -169,6 +169,35 @@ func (kg *KeyGenerator) IPv6WeeklyNewsKey(limit int, includeZeroNodes bool) stri
 	return fmt.Sprintf("%s:analytics:ipv6:weeklynews:%d:%t", kg.Prefix, limit, includeZeroNodes)
 }
 
+func (kg *KeyGenerator) IPv6OnlyNodesKey(limit, days int, includeZeroNodes bool) string {
+	return fmt.Sprintf("%s:analytics:ipv6:only:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+}
+
+func (kg *KeyGenerator) PureIPv6OnlyNodesKey(limit, days int, includeZeroNodes bool) string {
+	return fmt.Sprintf("%s:analytics:ipv6:pureonly:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+}
+
+func (kg *KeyGenerator) GeoHostingDistributionKey(days int) string {
+	return fmt.Sprintf("%s:analytics:geo:hosting:%d", kg.Prefix, days)
+}
+
+func (kg *KeyGenerator) NodesByCountryKey(countryCode string, days int) string {
+	return fmt.Sprintf("%s:analytics:geo:country:%s:%d", kg.Prefix, countryCode, days)
+}
+
+func (kg *KeyGenerator) NodesByProviderKey(provider string, days int) string {
+	hash := md5.Sum([]byte(provider))
+	return fmt.Sprintf("%s:analytics:geo:provider:%s:%d", kg.Prefix, hex.EncodeToString(hash[:8]), days)
+}
+
+func (kg *KeyGenerator) OnThisDayNodesKey(month, day, limit int, activeOnly bool) string {
+	return fmt.Sprintf("%s:analytics:onthisday:%d:%d:%d:%t", kg.Prefix, month, day, limit, activeOnly)
+}
+
+func (kg *KeyGenerator) PioneersByRegionKey(zone, region, limit int) string {
+	return fmt.Sprintf("%s:analytics:pioneers:%d:%d:%d", kg.Prefix, zone, region, limit)
+}
+
 func (kg *KeyGenerator) AnalyticsPattern() string {
 	return fmt.Sprintf("%s:analytics:*", kg.Prefix)
 }

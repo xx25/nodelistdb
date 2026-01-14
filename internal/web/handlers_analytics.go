@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
@@ -634,7 +635,7 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Get geo distribution
-	dist, err := s.storage.TestOps().GetGeoHostingDistribution(days)
+	dist, err := s.storage.GetGeoHostingDistribution(days)
 	var displayError error
 
 	if err != nil {
@@ -696,7 +697,7 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get nodes for country
-	nodes, err := s.storage.TestOps().GetNodesByCountry(countryCode, days)
+	nodes, err := s.storage.GetNodesByCountry(countryCode, days)
 	var displayError error
 
 	if err != nil {
@@ -778,7 +779,7 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get nodes for provider
-	nodes, err := s.storage.TestOps().GetNodesByProvider(provider, days)
+	nodes, err := s.storage.GetNodesByProvider(provider, days)
 	var displayError error
 
 	if err != nil {
@@ -836,6 +837,105 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// OnThisDayHandler displays nodes that were first added on this day in previous years
+func (s *Server) OnThisDayHandler(w http.ResponseWriter, r *http.Request) {
+	// Use current date's month and day
+	now := time.Now()
+	month := int(now.Month())
+	day := now.Day()
+
+	// Parse optional limit parameter (default: 100, 0 = all)
+	query := r.URL.Query()
+	limit := 100
+	if limitStr := query.Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed >= 0 {
+			if parsed == 0 || parsed > 10000 {
+				limit = 0 // 0 means all
+			} else {
+				limit = parsed
+			}
+		}
+	}
+
+	// Parse active only parameter (default: true)
+	activeOnly := query.Get("active") != "0"
+
+	// Fetch on this day nodes
+	nodes, err := s.storage.GetOnThisDayNodes(month, day, limit, activeOnly)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] On This Day: Error fetching data: %v", err)
+		displayError = fmt.Errorf("Failed to fetch On This Day data. Please try again later")
+		nodes = []storage.OnThisDayNode{}
+	}
+
+	// Group nodes by year for better display
+	nodesByYear := make(map[int][]storage.OnThisDayNode)
+	var years []int
+	for _, n := range nodes {
+		year := n.FirstAppeared.Year()
+		if _, exists := nodesByYear[year]; !exists {
+			years = append(years, year)
+		}
+		nodesByYear[year] = append(nodesByYear[year], n)
+	}
+
+	// Sort years in descending order (most recent first)
+	for i := 0; i < len(years)-1; i++ {
+		for j := i + 1; j < len(years); j++ {
+			if years[j] > years[i] {
+				years[i], years[j] = years[j], years[i]
+			}
+		}
+	}
+
+	// Build template data
+	data := struct {
+		Title       string
+		ActivePage  string
+		Version     string
+		Month       int
+		Day         int
+		MonthName   string
+		CurrentYear int
+		TotalNodes  int
+		NodesByYear map[int][]storage.OnThisDayNode
+		Years       []int
+		Limit       int
+		ActiveOnly  bool
+		Error       error
+	}{
+		Title:       "On This Day",
+		ActivePage:  "analytics",
+		Version:     version.GetVersionInfo(),
+		Month:       month,
+		Day:         day,
+		MonthName:   now.Month().String(),
+		CurrentYear: now.Year(),
+		TotalNodes:  len(nodes),
+		NodesByYear: nodesByYear,
+		Years:       years,
+		Limit:       limit,
+		ActiveOnly:  activeOnly,
+		Error:       displayError,
+	}
+
+	// Check template exists before rendering
+	tmpl, exists := s.templates["on_this_day"]
+	if !exists {
+		log.Printf("[ERROR] On This Day: Template 'on_this_day' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Render template
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] On This Day: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // PioneersHandler displays the first nodes (pioneers) in a FidoNet region
 func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 	// Get zone and region parameters from query string
@@ -854,7 +954,7 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("invalid zone or region parameters")
 		} else {
 			// Get pioneers for this zone:region (default to 50)
-			pioneers, err = s.storage.SearchOps().GetPioneersByRegion(zone, region, 50)
+			pioneers, err = s.storage.GetPioneersByRegion(zone, region, 50)
 		}
 	}
 

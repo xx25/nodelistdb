@@ -335,6 +335,10 @@ type Operations interface {
 	GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error)
 	GetBinkdDetailedStats(days int) (*SoftwareDistribution, error)
 	GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error)
+	GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error)
+	GetNodesByProvider(provider string, days int) ([]NodeTestResult, error)
+	GetOnThisDayNodes(month, day, limit int, activeOnly bool) ([]OnThisDayNode, error)
+	GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error)
 
 	// Utility operations (delegated to NodeOps())
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
@@ -448,6 +452,22 @@ const (
 
 	NodeInsertPlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
 )
+
+// OnThisDayNode represents a node that was first added on this day in a previous year
+// It tracks when a new sysop appeared with a node address that wasn't theirs before
+type OnThisDayNode struct {
+	Zone          int       `json:"zone"`
+	Net           int       `json:"net"`
+	Node          int       `json:"node"`
+	SysopName     string    `json:"sysop_name"`
+	SystemName    string    `json:"system_name"`
+	Location      string    `json:"location"`
+	FirstAppeared time.Time `json:"first_appeared"` // When this sysop first got this node
+	LastSeen      time.Time `json:"last_seen"`      // Final appearance (ignoring temporary gaps)
+	YearsActive   int       `json:"years_active"`   // Years from first to last appearance
+	StillActive   bool      `json:"still_active"`   // Whether still in latest nodelist
+	RawLine       string    `json:"raw_line"`       // Original nodelist line from first appearance
+}
 
 // Error messages for consistent error handling
 const (

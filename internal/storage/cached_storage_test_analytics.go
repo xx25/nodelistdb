@@ -430,3 +430,248 @@ func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*I
 
 	return news, nil
 }
+
+// GetIPv6OnlyNodes returns nodes with working IPv6 but no working IPv4 (cached)
+func (cs *CachedStorage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes)
+	}
+
+	key := cs.keyGen.IPv6OnlyNodesKey(limit, days, includeZeroNodes)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []NodeTestResult
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 15 minute TTL
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
+// GetPureIPv6OnlyNodes returns nodes that only advertise IPv6 addresses (cached)
+func (cs *CachedStorage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes)
+	}
+
+	key := cs.keyGen.PureIPv6OnlyNodesKey(limit, days, includeZeroNodes)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []NodeTestResult
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 15 minute TTL
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
+// GetGeoHostingDistribution returns geographic hosting distribution (cached)
+func (cs *CachedStorage) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetGeoHostingDistribution(days)
+	}
+
+	key := cs.keyGen.GeoHostingDistributionKey(days)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var dist GeoHostingDistribution
+		if err := json.Unmarshal(data, &dist); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return &dist, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	dist, err := cs.Storage.GetGeoHostingDistribution(days)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 1 hour TTL (geo data changes slowly)
+	if dist != nil {
+		if data, err := json.Marshal(dist); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return dist, nil
+}
+
+// GetNodesByCountry returns nodes for a specific country (cached)
+func (cs *CachedStorage) GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetNodesByCountry(countryCode, days)
+	}
+
+	key := cs.keyGen.NodesByCountryKey(countryCode, days)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []NodeTestResult
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetNodesByCountry(countryCode, days)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 30 minute TTL
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 30*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
+// GetNodesByProvider returns nodes for a specific provider (cached)
+func (cs *CachedStorage) GetNodesByProvider(provider string, days int) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetNodesByProvider(provider, days)
+	}
+
+	key := cs.keyGen.NodesByProviderKey(provider, days)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []NodeTestResult
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetNodesByProvider(provider, days)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 30 minute TTL
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 30*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
+// GetOnThisDayNodes returns nodes first added on this day in previous years (cached)
+func (cs *CachedStorage) GetOnThisDayNodes(month, day, limit int, activeOnly bool) ([]OnThisDayNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly)
+	}
+
+	key := cs.keyGen.OnThisDayNodesKey(month, day, limit, activeOnly)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []OnThisDayNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 1 hour TTL (historical data doesn't change often)
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
+// GetPioneersByRegion returns first sysops in a FidoNet region (cached)
+func (cs *CachedStorage) GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetPioneersByRegion(zone, region, limit)
+	}
+
+	key := cs.keyGen.PioneersByRegionKey(zone, region, limit)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []PioneerNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetPioneersByRegion(zone, region, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 1 hour TTL (historical data doesn't change often)
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}

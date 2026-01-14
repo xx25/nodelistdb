@@ -257,6 +257,22 @@ func (s *Storage) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, 
 	return s.testOperations.GetGeoHostingDistribution(days)
 }
 
+func (s *Storage) GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error) {
+	return s.testOperations.GetNodesByCountry(countryCode, days)
+}
+
+func (s *Storage) GetNodesByProvider(provider string, days int) ([]NodeTestResult, error) {
+	return s.testOperations.GetNodesByProvider(provider, days)
+}
+
+func (s *Storage) GetOnThisDayNodes(month, day, limit int, activeOnly bool) ([]OnThisDayNode, error) {
+	return s.analyticsOperations.GetOnThisDayNodes(month, day, limit, activeOnly)
+}
+
+func (s *Storage) GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error) {
+	return s.searchOperations.GetPioneersByRegion(zone, region, limit)
+}
+
 // --- Utility Methods ---
 
 // GetQueryBuilder returns the query builder for direct access

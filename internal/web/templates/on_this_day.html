@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - NodelistDB</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .year-section {
+            margin-bottom: 2rem;
+        }
+        .year-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius) var(--radius) 0 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .year-header .years-ago {
+            font-weight: normal;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        .year-content {
+            border: 1px solid #e2e8f0;
+            border-top: none;
+            border-radius: 0 0 var(--radius) var(--radius);
+            overflow: hidden;
+        }
+        .node-card {
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .node-card:last-child {
+            border-bottom: none;
+        }
+        .node-card:hover {
+            background: #f8fafc;
+        }
+        .node-info {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.25rem 1rem;
+        }
+        .node-address {
+            font-size: 1rem;
+            font-weight: 600;
+            min-width: 120px;
+        }
+        .node-address a {
+            text-decoration: none;
+        }
+        .node-address a:hover {
+            text-decoration: underline;
+        }
+        .node-address.active a {
+            color: #16a34a;
+        }
+        .node-address.inactive a {
+            color: #dc2626;
+        }
+        .node-sysop {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .node-system {
+            font-weight: 600;
+            color: #4b5563;
+        }
+        .node-location {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        .node-dates {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+        .node-status {
+            text-align: right;
+            white-space: nowrap;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .status-inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .years-active {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .btn-limit {
+            padding: 0.25rem 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            background: white;
+        }
+        .btn-limit:hover {
+            background: #f1f5f9;
+            color: var(--text-primary);
+        }
+        .btn-limit.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .filters {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .info-box {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .info-box p {
+            margin: 0;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>On This Day in FidoNet History</h1>
+            <p class="subtitle">Nodes that joined FidoNet on {{.MonthName}} {{.Day}} in previous years</p>
+        </header>
+
+        {{template "nav" .}}
+
+        <div class="content">
+            <div class="filters">
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span style="color: var(--text-secondary);">Show:</span>
+                    <a href="?limit=50{{if not .ActiveOnly}}&active=0{{end}}" class="btn-limit {{if eq .Limit 50}}active{{end}}">50</a>
+                    <a href="?limit=100{{if not .ActiveOnly}}&active=0{{end}}" class="btn-limit {{if eq .Limit 100}}active{{end}}">100</a>
+                    <a href="?limit=500{{if not .ActiveOnly}}&active=0{{end}}" class="btn-limit {{if eq .Limit 500}}active{{end}}">500</a>
+                    <a href="?limit=1000{{if not .ActiveOnly}}&active=0{{end}}" class="btn-limit {{if eq .Limit 1000}}active{{end}}">1000</a>
+                    <a href="?limit=0{{if not .ActiveOnly}}&active=0{{end}}" class="btn-limit {{if eq .Limit 0}}active{{end}}">All</a>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <a href="?limit={{.Limit}}&active=0" class="btn-limit {{if not .ActiveOnly}}active{{end}}">All nodes</a>
+                    <a href="?limit={{.Limit}}" class="btn-limit {{if .ActiveOnly}}active{{end}}">Active only</a>
+                </div>
+            </div>
+
+            {{if .Error}}
+                <div class="alert alert-error">
+                    <strong>Error:</strong> {{.Error}}
+                </div>
+            {{end}}
+
+            {{if .Years}}
+                {{range $year := .Years}}
+                    {{$nodes := index $.NodesByYear $year}}
+                    {{$yearsAgo := sub $.CurrentYear $year}}
+                    <div class="year-section">
+                        <div class="year-header">
+                            {{$year}}
+                            <span class="years-ago">
+                                ({{$yearsAgo}} year{{if ne $yearsAgo 1}}s{{end}} ago)
+                            </span>
+                        </div>
+                        <div class="year-content">
+                            {{range $node := $nodes}}
+                            <div class="node-card">
+                                <div class="node-info">
+                                    <span class="node-address {{if $node.StillActive}}active{{else}}inactive{{end}}">
+                                        <a href="/node/{{$node.Zone}}/{{$node.Net}}/{{$node.Node}}">{{$node.Zone}}:{{$node.Net}}/{{$node.Node}}</a>
+                                    </span>
+                                    <span class="node-sysop">{{replaceUnderscores $node.SysopName}}</span>
+                                    <span class="node-system">{{replaceUnderscores $node.SystemName}}</span>
+                                    <span class="node-location">{{replaceUnderscores $node.Location}}</span>
+                                    <span class="node-dates">{{$node.FirstAppeared.Format "2006-01-02"}} — {{$node.LastSeen.Format "2006-01-02"}}</span>
+                                </div>
+                                <div class="node-status">
+                                    {{if $node.StillActive}}
+                                        <span class="status-badge status-active">Active</span>
+                                    {{else}}
+                                        <span class="years-active">{{dateDuration $node.FirstAppeared $node.LastSeen}}</span>
+                                    {{end}}
+                                </div>
+                            </div>
+                            {{end}}
+                        </div>
+                    </div>
+                {{end}}
+            {{else}}
+                <div class="card">
+                    <p style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                        No nodes were added on {{.MonthName}} {{.Day}} in previous years.
+                    </p>
+                </div>
+            {{end}}
+        </div>
+
+        {{template "footer" .}}
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

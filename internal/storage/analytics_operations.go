@@ -372,6 +372,124 @@ func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time) erro
 	return nil
 }
 
+// GetOnThisDayNodes finds nodes that were first added on this day (month/day) in previous years
+// A node is considered "new" when a sysop first appears with that node address
+// YearsActive is calculated from first appearance to final disappearance (ignoring temporary gaps)
+func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, activeOnly bool) ([]OnThisDayNode, error) {
+	ao.mu.RLock()
+	defer ao.mu.RUnlock()
+
+	conn := ao.db.Conn()
+
+	// Build the active filter clause
+	activeFilter := ""
+	if activeOnly {
+		activeFilter = "AND nl.last_seen >= md.latest_date"
+	}
+
+	// Build limit clause
+	limitClause := ""
+	if limit > 0 {
+		limitClause = fmt.Sprintf("LIMIT %d", limit)
+	}
+
+	// Query explanation:
+	// 1. Find the first and last appearance of each (zone, net, node, sysop_name) combination
+	// 2. Filter to only those whose first appearance was on the specified month/day
+	// 3. Check if still active by comparing last_seen to the max nodelist date
+	// 4. Calculate years active from first to last appearance
+	query := fmt.Sprintf(`
+		WITH
+		-- Get the maximum nodelist date to determine if node is still active
+		max_date AS (
+			SELECT max(nodelist_date) as latest_date FROM nodes
+		),
+		-- Get first and last appearance for each (zone, net, node, sysop_name) combination
+		node_lifetimes AS (
+			SELECT
+				zone,
+				net,
+				node,
+				sysop_name,
+				argMin(system_name, nodelist_date) as first_system_name,
+				argMin(location, nodelist_date) as first_location,
+				min(nodelist_date) as first_appeared,
+				max(nodelist_date) as last_seen,
+				argMin(
+					concat(
+						if(node_type != '', node_type, ''),
+						if(node_type != '', ',', ''),
+						toString(node), ',',
+						system_name, ',',
+						location, ',',
+						sysop_name, ',',
+						phone, ',',
+						toString(max_speed),
+						if(length(flags) > 0, ',', ''),
+						arrayStringConcat(flags, ',')
+					),
+					nodelist_date
+				) as raw_line
+			FROM nodes
+			GROUP BY zone, net, node, sysop_name
+		)
+		SELECT
+			nl.zone,
+			nl.net,
+			nl.node,
+			nl.sysop_name,
+			nl.first_system_name,
+			nl.first_location,
+			nl.first_appeared,
+			nl.last_seen,
+			toYear(nl.last_seen) - toYear(nl.first_appeared) + 1 as years_active,
+			nl.last_seen >= md.latest_date as still_active,
+			nl.raw_line
+		FROM node_lifetimes nl
+		CROSS JOIN max_date md
+		WHERE toMonth(nl.first_appeared) = ?
+		  AND toDayOfMonth(nl.first_appeared) = ?
+		  AND toYear(nl.first_appeared) < toYear(today())
+		  %s
+		ORDER BY nl.first_appeared DESC, nl.zone, nl.net, nl.node
+		%s
+	`, activeFilter, limitClause)
+
+	rows, err := conn.Query(query, month, day)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query on this day nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []OnThisDayNode
+	for rows.Next() {
+		var n OnThisDayNode
+		err := rows.Scan(
+			&n.Zone,
+			&n.Net,
+			&n.Node,
+			&n.SysopName,
+			&n.SystemName,
+			&n.Location,
+			&n.FirstAppeared,
+			&n.LastSeen,
+			&n.YearsActive,
+			&n.StillActive,
+			&n.RawLine,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan on this day node row: %w", err)
+		}
+		results = append(results, n)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating on this day rows: %w", err)
+	}
+
+	return results, nil
+}
+
 // Close closes the analytics operations
 func (ao *AnalyticsOperations) Close() error {
 	ao.mu.Lock()
