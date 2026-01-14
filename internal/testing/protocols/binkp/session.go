@@ -76,26 +76,29 @@ func (s *Session) SetTimeout(timeout time.Duration) {
 
 // Handshake performs the BinkP handshake
 func (s *Session) Handshake() error {
+	// Set write deadline for outgoing frames
+	_ = s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
+
 	// Send our M_NUL frames first
 	if err := s.sendOurInfo(); err != nil {
 		return fmt.Errorf("failed to send our info: %w", err)
 	}
-	
+
 	// Send our address
 	if err := s.sendOurAddress(); err != nil {
 		return fmt.Errorf("failed to send our address: %w", err)
 	}
-	
+
 	// Send password (we send "-" for no password in testing)
 	if err := s.sendPassword("-"); err != nil {
 		return fmt.Errorf("failed to send password: %w", err)
 	}
-	
+
 	// Receive remote frames
 	if err := s.receiveRemoteInfo(); err != nil {
 		return fmt.Errorf("failed to receive remote info: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -208,6 +211,12 @@ func (s *Session) receiveRemoteInfo() error {
 		case M_EOB:
 			// End of batch - remote has no files for us
 			s.remoteEOBRecvd = true
+
+			// Require M_ADR before accepting M_EOB as successful handshake
+			if !receivedADR {
+				return fmt.Errorf("received M_EOB before M_ADR - invalid handshake")
+			}
+
 			if s.debug {
 				logging.Debugf("BinkP: Remote sent M_EOB - sending our M_EOB in response")
 			}
@@ -289,6 +298,8 @@ func (s *Session) sendEOB() error {
 	if s.localEOBSent {
 		return nil // Already sent
 	}
+	// Set write deadline for M_EOB
+	_ = s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
 	err := WriteFrame(s.conn, &Frame{
 		Type:    M_EOB,
 		Command: true,

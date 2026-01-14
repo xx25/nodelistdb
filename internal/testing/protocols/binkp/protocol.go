@@ -4,11 +4,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"github.com/nodelistdb/internal/testing/logging"
 	"net"
 	"os"
 	"strings"
-	"time"
+
+	"github.com/nodelistdb/internal/testing/logging"
 )
 
 // BinkP frame types
@@ -69,10 +69,8 @@ func (f *Frame) String() string {
 }
 
 // ReadFrame reads a single BinkP frame from the connection
+// Note: Caller is responsible for setting read deadline on conn before calling
 func ReadFrame(conn net.Conn) (*Frame, error) {
-	// Set read timeout
-	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-	
 	// Read 2-byte header (network byte order)
 	header := make([]byte, 2)
 	n, err := io.ReadFull(conn, header)
@@ -90,11 +88,16 @@ func ReadFrame(conn net.Conn) (*Frame, error) {
 	headerValue := binary.BigEndian.Uint16(header)
 	isCommand := (headerValue & 0x8000) != 0
 	dataLen := int(headerValue & 0x7FFF)
-	
+
+	// Command frames must have at least 1 byte (the command type)
+	if isCommand && dataLen == 0 {
+		return nil, fmt.Errorf("invalid command frame: zero-length data")
+	}
+
 	// Read data
 	var data []byte
 	var frameType byte
-	
+
 	if dataLen > 0 {
 		data = make([]byte, dataLen)
 		n, err = io.ReadFull(conn, data)
@@ -104,14 +107,14 @@ func ReadFrame(conn net.Conn) (*Frame, error) {
 		if n != dataLen {
 			return nil, fmt.Errorf("short data read: %d bytes, expected %d", n, dataLen)
 		}
-		
+
 		// For command frames, first byte is the command type
-		if isCommand && dataLen > 0 {
+		if isCommand {
 			frameType = data[0]
 			data = data[1:] // Rest is command arguments
 		}
 	}
-	
+
 	return &Frame{
 		Type:    frameType,
 		Command: isCommand,
@@ -120,15 +123,13 @@ func ReadFrame(conn net.Conn) (*Frame, error) {
 }
 
 // WriteFrame writes a BinkP frame to the connection
+// Note: Caller is responsible for setting write deadline on conn if needed
 func WriteFrame(conn net.Conn, frame *Frame) error {
 	// Debug: log what we're sending
 	if debug := os.Getenv("DEBUG_BINKP"); debug != "" {
 		logging.Debugf("BinkP: Writing frame type=0x%02X command=%v len=%d", frame.Type, frame.Command, len(frame.Data))
 	}
-	
-	// Set write timeout
-	_ = conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
-	
+
 	dataLen := len(frame.Data)
 	
 	// BinkP header format (2 bytes, network byte order):
