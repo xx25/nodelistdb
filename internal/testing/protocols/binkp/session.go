@@ -26,14 +26,16 @@ type NodeInfo struct {
 
 // Session represents a BinkP session
 type Session struct {
-	conn         net.Conn
-	localAddress string // Our FidoNet address
-	systemName   string // Our system name (SYS)
-	sysop        string // Our sysop name (ZYZ)
-	location     string // Our location (LOC)
-	remoteInfo   NodeInfo
-	timeout      time.Duration
-	debug        bool
+	conn           net.Conn
+	localAddress   string // Our FidoNet address
+	systemName     string // Our system name (SYS)
+	sysop          string // Our sysop name (ZYZ)
+	location       string // Our location (LOC)
+	remoteInfo     NodeInfo
+	timeout        time.Duration
+	debug          bool
+	localEOBSent   bool // Track if we sent M_EOB
+	remoteEOBRecvd bool // Track if we received M_EOB from remote
 }
 
 // NewSession creates a new BinkP session
@@ -205,8 +207,17 @@ func (s *Session) receiveRemoteInfo() error {
 			
 		case M_EOB:
 			// End of batch - remote has no files for us
+			s.remoteEOBRecvd = true
 			if s.debug {
-				logging.Debugf("BinkP: Remote sent M_EOB - handshake complete (no files)")
+				logging.Debugf("BinkP: Remote sent M_EOB - sending our M_EOB in response")
+			}
+			// Send our M_EOB immediately to complete the exchange
+			if !s.localEOBSent {
+				if err := s.sendEOB(); err != nil {
+					if s.debug {
+						logging.Debugf("BinkP: Failed to send M_EOB response: %v", err)
+					}
+				}
 			}
 			// Handshake complete - no files to transfer
 			return nil
@@ -273,34 +284,78 @@ func (s *Session) GetNodeInfo() NodeInfo {
 	return s.remoteInfo
 }
 
-// Close closes the session gracefully
-func (s *Session) Close() error {
-	if s.conn != nil {
-		// Send M_EOB to indicate we're done
-		if err := WriteFrame(s.conn, &Frame{
-			Type:    M_EOB,
-			Command: true,
-			Data:    nil,
-		}); err != nil {
-			if s.debug {
-				logging.Debugf("BinkP: Failed to send M_EOB: %v", err)
-			}
-		} else if s.debug {
+// sendEOB sends M_EOB frame and tracks that we sent it
+func (s *Session) sendEOB() error {
+	if s.localEOBSent {
+		return nil // Already sent
+	}
+	err := WriteFrame(s.conn, &Frame{
+		Type:    M_EOB,
+		Command: true,
+		Data:    nil,
+	})
+	if err == nil {
+		s.localEOBSent = true
+		if s.debug {
 			logging.Debugf("BinkP: Sent M_EOB")
 		}
-		
-		// Wait briefly for remote's M_EOB (best effort)
+	}
+	return err
+}
+
+// Close closes the session gracefully
+// This performs a proper BinkP shutdown sequence that MBSE and other mailers expect:
+// 1. Ensure M_EOB exchange is complete (both sides sent M_EOB)
+// 2. Use graceful TCP shutdown (shutdown() syscall) instead of abrupt RST
+func (s *Session) Close() error {
+	if s.conn == nil {
+		return nil
+	}
+
+	// Send M_EOB if we haven't already
+	if !s.localEOBSent {
+		if err := s.sendEOB(); err != nil {
+			if s.debug {
+				logging.Debugf("BinkP: Failed to send M_EOB during close: %v", err)
+			}
+		}
+	}
+
+	// Wait for remote M_EOB if we haven't received it yet
+	if !s.remoteEOBRecvd {
 		_ = s.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 		frame, err := ReadFrame(s.conn)
 		if err == nil && frame.Type == M_EOB {
+			s.remoteEOBRecvd = true
 			if s.debug {
-				logging.Debugf("BinkP: Received remote M_EOB")
+				logging.Debugf("BinkP: Received remote M_EOB during close")
 			}
 		}
-		
-		return s.conn.Close()
 	}
-	return nil
+
+	// Perform graceful TCP shutdown like MBSE's closetcp() does
+	// This sends FIN instead of RST, preventing SIGPIPE on the remote side
+	if tcpConn, ok := s.conn.(*net.TCPConn); ok {
+		// First, close the write side (sends TCP FIN)
+		if err := tcpConn.CloseWrite(); err != nil {
+			if s.debug {
+				logging.Debugf("BinkP: CloseWrite failed: %v", err)
+			}
+		} else {
+			// Give remote a moment to process the FIN and send any final data
+			// Then drain any remaining data from the connection
+			_ = tcpConn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+			buf := make([]byte, 1024)
+			for {
+				_, err := tcpConn.Read(buf)
+				if err != nil {
+					break // EOF or timeout - expected
+				}
+			}
+		}
+	}
+
+	return s.conn.Close()
 }
 
 // ValidateAddress checks if the remote announced the expected address
