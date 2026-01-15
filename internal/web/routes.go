@@ -13,6 +13,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/download/year/", s.YearArchiveHandler)
 	mux.HandleFunc("/download/urls.txt", s.URLListHandler)
 	mux.HandleFunc("/api/help", s.APIHelpHandler)
+	mux.HandleFunc("/links", s.LinksHandler)
 	mux.HandleFunc("/node/", s.NodeHistoryHandler)
 	mux.HandleFunc("/analytics", s.AnalyticsHandler)
 	mux.HandleFunc("/analytics/flag", s.AnalyticsFlagHandler)

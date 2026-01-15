@@ -34,6 +34,7 @@ type Config struct {
 	Cache             CacheConfig      `yaml:"cache"`
 	FTP               FTPConfig        `yaml:"ftp"`
 	ModemAPI          ModemAPIConfig   `yaml:"modem_api"`
+	LinksFile         string           `yaml:"links_file"` // Path to links.yaml for external FidoNet links
 	ServerLogging     LoggingConfig    `yaml:"server_logging"`
 	ParserLogging     LoggingConfig    `yaml:"parser_logging"`
 	TestdaemonLogging LoggingConfig    `yaml:"testdaemon_logging"`

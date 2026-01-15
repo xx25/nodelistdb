@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/links"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 )
@@ -20,6 +21,7 @@ type Server struct {
 	templates   map[string]*template.Template
 	templatesFS embed.FS
 	staticFS    embed.FS
+	linksLoader *links.Loader
 }
 
 // parseNodeURLPath extracts zone, net, and node from URL path /node/{zone}/{net}/{node}
@@ -86,6 +88,11 @@ func New(storage storage.Operations, templatesFS embed.FS, staticFS embed.FS) *S
 	return server
 }
 
+// SetLinksLoader sets the links loader for hot-reloadable links
+func (s *Server) SetLinksLoader(loader *links.Loader) {
+	s.linksLoader = loader
+}
+
 // IndexHandler handles the home page
 func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
 	data := struct {
@@ -140,6 +147,33 @@ func (s *Server) APIHelpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.templates["api_help"].Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// LinksHandler shows external FidoNet links
+func (s *Server) LinksHandler(w http.ResponseWriter, r *http.Request) {
+	var categories []links.Category
+	if s.linksLoader != nil {
+		config := s.linksLoader.GetConfig()
+		if config != nil {
+			categories = config.Categories
+		}
+	}
+
+	data := struct {
+		Title      string
+		ActivePage string
+		Version    string
+		Categories []links.Category
+	}{
+		Title:      "FidoNet Links",
+		ActivePage: "links",
+		Version:    version.GetVersionInfo(),
+		Categories: categories,
+	}
+
+	if err := s.templates["links"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

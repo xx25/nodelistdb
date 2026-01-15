@@ -98,6 +98,14 @@ ftp:
 # Security: Anonymous-only, read-only, chrooted to nodelist_path, no SSL
 
 # ============================================================================
+# EXTERNAL LINKS (Server only - optional)
+# ============================================================================
+# Path to YAML file containing external FidoNet links for the Links page.
+# This file is hot-reloaded - changes take effect without server restart.
+# See links.example.yaml for format documentation.
+links_file: links.yaml
+
+# ============================================================================
 # TESTDAEMON CONFIGURATION (Testdaemon only - ignored by parser/server)
 # ============================================================================
 

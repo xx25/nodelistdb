@@ -17,6 +17,7 @@ import (
 	"github.com/nodelistdb/internal/config"
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/ftp"
+	"github.com/nodelistdb/internal/links"
 	"github.com/nodelistdb/internal/logging"
 	"github.com/nodelistdb/internal/modem"
 	"github.com/nodelistdb/internal/storage"
@@ -292,6 +293,14 @@ func main() {
 	}
 	webServer := web.New(finalStorage, web.TemplatesFS, web.StaticFS)
 
+	// Initialize links loader for hot-reloadable links (if configured)
+	if cfg.LinksFile != "" {
+		linksLoader := links.NewLoader(cfg.LinksFile)
+		defer linksLoader.Stop()
+		webServer.SetLinksLoader(linksLoader)
+		logging.Info("Links configuration enabled", slog.String("path", cfg.LinksFile))
+	}
+
 	// Set up HTTP routes using Chi router
 	apiRouter := apiServer.SetupRouter()
 
@@ -363,6 +372,7 @@ func main() {
 		logging.Infof("    http://%s:%s/        - Home page", *host, *port)
 		logging.Infof("    http://%s:%s/search  - Search nodes", *host, *port)
 		logging.Infof("    http://%s:%s/stats   - Statistics", *host, *port)
+		logging.Infof("    http://%s:%s/links   - External links", *host, *port)
 		logging.Info("  REST API:")
 		logging.Infof("    http://%s:%s/api/health          - API health check", *host, *port)
 		logging.Infof("    http://%s:%s/api/nodes           - Search nodes", *host, *port)
