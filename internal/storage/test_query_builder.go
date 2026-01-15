@@ -151,9 +151,10 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 	return `
 		WITH
-		-- Generate date series for the report period
+		-- Generate date series for the report period (starting from yesterday)
+		-- Exclude today to avoid incomplete data at day boundaries
 		date_series AS (
-			SELECT toDate(now() - INTERVAL number DAY) as report_date
+			SELECT toDate(now() - INTERVAL (number + 1) DAY) as report_date
 			FROM numbers(?)
 		),
 		-- For each date, find the last known status of each node up to that date

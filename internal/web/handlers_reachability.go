@@ -22,8 +22,8 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	statusFilter := query.Get("status")
 	protocolFilter := query.Get("protocol")
 
-	// Parse period filter (default to 1 day for nodes, 30 days for trends)
-	trendsPeriodFilter := 30 // For trends chart
+	// Parse period filter (default to 1 day for nodes, 90 days for trends)
+	trendsPeriodFilter := 90 // For trends chart (3 months)
 	nodesPeriodFilter := 1   // Default to 1 day for recently tested nodes
 	if p := query.Get("trends_period"); p != "" {
 		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 && parsed <= 365 {
