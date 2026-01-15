@@ -1438,3 +1438,432 @@ heartbeat:
 - Queue growing faster than processing
 - Nodes with no matching daemon (prefix coverage gap)
 - Orphaned nodes detected (assigned_to = '') - indicates recovery job failure
+
+## Client Implementation Guide
+
+This section describes how to implement a modem testing client (daemon) that communicates with the NodelistDB server API.
+
+### Overview
+
+The modem daemon is a standalone application that:
+1. Authenticates with the server using an API key
+2. Fetches assigned nodes to test
+3. Performs modem calls and EMSI handshakes
+4. Reports results back to the server
+5. Sends periodic heartbeats
+
+### Authentication
+
+All API requests require Bearer token authentication:
+
+```
+Authorization: Bearer <your-api-key>
+```
+
+The API key must be registered in the server's `config.yaml`. Contact the server administrator to obtain your `caller_id` and API key.
+
+### Main Loop
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      DAEMON MAIN LOOP                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. Start heartbeat goroutine (runs every 60s)              │
+│     └─► POST /api/modem/heartbeat                           │
+│                                                              │
+│  2. Main testing loop:                                       │
+│     ┌──────────────────────────────────────────────────┐    │
+│     │ a) GET /api/modem/nodes?limit=50                 │    │
+│     │    └─► Receive list of assigned nodes            │    │
+│     │                                                  │    │
+│     │ b) If no nodes: sleep 30s, goto (a)              │    │
+│     │                                                  │    │
+│     │ c) POST /api/modem/in-progress                   │    │
+│     │    └─► Mark nodes as being tested                │    │
+│     │                                                  │    │
+│     │ d) For each node:                                │    │
+│     │    - Select best modem based on node's flags     │    │
+│     │    - Dial phone number                           │    │
+│     │    - Perform EMSI handshake                      │    │
+│     │    - Collect results                             │    │
+│     │                                                  │    │
+│     │ e) POST /api/modem/results                       │    │
+│     │    └─► Submit test results                       │    │
+│     │                                                  │    │
+│     │ f) Goto (a)                                      │    │
+│     └──────────────────────────────────────────────────┘    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### API Endpoints
+
+#### 1. Get Assigned Nodes
+
+Fetch nodes assigned to your daemon for testing.
+
+```
+GET /api/modem/nodes?limit=50&only_callable=true
+Authorization: Bearer <api-key>
+```
+
+**Query Parameters:**
+- `limit` (optional): Maximum nodes to return (default: 50, max: 100)
+- `only_callable` (optional): Filter by time availability (default: true)
+
+**Response:**
+```json
+{
+  "nodes": [
+    {
+      "zone": 2,
+      "net": 5020,
+      "node": 100,
+      "conflict_sequence": 0,
+      "phone": "+7-495-123-4567",
+      "phone_normalized": "+74951234567",
+      "address": "2:5020/100",
+      "modem_flags": ["V34", "V32B", "ZYX"],
+      "flags": ["CM", "XA", "IBN"],
+      "priority": 70,
+      "retry_count": 0,
+      "is_callable_now": true,
+      "next_call_window": null
+    }
+  ],
+  "remaining": 125
+}
+```
+
+**Important Fields:**
+- `modem_flags`: Use these to select the best modem (V34, V32B, HST, ZYX, etc.)
+- `is_callable_now`: Server-computed time availability
+- `next_call_window`: When node becomes callable (if not now)
+
+#### 2. Mark Nodes In Progress
+
+Mark nodes as being actively tested (prevents timeout reclamation).
+
+```
+POST /api/modem/in-progress
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{
+  "nodes": [
+    {"zone": 2, "net": 5020, "node": 100, "conflict_sequence": 0},
+    {"zone": 2, "net": 5020, "node": 101, "conflict_sequence": 0}
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "marked": 2
+}
+```
+
+#### 3. Submit Results
+
+Submit test results after completing modem calls.
+
+```
+POST /api/modem/results
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{
+  "results": [
+    {
+      "zone": 2,
+      "net": 5020,
+      "node": 100,
+      "conflict_sequence": 0,
+      "test_time": "2026-01-15T14:30:00Z",
+      "success": true,
+      "response_ms": 45000,
+      "system_name": "My BBS System",
+      "mailer_info": "BinkD 1.1",
+      "addresses": ["2:5020/100", "2:5020/100.1"],
+      "address_valid": true,
+      "response_type": "EMSI_DAT",
+      "software_source": "emsi_dat",
+      "connect_speed": 33600,
+      "modem_protocol": "V.34",
+      "phone_dialed": "+7-495-123-4567",
+      "ring_count": 3,
+      "carrier_time_ms": 8500,
+      "modem_used": "zyxel-1",
+      "match_reason": "Proprietary match: ZYX"
+    },
+    {
+      "zone": 2,
+      "net": 5020,
+      "node": 101,
+      "conflict_sequence": 0,
+      "test_time": "2026-01-15T14:32:00Z",
+      "success": false,
+      "response_ms": 60000,
+      "error": "NO CARRIER after 60s"
+    }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "accepted": 2,
+  "stored": 2
+}
+```
+
+**Result Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| zone, net, node, conflict_sequence | int | Yes | Node identifier |
+| test_time | string | Yes | RFC3339 timestamp |
+| success | bool | Yes | Whether EMSI handshake succeeded |
+| response_ms | uint32 | Yes | Total time from dial to result |
+| error | string | On failure | Error description |
+| system_name | string | On success | Remote system name from EMSI |
+| mailer_info | string | On success | Mailer software info |
+| addresses | []string | On success | FidoNet addresses from EMSI |
+| address_valid | bool | On success | Whether expected address was in response |
+| response_type | string | On success | EMSI response type (EMSI_DAT, etc.) |
+| connect_speed | uint32 | Optional | Modem connect speed (bps) |
+| modem_protocol | string | Optional | Negotiated protocol (V.34, V.32bis) |
+| phone_dialed | string | Optional | Actual phone number dialed |
+| ring_count | uint8 | Optional | Rings before answer |
+| carrier_time_ms | uint32 | Optional | Time to carrier detect |
+| modem_used | string | Optional | Local modem identifier |
+| match_reason | string | Optional | Why this modem was selected |
+
+#### 4. Heartbeat
+
+Send periodic heartbeats to indicate daemon is alive.
+
+```
+POST /api/modem/heartbeat
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{
+  "status": "active",
+  "modems_available": 3,
+  "modems_in_use": 1,
+  "tests_completed": 45,
+  "tests_failed": 3,
+  "last_test_time": "2026-01-15T14:32:00Z"
+}
+```
+
+**Status Values:**
+- `active`: Daemon is running and testing
+- `inactive`: Daemon is paused
+- `maintenance`: Daemon is in maintenance mode
+
+**Response:**
+```json
+{
+  "ack": true,
+  "assigned_nodes": 125
+}
+```
+
+**Important:** Send heartbeats every 60 seconds. If no heartbeat for 10 minutes, the server considers the daemon offline and reassigns its nodes.
+
+#### 5. Release Nodes (Optional)
+
+Release nodes back to queue (e.g., on graceful shutdown or modem failure).
+
+```
+POST /api/modem/release
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{
+  "nodes": [
+    {"zone": 2, "net": 5020, "node": 100, "conflict_sequence": 0}
+  ],
+  "reason": "modem_failure"
+}
+```
+
+**Response:**
+```json
+{
+  "released": 1
+}
+```
+
+### Modem Selection Algorithm
+
+Select the best local modem based on node's `modem_flags`:
+
+```
+Priority 1: Proprietary protocol match (same vendor = best performance)
+  - ZYX <-> ZYX (Zyxel)
+  - HST <-> HST (USR)
+  - V90S -> V90C (56K)
+
+Priority 2: Highest common speed protocol
+  - V34 (33600 bps)
+  - V32B (14400 bps)
+  - V32 (9600 bps)
+
+Priority 3: Fallback to any available modem
+```
+
+**Example:**
+```
+Node flags: ["V32B", "V42B", "ZYX", "CM"]
+Your modems: [zyxel-1, usr-courier, generic-v34]
+
+Result: Select zyxel-1
+Reason: Proprietary match ZYX (Zyxel <-> Zyxel)
+```
+
+### Error Handling
+
+| HTTP Status | Meaning | Action |
+|-------------|---------|--------|
+| 200 | Success | Process response |
+| 400 | Bad request | Fix request format |
+| 401 | Unauthorized | Check API key |
+| 429 | Rate limited | Back off and retry |
+| 500 | Server error | Retry with backoff |
+
+### Example Python Client
+
+```python
+import requests
+import time
+from datetime import datetime
+
+class ModemDaemon:
+    def __init__(self, api_url, api_key):
+        self.api_url = api_url
+        self.headers = {"Authorization": f"Bearer {api_key}"}
+
+    def get_nodes(self, limit=50):
+        resp = requests.get(
+            f"{self.api_url}/nodes",
+            params={"limit": limit, "only_callable": "true"},
+            headers=self.headers
+        )
+        resp.raise_for_status()
+        return resp.json()["nodes"]
+
+    def mark_in_progress(self, nodes):
+        resp = requests.post(
+            f"{self.api_url}/in-progress",
+            json={"nodes": [
+                {"zone": n["zone"], "net": n["net"],
+                 "node": n["node"], "conflict_sequence": n["conflict_sequence"]}
+                for n in nodes
+            ]},
+            headers=self.headers
+        )
+        resp.raise_for_status()
+        return resp.json()["marked"]
+
+    def submit_results(self, results):
+        resp = requests.post(
+            f"{self.api_url}/results",
+            json={"results": results},
+            headers=self.headers
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def heartbeat(self, status="active", modems_available=1, modems_in_use=0):
+        resp = requests.post(
+            f"{self.api_url}/heartbeat",
+            json={
+                "status": status,
+                "modems_available": modems_available,
+                "modems_in_use": modems_in_use,
+                "tests_completed": self.tests_completed,
+                "tests_failed": self.tests_failed
+            },
+            headers=self.headers
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def test_node(self, node):
+        """Override this with actual modem testing logic"""
+        # 1. Select best modem based on node["modem_flags"]
+        # 2. Dial node["phone"]
+        # 3. Perform EMSI handshake
+        # 4. Return result dict
+        pass
+
+    def run(self):
+        while True:
+            nodes = self.get_nodes()
+            if not nodes:
+                time.sleep(30)
+                continue
+
+            self.mark_in_progress(nodes)
+
+            results = []
+            for node in nodes:
+                result = self.test_node(node)
+                results.append(result)
+
+            self.submit_results(results)
+
+# Usage
+daemon = ModemDaemon(
+    api_url="https://nodelistdb.example.com/api/modem",
+    api_key="your-api-key-here"
+)
+daemon.run()
+```
+
+### Daemon Configuration Example
+
+```yaml
+# modem-daemon.yaml
+api:
+  url: "https://nodelistdb.example.com/api/modem"
+  key: "your-api-key-here"
+
+identity:
+  address: "2:5001/100"
+  system_name: "NodelistDB Modem Tester"
+  sysop: "Test Operator"
+  location: "Moscow, Russia"
+
+modems:
+  - id: "zyxel-1"
+    device: "/dev/ttyUSB0"
+    init: "ATZ"
+    protocols: ["V34", "V32B", "ZYX"]
+    max_speed: 33600
+
+  - id: "usr-courier"
+    device: "/dev/ttyUSB1"
+    init: "ATZ"
+    protocols: ["V90S", "V34", "HST"]
+    max_speed: 56000
+    is_digital: true
+
+timeouts:
+  dial: 60s
+  carrier: 30s
+  emsi: 30s
+
+polling:
+  interval: 30s
+  batch_size: 50
+
+heartbeat:
+  interval: 60s
+```
