@@ -180,13 +180,27 @@ func (p *QueuePopulator) queryNodesWithPhones(ctx context.Context) ([]NodeWithPh
 	return nodes, nil
 }
 
-// extractTimeFlags extracts time-related flags (T-flags) from general flags
+// extractTimeFlags extracts time-related flags from general flags
+// Includes: T-flags (TAN, T18), ZMH, #nn (e.g., #02), CM, ICM
 func extractTimeFlags(flags []string) []string {
 	var timeFlags []string
 	for _, flag := range flags {
-		// T-flags typically start with T followed by two letter codes
-		// Examples: Txy (like T18, TNA, etc.)
-		if len(flag) >= 2 && flag[0] == 'T' {
+		if len(flag) == 0 {
+			continue
+		}
+		// T-flags: start with T followed by letters/digits (TAN, T18, etc.)
+		if flag[0] == 'T' && len(flag) >= 2 {
+			timeFlags = append(timeFlags, flag)
+			continue
+		}
+		// #nn flags: specific UTC hour (e.g., #02, #18)
+		if flag[0] == '#' && len(flag) == 3 {
+			timeFlags = append(timeFlags, flag)
+			continue
+		}
+		// ZMH, CM, ICM flags
+		switch flag {
+		case "ZMH", "CM", "ICM":
 			timeFlags = append(timeFlags, flag)
 		}
 	}

@@ -129,7 +129,10 @@ func (m *ModemQueueOperations) MarkNodesInProgress(ctx context.Context, callerID
 			WHERE zone = ? AND net = ? AND node = ? AND conflict_sequence = ?
 			  AND assigned_to = ? AND status = 'pending'
 		`, node.Zone, node.Net, node.Node, node.ConflictSequence, callerID).Scan(&count)
-		if err == nil && count > 0 {
+		if err != nil {
+			return 0, fmt.Errorf("failed to check node eligibility: %w", err)
+		}
+		if count > 0 {
 			eligibleCount++
 		}
 	}
@@ -209,6 +212,29 @@ func (m *ModemQueueOperations) VerifyNodeOwnership(ctx context.Context, callerID
 		node.Zone, node.Net, node.Node, node.ConflictSequence, callerID).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify node ownership: %w", err)
+	}
+
+	return count > 0, nil
+}
+
+// VerifyNodeStatus checks if a node is assigned to the caller and has the expected status
+// Used after mutations to verify they actually took effect (eliminates TOCTOU race)
+func (m *ModemQueueOperations) VerifyNodeStatus(ctx context.Context, callerID string, node NodeIdentifier, expectedStatus string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	query := `
+		SELECT count() FROM modem_test_queue
+		WHERE zone = ? AND net = ? AND node = ? AND conflict_sequence = ?
+		  AND assigned_to = ?
+		  AND status = ?
+	`
+
+	var count uint64
+	err := m.db.Conn().QueryRowContext(ctx, query,
+		node.Zone, node.Net, node.Node, node.ConflictSequence, callerID, expectedStatus).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify node status: %w", err)
 	}
 
 	return count > 0, nil

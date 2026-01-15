@@ -199,8 +199,7 @@ func (h *ModemHandler) SubmitResults(w http.ResponseWriter, r *http.Request) {
 			ConflictSequence: result.ConflictSequence,
 		}
 
-		// Verify caller owns this node and it's in_progress before accepting results
-		// ClickHouse mutations don't return affected row counts, so we must check explicitly
+		// Pre-check: verify caller owns this node and it's in_progress
 		owns, err := h.queueOps.VerifyNodeOwnership(ctx, callerID, node)
 		if err != nil {
 			logging.Warn("failed to verify node ownership", "node", node.Address(), "error", err)
@@ -212,20 +211,36 @@ func (h *ModemHandler) SubmitResults(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Update queue status based on result
+		// Attempt mutation
+		var expectedStatus string
 		if result.Success {
+			expectedStatus = storage.ModemQueueStatusCompleted
 			if err := h.queueOps.MarkNodeCompleted(ctx, callerID, node); err != nil {
 				logging.Warn("failed to mark node completed", "node", node.Address(), "error", err)
 				continue
 			}
 		} else {
+			expectedStatus = storage.ModemQueueStatusFailed
 			if err := h.queueOps.MarkNodeFailed(ctx, callerID, node, result.Error); err != nil {
 				logging.Warn("failed to mark node failed", "node", node.Address(), "error", err)
 				continue
 			}
 		}
 
-		// Store detailed modem test result
+		// Post-check: verify mutation took effect (eliminates TOCTOU race)
+		// ClickHouse mutations are async but complete quickly; this catches races
+		verified, err := h.queueOps.VerifyNodeStatus(ctx, callerID, node, expectedStatus)
+		if err != nil {
+			logging.Warn("failed to verify node status after mutation", "node", node.Address(), "error", err)
+			continue
+		}
+		if !verified {
+			logging.Warn("mutation did not take effect (possible race)",
+				"caller_id", callerID, "node", node.Address(), "expected_status", expectedStatus)
+			continue
+		}
+
+		// Store detailed modem test result (only after verified mutation)
 		if err := h.storeModemTestResult(ctx, callerID, result); err != nil {
 			logging.Warn("failed to store modem test result", "node", node.Address(), "error", err)
 			// Continue anyway - queue status update succeeded
