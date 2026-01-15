@@ -63,5 +63,19 @@ func (s *Server) SetupRouter() http.Handler {
 	// Nodelist routes
 	r.Get("/api/nodelist/latest", s.LatestNodelistAPIHandler)
 
+	// Modem testing API routes (authenticated with size limits)
+	if s.modemHandler != nil {
+		r.Route("/api/modem", func(r chi.Router) {
+			r.Use(s.modemHandler.SizeLimitMiddleware())
+			r.Use(s.modemHandler.AuthMiddleware())
+			r.Get("/nodes", s.modemHandler.GetAssignedNodes)
+			r.Post("/in-progress", s.modemHandler.MarkInProgress)
+			r.Post("/results", s.modemHandler.SubmitResults)
+			r.Post("/heartbeat", s.modemHandler.Heartbeat)
+			r.Post("/release", s.modemHandler.ReleaseNodes)
+			r.Get("/stats", s.modemHandler.GetQueueStats) // Admin endpoint
+		})
+	}
+
 	return r
 }

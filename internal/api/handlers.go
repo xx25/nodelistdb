@@ -11,7 +11,13 @@ import (
 
 // Server represents the API server
 type Server struct {
-	storage storage.Operations
+	storage      storage.Operations
+	modemHandler *ModemHandler
+}
+
+// SetModemHandler sets the modem handler for the server
+func (s *Server) SetModemHandler(handler *ModemHandler) {
+	s.modemHandler = handler
 }
 
 // New creates a new API server

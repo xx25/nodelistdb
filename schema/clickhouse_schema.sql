@@ -163,6 +163,25 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `vmodem_ipv6_response_ms` UInt32 DEFAULT 0,
     `vmodem_ipv6_address` String DEFAULT '',
     `vmodem_ipv6_error` String DEFAULT '',
+    -- Modem (PSTN) test results
+    `modem_tested` Bool DEFAULT false,
+    `modem_success` Bool DEFAULT false,
+    `modem_response_ms` UInt32 DEFAULT 0,
+    `modem_system_name` String DEFAULT '',
+    `modem_mailer_info` String DEFAULT '',
+    `modem_addresses` Array(String) DEFAULT [],
+    `modem_address_valid` Bool DEFAULT false,
+    `modem_response_type` String DEFAULT '',
+    `modem_software_source` String DEFAULT '',
+    `modem_error` String DEFAULT '',
+    `modem_connect_speed` UInt32 DEFAULT 0,
+    `modem_protocol` String DEFAULT '',
+    `modem_caller_id` String DEFAULT '',
+    `modem_phone_dialed` String DEFAULT '',
+    `modem_ring_count` UInt8 DEFAULT 0,
+    `modem_carrier_time_ms` UInt32 DEFAULT 0,
+    `modem_used` String DEFAULT '',
+    `modem_match_reason` String DEFAULT '',
     INDEX idx_date test_date TYPE minmax GRANULARITY 1,
     INDEX idx_zone_net (zone, net) TYPE minmax GRANULARITY 1,
     INDEX idx_operational is_operational TYPE minmax GRANULARITY 1,
@@ -225,4 +244,67 @@ CREATE TABLE IF NOT EXISTS nodelistdb.flag_statistics
 ENGINE = ReplacingMergeTree(nodelist_date)
 PARTITION BY year
 ORDER BY (flag, year, nodelist_date)
+SETTINGS index_granularity = 8192;
+
+-- Modem caller runtime status table
+-- Tracks heartbeats and runtime statistics for modem daemons
+-- Configuration (prefixes, API keys) is stored in config.yaml, not here
+CREATE TABLE IF NOT EXISTS nodelistdb.modem_caller_status
+(
+    `caller_id` String,                                         -- References config.yaml caller_id
+    `last_heartbeat` DateTime,
+    `status` Enum8('active' = 1, 'inactive' = 2, 'maintenance' = 3),
+    `modems_available` UInt8 DEFAULT 0,
+    `modems_in_use` UInt8 DEFAULT 0,
+    `tests_completed` UInt32 DEFAULT 0,
+    `tests_failed` UInt32 DEFAULT 0,
+    `last_test_time` DateTime DEFAULT toDateTime(0),
+    `updated_at` DateTime
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY caller_id
+SETTINGS index_granularity = 8192;
+
+-- Modem test queue table
+-- Nodes are pre-assigned to specific daemons on queue entry
+CREATE TABLE IF NOT EXISTS nodelistdb.modem_test_queue
+(
+    -- Node identification
+    `zone` UInt16,
+    `net` UInt16,
+    `node` UInt16,
+    `conflict_sequence` UInt8 DEFAULT 0,                        -- Matches nodelist duplicate handling
+    `phone` String,
+    `phone_normalized` String,                                  -- "+74951234567" for prefix matching
+    `modem_flags` Array(String),                                -- [V34, V32B, ZYX] - passed to daemon
+    `flags` Array(String),                                      -- General node flags [CM, XA, TAN]
+
+    -- Time availability (denormalized from flags for query efficiency)
+    `is_cm` Bool DEFAULT false,                                 -- Has CM flag (24/7 available)
+    `time_flags` Array(String),                                 -- T-flags like [T, A, N]
+
+    -- Pre-assignment (replaces claiming)
+    `assigned_to` String,                                       -- caller_id of assigned daemon
+    `assigned_at` DateTime,
+
+    -- Scheduling
+    `priority` UInt8,
+    `retry_count` UInt8,
+    `next_attempt_after` DateTime,                              -- For retry backoff
+
+    -- Status
+    `status` Enum8('pending' = 1, 'in_progress' = 2, 'completed' = 3, 'failed' = 4),
+    `in_progress_since` DateTime DEFAULT toDateTime(0),         -- For stale detection
+    `last_tested_at` DateTime DEFAULT toDateTime(0),
+    `last_error` String DEFAULT '',
+
+    -- Metadata
+    `created_at` DateTime,
+    `updated_at` DateTime,
+
+    -- Secondary index for daemon queries (WHERE assigned_to = ? AND status = ?)
+    INDEX idx_assigned_status (assigned_to, status) TYPE set(10) GRANULARITY 4
+)
+ENGINE = MergeTree()
+ORDER BY (zone, net, node, conflict_sequence)
 SETTINGS index_granularity = 8192;

@@ -30,12 +30,13 @@ type ClickHouseConfig struct {
 
 // Config represents the complete application configuration
 type Config struct {
-	ClickHouse       ClickHouseConfig `yaml:"clickhouse"`
-	Cache            CacheConfig      `yaml:"cache"`
-	FTP              FTPConfig        `yaml:"ftp"`
-	ServerLogging    LoggingConfig    `yaml:"server_logging"`
-	ParserLogging    LoggingConfig    `yaml:"parser_logging"`
-	TestdaemonLogging LoggingConfig   `yaml:"testdaemon_logging"`
+	ClickHouse        ClickHouseConfig `yaml:"clickhouse"`
+	Cache             CacheConfig      `yaml:"cache"`
+	FTP               FTPConfig        `yaml:"ftp"`
+	ModemAPI          ModemAPIConfig   `yaml:"modem_api"`
+	ServerLogging     LoggingConfig    `yaml:"server_logging"`
+	ParserLogging     LoggingConfig    `yaml:"parser_logging"`
+	TestdaemonLogging LoggingConfig    `yaml:"testdaemon_logging"`
 
 	// Deprecated: Use component-specific logging configs instead
 	Logging LoggingConfig `yaml:"logging,omitempty"`
@@ -361,6 +362,11 @@ func (c *Config) validate() error {
 		}
 	}
 
+	// Validate modem API configuration
+	if err := c.validateModemAPI(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -371,6 +377,7 @@ func CreateExampleConfig(dir string) error {
 		ClickHouse: DefaultClickHouseConfig(),
 		Cache:      *DefaultCacheConfig(),
 		FTP:        *DefaultFTPConfig(),
+		ModemAPI:   *DefaultModemAPIConfig(),
 		Logging:    *DefaultLoggingConfig(),
 	}
 
