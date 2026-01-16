@@ -52,7 +52,10 @@ func (d *Driver) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpser
 	return d.rootFs, nil
 }
 
-// GetTLSConfig returns nil as we don't support TLS (anonymous read-only)
+// ErrTLSNotSupported is returned when a client requests TLS but it's not configured
+var ErrTLSNotSupported = errors.New("TLS is not supported on this server")
+
+// GetTLSConfig returns an error as we don't support TLS (anonymous read-only)
 func (d *Driver) GetTLSConfig() (*tls.Config, error) {
-	return nil, nil // No TLS support for now
+	return nil, ErrTLSNotSupported
 }

@@ -1,0 +1,56 @@
+# FidoNet Links Configuration
+# This file is hot-reloaded - changes take effect without server restart
+
+# Categories of links - each category becomes a section on the page
+categories:
+  - name: Alternative Access
+    description: Alternative ways to access this site
+    links:
+      - title: TOR Network
+        url: http://nodelistaimn7qkhyxcs5k754qs4suvfgfkb3th3wggie5yhdxjabiyd.onion
+        description: This site on the TOR network
+
+      - title: I2P Network
+        url: http://nodelist.i2p/
+        description: This site on the I2P network
+
+      - title: Russian Mirror
+        url: https://nodelist.5001.ru/
+        description: Mirror site hosted in Russia
+
+  - name: Official Resources
+    description: Official FidoNet documentation and standards
+    links:
+      - title: FidoNet Technical Standards
+        url: https://www.fidonet.org/ftsc/
+        description: FidoNet Technical Standards Committee documents
+
+      - title: FidoNet Policy
+        url: https://www.fidonet.org/policy4.txt
+        description: FidoNet Policy Document (Policy 4)
+
+  - name: Nodelist Resources
+    description: Where to get nodelists and diffs
+    links:
+      - title: FileGate
+        url: https://www.filegate.net/
+        description: FidoNet file distribution network
+
+  - name: BBS Software
+    description: Popular BBS and mailer software
+    links:
+      - title: Mystic BBS
+        url: https://www.mysticbbs.com/
+        description: Modern cross-platform BBS software
+
+      - title: Synchronet BBS
+        url: https://www.synchro.net/
+        description: Free open-source BBS software package
+
+  - name: FidoNet History
+    description: Historical information about FidoNet
+    links:
+      - title: FidoNet Wikipedia
+        url: https://en.wikipedia.org/wiki/FidoNet
+        description: Wikipedia article about FidoNet history
+
