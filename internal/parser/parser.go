@@ -164,6 +164,15 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	// Clear reusable maps at start of parsing to reuse capacity
 	p.clearReusableMaps()
 
+	// Reset context to defaults for clean parsing state between files
+	// This prevents state leakage where zone/net/region from a previous file
+	// could affect parsing of subsequent files
+	p.Context = Context{
+		CurrentZone: 1,
+		CurrentNet:  1,
+		// CurrentRegion intentionally nil
+	}
+
 	if p.verbose {
 		fmt.Printf("Parsing file: %s\n", filepath.Base(filePath))
 	}
