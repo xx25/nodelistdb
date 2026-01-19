@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -881,6 +882,48 @@ func TestParseProtocolValue(t *testing.T) {
 			wantAddr: "0",
 			wantPort: 0,
 		},
+		{
+			name:     "bracketed IPv6 with out-of-range port",
+			value:    "[::1]:99999",
+			wantAddr: "[::1]",
+			wantPort: 0, // Port out of range, should be ignored
+		},
+		{
+			name:     "bracketed IPv6 with zero port",
+			value:    "[::1]:0",
+			wantAddr: "[::1]",
+			wantPort: 0, // Port 0 is invalid
+		},
+		{
+			name:     "bracketed IPv6 with negative port",
+			value:    "[::1]:-1",
+			wantAddr: "[::1]",
+			wantPort: 0, // Negative port is invalid
+		},
+		{
+			name:     "host with non-numeric port",
+			value:    "host:abc",
+			wantAddr: "host:abc",
+			wantPort: 0, // Non-numeric port, treat as address
+		},
+		{
+			name:     "host with negative port",
+			value:    "host:-1",
+			wantAddr: "host:-1",
+			wantPort: 0, // Negative port is invalid
+		},
+		{
+			name:     "port at boundary (65535)",
+			value:    "host:65535",
+			wantAddr: "host",
+			wantPort: 65535,
+		},
+		{
+			name:     "port just over boundary (65536)",
+			value:    "host:65536",
+			wantAddr: "host:65536",
+			wantPort: 0, // Over max port
+		},
 	}
 
 	for _, tt := range tests {
@@ -1022,6 +1065,144 @@ func TestParseFlagsWithConfig(t *testing.T) {
 	}
 }
 
+func TestParseFlagsWithConfigJSONContent(t *testing.T) {
+	p := New(false)
+
+	t.Run("IBN with port has correct JSON", func(t *testing.T) {
+		_, config := p.parseFlagsWithConfig("IBN:24555,CM")
+
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal(config, &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal config: %v", err)
+		}
+
+		if len(internetConfig.Protocols["IBN"]) != 1 {
+			t.Errorf("expected 1 IBN protocol entry, got %d", len(internetConfig.Protocols["IBN"]))
+		}
+		if internetConfig.Protocols["IBN"][0].Port != 24555 {
+			t.Errorf("IBN port = %d, want 24555", internetConfig.Protocols["IBN"][0].Port)
+		}
+	})
+
+	t.Run("IBN with hostname has correct JSON", func(t *testing.T) {
+		_, config := p.parseFlagsWithConfig("IBN:bbs.example.com")
+
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal(config, &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal config: %v", err)
+		}
+
+		if len(internetConfig.Protocols["IBN"]) != 1 {
+			t.Errorf("expected 1 IBN protocol entry, got %d", len(internetConfig.Protocols["IBN"]))
+		}
+		if internetConfig.Protocols["IBN"][0].Address != "bbs.example.com" {
+			t.Errorf("IBN address = %q, want %q", internetConfig.Protocols["IBN"][0].Address, "bbs.example.com")
+		}
+		// Should have default port when hostname is provided
+		if internetConfig.Protocols["IBN"][0].Port != 24554 {
+			t.Errorf("IBN port = %d, want default 24554", internetConfig.Protocols["IBN"][0].Port)
+		}
+	})
+
+	t.Run("INA default address in JSON", func(t *testing.T) {
+		_, config := p.parseFlagsWithConfig("INA:node.fido.net,IBN")
+
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal(config, &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal config: %v", err)
+		}
+
+		if internetConfig.Defaults["INA"] != "node.fido.net" {
+			t.Errorf("INA default = %q, want %q", internetConfig.Defaults["INA"], "node.fido.net")
+		}
+	})
+
+	t.Run("multiple protocols in JSON", func(t *testing.T) {
+		_, config := p.parseFlagsWithConfig("IBN:24554,ITN:23,IFC")
+
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal(config, &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal config: %v", err)
+		}
+
+		if len(internetConfig.Protocols["IBN"]) != 1 {
+			t.Errorf("expected 1 IBN entry, got %d", len(internetConfig.Protocols["IBN"]))
+		}
+		if len(internetConfig.Protocols["ITN"]) != 1 {
+			t.Errorf("expected 1 ITN entry, got %d", len(internetConfig.Protocols["ITN"]))
+		}
+		if len(internetConfig.Protocols["IFC"]) != 1 {
+			t.Errorf("expected 1 IFC entry, got %d", len(internetConfig.Protocols["IFC"]))
+		}
+
+		if internetConfig.Protocols["IBN"][0].Port != 24554 {
+			t.Errorf("IBN port = %d, want 24554", internetConfig.Protocols["IBN"][0].Port)
+		}
+		if internetConfig.Protocols["ITN"][0].Port != 23 {
+			t.Errorf("ITN port = %d, want 23", internetConfig.Protocols["ITN"][0].Port)
+		}
+	})
+
+	t.Run("info flags in JSON", func(t *testing.T) {
+		_, config := p.parseFlagsWithConfig("INO4,ICM")
+
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal(config, &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal config: %v", err)
+		}
+
+		if len(internetConfig.InfoFlags) != 2 {
+			t.Errorf("expected 2 info flags, got %d", len(internetConfig.InfoFlags))
+		}
+
+		foundINO4, foundICM := false, false
+		for _, flag := range internetConfig.InfoFlags {
+			if flag == "INO4" {
+				foundINO4 = true
+			}
+			if flag == "ICM" {
+				foundICM = true
+			}
+		}
+		if !foundINO4 {
+			t.Error("INO4 not found in info flags")
+		}
+		if !foundICM {
+			t.Error("ICM not found in info flags")
+		}
+	})
+
+	t.Run("email protocol IEM in JSON", func(t *testing.T) {
+		_, config := p.parseFlagsWithConfig("IEM:sysop@example.com")
+
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal(config, &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal config: %v", err)
+		}
+
+		if internetConfig.Defaults["IEM"] != "sysop@example.com" {
+			t.Errorf("IEM default = %q, want %q", internetConfig.Defaults["IEM"], "sysop@example.com")
+		}
+	})
+
+	t.Run("BND mapped to IBN in JSON", func(t *testing.T) {
+		_, config := p.parseFlagsWithConfig("BND")
+
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal(config, &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal config: %v", err)
+		}
+
+		// BND should map to IBN
+		if len(internetConfig.Protocols["IBN"]) != 1 {
+			t.Errorf("expected 1 IBN entry for BND, got %d", len(internetConfig.Protocols["IBN"]))
+		}
+		if internetConfig.Protocols["IBN"][0].Port != 24554 {
+			t.Errorf("IBN port = %d, want default 24554", internetConfig.Protocols["IBN"][0].Port)
+		}
+	})
+}
+
 func TestHasFlag(t *testing.T) {
 	p := New(false)
 
@@ -1088,13 +1269,23 @@ func TestConvertLegacyFlags(t *testing.T) {
 		},
 		{
 			name:   "MO: to MO",
-			input:  "MO:LO",
-			expect: "MOLO",
+			input:  "MO:test",
+			expect: "MOtest",
+		},
+		{
+			name:   "LO: to LO",
+			input:  "LO:only",
+			expect: "LOonly",
+		},
+		{
+			name:   "CM: to CM",
+			input:  "CM:flag",
+			expect: "CMflag",
 		},
 		{
 			name:   "multiple conversions",
-			input:  "XP:MO:CM:",
-			expect: "XAMOCM",
+			input:  "XP:MO:LO:CM:",
+			expect: "XAMOLOCM",
 		},
 		{
 			name:   "no legacy flags",
@@ -1359,6 +1550,168 @@ func TestParseLine(t *testing.T) {
 	}
 }
 
+func TestParseLineDetailedFields(t *testing.T) {
+	t.Run("all fields parsed correctly", func(t *testing.T) {
+		p := New(false)
+		p.Context.CurrentZone = 1
+		p.Context.CurrentNet = 5001
+
+		line := ",100,My_BBS_System,New_York_NY,John_Doe,1-212-555-1234,9600,CM,V34,HST"
+		node, err := p.parseLine(line, time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC), 15, "nodelist.015")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if node.SystemName != "My_BBS_System" {
+			t.Errorf("SystemName = %q, want %q", node.SystemName, "My_BBS_System")
+		}
+		if node.Location != "New_York_NY" {
+			t.Errorf("Location = %q, want %q", node.Location, "New_York_NY")
+		}
+		if node.SysopName != "John_Doe" {
+			t.Errorf("SysopName = %q, want %q", node.SysopName, "John_Doe")
+		}
+		if node.Phone != "1-212-555-1234" {
+			t.Errorf("Phone = %q, want %q", node.Phone, "1-212-555-1234")
+		}
+		if node.MaxSpeed != 9600 {
+			t.Errorf("MaxSpeed = %d, want 9600", node.MaxSpeed)
+		}
+		if node.DayNumber != 15 {
+			t.Errorf("DayNumber = %d, want 15", node.DayNumber)
+		}
+		if !node.NodelistDate.Equal(time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)) {
+			t.Errorf("NodelistDate = %v, want 2024-01-15", node.NodelistDate)
+		}
+	})
+
+	t.Run("modem flags parsed", func(t *testing.T) {
+		p := New(false)
+		p.Context.CurrentZone = 1
+		p.Context.CurrentNet = 5001
+
+		line := ",100,BBS,City,Op,Phone,9600,CM,V34,HST,V32B"
+		node, err := p.parseLine(line, time.Now(), 1, "test.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Check that modem flags are captured
+		if len(node.ModemFlags) == 0 {
+			t.Error("expected modem flags to be captured")
+		}
+		foundV34 := false
+		for _, flag := range node.ModemFlags {
+			if flag == "V34" {
+				foundV34 = true
+				break
+			}
+		}
+		if !foundV34 {
+			t.Errorf("V34 not found in modem flags: %v", node.ModemFlags)
+		}
+	})
+
+	t.Run("internet config parsed for IBN", func(t *testing.T) {
+		p := New(false)
+		p.Context.CurrentZone = 1
+		p.Context.CurrentNet = 5001
+
+		line := ",100,BBS,City,Op,Phone,9600,CM,IBN:bbs.example.com:24555"
+		node, err := p.parseLine(line, time.Now(), 1, "test.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !node.HasInet {
+			t.Error("HasInet should be true for IBN")
+		}
+		if len(node.InternetConfig) == 0 {
+			t.Error("InternetConfig should not be empty")
+		}
+
+		var config database.InternetConfiguration
+		if err := json.Unmarshal(node.InternetConfig, &config); err != nil {
+			t.Fatalf("failed to unmarshal InternetConfig: %v", err)
+		}
+
+		if len(config.Protocols["IBN"]) != 1 {
+			t.Errorf("expected 1 IBN entry, got %d", len(config.Protocols["IBN"]))
+		}
+	})
+
+	t.Run("HasInet true for info flags only", func(t *testing.T) {
+		p := New(false)
+		p.Context.CurrentZone = 1
+		p.Context.CurrentNet = 5001
+
+		line := ",100,BBS,City,Op,Phone,9600,CM,INO4"
+		node, err := p.parseLine(line, time.Now(), 1, "test.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !node.HasInet {
+			t.Error("HasInet should be true for INO4 info flag")
+		}
+	})
+
+	t.Run("HasInet true for email flags only", func(t *testing.T) {
+		p := New(false)
+		p.Context.CurrentZone = 1
+		p.Context.CurrentNet = 5001
+
+		line := ",100,BBS,City,Op,Phone,9600,CM,IEM:sysop@example.com"
+		node, err := p.parseLine(line, time.Now(), 1, "test.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !node.HasInet {
+			t.Error("HasInet should be true for IEM email flag")
+		}
+	})
+
+	t.Run("region context preserved", func(t *testing.T) {
+		p := New(false)
+		p.Context.CurrentZone = 1
+		p.Context.CurrentNet = 5001
+		region := 17
+		p.Context.CurrentRegion = &region
+
+		line := ",100,BBS,City,Op,Phone,9600,CM"
+		node, err := p.parseLine(line, time.Now(), 1, "test.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if node.Region == nil {
+			t.Error("Region should not be nil when context has region")
+		} else if *node.Region != 17 {
+			t.Errorf("Region = %d, want 17", *node.Region)
+		}
+	})
+
+	t.Run("conflict fields initialized", func(t *testing.T) {
+		p := New(false)
+		p.Context.CurrentZone = 1
+		p.Context.CurrentNet = 5001
+
+		line := ",100,BBS,City,Op,Phone,9600,CM"
+		node, err := p.parseLine(line, time.Now(), 1, "test.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if node.ConflictSequence != 0 {
+			t.Errorf("ConflictSequence = %d, want 0", node.ConflictSequence)
+		}
+		if node.HasConflict {
+			t.Error("HasConflict should be false initially")
+		}
+	})
+}
+
 func TestTrackDuplicates(t *testing.T) {
 	t.Run("first occurrence", func(t *testing.T) {
 		p := New(false)
@@ -1464,12 +1817,16 @@ func TestTrackDuplicates(t *testing.T) {
 		p.trackDuplicates(&node1, &nodes, &stats, 1, "test.txt")
 		nodes = append(nodes, node1)
 		p.trackDuplicates(&node2, &nodes, &stats, 2, "test.txt")
+		nodes = append(nodes, node2) // Mirror production usage
 
 		if node1.HasConflict || node2.HasConflict {
 			t.Error("different nodes should not have conflicts")
 		}
 		if stats.totalDuplicates != 0 {
 			t.Errorf("totalDuplicates = %d, want 0", stats.totalDuplicates)
+		}
+		if len(nodes) != 2 {
+			t.Errorf("nodes length = %d, want 2", len(nodes))
 		}
 	})
 }

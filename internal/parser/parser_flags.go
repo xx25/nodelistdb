@@ -206,7 +206,7 @@ func (p *Parser) parseProtocolValue(value string) (address string, port int) {
 		bracketEnd := strings.Index(value, "]")
 		address = value[:bracketEnd+1]
 		if bracketEnd+1 < len(value) && value[bracketEnd+1] == ':' {
-			if p, err := strconv.Atoi(value[bracketEnd+2:]); err == nil {
+			if p, err := strconv.Atoi(value[bracketEnd+2:]); err == nil && p > 0 && p < 65536 {
 				port = p
 			}
 		}
