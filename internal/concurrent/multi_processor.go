@@ -263,12 +263,6 @@ func (p *MultiProcessor) worker(ctx context.Context, jobs <-chan Job, results ch
 	}
 }
 
-// processFile processes a single file using the shared parser (kept for backward compatibility).
-// Note: This method is not safe for concurrent use. Use processFileWithParser instead.
-func (p *MultiProcessor) processFile(ctx context.Context, job Job) Result {
-	return p.processFileWithParser(ctx, job, p.parser)
-}
-
 // processFileWithParser processes a single file using the provided parser instance.
 // This is the thread-safe version that should be used from worker goroutines.
 func (p *MultiProcessor) processFileWithParser(ctx context.Context, job Job, fileParser *parser.Parser) Result {
