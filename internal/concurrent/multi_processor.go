@@ -238,6 +238,11 @@ func (p *MultiProcessor) ProcessFiles(ctx context.Context, files []string) error
 func (p *MultiProcessor) worker(ctx context.Context, jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	// Create a dedicated parser instance for this worker to avoid race conditions.
+	// The Parser struct has mutable state (Context, nodeTracker, DetectedFormat)
+	// that would be corrupted if shared across concurrent goroutines.
+	workerParser := parser.New(p.verbose)
+
 	for {
 		select {
 		case job, ok := <-jobs:
@@ -245,7 +250,7 @@ func (p *MultiProcessor) worker(ctx context.Context, jobs <-chan Job, results ch
 				return
 			}
 
-			result := p.processFile(ctx, job)
+			result := p.processFileWithParser(ctx, job, workerParser)
 			select {
 			case results <- result:
 			case <-ctx.Done():
@@ -258,8 +263,15 @@ func (p *MultiProcessor) worker(ctx context.Context, jobs <-chan Job, results ch
 	}
 }
 
-// processFile processes a single file
+// processFile processes a single file using the shared parser (kept for backward compatibility).
+// Note: This method is not safe for concurrent use. Use processFileWithParser instead.
 func (p *MultiProcessor) processFile(ctx context.Context, job Job) Result {
+	return p.processFileWithParser(ctx, job, p.parser)
+}
+
+// processFileWithParser processes a single file using the provided parser instance.
+// This is the thread-safe version that should be used from worker goroutines.
+func (p *MultiProcessor) processFileWithParser(ctx context.Context, job Job, fileParser *parser.Parser) Result {
 	startTime := time.Now()
 	result := Result{
 		JobID:    job.JobID,
@@ -268,7 +280,7 @@ func (p *MultiProcessor) processFile(ctx context.Context, job Job) Result {
 	}
 
 	// Parse file
-	parseResult, err := p.parser.ParseFileWithCRC(job.FilePath)
+	parseResult, err := fileParser.ParseFileWithCRC(job.FilePath)
 	if err != nil {
 		result.Error = fmt.Errorf("parse failed: %w", err)
 		result.Duration = time.Since(startTime)

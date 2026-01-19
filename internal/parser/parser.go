@@ -214,7 +214,12 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	}, nil
 }
 
+// MaxDecompressedSize is the maximum size of decompressed data to prevent gzip bombs.
+// 500MB should be sufficient for any legitimate FidoNet nodelist file.
+const MaxDecompressedSize = 500 * 1024 * 1024
+
 // openFileReader opens a file and returns a reader that handles both regular and gzipped files.
+// For gzipped files, decompression is limited to MaxDecompressedSize to prevent gzip bombs.
 func (p *Parser) openFileReader(filePath string) (io.Reader, func(), error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -231,7 +236,9 @@ func (p *Parser) openFileReader(filePath string) (io.Reader, func(), error) {
 			file.Close()
 			return nil, nil, NewFileError(filePath, "gzip", "failed to create gzip reader", err)
 		}
-		reader = gzipReader
+		// Wrap with LimitReader to prevent gzip bombs (small compressed files
+		// that decompress to enormous sizes, causing memory exhaustion)
+		reader = io.LimitReader(gzipReader, MaxDecompressedSize)
 		closeFunc = func() {
 			gzipReader.Close()
 			file.Close()
