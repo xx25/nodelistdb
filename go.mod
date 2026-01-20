@@ -10,6 +10,7 @@ require (
 	github.com/fclairamb/ftpserverlib v0.29.0
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/google/uuid v1.6.0
+	github.com/mfkenney/go-serial/v2 v2.0.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/afero v1.15.0
 	golang.org/x/text v0.28.0
@@ -17,10 +18,13 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+replace github.com/mfkenney/go-serial/v2 => /home/dp/src/go-serial
+
 require (
 	github.com/ClickHouse/ch-go v0.67.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/creack/goselect v0.1.2 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
@@ -39,6 +43,7 @@ require (
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
