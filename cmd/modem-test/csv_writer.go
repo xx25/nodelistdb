@@ -175,7 +175,7 @@ func RecordFromTestResult(
 	}
 
 	if emsiErr != nil {
-		rec.EMSIError = emsiErr.Error()
+		rec.EMSIError = "error" // Just flag that error occurred, details in log
 	}
 
 	if emsiInfo != nil {
