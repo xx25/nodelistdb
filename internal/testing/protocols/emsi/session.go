@@ -10,6 +10,17 @@ import (
 	"github.com/nodelistdb/internal/testing/logging"
 )
 
+// CompletionReason indicates how the EMSI handshake finished
+type CompletionReason string
+
+const (
+	ReasonNone      CompletionReason = ""           // Not completed yet
+	ReasonComplete  CompletionReason = "COMPLETE"   // Normal handshake finished
+	ReasonNCP       CompletionReason = "NCP"        // No Compatible Protocols (test mode)
+	ReasonTimeout   CompletionReason = "TIMEOUT"    // Timed out waiting for response
+	ReasonError     CompletionReason = "ERROR"      // Error during handshake
+)
+
 // Session represents an EMSI session
 type Session struct {
 	conn         net.Conn
@@ -23,6 +34,17 @@ type Session struct {
 	config       *Config // EMSI configuration (FSC-0056.001 compliant defaults)
 	debug        bool
 	bannerText   string // Capture full banner text during handshake
+
+	// Completion info
+	completionReason CompletionReason
+	handshakeTiming  HandshakeTiming
+}
+
+// HandshakeTiming records timing for each handshake phase
+type HandshakeTiming struct {
+	InitialPhase  time.Duration // Time to get first EMSI response
+	DATExchange   time.Duration // Time for DAT packet exchange
+	Total         time.Duration // Total handshake time
 }
 
 // NewSession creates a new EMSI session with FSC-0056.001 defaults
@@ -65,6 +87,16 @@ func NewSessionWithInfoAndConfig(conn net.Conn, localAddress, systemName, sysop,
 // SetDebug enables debug logging
 func (s *Session) SetDebug(debug bool) {
 	s.debug = debug
+}
+
+// GetCompletionReason returns how the handshake finished
+func (s *Session) GetCompletionReason() CompletionReason {
+	return s.completionReason
+}
+
+// GetHandshakeTiming returns timing information for the handshake phases
+func (s *Session) GetHandshakeTiming() HandshakeTiming {
+	return s.handshakeTiming
 }
 
 // SetTimeout is a legacy API for backward compatibility.
@@ -114,6 +146,9 @@ func (s *Session) SetTimeout(timeout time.Duration) {
 // - "send_cr": Send CRs to wake remote, then wait for EMSI
 // - "send_inq": Immediately send EMSI_INQ
 func (s *Session) Handshake() error {
+	handshakeStart := time.Now()
+	s.completionReason = ReasonNone
+
 	if s.debug {
 		logging.Debugf("EMSI: === Starting EMSI Handshake ===")
 		logging.Debugf("EMSI: Strategy: %s, PreventiveINQ: %v", s.config.InitialStrategy, s.config.PreventiveINQ)
@@ -124,6 +159,8 @@ func (s *Session) Handshake() error {
 	var response string
 	var responseType string
 	var err error
+
+	initialPhaseStart := time.Now()
 
 	// Select initial strategy
 	switch s.config.InitialStrategy {
@@ -136,6 +173,8 @@ func (s *Session) Handshake() error {
 	}
 
 	if err != nil {
+		s.completionReason = ReasonError
+		s.handshakeTiming.Total = time.Since(handshakeStart)
 		return err
 	}
 
@@ -144,11 +183,17 @@ func (s *Session) Handshake() error {
 	if (responseType == "BANNER" || responseType == "UNKNOWN") && s.config.PreventiveINQ {
 		response, responseType, err = s.sendPreventiveINQ()
 		if err != nil {
+			s.completionReason = ReasonError
+			s.handshakeTiming.Total = time.Since(handshakeStart)
 			return err
 		}
 	}
-	
+
+	s.handshakeTiming.InitialPhase = time.Since(initialPhaseStart)
+	datExchangeStart := time.Now()
+
 	if s.debug {
+		logging.Debugf("EMSI: Initial phase completed in %v", s.handshakeTiming.InitialPhase)
 		logging.Debugf("EMSI: Received response type: %s", responseType)
 		if len(response) > 0 && len(response) < 500 {
 			logging.Debugf("EMSI: Response data (first 500 chars): %q", response)
@@ -156,7 +201,7 @@ func (s *Session) Handshake() error {
 			logging.Debugf("EMSI: Response data (first 500 chars): %q...", response[:500])
 		}
 	}
-	
+
 	switch responseType {
 	case "REQ":
 		// Remote wants our EMSI_DAT
@@ -315,31 +360,49 @@ func (s *Session) Handshake() error {
 		}
 		
 	case "NAK":
+		s.completionReason = ReasonError
+		s.handshakeTiming.Total = time.Since(handshakeStart)
 		return fmt.Errorf("remote sent EMSI_NAK")
-		
+
 	case "CLI":
+		s.completionReason = ReasonError
+		s.handshakeTiming.Total = time.Since(handshakeStart)
 		return fmt.Errorf("remote sent EMSI_CLI (calling system only)")
-		
+
 	case "HBT":
+		s.completionReason = ReasonError
+		s.handshakeTiming.Total = time.Since(handshakeStart)
 		return fmt.Errorf("remote sent EMSI_HBT (heartbeat)")
-		
+
 	default:
 		if s.debug {
 			logging.Debugf("EMSI: ERROR: Unexpected response type: %s", responseType)
 		}
+		s.completionReason = ReasonTimeout
+		s.handshakeTiming.Total = time.Since(handshakeStart)
 		// Include the actual data received for BANNER/UNKNOWN to help diagnose
-		if responseType == "BANNER" || responseType == "UNKNOWN" {
-			// Truncate long banners, clean up for display
-			bannerPreview := cleanBannerForDisplay(response, 200)
-			if bannerPreview != "" {
-				return fmt.Errorf("unexpected response type: %s\nReceived data:\n%s", responseType, bannerPreview)
-			}
+		if (responseType == "BANNER" || responseType == "UNKNOWN") && len(response) > 0 {
+			preview := formatResponsePreview(response, 200)
+			return fmt.Errorf("unexpected response type: %s\nReceived %d bytes: %s", responseType, len(response), preview)
 		}
 		return fmt.Errorf("unexpected response type: %s", responseType)
 	}
-	
+
+	// Record timing
+	s.handshakeTiming.DATExchange = time.Since(datExchangeStart)
+	s.handshakeTiming.Total = time.Since(handshakeStart)
+
+	// Determine completion reason based on protocol negotiation
+	if len(s.config.Protocols) == 0 {
+		s.completionReason = ReasonNCP // No Compatible Protocols (test mode)
+	} else {
+		s.completionReason = ReasonComplete
+	}
+
 	if s.debug {
-		logging.Debugf("EMSI: === Handshake Complete ===")
+		logging.Debugf("EMSI: === Handshake Complete (%s) ===", s.completionReason)
+		logging.Debugf("EMSI: Timing: Initial=%v, DATExchange=%v, Total=%v",
+			s.handshakeTiming.InitialPhase, s.handshakeTiming.DATExchange, s.handshakeTiming.Total)
 	}
 
 	return nil
@@ -800,66 +863,55 @@ func normalizeAddress(addr string) string {
 
 	return addr
 }
-
-// cleanBannerForDisplay cleans up banner text for error message display.
-// Removes ANSI escape codes, control characters, and truncates to maxLen.
-func cleanBannerForDisplay(banner string, maxLen int) string {
-	if banner == "" {
-		return ""
+// formatResponsePreview formats response data for error messages.
+// Returns text if data is 7-bit ASCII printable, otherwise hex dump.
+func formatResponsePreview(data string, maxLen int) string {
+	if len(data) == 0 {
+		return "(empty)"
 	}
 
-	var result strings.Builder
-	inEscape := false
-	lineCount := 0
-	const maxLines = 10
-
-	for _, r := range banner {
-		// Track ANSI escape sequences
-		if r == '\x1b' {
-			inEscape = true
-			continue
+	// Check if data is 7-bit ASCII printable (or common control chars)
+	is7BitASCII := true
+	for _, b := range []byte(data) {
+		// Allow printable ASCII (32-126), tab, CR, LF
+		if b < 32 && b != '\t' && b != '\r' && b != '\n' {
+			is7BitASCII = false
+			break
 		}
-		if inEscape {
-			// End of ANSI sequence
-			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-
-		// Handle line breaks
-		if r == '\n' || r == '\r' {
-			if result.Len() > 0 {
-				lastByte := result.String()[result.Len()-1]
-				if lastByte != '\n' {
-					result.WriteRune('\n')
-					lineCount++
-					if lineCount >= maxLines {
-						result.WriteString("...")
-						break
-					}
-				}
-			}
-			continue
-		}
-
-		// Skip other control characters except tab
-		if r < 32 && r != '\t' {
-			continue
-		}
-
-		// Skip high control characters
-		if r >= 127 && r < 160 {
-			continue
-		}
-
-		result.WriteRune(r)
-
-		if result.Len() >= maxLen {
-			result.WriteString("...")
+		if b > 126 {
+			is7BitASCII = false
 			break
 		}
 	}
 
-	return strings.TrimSpace(result.String())
+	if is7BitASCII {
+		// Show as text, truncate if needed
+		preview := data
+		if len(preview) > maxLen {
+			preview = preview[:maxLen] + "..."
+		}
+		// Replace control chars for display
+		preview = strings.ReplaceAll(preview, "\r\n", "\\r\\n\n")
+		preview = strings.ReplaceAll(preview, "\r", "\\r\n")
+		preview = strings.ReplaceAll(preview, "\n", "\\n\n")
+		return preview
+	}
+
+	// Show as hex dump
+	hexLen := maxLen / 3 // Each byte takes ~3 chars in hex
+	if hexLen > len(data) {
+		hexLen = len(data)
+	}
+
+	var hex strings.Builder
+	for i := 0; i < hexLen; i++ {
+		if i > 0 {
+			hex.WriteByte(' ')
+		}
+		fmt.Fprintf(&hex, "%02X", data[i])
+	}
+	if hexLen < len(data) {
+		hex.WriteString("...")
+	}
+	return hex.String()
 }

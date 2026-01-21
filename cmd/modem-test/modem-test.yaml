@@ -31,6 +31,15 @@ modem:
     - "AT&V1"      # Line quality stats (USRobotics modems)
     # - "ATI11"    # Alternative for ZyXEL modems
 
+  # Delay before post-disconnect commands (modem needs time to compute stats)
+  # USRobotics and most modems need 1-2 seconds after hangup
+  # Based on bforce (2-3s) and qico (2.5s) implementations
+  post_disconnect_delay: 2s
+
+  # Stats profile for parsing line statistics output
+  # Profiles: "rockwell" (USR/Conexant), "zyxel", "raw" (no parsing)
+  stats_profile: rockwell
+
 test:
   count: 10
   inter_delay: 5s
@@ -39,6 +48,7 @@ test:
   #   - "917"
   #   - "918"
   #   - "919"
+  # csv_file: "modem-test-results.csv"  # Optional: output results to CSV file
 
 emsi:
   our_address: "2:5001/5001"

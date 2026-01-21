@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 type TestLogger struct {
 	config    LoggingConfig
 	startTime time.Time
+	output    io.Writer
 }
 
 // NewTestLogger creates a new test logger with the given configuration
@@ -21,7 +23,13 @@ func NewTestLogger(cfg LoggingConfig) *TestLogger {
 	return &TestLogger{
 		config:    cfg,
 		startTime: time.Now(),
+		output:    os.Stderr,
 	}
+}
+
+// SetOutput sets the output writer (can be used with io.MultiWriter)
+func (l *TestLogger) SetOutput(w io.Writer) {
+	l.output = w
 }
 
 // timestamp returns the current time formatted for log output
@@ -52,7 +60,7 @@ func (l *TestLogger) log(category, color, message string, args ...interface{}) {
 	}
 
 	formattedMsg := fmt.Sprintf(message, args...)
-	fmt.Fprintf(os.Stderr, "%s%s %s\n", prefix, cat, formattedMsg)
+	fmt.Fprintf(l.output, "%s%s %s\n", prefix, cat, formattedMsg)
 }
 
 // Colors for terminal output
@@ -127,6 +135,52 @@ func (l *TestLogger) EMSI(format string, args ...interface{}) {
 	l.log("EMSI", colorCyan, format, args...)
 }
 
+// EMSIDetails represents EMSI data for printing (to avoid import cycle)
+type EMSIDetails struct {
+	SystemName    string
+	Location      string
+	Sysop         string
+	Addresses     []string
+	MailerName    string
+	MailerVersion string
+	Protocols     []string
+	Capabilities  []string
+}
+
+// PrintEMSIDetails prints detailed EMSI remote system information
+func (l *TestLogger) PrintEMSIDetails(info *EMSIDetails) {
+	if info == nil {
+		return
+	}
+
+	// Print each field with EMSI category
+	if len(info.Addresses) > 0 {
+		l.log("EMSI", colorCyan, "Address:  %s", strings.Join(info.Addresses, ", "))
+	}
+	if info.SystemName != "" {
+		l.log("EMSI", colorCyan, "System:   %s", info.SystemName)
+	}
+	if info.Location != "" {
+		l.log("EMSI", colorCyan, "Location: %s", info.Location)
+	}
+	if info.Sysop != "" {
+		l.log("EMSI", colorCyan, "Sysop:    %s", info.Sysop)
+	}
+	if info.MailerName != "" {
+		mailer := info.MailerName
+		if info.MailerVersion != "" {
+			mailer += " " + info.MailerVersion
+		}
+		l.log("EMSI", colorCyan, "Mailer:   %s", mailer)
+	}
+	if len(info.Protocols) > 0 {
+		l.log("EMSI", colorCyan, "Protocols: %s", strings.Join(info.Protocols, ", "))
+	}
+	if len(info.Capabilities) > 0 {
+		l.log("EMSI", colorCyan, "Caps:     %s", strings.Join(info.Capabilities, ", "))
+	}
+}
+
 // Hangup logs hangup messages
 func (l *TestLogger) Hangup(format string, args ...interface{}) {
 	l.log("HANGUP", colorYellow, format, args...)
@@ -159,29 +213,42 @@ func (l *TestLogger) Error(format string, args ...interface{}) {
 	l.log("ERROR", colorRed, format, args...)
 }
 
+// Warn logs warning messages
+func (l *TestLogger) Warn(format string, args ...interface{}) {
+	l.log("WARN", colorYellow, format, args...)
+}
+
 // PrintHeader prints the session header
 func (l *TestLogger) PrintHeader(configPath, device string, phones []string, testCount int) {
-	fmt.Fprintln(os.Stderr, strings.Repeat("=", 80))
-	fmt.Fprintln(os.Stderr, "                        MODEM TEST SESSION")
-	fmt.Fprintln(os.Stderr, strings.Repeat("=", 80))
-	fmt.Fprintf(os.Stderr, "Config:    %s\n", configPath)
-	fmt.Fprintf(os.Stderr, "Device:    %s\n", device)
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output, "                        MODEM TEST SESSION")
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	fmt.Fprintf(l.output, "Config:    %s\n", configPath)
+	fmt.Fprintf(l.output, "Device:    %s\n", device)
 	if len(phones) == 1 {
-		fmt.Fprintf(os.Stderr, "Phone:     %s\n", phones[0])
+		fmt.Fprintf(l.output, "Phone:     %s\n", phones[0])
 	} else {
-		fmt.Fprintf(os.Stderr, "Phones:    %s (circular)\n", strings.Join(phones, ", "))
+		fmt.Fprintf(l.output, "Phones:    %s (circular)\n", strings.Join(phones, ", "))
 	}
-	fmt.Fprintf(os.Stderr, "Tests:     %d\n", testCount)
-	fmt.Fprintf(os.Stderr, "Started:   %s\n", time.Now().Format("2006-01-02 15:04:05"))
-	fmt.Fprintln(os.Stderr, strings.Repeat("=", 80))
+	if testCount <= 0 {
+		fmt.Fprintln(l.output, "Tests:     ∞ (infinite, Ctrl+C to stop)")
+	} else {
+		fmt.Fprintf(l.output, "Tests:     %d\n", testCount)
+	}
+	fmt.Fprintf(l.output, "Started:   %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
 	fmt.Fprintln(os.Stderr)
 }
 
 // PrintTestHeader prints a test section header
 func (l *TestLogger) PrintTestHeader(testNum, totalTests int) {
-	fmt.Fprintln(os.Stderr, strings.Repeat("=", 80))
-	fmt.Fprintf(os.Stderr, "TEST %d/%d\n", testNum, totalTests)
-	fmt.Fprintln(os.Stderr, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	if totalTests <= 0 {
+		fmt.Fprintf(l.output, "TEST %d\n", testNum)
+	} else {
+		fmt.Fprintf(l.output, "TEST %d/%d\n", testNum, totalTests)
+	}
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
 }
 
 // PhoneStats holds statistics for a single phone number
@@ -226,11 +293,11 @@ func (l *TestLogger) PrintSummary(total, success, failed int, totalDuration time
 // PrintSummaryWithPhoneStats prints the final test summary with per-phone statistics
 func (l *TestLogger) PrintSummaryWithPhoneStats(total, success, failed int, totalDuration time.Duration, avgDialTime, avgEmsiTime time.Duration, results []string, phoneStats map[string]*PhoneStats) {
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, strings.Repeat("=", 80))
-	fmt.Fprintln(os.Stderr, "                           SUMMARY")
-	fmt.Fprintln(os.Stderr, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output, "                           SUMMARY")
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
 
-	fmt.Fprintf(os.Stderr, "Total:     %d tests\n", total)
+	fmt.Fprintf(l.output, "Total:     %d tests\n", total)
 
 	successPct := 0.0
 	failedPct := 0.0
@@ -239,22 +306,22 @@ func (l *TestLogger) PrintSummaryWithPhoneStats(total, success, failed int, tota
 		failedPct = float64(failed) / float64(total) * 100
 	}
 
-	fmt.Fprintf(os.Stderr, "Success:   %d (%.1f%%)\n", success, successPct)
-	fmt.Fprintf(os.Stderr, "Failed:    %d (%.1f%%)\n", failed, failedPct)
-	fmt.Fprintf(os.Stderr, "Duration:  %s\n", formatDuration(totalDuration))
+	fmt.Fprintf(l.output, "Success:   %d (%.1f%%)\n", success, successPct)
+	fmt.Fprintf(l.output, "Failed:    %d (%.1f%%)\n", failed, failedPct)
+	fmt.Fprintf(l.output, "Duration:  %s\n", formatDuration(totalDuration))
 	fmt.Fprintln(os.Stderr)
 
 	if success > 0 {
-		fmt.Fprintf(os.Stderr, "Avg dial time:  %.1fs\n", avgDialTime.Seconds())
-		fmt.Fprintf(os.Stderr, "Avg EMSI time:  %.1fs\n", avgEmsiTime.Seconds())
+		fmt.Fprintf(l.output, "Avg dial time:  %.1fs\n", avgDialTime.Seconds())
+		fmt.Fprintf(l.output, "Avg EMSI time:  %.1fs\n", avgEmsiTime.Seconds())
 		fmt.Fprintln(os.Stderr)
 	}
 
 	// Print per-phone statistics if multiple phones were tested
 	if len(phoneStats) > 1 {
-		fmt.Fprintln(os.Stderr, "PER-PHONE STATISTICS:")
-		fmt.Fprintf(os.Stderr, "  %-12s %6s %6s %6s %10s %10s\n", "PHONE", "TOTAL", "OK", "FAIL", "AVG DIAL", "AVG EMSI")
-		fmt.Fprintf(os.Stderr, "  %s\n", strings.Repeat("-", 58))
+		fmt.Fprintln(l.output, "PER-PHONE STATISTICS:")
+		fmt.Fprintf(l.output, "  %-12s %6s %6s %6s %10s %10s\n", "PHONE", "TOTAL", "OK", "FAIL", "AVG DIAL", "AVG EMSI")
+		fmt.Fprintf(l.output, "  %s\n", strings.Repeat("-", 58))
 
 		// Sort phones for consistent output
 		phones := make([]string, 0, len(phoneStats))
@@ -271,17 +338,17 @@ func (l *TestLogger) PrintSummaryWithPhoneStats(total, success, failed int, tota
 				avgDial = fmt.Sprintf("%.1fs", stats.AvgDialTime().Seconds())
 				avgEmsi = fmt.Sprintf("%.1fs", stats.AvgEmsiTime().Seconds())
 			}
-			fmt.Fprintf(os.Stderr, "  %-12s %6d %6d %6d %10s %10s  (%.0f%%)\n",
+			fmt.Fprintf(l.output, "  %-12s %6d %6d %6d %10s %10s  (%.0f%%)\n",
 				stats.Phone, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, stats.SuccessRate())
 		}
 		fmt.Fprintln(os.Stderr)
 	}
 
-	fmt.Fprintln(os.Stderr, "RESULTS:")
+	fmt.Fprintln(l.output, "RESULTS:")
 	for _, r := range results {
-		fmt.Fprintf(os.Stderr, "  %s\n", r)
+		fmt.Fprintf(l.output, "  %s\n", r)
 	}
-	fmt.Fprintln(os.Stderr, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
 }
 
 // sortStrings sorts a slice of strings in place (simple bubble sort)
@@ -295,20 +362,98 @@ func sortStrings(s []string) {
 	}
 }
 
-// PrintLineStats prints post-disconnect line statistics
+// PrintLineStats prints post-disconnect line statistics (raw format)
 func (l *TestLogger) PrintLineStats(stats string) {
-	if strings.TrimSpace(stats) == "" {
+	l.PrintLineStatsWithProfile(stats, "raw")
+}
+
+// PrintLineStatsWithProfile prints post-disconnect line statistics with optional parsing
+func (l *TestLogger) PrintLineStatsWithProfile(raw string, profile string) {
+	if strings.TrimSpace(raw) == "" {
 		return
 	}
 
+	// Try to parse stats if profile is specified
+	if profile != "" && profile != "raw" {
+		parsed := ParseStats(raw, profile)
+		if parsed != nil {
+			l.printParsedStats(parsed)
+			return
+		}
+	}
+
+	// Fallback to raw output
 	l.Stats("Post-disconnect line statistics:")
-	lines := strings.Split(stats, "\n")
+	lines := strings.Split(raw, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" && line != "OK" {
-			fmt.Fprintf(os.Stderr, "               %s\n", line)
+			fmt.Fprintf(l.output, "               %s\n", line)
 		}
 	}
+}
+
+// printParsedStats prints parsed line statistics in compact format
+func (l *TestLogger) printParsedStats(stats *LineStats) {
+	l.Stats("Line statistics:")
+
+	// Speed info - compact format
+	if stats.LastTXRate > 0 || stats.LastRXRate > 0 {
+		txSpeed := formatSpeed(stats.LastTXRate)
+		rxSpeed := formatSpeed(stats.LastRXRate)
+		if stats.LastTXRate == stats.LastRXRate {
+			l.log("STATS", colorGray, "Speed:    %s (TX=RX)", txSpeed)
+		} else {
+			l.log("STATS", colorGray, "Speed:    TX:%s RX:%s", txSpeed, rxSpeed)
+		}
+	}
+
+	// Protocol and compression
+	if stats.Protocol != "" {
+		proto := stats.Protocol
+		if stats.Compression != "" && stats.Compression != "None" {
+			proto += "/" + stats.Compression
+		}
+		l.log("STATS", colorGray, "Protocol: %s", proto)
+	}
+
+	// Line quality - show on single line
+	var quality []string
+	if stats.LineQuality > 0 {
+		quality = append(quality, fmt.Sprintf("Quality:%d", stats.LineQuality))
+	}
+	if stats.RxLevel > 0 {
+		quality = append(quality, fmt.Sprintf("RxLevel:-%ddBm", stats.RxLevel))
+	}
+	if stats.EQMSum > 0 {
+		quality = append(quality, fmt.Sprintf("EQM:%04X", stats.EQMSum))
+	}
+	if len(quality) > 0 {
+		l.log("STATS", colorGray, "Line:     %s", strings.Join(quality, " "))
+	}
+
+	// Retrains (only if non-zero)
+	if stats.LocalRetrain > 0 || stats.RemoteRetrain > 0 {
+		l.log("STATS", colorGray, "Retrains: Local:%d Remote:%d", stats.LocalRetrain, stats.RemoteRetrain)
+	}
+
+	// Termination reason
+	if stats.TerminationReason != "" {
+		l.log("STATS", colorGray, "Result:   %s", stats.TerminationReason)
+	}
+
+	// Any warning messages (like "Flex fail")
+	for _, msg := range stats.Messages {
+		l.log("STATS", colorYellow, "Note:     %s", msg)
+	}
+}
+
+// formatSpeed formats speed in human-readable format
+func formatSpeed(bps int) string {
+	if bps >= 1000 {
+		return fmt.Sprintf("%.1fk", float64(bps)/1000)
+	}
+	return fmt.Sprintf("%d", bps)
 }
 
 // logHexDump outputs a hex dump of data
@@ -317,7 +462,7 @@ func (l *TestLogger) logHexDump(data []byte, direction string) {
 	lines := strings.Split(dump, "\n")
 	for _, line := range lines {
 		if strings.TrimSpace(line) != "" {
-			fmt.Fprintf(os.Stderr, "       %s %s\n", direction, line)
+			fmt.Fprintf(l.output, "       %s %s\n", direction, line)
 		}
 	}
 }

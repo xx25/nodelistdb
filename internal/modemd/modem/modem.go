@@ -139,8 +139,17 @@ func (m *Modem) debugLogStatus(label string) {
 		fmt.Fprintf(os.Stderr, "[%s RS232] %s: error: %v\n", debugTimestamp(), label, err)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[%s RS232] %s: DCD=%v DSR=%v CTS=%v RI=%v\n",
-		debugTimestamp(), label, status.DCD, status.DSR, status.CTS, status.RI)
+	fmt.Fprintf(os.Stderr, "[%s RS232] %s: DCD=%s DSR=%s CTS=%s RI=%s\n",
+		debugTimestamp(), label,
+		boolTo01(status.DCD), boolTo01(status.DSR), boolTo01(status.CTS), boolTo01(status.RI))
+}
+
+// boolTo01 converts bool to "1" or "0" for compact display
+func boolTo01(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
 }
 
 // Open opens the serial port and initializes the modem
@@ -531,8 +540,15 @@ func (m *Modem) hangupDTRLocked() error {
 		return fmt.Errorf("failed to drop DTR: %w", err)
 	}
 
-	// Wait for modem to detect DTR drop
-	time.Sleep(500 * time.Millisecond)
+	// Wait for modem to detect DTR drop and check DCD
+	for i := 0; i < 10; i++ {
+		time.Sleep(100 * time.Millisecond)
+		status, err := m.getStatusLocked()
+		if err == nil && !status.DCD {
+			// Carrier dropped, hangup successful
+			break
+		}
+	}
 
 	// Raise DTR
 	if err := m.port.SetDTR(true); err != nil {
@@ -541,6 +557,16 @@ func (m *Modem) hangupDTRLocked() error {
 
 	// Wait for modem to stabilize
 	time.Sleep(100 * time.Millisecond)
+
+	// Check if DCD is still high (hangup failed)
+	status, err := m.getStatusLocked()
+	if err == nil && status.DCD {
+		if m.config.Debug {
+			fmt.Fprintf(os.Stderr, "[%s MODEM] DTR hangup failed (DCD still high), trying escape sequence\n", debugTimestamp())
+		}
+		// DTR method failed, try escape sequence as fallback
+		return m.hangupEscapeLocked()
+	}
 
 	// Flush buffers (modem may emit garbage during hangup)
 	_ = m.port.ResetInputBuffer()

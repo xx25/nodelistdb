@@ -37,6 +37,12 @@ type ModemConfig struct {
 
 	// Post-disconnect commands - executed after hangup to get line stats
 	PostDisconnectCommands []string `yaml:"post_disconnect_commands"`
+
+	// Delay before post-disconnect commands (modem needs time to compute stats)
+	PostDisconnectDelay Duration `yaml:"post_disconnect_delay"`
+
+	// Stats profile for parsing line statistics: "rockwell", "usr", "zyxel", "raw" (default)
+	StatsProfile string `yaml:"stats_profile"`
 }
 
 // TestConfig contains test execution parameters
@@ -45,6 +51,7 @@ type TestConfig struct {
 	InterDelay Duration `yaml:"inter_delay"`
 	Phone      string   `yaml:"phone"`   // Single phone (for backward compatibility)
 	Phones     []string `yaml:"phones"`  // Multiple phones (called in circular order)
+	CSVFile    string   `yaml:"csv_file"` // Path to CSV output file (optional)
 }
 
 // EMSIConfig contains EMSI handshake parameters
@@ -114,6 +121,8 @@ func DefaultConfig() *Config {
 			PostDisconnectCommands: []string{
 				"AT&V1", // Line quality stats (USR modems)
 			},
+			PostDisconnectDelay: Duration(2 * time.Second), // Wait for modem to compute stats
+			StatsProfile:        "rockwell",                // Default parser profile
 		},
 		Test: TestConfig{
 			Count:      10,
@@ -173,7 +182,8 @@ func (c *Config) Validate() error {
 }
 
 // ApplyCLIOverrides applies command-line flag values to the config
-func (c *Config) ApplyCLIOverrides(device, phone string, count int, debug bool) {
+// count: -1 means "not specified" (use config default), 0 means infinite, >0 is the count
+func (c *Config) ApplyCLIOverrides(device, phone string, count int, debug bool, csvFile string) {
 	if device != "" {
 		c.Modem.Device = device
 	}
@@ -183,8 +193,11 @@ func (c *Config) ApplyCLIOverrides(device, phone string, count int, debug bool) 
 		c.Test.Phones = phones
 		c.Test.Phone = "" // Clear single phone - use Phones list
 	}
-	if count > 0 {
-		c.Test.Count = count
+	if count >= 0 {
+		c.Test.Count = count // 0 = infinite
+	}
+	if csvFile != "" {
+		c.Test.CSVFile = csvFile
 	}
 	if debug {
 		c.Logging.Debug = true
