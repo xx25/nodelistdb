@@ -16,43 +16,95 @@ import (
 	"github.com/nodelistdb/internal/testing/protocols/emsi"
 )
 
+// CLI flags
+var (
+	configPath  = flag.String("config", "", "Path to YAML config file")
+	phone       = flag.String("phone", "", "Phone number to dial (required for batch mode)")
+	count       = flag.Int("count", 0, "Number of test calls (overrides config)")
+	device      = flag.String("device", "", "Serial device (overrides config)")
+	debug       = flag.Bool("debug", false, "Enable debug output (overrides config)")
+	interactive = flag.Bool("interactive", false, "Interactive AT command mode")
+	batch       = flag.Bool("batch", false, "Run batch test mode")
+)
+
 func main() {
-	// Command line flags
-	device := flag.String("device", "/dev/ttyACM0", "Serial port device")
-	baudRate := flag.Int("baud", 115200, "Baud rate")
-	dialNumber := flag.String("dial", "", "Phone number to dial (e.g., 900)")
-	dialTimeout := flag.Duration("dial-timeout", 200*time.Second, "Dial timeout")
-	carrierTimeout := flag.Duration("carrier-timeout", 5*time.Second, "Carrier detect timeout")
-	emsiTimeout := flag.Duration("emsi-timeout", 30*time.Second, "EMSI handshake timeout")
-	doEmsi := flag.Bool("emsi", false, "Perform EMSI handshake after connect")
-	interactive := flag.Bool("interactive", false, "Interactive AT command mode")
-	initString := flag.String("init", "ATZ", "Modem init string")
-	hangupMethod := flag.String("hangup", "dtr", "Hangup method: dtr or escape")
-	localAddr := flag.String("addr", "2:5001/5001", "Our FidoNet address for EMSI")
-	systemName := flag.String("system", "NodelistDB Modem Tester", "Our system name for EMSI")
-	debug := flag.Bool("debug", false, "Enable debug output")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Modem test tool for FidoNet node connectivity testing.\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  # Run batch test with config file\n")
+		fmt.Fprintf(os.Stderr, "  %s -config modem-test.yaml -phone 917 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Test multiple phones in circular order\n")
+		fmt.Fprintf(os.Stderr, "  %s -phone 917,918,919 -count 9 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Test phone range (901 through 910)\n")
+		fmt.Fprintf(os.Stderr, "  %s -phone 901-910 -count 20 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Mix ranges and individual numbers\n")
+		fmt.Fprintf(os.Stderr, "  %s -phone 901-903,917,920-922 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Interactive AT command mode\n")
+		fmt.Fprintf(os.Stderr, "  %s -interactive\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Override device\n")
+		fmt.Fprintf(os.Stderr, "  %s -config modem.yaml -phone 917 -device /dev/ttyUSB0 -batch\n", os.Args[0])
+	}
 
 	flag.Parse()
 
-	fmt.Println("=== NodelistDB Modem Test Tool ===")
-	fmt.Printf("Device: %s\n", *device)
-	fmt.Printf("Baud rate: %d\n", *baudRate)
+	// Load or create config
+	var cfg *Config
+	var err error
+	configFile := "(defaults)"
+
+	if *configPath != "" {
+		cfg, err = LoadConfig(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to load config: %v\n", err)
+			os.Exit(1)
+		}
+		configFile = *configPath
+	} else {
+		cfg = DefaultConfig()
+	}
+
+	// Apply CLI overrides
+	cfg.ApplyCLIOverrides(*device, *phone, *count, *debug)
+
+	// Create logger
+	log := NewTestLogger(cfg.Logging)
+
+	// Validate required parameters for batch mode
+	phones := cfg.GetPhones()
+	if *batch && len(phones) == 0 {
+		fmt.Fprintf(os.Stderr, "ERROR: Phone number is required for batch mode. Use -phone flag or set in config.\n")
+		fmt.Fprintf(os.Stderr, "       Multiple phones: -phone 917,918,919\n")
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	// Create modem configuration
-	cfg := modem.Config{
-		Device:           *device,
-		BaudRate:         *baudRate,
-		InitString:       *initString,
-		DialPrefix:       modem.ATDT,
-		HangupMethod:     *hangupMethod,
-		ATCommandTimeout: 5 * time.Second,
-		ReadTimeout:      1 * time.Second,
+	modemCfg := modem.Config{
+		Device:           cfg.Modem.Device,
+		BaudRate:         cfg.Modem.BaudRate,
+		InitString:       getFirstInitCommand(cfg.Modem.InitCommands),
+		InitCommands:     cfg.Modem.InitCommands,
+		DialPrefix:       cfg.Modem.DialPrefix,
+		HangupMethod:     cfg.Modem.HangupMethod,
+		Debug:            cfg.Logging.Debug,
+		DialTimeout:      cfg.Modem.DialTimeout.Duration(),
+		CarrierTimeout:   cfg.Modem.CarrierTimeout.Duration(),
+		ATCommandTimeout: cfg.Modem.ATCommandTimeout.Duration(),
+		ReadTimeout:      cfg.Modem.ReadTimeout.Duration(),
+	}
+
+	// Set line stats command from post-disconnect commands
+	if len(cfg.Modem.PostDisconnectCommands) > 0 {
+		modemCfg.LineStatsCommand = cfg.Modem.PostDisconnectCommands[0]
 	}
 
 	// Create modem
-	m, err := modem.New(cfg)
+	m, err := modem.New(modemCfg)
 	if err != nil {
-		fmt.Printf("ERROR: Failed to create modem: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR: Failed to create modem: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -61,11 +113,11 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\nReceived interrupt, cleaning up...")
+		fmt.Fprintln(os.Stderr, "\nReceived interrupt, cleaning up...")
 		if m.InDataMode() {
-			fmt.Println("Hanging up...")
+			fmt.Fprintln(os.Stderr, "Hanging up...")
 			if err := m.Hangup(); err != nil {
-				fmt.Printf("Hangup error: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Hangup error: %v\n", err)
 			}
 		}
 		m.Close()
@@ -73,66 +125,73 @@ func main() {
 	}()
 
 	// Open modem
-	fmt.Printf("\nOpening %s...\n", *device)
+	log.Init("Opening %s...", cfg.Modem.Device)
 	if err := m.Open(); err != nil {
-		fmt.Printf("ERROR: Failed to open modem: %v\n", err)
+		log.Fail("Failed to open modem: %v", err)
 		os.Exit(1)
 	}
 	defer m.Close()
 
-	fmt.Println("Modem opened and initialized successfully")
+	log.OK("Modem opened and initialized successfully")
 
-	// Get modem info
-	fmt.Println("\n--- Modem Info ---")
+	// Route to appropriate mode
+	if *interactive {
+		runInteractiveMode(m, log)
+	} else if *batch || len(phones) > 0 {
+		runBatchMode(m, cfg, log, configFile)
+	} else {
+		// Default: show modem info
+		runInfoMode(m, log)
+	}
+}
+
+func getFirstInitCommand(cmds []string) string {
+	if len(cmds) > 0 {
+		return cmds[0]
+	}
+	return "ATZ"
+}
+
+func runInfoMode(m *modem.Modem, log *TestLogger) {
+	fmt.Fprintln(os.Stderr, "\n--- Modem Info ---")
 	info, err := m.GetInfo()
 	if err != nil {
-		fmt.Printf("Failed to get modem info: %v\n", err)
+		log.Fail("Failed to get modem info: %v", err)
 	} else {
 		if info.Manufacturer != "" {
-			fmt.Printf("Manufacturer: %s\n", info.Manufacturer)
+			fmt.Fprintf(os.Stderr, "Manufacturer: %s\n", info.Manufacturer)
 		}
 		if info.Model != "" {
-			fmt.Printf("Model: %s\n", info.Model)
+			fmt.Fprintf(os.Stderr, "Model: %s\n", info.Model)
 		}
 		if info.Firmware != "" {
-			fmt.Printf("Firmware: %s\n", info.Firmware)
+			fmt.Fprintf(os.Stderr, "Firmware: %s\n", info.Firmware)
 		}
-		fmt.Printf("Raw response:\n%s\n", info.RawResponse)
+		fmt.Fprintf(os.Stderr, "Raw response:\n%s\n", info.RawResponse)
 	}
 
 	// Get modem status
 	status, err := m.GetStatus()
 	if err != nil {
-		fmt.Printf("Failed to get modem status: %v\n", err)
+		log.Fail("Failed to get modem status: %v", err)
 	} else {
-		fmt.Printf("\n--- Modem Status ---\n")
-		fmt.Printf("DCD (Carrier): %v\n", status.DCD)
-		fmt.Printf("DSR (Ready):   %v\n", status.DSR)
-		fmt.Printf("CTS (Clear):   %v\n", status.CTS)
-		fmt.Printf("RI (Ring):     %v\n", status.RI)
+		fmt.Fprintln(os.Stderr, "\n--- Modem Status ---")
+		fmt.Fprintf(os.Stderr, "DCD (Carrier): %v\n", status.DCD)
+		fmt.Fprintf(os.Stderr, "DSR (Ready):   %v\n", status.DSR)
+		fmt.Fprintf(os.Stderr, "CTS (Clear):   %v\n", status.CTS)
+		fmt.Fprintf(os.Stderr, "RI (Ring):     %v\n", status.RI)
 	}
 
-	// Interactive mode
-	if *interactive {
-		runInteractive(m)
-		return
-	}
-
-	// Dial if number provided
-	if *dialNumber != "" {
-		runDial(m, *dialNumber, *dialTimeout, *carrierTimeout, *doEmsi, *emsiTimeout, *localAddr, *systemName, *debug)
-	}
-
-	fmt.Println("\nTest complete")
+	fmt.Fprintln(os.Stderr, "\nUse -interactive for AT command mode or -batch -phone <number> for batch testing.")
 }
 
-func runInteractive(m *modem.Modem) {
-	fmt.Println("\n=== Interactive AT Command Mode ===")
-	fmt.Println("Enter AT commands (type 'quit' to exit)")
+func runInteractiveMode(m *modem.Modem, log *TestLogger) {
+	fmt.Fprintln(os.Stderr, "\n=== Interactive AT Command Mode ===")
+	fmt.Fprintln(os.Stderr, "Enter AT commands (type 'quit' to exit)")
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("> ")
+		fmt.Fprint(os.Stderr, "> ")
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			break
@@ -146,127 +205,192 @@ func runInteractive(m *modem.Modem) {
 			break
 		}
 
+		log.TXString(cmd + "\r")
 		response, err := m.SendAT(cmd, 10*time.Second)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			log.Fail("Error: %v", err)
 		} else {
-			fmt.Printf("%s\n", response)
+			log.RXString(response)
+			fmt.Fprintf(os.Stderr, "%s\n", response)
 		}
 	}
 }
 
-func runDial(m *modem.Modem, number string, dialTimeout, carrierTimeout time.Duration, doEmsi bool, emsiTimeout time.Duration, localAddr, systemName string, debug bool) {
-	fmt.Printf("\n=== Dialing %s ===\n", number)
-	fmt.Printf("Dial timeout: %v\n", dialTimeout)
-	fmt.Printf("Carrier timeout: %v\n", carrierTimeout)
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string) {
+	phones := cfg.GetPhones()
+	testCount := cfg.Test.Count
+	interDelay := cfg.Test.InterDelay.Duration()
 
-	startTime := time.Now()
+	// Print session header
+	log.PrintHeader(configFile, cfg.Modem.Device, phones, testCount)
 
-	result, err := m.Dial(number, dialTimeout, carrierTimeout)
+	// Stats
+	var success, failed int
+	var totalDialTime, totalEmsiTime time.Duration
+	results := make([]string, 0, testCount)
+	sessionStart := time.Now()
+
+	// Per-phone statistics
+	phoneStats := make(map[string]*PhoneStats)
+	for _, phone := range phones {
+		phoneStats[phone] = &PhoneStats{Phone: phone}
+	}
+
+	for i := 1; i <= testCount; i++ {
+		// Select phone in circular order
+		phoneIndex := (i - 1) % len(phones)
+		currentPhone := phones[phoneIndex]
+
+		log.PrintTestHeader(i, testCount)
+
+		result := runSingleTest(m, cfg, log, i, currentPhone)
+		results = append(results, result.message)
+
+		// Update per-phone stats
+		stats := phoneStats[currentPhone]
+		stats.Total++
+
+		if result.success {
+			success++
+			stats.Success++
+			totalDialTime += result.dialTime
+			totalEmsiTime += result.emsiTime
+			stats.TotalDialTime += result.dialTime
+			stats.TotalEmsiTime += result.emsiTime
+		} else {
+			failed++
+			stats.Failed++
+		}
+
+		if i < testCount {
+			log.Info("Waiting %v before next test...", interDelay)
+			time.Sleep(interDelay)
+		}
+	}
+
+	// Calculate averages
+	var avgDialTime, avgEmsiTime time.Duration
+	if success > 0 {
+		avgDialTime = totalDialTime / time.Duration(success)
+		avgEmsiTime = totalEmsiTime / time.Duration(success)
+	}
+
+	// Print summary with per-phone stats
+	log.PrintSummaryWithPhoneStats(testCount, success, failed, time.Since(sessionStart), avgDialTime, avgEmsiTime, results, phoneStats)
+}
+
+type testResult struct {
+	success  bool
+	message  string
+	dialTime time.Duration
+	emsiTime time.Duration
+}
+
+func runSingleTest(m *modem.Modem, cfg *Config, log *TestLogger, testNum int, phoneNumber string) testResult {
+	// Dial
+	log.Dial("%s -> ATDT%s", phoneNumber, phoneNumber)
+	result, err := m.DialNumber(phoneNumber)
 	if err != nil {
-		fmt.Printf("ERROR: Dial failed: %v\n", err)
-		if result != nil {
-			fmt.Printf("Dial time: %v\n", result.DialTime)
-			fmt.Printf("Error: %s\n", result.Error)
+		msg := fmt.Sprintf("Test %d [%s]: DIAL ERROR - %v", testNum, phoneNumber, err)
+		log.Fail("%s", msg)
+
+		// Try to recover
+		log.Info("Attempting modem reset...")
+		m.Reset()
+
+		return testResult{
+			success: false,
+			message: msg,
 		}
-		return
 	}
 
-	fmt.Printf("\n--- Dial Result ---\n")
-	fmt.Printf("Success: %v\n", result.Success)
-	fmt.Printf("Dial time: %v\n", result.DialTime)
-
-	if result.Success {
-		fmt.Printf("Connect speed: %d\n", result.ConnectSpeed)
-		if result.Protocol != "" {
-			fmt.Printf("Protocol: %s\n", result.Protocol)
+	if !result.Success {
+		msg := fmt.Sprintf("Test %d [%s]: DIAL FAILED - %s (%.1fs)", testNum, phoneNumber, result.Error, result.DialTime.Seconds())
+		log.Fail("%s", msg)
+		return testResult{
+			success: false,
+			message: msg,
 		}
-		fmt.Printf("Ring count: %d\n", result.RingCount)
-		fmt.Printf("Carrier time: %v\n", result.CarrierTime)
+	}
 
-		// Get modem status after connect
-		status, err := m.GetStatus()
-		if err == nil {
-			fmt.Printf("\n--- Post-Connect Status ---\n")
-			fmt.Printf("DCD (Carrier): %v\n", status.DCD)
-		}
-
-		if doEmsi {
-			runEmsiHandshake(m, emsiTimeout, localAddr, systemName, debug)
-		} else {
-			// Just stay connected for a moment to verify
-			fmt.Println("\nConnected! Waiting 3 seconds before hangup...")
-			time.Sleep(3 * time.Second)
-		}
-
-		// Hangup
-		fmt.Println("\nHanging up...")
-		if err := m.Hangup(); err != nil {
-			fmt.Printf("Hangup error: %v\n", err)
-			fmt.Println("Attempting modem reset...")
-			if err := m.Reset(); err != nil {
-				fmt.Printf("Reset error: %v\n", err)
-			}
-		} else {
-			fmt.Println("Hangup successful")
-		}
+	// Log connection with full CONNECT string
+	if result.ConnectString != "" {
+		log.OK("%s (%.1fs)", result.ConnectString, result.DialTime.Seconds())
 	} else {
-		fmt.Printf("Error: %s\n", result.Error)
+		log.OK("Connected at %d bps (%.1fs)", result.ConnectSpeed, result.DialTime.Seconds())
 	}
 
-	fmt.Printf("\nTotal time: %v\n", time.Since(startTime))
-}
+	// Log RS232 status after connect
+	if status, err := m.GetStatus(); err == nil {
+		log.RS232(status.DCD, status.DSR, status.CTS, status.RI)
+	}
 
-func runEmsiHandshake(m *modem.Modem, timeout time.Duration, localAddr, systemName string, debug bool) {
-	fmt.Printf("\n=== EMSI Handshake ===\n")
-	fmt.Printf("Timeout: %v\n", timeout)
-	fmt.Printf("Our address: %s\n", localAddr)
-	fmt.Printf("Our system: %s\n", systemName)
-
-	// Get net.Conn wrapper
+	// EMSI handshake
+	log.EMSI("Starting handshake...")
 	conn := m.GetConn()
-
-	// Create EMSI session
-	session := emsi.NewSessionWithInfo(
+	emsiCfg := emsi.DefaultConfig()
+	emsiCfg.Protocols = cfg.EMSI.Protocols
+	session := emsi.NewSessionWithInfoAndConfig(
 		conn,
-		localAddr,
-		systemName,
-		"Test Operator",
-		"Test Location",
+		cfg.EMSI.OurAddress,
+		cfg.EMSI.SystemName,
+		cfg.EMSI.Sysop,
+		cfg.EMSI.Location,
+		emsiCfg,
 	)
-	session.SetTimeout(timeout)
-	session.SetDebug(debug)
+	session.SetTimeout(cfg.EMSI.Timeout.Duration())
 
-	// Perform handshake
-	fmt.Println("\nStarting EMSI handshake...")
-	startTime := time.Now()
+	emsiStart := time.Now()
+	emsiErr := session.Handshake()
+	emsiTime := time.Since(emsiStart)
 
-	if err := session.Handshake(); err != nil {
-		fmt.Printf("ERROR: EMSI handshake failed: %v\n", err)
-		fmt.Printf("Handshake time: %v\n", time.Since(startTime))
-		return
+	var testRes testResult
+	testRes.dialTime = result.DialTime
+
+	if emsiErr != nil {
+		msg := fmt.Sprintf("Test %d [%s]: CONNECT %d, EMSI FAILED - %v", testNum, phoneNumber, result.ConnectSpeed, emsiErr)
+		log.Fail("EMSI handshake failed: %v (%.1fs)", emsiErr, emsiTime.Seconds())
+		testRes.success = false
+		testRes.message = msg
+	} else {
+		info := session.GetRemoteInfo()
+		sysName := ""
+		if info != nil {
+			sysName = info.SystemName
+		}
+		msg := fmt.Sprintf("Test %d [%s]: OK - CONNECT %d, EMSI %.1fs, %s", testNum, phoneNumber, result.ConnectSpeed, emsiTime.Seconds(), sysName)
+		log.OK("EMSI complete: %s (%.1fs)", sysName, emsiTime.Seconds())
+		testRes.success = true
+		testRes.message = msg
+		testRes.emsiTime = emsiTime
 	}
 
-	fmt.Printf("Handshake time: %v\n", time.Since(startTime))
+	// Hangup
+	log.Hangup("Disconnecting...")
+	if err := m.Hangup(); err != nil {
+		log.Fail("Hangup error: %v, resetting...", err)
+		m.Reset()
+	} else {
+		// Log RS232 status after hangup
+		if status, err := m.GetStatus(); err == nil {
+			log.RS232(status.DCD, status.DSR, status.CTS, status.RI)
+		}
+	}
 
-	// Get remote info
-	info := session.GetRemoteInfo()
-	if info != nil {
-		fmt.Println("\n--- Remote System Info ---")
-		fmt.Printf("System name: %s\n", info.SystemName)
-		fmt.Printf("Location: %s\n", info.Location)
-		fmt.Printf("Sysop: %s\n", info.Sysop)
-		fmt.Printf("Mailer: %s %s\n", info.MailerName, info.MailerVersion)
-		fmt.Printf("Addresses: %v\n", info.Addresses)
+	// Get line stats if not in data mode
+	if !m.InDataMode() && len(cfg.Modem.PostDisconnectCommands) > 0 {
+		// Drain any pending modem output (e.g., NO CARRIER) before sending commands
+		// Wait up to 2 seconds, but stop early after 200ms of silence
+		m.DrainPendingResponse(2 * time.Second)
 
-		// Validate address
-		if len(info.Addresses) > 0 {
-			fmt.Printf("\nAddress validation:\n")
-			for _, addr := range info.Addresses {
-				fmt.Printf("  %s\n", addr)
+		// Run all post-disconnect commands
+		for _, cmd := range cfg.Modem.PostDisconnectCommands {
+			response, err := m.SendAT(cmd, cfg.Modem.ATCommandTimeout.Duration())
+			if err == nil {
+				log.PrintLineStats(response)
 			}
 		}
-	} else {
-		fmt.Println("No remote info received (handshake may have been partial)")
 	}
+
+	return testRes
 }

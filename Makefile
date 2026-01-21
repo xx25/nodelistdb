@@ -4,10 +4,12 @@
 BINARY_NAME_PARSER=parser
 BINARY_NAME_SERVER=server
 BINARY_NAME_DAEMON=testdaemon
+BINARY_NAME_MODEMTEST=modem-test
 BUILD_DIR=bin
 CMD_PARSER=cmd/parser
 CMD_SERVER=cmd/server
 CMD_DAEMON=cmd/testdaemon
+CMD_MODEMTEST=cmd/modem-test
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -26,7 +28,7 @@ GOMOD=$(GO) mod
 ARM64_CC ?= aarch64-linux-gnu-gcc
 ARM64_CXX ?= aarch64-linux-gnu-g++
 
-.PHONY: help build clean test run-parser deps build-daemon run-daemon
+.PHONY: help build clean test run-parser deps build-daemon run-daemon build-modem-test run-modem-test
 
 # Default target
 help: ## Show this help message
@@ -74,6 +76,11 @@ build-daemon: ## Build testing daemon binary
 	go build -ldflags "$(LDFLAGS)" -o bin/testdaemon ./cmd/testdaemon
 	@echo "✓ Testing daemon built successfully"
 
+build-modem-test: ## Build modem test tool
+	@echo "Building modem test tool..."
+	go build -ldflags "$(LDFLAGS)" -o bin/modem-test ./cmd/modem-test
+	@echo "✓ Modem test tool built successfully"
+
 # Development targets
 test: ## Run tests
 	go test -v ./...
@@ -120,6 +127,17 @@ run-daemon-debug: build-daemon ## Run testing daemon in debug mode
 
 run-daemon-once: build-daemon ## Run testing daemon single cycle
 	./bin/testdaemon -config config.yaml -once
+
+run-modem-test: build-modem-test ## Run modem test tool (requires PHONE)
+	@if [ -z "$(PHONE)" ]; then \
+		echo "Usage: make run-modem-test PHONE=917 [COUNT=10] [CONFIG=...]"; \
+		echo "       make run-modem-test PHONE=917,918,919 COUNT=9"; \
+		echo "       make run-modem-test PHONE=901-910 COUNT=20"; \
+		echo ""; \
+		echo "Or run directly: ./bin/modem-test -phone 917 -batch"; \
+		exit 1; \
+	fi
+	./bin/modem-test -phone "$(PHONE)" -batch $(if $(COUNT),-count $(COUNT)) $(if $(CONFIG),-config $(CONFIG)) $(if $(DEBUG),-debug)
 
 # Cross-compilation for deployment
 build-linux: build-linux-amd64 build-linux-arm64 ## Build for Linux (both x64 and ARM64)

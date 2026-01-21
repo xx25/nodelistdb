@@ -327,6 +327,14 @@ func (s *Session) Handshake() error {
 		if s.debug {
 			logging.Debugf("EMSI: ERROR: Unexpected response type: %s", responseType)
 		}
+		// Include the actual data received for BANNER/UNKNOWN to help diagnose
+		if responseType == "BANNER" || responseType == "UNKNOWN" {
+			// Truncate long banners, clean up for display
+			bannerPreview := cleanBannerForDisplay(response, 200)
+			if bannerPreview != "" {
+				return fmt.Errorf("unexpected response type: %s\nReceived data:\n%s", responseType, bannerPreview)
+			}
+		}
 		return fmt.Errorf("unexpected response type: %s", responseType)
 	}
 	
@@ -784,11 +792,74 @@ func (s *Session) ValidateAddress(expectedAddress string) bool {
 func normalizeAddress(addr string) string {
 	// Remove spaces and convert to lowercase
 	addr = strings.TrimSpace(strings.ToLower(addr))
-	
+
 	// Remove @domain if present
 	if idx := strings.Index(addr, "@"); idx != -1 {
 		addr = addr[:idx]
 	}
-	
+
 	return addr
+}
+
+// cleanBannerForDisplay cleans up banner text for error message display.
+// Removes ANSI escape codes, control characters, and truncates to maxLen.
+func cleanBannerForDisplay(banner string, maxLen int) string {
+	if banner == "" {
+		return ""
+	}
+
+	var result strings.Builder
+	inEscape := false
+	lineCount := 0
+	const maxLines = 10
+
+	for _, r := range banner {
+		// Track ANSI escape sequences
+		if r == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			// End of ANSI sequence
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+
+		// Handle line breaks
+		if r == '\n' || r == '\r' {
+			if result.Len() > 0 {
+				lastByte := result.String()[result.Len()-1]
+				if lastByte != '\n' {
+					result.WriteRune('\n')
+					lineCount++
+					if lineCount >= maxLines {
+						result.WriteString("...")
+						break
+					}
+				}
+			}
+			continue
+		}
+
+		// Skip other control characters except tab
+		if r < 32 && r != '\t' {
+			continue
+		}
+
+		// Skip high control characters
+		if r >= 127 && r < 160 {
+			continue
+		}
+
+		result.WriteRune(r)
+
+		if result.Len() >= maxLen {
+			result.WriteString("...")
+			break
+		}
+	}
+
+	return strings.TrimSpace(result.String())
 }

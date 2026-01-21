@@ -1,9 +1,9 @@
 package modem
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,9 +15,12 @@ import (
 type Config struct {
 	Device       string        // Serial port device (e.g., /dev/ttyUSB0, /dev/ttyACM0)
 	BaudRate     int           // Serial port baud rate (e.g., 115200)
-	InitString   string        // Modem init command (e.g., "ATZ" or "AT&F")
+	InitString   string        // Modem init command (e.g., "ATZ" or "AT&F") - used if InitCommands is empty
+	InitCommands []string      // Ordered list of init commands (overrides InitString if non-empty)
 	DialPrefix   string        // Dial command prefix (e.g., "ATDT" or "ATD")
 	HangupMethod string        // "dtr" (drop DTR) or "escape" (+++ ATH)
+	LineStatsCommand string    // AT command for line stats (default AT&V1)
+	Debug        bool          // Enable debug logging of all modem I/O
 
 	// Timeouts
 	DialTimeout      time.Duration // Timeout for dial (waiting for CONNECT/error), default 200s
@@ -33,6 +36,7 @@ func DefaultConfig() Config {
 		InitString:       ATZ,
 		DialPrefix:       ATDT,
 		HangupMethod:     "dtr",
+		LineStatsCommand: ATLineStats,
 		DialTimeout:      200 * time.Second,
 		CarrierTimeout:   5 * time.Second,
 		ATCommandTimeout: 5 * time.Second,
@@ -52,7 +56,6 @@ type ModemStatus struct {
 type Modem struct {
 	config Config
 	port   *serial.Port
-	reader *bufio.Reader
 
 	mu          sync.Mutex
 	initialized bool
@@ -79,6 +82,9 @@ func New(cfg Config) (*Modem, error) {
 	if cfg.HangupMethod == "" {
 		cfg.HangupMethod = "dtr"
 	}
+	if cfg.LineStatsCommand == "" {
+		cfg.LineStatsCommand = ATLineStats
+	}
 	if cfg.DialTimeout == 0 {
 		cfg.DialTimeout = 200 * time.Second
 	}
@@ -95,6 +101,46 @@ func New(cfg Config) (*Modem, error) {
 	return &Modem{
 		config: cfg,
 	}, nil
+}
+
+// debugTimestamp returns current time formatted for debug output
+func debugTimestamp() string {
+	return time.Now().Format("15:04:05.000")
+}
+
+// debugLog prints debug message if debug mode is enabled (uses stderr for unbuffered output)
+func (m *Modem) debugLog(format string, args ...interface{}) {
+	if m.config.Debug {
+		fmt.Fprintf(os.Stderr, "[%s MODEM] "+format+"\n", append([]interface{}{debugTimestamp()}, args...)...)
+	}
+}
+
+// debugLogTX logs data being sent to modem
+func (m *Modem) debugLogTX(data []byte) {
+	if m.config.Debug {
+		fmt.Fprintf(os.Stderr, "[%s TX] %q\n", debugTimestamp(), string(data))
+	}
+}
+
+// debugLogRX logs data received from modem
+func (m *Modem) debugLogRX(data []byte) {
+	if m.config.Debug {
+		fmt.Fprintf(os.Stderr, "[%s RX] %q\n", debugTimestamp(), string(data))
+	}
+}
+
+// debugLogStatus logs RS232 control line status
+func (m *Modem) debugLogStatus(label string) {
+	if !m.config.Debug {
+		return
+	}
+	status, err := m.getStatusLocked()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[%s RS232] %s: error: %v\n", debugTimestamp(), label, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[%s RS232] %s: DCD=%v DSR=%v CTS=%v RI=%v\n",
+		debugTimestamp(), label, status.DCD, status.DSR, status.CTS, status.RI)
 }
 
 // Open opens the serial port and initializes the modem
@@ -120,7 +166,6 @@ func (m *Modem) Open() error {
 	}
 
 	m.port = port
-	m.reader = bufio.NewReader(port)
 
 	// Ensure DTR is high (modem ready)
 	if err := port.SetDTR(true); err != nil {
@@ -151,6 +196,12 @@ func (m *Modem) initModem() error {
 	_ = m.port.ResetInputBuffer()
 	_ = m.port.ResetOutputBuffer()
 
+	// If InitCommands is provided, use it instead of default sequence
+	if len(m.config.InitCommands) > 0 {
+		return m.initModemWithCommands(m.config.InitCommands)
+	}
+
+	// Default initialization sequence (backward compatible)
 	// Send init string (usually ATZ)
 	response, err := m.sendATLocked(m.config.InitString, m.config.ATCommandTimeout)
 	if err != nil {
@@ -188,6 +239,37 @@ func (m *Modem) initModem() error {
 	return nil
 }
 
+// initModemWithCommands executes a custom list of init commands
+func (m *Modem) initModemWithCommands(commands []string) error {
+	for i, cmd := range commands {
+		cmd = strings.TrimSpace(cmd)
+		if cmd == "" {
+			continue
+		}
+
+		m.debugLog("init command %d/%d: %s", i+1, len(commands), cmd)
+
+		response, err := m.sendATLocked(cmd, m.config.ATCommandTimeout)
+		if err != nil {
+			return fmt.Errorf("init command %q failed: %w", cmd, err)
+		}
+
+		// Check for failure responses
+		if failed, reason := IsFailureResponse(response); failed {
+			// Some commands like ATX4 may fail on certain modems - log but continue
+			m.debugLog("init command %q returned %s (continuing)", cmd, reason)
+			continue
+		}
+
+		// For most commands, we expect OK
+		if !IsSuccessResponse(response) {
+			m.debugLog("init command %q returned unexpected: %s", cmd, response)
+		}
+	}
+
+	return nil
+}
+
 // Close closes the serial port
 func (m *Modem) Close() error {
 	m.mu.Lock()
@@ -206,7 +288,6 @@ func (m *Modem) Close() error {
 
 	err := m.port.Close()
 	m.port = nil
-	m.reader = nil
 	m.initialized = false
 	m.inDataMode = false
 
@@ -271,16 +352,40 @@ func (m *Modem) SendAT(cmd string, timeout time.Duration) (string, error) {
 	return m.sendATLocked(cmd, timeout)
 }
 
+// GetLineStats sends the configured line stats command and returns raw response.
+func (m *Modem) GetLineStats() (string, error) {
+	cmd := strings.TrimSpace(m.config.LineStatsCommand)
+	if cmd == "" {
+		cmd = ATLineStats
+	}
+
+	// Small delay after hangup for modem to stabilize.
+	time.Sleep(500 * time.Millisecond)
+
+	resp, err := m.SendAT(cmd, m.config.ATCommandTimeout)
+	if err != nil {
+		return "", err
+	}
+	if failed, reason := IsFailureResponse(resp); failed {
+		return "", fmt.Errorf("line stats command failed: %s", reason)
+	}
+	return resp, nil
+}
+
 // sendATLocked sends an AT command (caller must hold mutex)
 func (m *Modem) sendATLocked(cmd string, timeout time.Duration) (string, error) {
-	// Flush input buffer before sending AND recreate bufio.Reader
-	// to discard any stale buffered data
+	if m.config.Debug {
+		fmt.Fprintf(os.Stderr, "[%s MODEM] sendAT: cmd=%q timeout=%v\n", debugTimestamp(), cmd, timeout)
+	}
+	// Flush input/output buffers before sending
 	_ = m.port.ResetInputBuffer()
 	_ = m.port.ResetOutputBuffer()
-	m.reader = bufio.NewReader(m.port)
+
+	m.debugLogStatus("before TX")
 
 	// Write command with CR
 	cmdBytes := []byte(cmd + "\r")
+	m.debugLogTX(cmdBytes)
 	if _, err := m.port.Write(cmdBytes); err != nil {
 		return "", fmt.Errorf("write failed: %w", err)
 	}
@@ -292,55 +397,89 @@ func (m *Modem) sendATLocked(cmd string, timeout time.Duration) (string, error) 
 	return m.readResponseLocked(timeout)
 }
 
-// readResponseLocked reads modem response until terminal result or timeout
+// readResponseLocked reads modem response until terminal result or timeout.
+// Uses short polling intervals to avoid blocking on slow serial reads.
 func (m *Modem) readResponseLocked(timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	var response []byte
-	buf := make([]byte, 256)
+	buf := make([]byte, 64) // Small buffer for quick reads
+
+	// Use short read timeout for polling (50ms for fast responsiveness)
+	const defaultPollTimeout = 50 // milliseconds
+
+	// Restore original read timeout when done
+	defer func() {
+		_ = m.port.SetReadTimeout(int(m.config.ReadTimeout.Milliseconds()))
+	}()
+
+	// Set initial poll timeout
+	currentTimeout := defaultPollTimeout
+	_ = m.port.SetReadTimeout(currentTimeout)
 
 	for time.Now().Before(deadline) {
-		// Set read deadline
+		// Adjust timeout if remaining time is less than poll timeout
 		remaining := time.Until(deadline)
-		if remaining < 100*time.Millisecond {
-			remaining = 100 * time.Millisecond
+		if remaining < time.Duration(defaultPollTimeout)*time.Millisecond {
+			newTimeout := int(remaining.Milliseconds())
+			if newTimeout < 10 {
+				newTimeout = 10 // minimum 10ms
+			}
+			if newTimeout != currentTimeout {
+				currentTimeout = newTimeout
+				_ = m.port.SetReadTimeout(currentTimeout)
+			}
 		}
-		_ = m.port.SetReadTimeout(int(remaining.Milliseconds()))
 
-		// Read raw bytes (modems may not terminate with '\n' promptly)
-		n, err := m.reader.Read(buf)
+		// Read directly from port (bypass bufio to avoid 4KB buffer fill wait)
+		n, err := m.port.Read(buf)
 		if n > 0 {
+			m.debugLogRX(buf[:n])
 			response = append(response, buf[:n]...)
 			resp := string(response)
 
 			// Check for terminal responses
 			if IsSuccessResponse(resp) || IsConnectResponse(resp) {
+				m.debugLogStatus("after RX (terminal)")
 				return normalizeResponseLineEndings(resp), nil
 			}
 			if failed, _ := IsFailureResponse(resp); failed {
+				m.debugLogStatus("after RX (failure)")
 				return normalizeResponseLineEndings(resp), nil
 			}
 		}
 
 		if err != nil {
+			// Check for fatal errors (not just timeout)
+			errStr := err.Error()
+			if strings.Contains(errStr, "closed") || strings.Contains(errStr, "denied") ||
+				strings.Contains(errStr, "no such") || strings.Contains(errStr, "not open") {
+				m.debugLogStatus("after RX (fatal error)")
+				return "", fmt.Errorf("port error: %w", err)
+			}
+
+			// On timeout error, check if we have a complete response
 			if len(response) > 0 {
 				resp := string(response)
 				if IsSuccessResponse(resp) || IsConnectResponse(resp) {
+					m.debugLogStatus("after RX (terminal)")
 					return normalizeResponseLineEndings(resp), nil
 				}
 				if failed, _ := IsFailureResponse(resp); failed {
+					m.debugLogStatus("after RX (failure)")
 					return normalizeResponseLineEndings(resp), nil
 				}
 			}
-			// Continue trying until deadline
-			time.Sleep(50 * time.Millisecond)
+			// Timeout with no/incomplete data - continue polling
 			continue
 		}
 
 		if n == 0 {
-			time.Sleep(50 * time.Millisecond)
+			// No data available, brief pause before next poll
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 
+	m.debugLogStatus("after RX (timeout)")
 	if len(response) > 0 {
 		return normalizeResponseLineEndings(string(response)), nil
 	}
@@ -407,9 +546,6 @@ func (m *Modem) hangupDTRLocked() error {
 	_ = m.port.ResetInputBuffer()
 	_ = m.port.ResetOutputBuffer()
 
-	// Recreate reader after buffer flush
-	m.reader = bufio.NewReader(m.port)
-
 	return nil
 }
 
@@ -448,7 +584,6 @@ func (m *Modem) hangupEscapeLocked() error {
 
 	// Flush buffers
 	_ = m.port.ResetInputBuffer()
-	m.reader = bufio.NewReader(m.port)
 
 	return nil
 }
@@ -457,7 +592,11 @@ func (m *Modem) hangupEscapeLocked() error {
 func (m *Modem) GetStatus() (*ModemStatus, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.getStatusLocked()
+}
 
+// getStatusLocked returns modem status (caller must hold mutex)
+func (m *Modem) getStatusLocked() (*ModemStatus, error) {
 	if m.port == nil {
 		return nil, errors.New("modem not open")
 	}
@@ -513,7 +652,7 @@ func (m *Modem) setInDataMode(inData bool) {
 	m.inDataMode = inData
 }
 
-// FlushBuffers flushes serial port buffers and recreates reader
+// FlushBuffers flushes serial port input and output buffers
 func (m *Modem) FlushBuffers() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -529,6 +668,54 @@ func (m *Modem) FlushBuffers() error {
 		return fmt.Errorf("failed to flush output buffer: %w", err)
 	}
 
-	m.reader = bufio.NewReader(m.port)
 	return nil
+}
+
+// DrainPendingResponse reads and discards any pending modem output.
+// Waits up to timeout for data, returns what was received.
+// Useful after hangup to consume NO CARRIER before sending new commands.
+func (m *Modem) DrainPendingResponse(timeout time.Duration) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.port == nil {
+		return ""
+	}
+
+	var response []byte
+	buf := make([]byte, 256)
+	deadline := time.Now().Add(timeout)
+	silenceStart := time.Now()
+	const silenceTimeout = 200 * time.Millisecond // Stop after 200ms of silence
+
+	_ = m.port.SetReadTimeout(50) // 50ms read chunks
+
+	for time.Now().Before(deadline) {
+		n, _ := m.port.Read(buf)
+		if n > 0 {
+			if m.config.Debug {
+				m.debugLogRX(buf[:n])
+			}
+			response = append(response, buf[:n]...)
+			silenceStart = time.Now() // Reset silence timer
+
+			// Check for terminal responses
+			resp := string(response)
+			if strings.Contains(resp, "NO CARRIER") ||
+				strings.Contains(resp, "OK") ||
+				strings.Contains(resp, "ERROR") {
+				break
+			}
+		} else {
+			// No data - check silence timeout
+			if time.Since(silenceStart) > silenceTimeout {
+				break
+			}
+		}
+	}
+
+	// Restore default read timeout
+	_ = m.port.SetReadTimeout(int(m.config.ReadTimeout.Milliseconds()))
+
+	return string(response)
 }

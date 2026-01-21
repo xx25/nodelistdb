@@ -1,7 +1,6 @@
 package modem
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,13 +9,14 @@ import (
 
 // DialResult contains the outcome of a dial attempt
 type DialResult struct {
-	Success      bool          // True if CONNECT was received
-	ConnectSpeed int           // Connection speed (e.g., 33600)
-	Protocol     string        // Protocol info (e.g., "V34/LAPM/V42BIS")
-	Error        string        // Error message if failed (e.g., "BUSY", "NO CARRIER")
-	RingCount    int           // Number of RINGs detected before answer
-	DialTime     time.Duration // Time from dial to CONNECT/failure
-	CarrierTime  time.Duration // Time from CONNECT to stable DCD
+	Success       bool          // True if CONNECT was received
+	ConnectSpeed  int           // Connection speed (e.g., 33600)
+	ConnectString string        // Raw CONNECT string from modem (e.g., "CONNECT 33600/ARQ/V34/LAPM")
+	Protocol      string        // Protocol info (e.g., "V34/LAPM/V42BIS")
+	Error         string        // Error message if failed (e.g., "BUSY", "NO CARRIER")
+	RingCount     int           // Number of RINGs detected before answer
+	DialTime      time.Duration // Time from dial to CONNECT/failure
+	CarrierTime   time.Duration // Time from CONNECT to stable DCD
 }
 
 // DialNumber dials a phone number using config timeouts.
@@ -60,7 +60,6 @@ func (m *Modem) Dial(phone string, dialTimeout, carrierTimeout time.Duration) (*
 
 	// Flush buffers before dialing
 	_ = m.port.ResetInputBuffer()
-	m.reader = bufio.NewReader(m.port)
 
 	// Build dial command
 	dialCmd := m.config.DialPrefix + phone + "\r"
@@ -86,6 +85,9 @@ func (m *Modem) Dial(phone string, dialTimeout, carrierTimeout time.Duration) (*
 
 	// Check for CONNECT
 	if IsConnectResponse(response) {
+		// Extract the CONNECT line
+		result.ConnectString = extractConnectLine(response)
+
 		// Parse speed and protocol
 		speed, protocol, _ := ParseConnectSpeed(response)
 		result.ConnectSpeed = speed
@@ -93,7 +95,6 @@ func (m *Modem) Dial(phone string, dialTimeout, carrierTimeout time.Duration) (*
 
 		// Flush any remaining data after CONNECT line
 		_ = m.port.ResetInputBuffer()
-		m.reader = bufio.NewReader(m.port)
 
 		// Wait for DCD to stabilize
 		connectTime := time.Now()
@@ -174,6 +175,26 @@ func (m *Modem) readDialResponseLocked(timeout time.Duration) (string, error) {
 		return string(response), nil
 	}
 	return "", errors.New("timeout waiting for dial response")
+}
+
+// extractConnectLine extracts the CONNECT line from modem response
+func extractConnectLine(response string) string {
+	lines := strings.Split(response, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "CONNECT") {
+			return line
+		}
+	}
+	// Try with \r as line separator
+	lines = strings.Split(response, "\r")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "CONNECT") {
+			return line
+		}
+	}
+	return ""
 }
 
 // waitForDCDLocked waits for DCD (Data Carrier Detect) to go high

@@ -1,0 +1,56 @@
+# Modem Test Configuration
+# Example configuration for the modem-test CLI tool
+
+modem:
+  device: "/dev/ttyACM0"
+  baud_rate: 115200
+  dial_prefix: "ATDT"
+  hangup_method: "dtr"  # "dtr" (drop DTR) or "escape" (+++ ATH)
+
+  # Timeouts
+  dial_timeout: 200s
+  carrier_timeout: 5s
+  at_command_timeout: 5s
+  read_timeout: 1s
+
+  # Init commands - executed in order during modem initialization
+  # Customize these for your specific modem
+  init_commands:
+    - "ATZ"        # Reset modem to profile 0
+    - "ATE0"       # Disable local echo
+    - "ATV1"       # Verbose result codes (OK, ERROR, CONNECT, etc.)
+    - "ATX4"       # Extended result codes (BUSY, NO DIALTONE, etc.)
+    - "ATS0=0"     # Disable auto-answer
+
+  # Post-disconnect commands - executed after hangup to get line statistics
+  # These vary by modem manufacturer:
+  #   USRobotics: AT&V1
+  #   ZyXEL:      ATI11
+  #   Generic:    AT+MS?
+  post_disconnect_commands:
+    - "AT&V1"      # Line quality stats (USRobotics modems)
+    # - "ATI11"    # Alternative for ZyXEL modems
+
+test:
+  count: 10
+  inter_delay: 5s
+  # phone: "917"           # Single phone number (can be set via CLI -phone flag)
+  # phones:                # Multiple phones - called in circular order
+  #   - "917"
+  #   - "918"
+  #   - "919"
+
+emsi:
+  our_address: "2:5001/5001"
+  system_name: "NodelistDB Tester"
+  sysop: "Test"
+  location: "Test"
+  timeout: 30s
+  protocols: []  # Empty = NCP (No Compatible Protocols - test only, no file transfer)
+  # protocols: ["ZMO", "ZAP"]  # Example: ZModem protocols for actual file transfer
+
+logging:
+  debug: true
+  timestamps: true
+  show_rs232: true   # Show DCD/DSR/CTS/RI status changes
+  show_hex: false    # Show hex dump of TX/RX data (very verbose)
