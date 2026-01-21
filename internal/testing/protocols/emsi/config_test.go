@@ -869,3 +869,129 @@ func TestEMSI2MergeFrom(t *testing.T) {
 func boolPtr(b bool) *bool {
 	return &b
 }
+
+// TestMergeFromComplete tests that MergeFromComplete copies all fields including bools
+func TestMergeFromComplete(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Verify default bool values before merge
+	if !cfg.SendINQTwice {
+		t.Fatal("SendINQTwice should default to true")
+	}
+	if !cfg.SendACKTwice {
+		t.Fatal("SendACKTwice should default to true")
+	}
+	if cfg.EnableEMSI2 {
+		t.Fatal("EnableEMSI2 should default to false")
+	}
+
+	// Merge complete config (simulating fully specified YAML)
+	complete := &Config{
+		MasterTimeout:   90 * time.Second,
+		SendINQTwice:    false, // Explicitly set to false
+		SendACKTwice:    false, // Explicitly set to false
+		EnableEMSI2:     true,  // Explicitly set to true
+		EnableDFB:       true,
+		CallerPrefsMode: false,
+	}
+
+	cfg.MergeFromComplete(complete)
+
+	// Bool fields should be overwritten
+	if cfg.SendINQTwice != false {
+		t.Errorf("SendINQTwice should be false after MergeFromComplete, got %v", cfg.SendINQTwice)
+	}
+	if cfg.SendACKTwice != false {
+		t.Errorf("SendACKTwice should be false after MergeFromComplete, got %v", cfg.SendACKTwice)
+	}
+	if cfg.EnableEMSI2 != true {
+		t.Errorf("EnableEMSI2 should be true after MergeFromComplete, got %v", cfg.EnableEMSI2)
+	}
+	if cfg.EnableDFB != true {
+		t.Errorf("EnableDFB should be true after MergeFromComplete, got %v", cfg.EnableDFB)
+	}
+	if cfg.CallerPrefsMode != false {
+		t.Errorf("CallerPrefsMode should be false after MergeFromComplete, got %v", cfg.CallerPrefsMode)
+	}
+
+	// Non-bool values should also be merged
+	if cfg.MasterTimeout != 90*time.Second {
+		t.Errorf("MasterTimeout should be 90s after MergeFromComplete, got %v", cfg.MasterTimeout)
+	}
+}
+
+// TestNewConfigManagerWithConfigAppliesBools tests that NewConfigManagerWithConfig
+// properly applies EMSI-II bool fields from the provided config (the bug fix)
+// while preserving default-true bools for partial configs
+func TestNewConfigManagerWithConfigAppliesBools(t *testing.T) {
+	// Create config with only EMSI-II enabled (simulating partial YAML)
+	// This was the bug - enable_emsi2: true was ignored before
+	customGlobal := &Config{
+		EnableEMSI2: true,
+		EnableDFB:   true,
+	}
+
+	mgr := NewConfigManagerWithConfig(customGlobal)
+	cfg := mgr.GetConfigForNode("any:node/addr")
+
+	// EMSI-II bool settings should be applied (this was the bug)
+	if cfg.EnableEMSI2 != true {
+		t.Errorf("EnableEMSI2 should be true from custom config, got %v", cfg.EnableEMSI2)
+	}
+	if cfg.EnableDFB != true {
+		t.Errorf("EnableDFB should be true from custom config, got %v", cfg.EnableDFB)
+	}
+
+	// Default-true bools should be preserved (not zeroed by partial config)
+	if cfg.SendINQTwice != true {
+		t.Errorf("SendINQTwice should remain true (default), got %v", cfg.SendINQTwice)
+	}
+	if cfg.SendACKTwice != true {
+		t.Errorf("SendACKTwice should remain true (default), got %v", cfg.SendACKTwice)
+	}
+	if cfg.CallerPrefsMode != true {
+		t.Errorf("CallerPrefsMode should remain true (default), got %v", cfg.CallerPrefsMode)
+	}
+
+	// Default values for unset timeouts should still be preserved
+	if cfg.StepTimeout != 20*time.Second {
+		t.Errorf("Default StepTimeout should be preserved: expected 20s, got %v", cfg.StepTimeout)
+	}
+}
+
+// TestNewConfigManagerWithConfigPartialPreservesDefaults tests that a partial
+// global config doesn't zero out default-true bools (regression test)
+func TestNewConfigManagerWithConfigPartialPreservesDefaults(t *testing.T) {
+	// Partial config - only sets a timeout, all bools are zero (false)
+	partialConfig := &Config{
+		MasterTimeout: 90 * time.Second,
+	}
+
+	mgr := NewConfigManagerWithConfig(partialConfig)
+	cfg := mgr.GetConfigForNode("any:node/addr")
+
+	// Timeout should be overridden
+	if cfg.MasterTimeout != 90*time.Second {
+		t.Errorf("MasterTimeout should be 90s, got %v", cfg.MasterTimeout)
+	}
+
+	// All default-true bools should be preserved
+	if !cfg.SendINQTwice {
+		t.Errorf("SendINQTwice should remain true (default)")
+	}
+	if !cfg.SendREQTwice {
+		t.Errorf("SendREQTwice should remain true (default)")
+	}
+	if !cfg.SendACKTwice {
+		t.Errorf("SendACKTwice should remain true (default)")
+	}
+	if !cfg.SendNAKOnRetry {
+		t.Errorf("SendNAKOnRetry should remain true (default)")
+	}
+	if !cfg.AcceptFDLenWithCR {
+		t.Errorf("AcceptFDLenWithCR should remain true (default)")
+	}
+	if !cfg.CallerPrefsMode {
+		t.Errorf("CallerPrefsMode should remain true (default)")
+	}
+}

@@ -196,11 +196,19 @@ func NewConfigManager() *ConfigManager {
 }
 
 // NewConfigManagerWithConfig creates a config manager with custom global config
-// Merges provided config with defaults to handle partial YAML configs
+// Merges non-zero non-bool fields from provided config, then applies default-false
+// bool fields that are set to true. This properly handles partial YAML configs.
+//
+// Note: To override default-true bools (like SendINQTwice) to false, use NodeOverride
+// which supports pointer bools for proper set/unset distinction.
 func NewConfigManagerWithConfig(global *Config) *ConfigManager {
 	merged := DefaultConfig()
 	if global != nil {
+		// Merge non-bool fields (safe for partial configs)
 		merged.MergeFrom(global)
+		// Apply default-false bools that are explicitly set to true
+		// This avoids zeroing default-true bools like SendINQTwice
+		merged.applyDefaultFalseBoolsFrom(global)
 	}
 	return &ConfigManager{
 		global:    merged,
@@ -309,10 +317,78 @@ func (n *NodeOverride) Copy() *NodeOverride {
 
 // MergeFrom merges non-zero values from another config
 // Used to apply partial YAML configs over defaults
+// NOTE: Bool fields are NOT merged - use MergeFromComplete for full config merging
 func (c *Config) MergeFrom(other *Config) {
 	if other == nil {
 		return
 	}
+	c.mergeNonBoolFields(other)
+}
+
+// MergeFromComplete merges ALL fields including bools from another config.
+// Non-bool fields use non-zero merge semantics; bool fields are copied directly.
+// WARNING: This will zero default-true bools if other has them as false.
+// For partial YAML configs, use MergeFrom + applyDefaultFalseBoolsFrom instead.
+func (c *Config) MergeFromComplete(other *Config) {
+	if other == nil {
+		return
+	}
+	c.mergeNonBoolFields(other)
+
+	// Copy all bool fields - caller indicates they want complete merge
+	c.PreventiveINQ = other.PreventiveINQ
+	c.SendINQTwice = other.SendINQTwice
+	c.SendREQTwice = other.SendREQTwice
+	c.SendACKTwice = other.SendACKTwice
+	c.SendNAKOnRetry = other.SendNAKOnRetry
+	c.AcceptFDLenWithCR = other.AcceptFDLenWithCR
+	c.EnableEMSI2 = other.EnableEMSI2
+	c.EnableDFB = other.EnableDFB
+	c.CallerPrefsMode = other.CallerPrefsMode
+	c.FileRequestCapable = other.FileRequestCapable
+	c.NoFileRequests = other.NoFileRequests
+	c.RequireFNC = other.RequireFNC
+	c.SuppressDeprecated = other.SuppressDeprecated
+}
+
+// applyDefaultFalseBoolsFrom applies bool fields that default to false when set to true.
+// Since we can't distinguish "not set" from "explicitly false" with non-pointer bools,
+// we only apply true values. This fixes the bug where enable_emsi2: true was ignored
+// while preserving default-true bools like SendINQTwice in partial configs.
+//
+// Note: To set bools to false (override default-true values), use NodeOverride which
+// uses pointer bools and can properly distinguish set vs unset.
+func (c *Config) applyDefaultFalseBoolsFrom(other *Config) {
+	if other == nil {
+		return
+	}
+	// Only apply true values - false could mean "not set" in YAML
+	// All these bools default to false, so true means explicitly enabled
+	if other.PreventiveINQ {
+		c.PreventiveINQ = true
+	}
+	if other.EnableEMSI2 {
+		c.EnableEMSI2 = true
+	}
+	if other.EnableDFB {
+		c.EnableDFB = true
+	}
+	if other.FileRequestCapable {
+		c.FileRequestCapable = true
+	}
+	if other.NoFileRequests {
+		c.NoFileRequests = true
+	}
+	if other.RequireFNC {
+		c.RequireFNC = true
+	}
+	if other.SuppressDeprecated {
+		c.SuppressDeprecated = true
+	}
+}
+
+// mergeNonBoolFields merges non-zero non-bool values from another config
+func (c *Config) mergeNonBoolFields(other *Config) {
 	if other.MasterTimeout != 0 {
 		c.MasterTimeout = other.MasterTimeout
 	}
@@ -340,12 +416,6 @@ func (c *Config) MergeFrom(other *Config) {
 	if other.InitialCRTimeout != 0 {
 		c.InitialCRTimeout = other.InitialCRTimeout
 	}
-	// Bool fields: DO NOT copy in MergeFrom because we can't distinguish
-	// "not set" from "explicitly set to false". Bools can only be changed
-	// via NodeOverride which uses pointers.
-	// If you need to change bool defaults globally, use NewConfigManagerWithConfig
-	// with a fully populated Config, or use NodeOverride for specific nodes.
-
 	if other.PreventiveINQTimeout != 0 {
 		c.PreventiveINQTimeout = other.PreventiveINQTimeout
 	}
@@ -358,7 +428,7 @@ func (c *Config) MergeFrom(other *Config) {
 		copy(c.Protocols, other.Protocols)
 	}
 
-	// EMSI-II non-bool fields (bools use NodeOverride pointers)
+	// EMSI-II non-bool fields
 	if other.LinkCode != "" {
 		c.LinkCode = other.LinkCode
 	}
