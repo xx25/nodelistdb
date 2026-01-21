@@ -40,6 +40,42 @@ type Config struct {
 
 	// Protocol Features
 	Protocols []string `yaml:"protocols"` // ["ZMO", "ZAP"]
+
+	// EMSI-II Features (FSC-0088.001)
+	EnableEMSI2        bool     `yaml:"enable_emsi2"`         // Advertise EII flag
+	EnableDFB          bool     `yaml:"enable_dfb"`           // Advertise DFB (fall-back) flag
+	CallerPrefsMode    bool     `yaml:"caller_prefs_mode"`    // true = EMSI-II caller-prefs (default)
+	FileRequestCapable bool     `yaml:"file_request_capable"` // Advertise FRQ flag
+	NoFileRequests     bool     `yaml:"no_file_requests"`     // Advertise NRQ flag
+	RequireFNC         bool     `yaml:"require_fnc"`          // Request 8.3 filename conversion
+
+	// Link Codes (expanded from single PUA)
+	LinkCode       string   `yaml:"link_code"`       // PUA, PUP, NPU, HAT (default: PUA)
+	LinkQualifiers []string `yaml:"link_qualifiers"` // PMO, NFE, NXP, NRQ, HNM, HXT, HFE, HRQ
+
+	// Per-AKA Flags (for multi-address systems, FSC-0088.001)
+	PerAKAFlags map[int]*PerAKAConfig `yaml:"per_aka_flags"` // Key is address index (0-based)
+
+	// Deprecated flags control (EMSI-II: don't send ARC, XMA)
+	SuppressDeprecated bool `yaml:"suppress_deprecated"` // Don't send ARC, XMA in EMSI-II
+}
+
+// PerAKAConfig holds link flags for a specific AKA index (FSC-0088.001)
+// Flags use XXn format in EMSI packets (e.g., PU2, HA3)
+type PerAKAConfig struct {
+	// Pickup flags
+	Pickup       *bool `yaml:"pickup,omitempty"`        // PUn
+	PickupMail   *bool `yaml:"pickup_mail,omitempty"`   // PMn (mail only)
+	NoFiles      *bool `yaml:"no_files,omitempty"`      // NFn (no TICs/attaches)
+	NoCompressed *bool `yaml:"no_compressed,omitempty"` // NXn (no compressed mail)
+	NoRequests   *bool `yaml:"no_requests,omitempty"`   // NRn (no file requests)
+
+	// Hold flags
+	Hold         *bool `yaml:"hold,omitempty"`          // HAn
+	HoldNonMail  *bool `yaml:"hold_non_mail,omitempty"` // HNn (hold except mail)
+	HoldCompress *bool `yaml:"hold_compress,omitempty"` // HXn (hold compressed)
+	HoldFiles    *bool `yaml:"hold_files,omitempty"`    // HFn (hold TICs/attaches)
+	HoldRequests *bool `yaml:"hold_requests,omitempty"` // HRn (hold requests)
 }
 
 // DefaultConfig returns FSC-0056.001 compliant defaults
@@ -79,6 +115,18 @@ func DefaultConfig() *Config {
 
 		// Minimum protocol set
 		Protocols: []string{"ZMO", "ZAP"},
+
+		// EMSI-II defaults (conservative - EMSI-I compatible)
+		EnableEMSI2:        false,  // Don't advertise EII by default
+		EnableDFB:          false,  // Don't advertise DFB by default
+		CallerPrefsMode:    true,   // EMSI-II requires caller-prefs
+		FileRequestCapable: false,  // Don't advertise FRQ by default
+		NoFileRequests:     false,  // Don't send NRQ unless explicitly disabled
+		RequireFNC:         false,  // Don't request filename conversion
+		LinkCode:           "PUA",  // Default: Pickup All
+		LinkQualifiers:     nil,    // No qualifiers by default
+		PerAKAFlags:        nil,    // No per-AKA flags by default
+		SuppressDeprecated: false,  // Send ARC, XMA for EMSI-I compat
 	}
 }
 
@@ -117,6 +165,18 @@ type NodeOverride struct {
 
 	// Protocol Features - pointer allows explicit empty list for NCP
 	Protocols *[]string `yaml:"protocols,omitempty"`
+
+	// EMSI-II Overrides (FSC-0088.001)
+	EnableEMSI2        *bool     `yaml:"enable_emsi2,omitempty"`
+	EnableDFB          *bool     `yaml:"enable_dfb,omitempty"`
+	CallerPrefsMode    *bool     `yaml:"caller_prefs_mode,omitempty"`
+	FileRequestCapable *bool     `yaml:"file_request_capable,omitempty"`
+	NoFileRequests     *bool     `yaml:"no_file_requests,omitempty"`
+	RequireFNC         *bool     `yaml:"require_fnc,omitempty"`
+	LinkCode           *string   `yaml:"link_code,omitempty"`
+	LinkQualifiers     *[]string `yaml:"link_qualifiers,omitempty"`
+	PerAKAFlags        map[int]*PerAKAConfig `yaml:"per_aka_flags,omitempty"`
+	SuppressDeprecated *bool     `yaml:"suppress_deprecated,omitempty"`
 }
 
 // ConfigManager manages global config and per-node overrides
@@ -190,6 +250,29 @@ func (c *Config) Copy() *Config {
 	cp := *c
 	cp.Protocols = make([]string, len(c.Protocols))
 	copy(cp.Protocols, c.Protocols)
+	// Deep copy LinkQualifiers
+	if c.LinkQualifiers != nil {
+		cp.LinkQualifiers = make([]string, len(c.LinkQualifiers))
+		copy(cp.LinkQualifiers, c.LinkQualifiers)
+	}
+	// Deep copy PerAKAFlags
+	if c.PerAKAFlags != nil {
+		cp.PerAKAFlags = make(map[int]*PerAKAConfig)
+		for k, v := range c.PerAKAFlags {
+			if v != nil {
+				cp.PerAKAFlags[k] = v.Copy()
+			}
+		}
+	}
+	return &cp
+}
+
+// Copy creates a copy of PerAKAConfig
+func (p *PerAKAConfig) Copy() *PerAKAConfig {
+	if p == nil {
+		return nil
+	}
+	cp := *p
 	return &cp
 }
 
@@ -205,6 +288,21 @@ func (n *NodeOverride) Copy() *NodeOverride {
 		protocols := make([]string, len(*n.Protocols))
 		copy(protocols, *n.Protocols)
 		cp.Protocols = &protocols
+	}
+	// Deep copy LinkQualifiers slice if present
+	if n.LinkQualifiers != nil {
+		qualifiers := make([]string, len(*n.LinkQualifiers))
+		copy(qualifiers, *n.LinkQualifiers)
+		cp.LinkQualifiers = &qualifiers
+	}
+	// Deep copy PerAKAFlags map if present
+	if n.PerAKAFlags != nil {
+		cp.PerAKAFlags = make(map[int]*PerAKAConfig)
+		for k, v := range n.PerAKAFlags {
+			if v != nil {
+				cp.PerAKAFlags[k] = v.Copy()
+			}
+		}
 	}
 	return &cp
 }
@@ -258,6 +356,23 @@ func (c *Config) MergeFrom(other *Config) {
 	if other.Protocols != nil {
 		c.Protocols = make([]string, len(other.Protocols))
 		copy(c.Protocols, other.Protocols)
+	}
+
+	// EMSI-II non-bool fields (bools use NodeOverride pointers)
+	if other.LinkCode != "" {
+		c.LinkCode = other.LinkCode
+	}
+	if other.LinkQualifiers != nil {
+		c.LinkQualifiers = make([]string, len(other.LinkQualifiers))
+		copy(c.LinkQualifiers, other.LinkQualifiers)
+	}
+	if other.PerAKAFlags != nil {
+		c.PerAKAFlags = make(map[int]*PerAKAConfig)
+		for k, v := range other.PerAKAFlags {
+			if v != nil {
+				c.PerAKAFlags[k] = v.Copy()
+			}
+		}
 	}
 }
 
@@ -327,6 +442,44 @@ func (c *Config) ApplyOverride(override *NodeOverride) {
 	if override.Protocols != nil {
 		c.Protocols = make([]string, len(*override.Protocols))
 		copy(c.Protocols, *override.Protocols)
+	}
+
+	// EMSI-II Overrides (FSC-0088.001)
+	if override.EnableEMSI2 != nil {
+		c.EnableEMSI2 = *override.EnableEMSI2
+	}
+	if override.EnableDFB != nil {
+		c.EnableDFB = *override.EnableDFB
+	}
+	if override.CallerPrefsMode != nil {
+		c.CallerPrefsMode = *override.CallerPrefsMode
+	}
+	if override.FileRequestCapable != nil {
+		c.FileRequestCapable = *override.FileRequestCapable
+	}
+	if override.NoFileRequests != nil {
+		c.NoFileRequests = *override.NoFileRequests
+	}
+	if override.RequireFNC != nil {
+		c.RequireFNC = *override.RequireFNC
+	}
+	if override.LinkCode != nil {
+		c.LinkCode = *override.LinkCode
+	}
+	if override.LinkQualifiers != nil {
+		c.LinkQualifiers = make([]string, len(*override.LinkQualifiers))
+		copy(c.LinkQualifiers, *override.LinkQualifiers)
+	}
+	if override.PerAKAFlags != nil {
+		c.PerAKAFlags = make(map[int]*PerAKAConfig)
+		for k, v := range override.PerAKAFlags {
+			if v != nil {
+				c.PerAKAFlags[k] = v.Copy()
+			}
+		}
+	}
+	if override.SuppressDeprecated != nil {
+		c.SuppressDeprecated = *override.SuppressDeprecated
 	}
 }
 

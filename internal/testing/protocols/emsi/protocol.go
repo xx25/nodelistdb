@@ -2,6 +2,9 @@ package emsi
 
 import (
 	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -16,34 +19,236 @@ const (
 	EMSI_DAT = "**EMSI_DAT"
 )
 
+// Link codes (FSC-0056.001 + FSC-0088.001)
+const (
+	// Base pickup/hold codes (mutually exclusive)
+	LinkCodePUA = "PUA" // Pickup All addresses
+	LinkCodePUP = "PUP" // Pickup Primary only
+	LinkCodeNPU = "NPU" // No Pickup desired
+	LinkCodeHAT = "HAT" // Hold All Traffic
+
+	// Pickup qualifiers (FSC-0088.001)
+	LinkQualPMO = "PMO" // Pickup Mail Only (ARCmail/Packets)
+	LinkQualNFE = "NFE" // No Files/attaches (no TICs)
+	LinkQualNXP = "NXP" // No compressed mail pickup
+	LinkQualNRQ = "NRQ" // No file Requests accepted
+
+	// Hold qualifiers (FSC-0088.001)
+	LinkQualHNM = "HNM" // Hold Non-Mail (hold except mail)
+	LinkQualHXT = "HXT" // Hold compressed mail (eXtended Traffic)
+	LinkQualHFE = "HFE" // Hold Files/attaches (TICs)
+	LinkQualHRQ = "HRQ" // Hold file Requests
+
+	// Session options
+	LinkQualFNC = "FNC" // Filename Conversion (8.3 format)
+	LinkQualRMA = "RMA" // Multiple file requests capable
+	LinkQualRH1 = "RH1" // Hydra batch separation
+)
+
+// Compatibility codes (FSC-0088.001)
+const (
+	CompatEII = "EII" // EMSI-II capable
+	CompatDFB = "DFB" // Fall-back to FTS1/WAZOO
+	CompatFRQ = "FRQ" // File Request on outbound
+	CompatNRQ = "NRQ" // No Request capability
+
+	// Deprecated (don't send in EMSI-II mode)
+	CompatARC = "ARC" // ARCmail
+	CompatXMA = "XMA" // Extended Mail
+)
+
 // EMSIData represents the EMSI handshake data
 type EMSIData struct {
 	// System information
-	SystemName   string
-	Location     string
-	Sysop        string
-	Phone        string
-	Speed        string
-	Flags        string
-	
+	SystemName    string
+	Location      string
+	Sysop         string
+	Phone         string
+	Speed         string
+	Flags         string
+
 	// Mailer information
-	MailerName   string
+	MailerName    string
 	MailerVersion string
-	MailerSerial string
-	
+	MailerSerial  string
+
 	// Addresses
-	Addresses    []string
-	
+	Addresses []string
+
 	// Capabilities
 	Protocols    []string // ZMO, ZAP, DZA, JAN, HYD
 	Capabilities []string // Additional capabilities
-	
+
 	// Password (for authentication)
-	Password     string
+	Password string
+
+	// EMSI-II Fields (FSC-0088.001)
+	EMSI2Mode      bool              // Both sides presented EII (set during negotiation)
+	LinkCode       string            // Parsed base link code (PUA, PUP, NPU, HAT)
+	LinkQualifiers []string          // Parsed link qualifiers (PMO, NFE, etc.)
+	PerAKAFlags    map[int][]string  // Per-address flags parsed from XXn format
+
+	// Parsed compatibility flags (from remote)
+	HasEII bool // Remote presented EII (EMSI-II capable)
+	HasDFB bool // Remote presented DFB (fall-back capable)
+	HasFRQ bool // Remote accepts file requests on outbound
+	HasNRQ bool // Remote has no file request capability
+	HasFNC bool // Remote requires filename conversion
+	HasRMA bool // Remote supports multiple file requests (Hydra)
+	HasRH1 bool // Remote uses Hydra batch separation
 }
 
-// CreateEMSI_DAT creates an EMSI_DAT packet
+// buildLinkCodes constructs link codes string from config
+// FSC-0088.001: For single-address, use PUA/PUP/NPU/HAT or PU0/HA0
+// For multi-address, don't emit both PUA and PUn flags
+func buildLinkCodes(cfg *Config, numAddresses int) string {
+	var codes []string
+
+	// Determine if we're using per-AKA flags
+	hasPerAKAFlags := cfg.EnableEMSI2 && cfg.PerAKAFlags != nil && len(cfg.PerAKAFlags) > 0
+
+	// FSC-0088.001: Neither PUA nor PUP should be presented if only one address
+	// and per-AKA flags are being used. Use PU0/HA0 instead.
+	if numAddresses == 1 && hasPerAKAFlags {
+		// Single address with per-AKA config - use PU0/HA0 format
+		if akaFlags, ok := cfg.PerAKAFlags[0]; ok {
+			codes = append(codes, buildPerAKACodes(0, akaFlags)...)
+		}
+	} else if numAddresses > 1 && hasPerAKAFlags {
+		// Multiple addresses with per-AKA config
+		// FSC-0088.001: Use per-AKA flags, don't also emit PUA/PUP
+		// Sort indices for deterministic output
+		indices := make([]int, 0, len(cfg.PerAKAFlags))
+		for idx := range cfg.PerAKAFlags {
+			if idx < numAddresses { // Only include valid indices
+				indices = append(indices, idx)
+			}
+		}
+		sort.Ints(indices)
+		for _, idx := range indices {
+			codes = append(codes, buildPerAKACodes(idx, cfg.PerAKAFlags[idx])...)
+		}
+	} else {
+		// No per-AKA flags or EMSI-I mode - use base link code
+		if cfg.LinkCode != "" {
+			codes = append(codes, cfg.LinkCode)
+		} else {
+			codes = append(codes, LinkCodePUA)
+		}
+	}
+
+	// Add qualifiers (PMO, NFE, HXT, etc. without address suffix)
+	codes = append(codes, cfg.LinkQualifiers...)
+
+	// Add FNC as link-session option if required (EMSI-II)
+	if cfg.EnableEMSI2 && cfg.RequireFNC {
+		codes = append(codes, LinkQualFNC)
+	}
+
+	return strings.Join(codes, ",")
+}
+
+// buildPerAKACodes builds XXn format codes for a specific AKA index
+func buildPerAKACodes(idx int, cfg *PerAKAConfig) []string {
+	if cfg == nil {
+		return nil
+	}
+
+	var codes []string
+	idxStr := strconv.Itoa(idx)
+
+	// Pickup flags
+	if cfg.Pickup != nil && *cfg.Pickup {
+		codes = append(codes, "PU"+idxStr)
+	}
+	if cfg.PickupMail != nil && *cfg.PickupMail {
+		codes = append(codes, "PM"+idxStr)
+	}
+	if cfg.NoFiles != nil && *cfg.NoFiles {
+		codes = append(codes, "NF"+idxStr)
+	}
+	if cfg.NoCompressed != nil && *cfg.NoCompressed {
+		codes = append(codes, "NX"+idxStr)
+	}
+	if cfg.NoRequests != nil && *cfg.NoRequests {
+		codes = append(codes, "NR"+idxStr)
+	}
+
+	// Hold flags
+	if cfg.Hold != nil && *cfg.Hold {
+		codes = append(codes, "HA"+idxStr)
+	}
+	if cfg.HoldNonMail != nil && *cfg.HoldNonMail {
+		codes = append(codes, "HN"+idxStr)
+	}
+	if cfg.HoldCompress != nil && *cfg.HoldCompress {
+		codes = append(codes, "HX"+idxStr)
+	}
+	if cfg.HoldFiles != nil && *cfg.HoldFiles {
+		codes = append(codes, "HF"+idxStr)
+	}
+	if cfg.HoldRequests != nil && *cfg.HoldRequests {
+		codes = append(codes, "HR"+idxStr)
+	}
+
+	return codes
+}
+
+// buildCompatibilityCodes constructs compatibility codes from config
+// FSC-0088.001: EII must be FIRST if present, then protocols in preference order
+func buildCompatibilityCodes(cfg *Config, dataProtocols []string) string {
+	var codes []string
+
+	// EMSI-II flag MUST be first per FSC-0088.001
+	if cfg.EnableEMSI2 {
+		codes = append(codes, CompatEII)
+	}
+
+	// Protocols in preference order (EMSI-II: caller-prefs)
+	// Use dataProtocols if provided (backward compatibility), otherwise use config
+	protocols := dataProtocols
+	if len(protocols) == 0 {
+		protocols = cfg.Protocols
+	}
+	if len(protocols) > 0 {
+		codes = append(codes, protocols...)
+	} else {
+		codes = append(codes, "ZMO", "ZAP")
+	}
+
+	// DFB flag
+	if cfg.EnableDFB {
+		codes = append(codes, CompatDFB)
+	}
+
+	// File request flags
+	if cfg.FileRequestCapable {
+		codes = append(codes, CompatFRQ)
+	}
+	if cfg.NoFileRequests {
+		codes = append(codes, CompatNRQ)
+	}
+
+	// Deprecated flags (only if not suppressed and not in EMSI-II mode)
+	if !cfg.SuppressDeprecated && !cfg.EnableEMSI2 {
+		codes = append(codes, CompatARC, CompatXMA)
+	}
+
+	return strings.Join(codes, ",")
+}
+
+// CreateEMSI_DAT creates an EMSI_DAT packet (legacy version without config)
+// Deprecated: Use CreateEMSI_DATWithConfig for EMSI-II support
 func CreateEMSI_DAT(data *EMSIData) string {
+	return CreateEMSI_DATWithConfig(data, nil)
+}
+
+// CreateEMSI_DATWithConfig creates an EMSI_DAT packet using configuration
+func CreateEMSI_DATWithConfig(data *EMSIData, cfg *Config) string {
+	// Use default config if none provided
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
 	// Build the data section
 	var dataPart strings.Builder
 	
@@ -62,15 +267,18 @@ func CreateEMSI_DAT(data *EMSIData) string {
 	}
 	dataPart.WriteString("}")
 	
-	// {link_codes} - link capabilities
-	dataPart.WriteString("{PUA}")  // Pick Up All
-	
-	// {compatibility_codes} - protocol capabilities
+	// {link_codes} - link capabilities (built from config)
 	dataPart.WriteString("{")
-	if len(data.Protocols) > 0 {
-		dataPart.WriteString(strings.Join(data.Protocols, ","))
+	dataPart.WriteString(buildLinkCodes(cfg, len(data.Addresses)))
+	dataPart.WriteString("}")
+
+	// {compatibility_codes} - protocol capabilities (built from config)
+	// Pass data.Protocols for backward compatibility with legacy callers
+	dataPart.WriteString("{")
+	if len(cfg.Protocols) > 0 || len(data.Protocols) > 0 {
+		dataPart.WriteString(buildCompatibilityCodes(cfg, data.Protocols))
 	} else {
-		dataPart.WriteString("NCP")  // No Compatible Protocols
+		dataPart.WriteString("NCP") // No Compatible Protocols
 	}
 	dataPart.WriteString("}")
 	
@@ -186,6 +394,104 @@ func extractBrackets(data string) []string {
 	return result
 }
 
+// perAKAPattern matches per-AKA flags like PU2, HA3, PM0, etc.
+var perAKAPattern = regexp.MustCompile(`^(PU|PM|NF|NX|NR|HA|HN|HX|HF|HR)(\d+)$`)
+
+// LinkCodesResult holds the parsed link codes
+type LinkCodesResult struct {
+	BaseCode   string
+	Qualifiers []string
+	PerAKA     map[int][]string
+	HasFNC     bool // Filename conversion required
+	HasRMA     bool // Multiple file requests (Hydra)
+	HasRH1     bool // Hydra batch separation
+}
+
+// parseLinkCodes parses link codes field including per-AKA flags (FSC-0088.001)
+// Returns structured result with base code, qualifiers, per-AKA flags, and session options
+func parseLinkCodes(field string) (string, []string, map[int][]string) {
+	result := parseLinkCodesEx(field)
+	return result.BaseCode, result.Qualifiers, result.PerAKA
+}
+
+// parseLinkCodesEx parses link codes with full EMSI-II support including session options
+func parseLinkCodesEx(field string) *LinkCodesResult {
+	result := &LinkCodesResult{
+		PerAKA: make(map[int][]string),
+	}
+	codes := strings.Split(field, ",")
+
+	for _, code := range codes {
+		code = strings.TrimSpace(strings.ToUpper(code))
+		if code == "" {
+			continue
+		}
+
+		// Check for per-AKA flag (XXn format)
+		if matches := perAKAPattern.FindStringSubmatch(code); matches != nil {
+			idx, _ := strconv.Atoi(matches[2])
+			result.PerAKA[idx] = append(result.PerAKA[idx], matches[1])
+			continue
+		}
+
+		// Check for base link code
+		switch code {
+		case LinkCodePUA, LinkCodePUP, LinkCodeNPU, LinkCodeHAT:
+			result.BaseCode = code
+		// Link-session options (FSC-0088.001)
+		case LinkQualFNC:
+			result.HasFNC = true
+		case LinkQualRMA:
+			result.HasRMA = true
+		case LinkQualRH1:
+			result.HasRH1 = true
+		default:
+			// Assume it's a qualifier (PMO, NFE, HXT, etc.)
+			result.Qualifiers = append(result.Qualifiers, code)
+		}
+	}
+
+	// Default to PUA if no base code found
+	if result.BaseCode == "" {
+		result.BaseCode = LinkCodePUA
+	}
+
+	return result
+}
+
+// parseCompatibilityCodes extracts EMSI-II flags from compatibility field
+// Note: FNC/RMA/RH1 are link-session options parsed from link codes, not compat codes
+func parseCompatibilityCodes(field string, data *EMSIData) {
+	codes := strings.Split(field, ",")
+
+	for _, code := range codes {
+		code = strings.TrimSpace(strings.ToUpper(code))
+		switch code {
+		case CompatEII:
+			data.HasEII = true
+		case CompatDFB:
+			data.HasDFB = true
+		case CompatFRQ:
+			data.HasFRQ = true
+		case CompatNRQ:
+			data.HasNRQ = true
+		case "NCP":
+			// No compatible protocols - skip
+		case CompatARC, CompatXMA:
+			// Deprecated - ignore
+		case LinkQualFNC, LinkQualRMA, LinkQualRH1:
+			// FSC-0088.001: These are link-session options, not compatibility codes
+			// They should be parsed from link codes field, ignore here
+		default:
+			// Protocol or other code - add to protocols if it looks like one
+			if code != "" && len(code) == 3 {
+				// Likely a protocol code (ZMO, ZAP, HYD, etc.)
+				data.Protocols = append(data.Protocols, code)
+			}
+		}
+	}
+}
+
 // ParseEMSI_DAT parses an EMSI_DAT packet
 func ParseEMSI_DAT(packet string) (*EMSIData, error) {
 	// Remove the header if present
@@ -217,16 +523,16 @@ func ParseEMSI_DAT(packet string) (*EMSIData, error) {
 			}
 		case 2: // Password
 			data.Password = part
-		case 3: // Link codes
-			// Parse link codes if needed
-		case 4: // Compatibility codes (protocols)
-			protocols := strings.Split(part, ",")
-			for _, proto := range protocols {
-				proto = strings.TrimSpace(proto)
-				if proto != "" && proto != "NCP" {
-					data.Protocols = append(data.Protocols, proto)
-				}
-			}
+		case 3: // Link codes (FSC-0088.001 enhanced parsing)
+			linkResult := parseLinkCodesEx(part)
+			data.LinkCode = linkResult.BaseCode
+			data.LinkQualifiers = linkResult.Qualifiers
+			data.PerAKAFlags = linkResult.PerAKA
+			data.HasFNC = linkResult.HasFNC
+			data.HasRMA = linkResult.HasRMA
+			data.HasRH1 = linkResult.HasRH1
+		case 4: // Compatibility codes (protocols + EMSI-II flags)
+			parseCompatibilityCodes(part, data)
 		case 5: // Mailer product code
 			// This is just the product code (like "FE", "PID", etc)
 			// Skip it or store it if needed

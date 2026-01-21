@@ -38,6 +38,10 @@ type Session struct {
 	// Completion info
 	completionReason CompletionReason
 	handshakeTiming  HandshakeTiming
+
+	// EMSI-II negotiation state (FSC-0088.001)
+	emsi2Negotiated  bool   // Both sides presented EII
+	selectedProtocol string // Final negotiated protocol
 }
 
 // HandshakeTiming records timing for each handshake phase
@@ -97,6 +101,82 @@ func (s *Session) GetCompletionReason() CompletionReason {
 // GetHandshakeTiming returns timing information for the handshake phases
 func (s *Session) GetHandshakeTiming() HandshakeTiming {
 	return s.handshakeTiming
+}
+
+// IsEMSI2Mode returns true if EMSI-II mode was negotiated (both sides presented EII)
+func (s *Session) IsEMSI2Mode() bool {
+	return s.emsi2Negotiated
+}
+
+// GetSelectedProtocol returns the negotiated file transfer protocol
+func (s *Session) GetSelectedProtocol() string {
+	return s.selectedProtocol
+}
+
+// negotiateEMSI2 determines if EMSI-II mode is active based on mutual EII flag presence
+func (s *Session) negotiateEMSI2() {
+	// EMSI-II mode requires both sides to present EII
+	if s.config.EnableEMSI2 && s.remoteInfo != nil && s.remoteInfo.HasEII {
+		s.emsi2Negotiated = true
+		if s.debug {
+			logging.Debugf("EMSI: EMSI-II mode negotiated (both sides presented EII)")
+		}
+	} else {
+		s.emsi2Negotiated = false
+		if s.debug {
+			if !s.config.EnableEMSI2 {
+				logging.Debugf("EMSI: EMSI-I mode (local EII disabled)")
+			} else if s.remoteInfo == nil {
+				logging.Debugf("EMSI: EMSI-I mode (no remote info)")
+			} else {
+				logging.Debugf("EMSI: EMSI-I mode (remote did not present EII)")
+			}
+		}
+	}
+}
+
+// selectProtocol implements protocol selection per FSC-0056.001 and FSC-0088.001
+// Returns the first protocol from our list that remote also supports
+func (s *Session) selectProtocol() string {
+	if s.remoteInfo == nil || len(s.remoteInfo.Protocols) == 0 {
+		return ""
+	}
+
+	// FSC-0088.001: EMSI-II mandates caller-prefs (caller lists in preference order)
+	// FSC-0056.001: EMSI-I was ambiguous, but we use caller-prefs as well
+	// CallerPrefsMode controls whether we strictly enforce this
+	if s.config.CallerPrefsMode || s.emsi2Negotiated {
+		// Caller-prefs: use OUR protocol order, find first match in remote's list
+		for _, ourProto := range s.config.Protocols {
+			for _, theirProto := range s.remoteInfo.Protocols {
+				if strings.EqualFold(ourProto, theirProto) {
+					s.selectedProtocol = ourProto
+					if s.debug {
+						logging.Debugf("EMSI: Selected protocol %s (caller-prefs)", ourProto)
+					}
+					return ourProto
+				}
+			}
+		}
+	} else {
+		// Answerer-prefs (legacy EMSI-I): use THEIR protocol order
+		for _, theirProto := range s.remoteInfo.Protocols {
+			for _, ourProto := range s.config.Protocols {
+				if strings.EqualFold(ourProto, theirProto) {
+					s.selectedProtocol = ourProto
+					if s.debug {
+						logging.Debugf("EMSI: Selected protocol %s (answerer-prefs)", ourProto)
+					}
+					return ourProto
+				}
+			}
+		}
+	}
+
+	if s.debug {
+		logging.Debugf("EMSI: No compatible protocol found (NCP)")
+	}
+	return "" // NCP - No Compatible Protocol
 }
 
 // SetTimeout is a legacy API for backward compatibility.
@@ -392,9 +472,16 @@ func (s *Session) Handshake() error {
 	s.handshakeTiming.DATExchange = time.Since(datExchangeStart)
 	s.handshakeTiming.Total = time.Since(handshakeStart)
 
+	// EMSI-II negotiation (FSC-0088.001)
+	s.negotiateEMSI2()
+	s.selectProtocol()
+
 	// Determine completion reason based on protocol negotiation
 	if len(s.config.Protocols) == 0 {
 		s.completionReason = ReasonNCP // No Compatible Protocols (test mode)
+	} else if s.selectedProtocol == "" && len(s.config.Protocols) > 0 {
+		// We have protocols but couldn't negotiate one
+		s.completionReason = ReasonNCP
 	} else {
 		s.completionReason = ReasonComplete
 	}
@@ -623,17 +710,18 @@ func (s *Session) sendEMSI_DAT() error {
 		Location:      s.location,
 		Sysop:         s.sysop,
 		Phone:         "-Unpublished-",
-		Speed:         "9600",                    // Numeric baud for compatibility
-		Flags:         "CM,IFC,XA",               // Traditional flags: Continuous Mail, IFCICO, Mail only
+		Speed:         "9600",                   // Numeric baud for compatibility
+		Flags:         "CM,IFC,XA",              // Traditional flags: Continuous Mail, IFCICO, Mail only
 		MailerName:    "NodelistDB",
 		MailerVersion: "1.0",
-		MailerSerial:  "LNX",                     // Traditional OS identifier
-		Addresses:     []string{s.localAddress},  // Bare address without @fidonet suffix
+		MailerSerial:  "LNX",                    // Traditional OS identifier
+		Addresses:     []string{s.localAddress}, // Bare address without @fidonet suffix
 		Protocols:     protocols,
-		Password:      "",                        // Empty password
+		Password:      "",                       // Empty password
 	}
-	
-	packet := CreateEMSI_DAT(data)
+
+	// Use config-aware packet builder for EMSI-II support
+	packet := CreateEMSI_DATWithConfig(data, s.config)
 	
 	if s.debug {
 		logging.Debugf("EMSI: sendEMSI_DAT: Created EMSI_DAT packet (%d bytes)", len(packet))

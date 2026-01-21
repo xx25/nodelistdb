@@ -665,3 +665,207 @@ func TestLoadOverridesDefensiveCopy(t *testing.T) {
 		t.Errorf("LoadOverrides should defensively copy, got StepTimeout=%v", cfg.StepTimeout)
 	}
 }
+
+// ============================================================================
+// EMSI-II (FSC-0088.001) Tests
+// ============================================================================
+
+// TestEMSI2ConfigDefaults verifies EMSI-II defaults are backward compatible
+func TestEMSI2ConfigDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// EMSI-II should be disabled by default for backward compatibility
+	if cfg.EnableEMSI2 != false {
+		t.Errorf("EnableEMSI2: expected false (backward compat), got %v", cfg.EnableEMSI2)
+	}
+	if cfg.EnableDFB != false {
+		t.Errorf("EnableDFB: expected false, got %v", cfg.EnableDFB)
+	}
+	if cfg.CallerPrefsMode != true {
+		t.Errorf("CallerPrefsMode: expected true (EMSI-II spec), got %v", cfg.CallerPrefsMode)
+	}
+	if cfg.FileRequestCapable != false {
+		t.Errorf("FileRequestCapable: expected false, got %v", cfg.FileRequestCapable)
+	}
+	if cfg.NoFileRequests != false {
+		t.Errorf("NoFileRequests: expected false, got %v", cfg.NoFileRequests)
+	}
+	if cfg.RequireFNC != false {
+		t.Errorf("RequireFNC: expected false, got %v", cfg.RequireFNC)
+	}
+	if cfg.LinkCode != "PUA" {
+		t.Errorf("LinkCode: expected 'PUA', got %q", cfg.LinkCode)
+	}
+	if cfg.LinkQualifiers != nil {
+		t.Errorf("LinkQualifiers: expected nil, got %v", cfg.LinkQualifiers)
+	}
+	if cfg.PerAKAFlags != nil {
+		t.Errorf("PerAKAFlags: expected nil, got %v", cfg.PerAKAFlags)
+	}
+	if cfg.SuppressDeprecated != false {
+		t.Errorf("SuppressDeprecated: expected false, got %v", cfg.SuppressDeprecated)
+	}
+}
+
+// TestEMSI2ConfigOverride tests per-node override of EMSI-II fields
+func TestEMSI2ConfigOverride(t *testing.T) {
+	cfg := DefaultConfig()
+
+	enableEMSI2 := true
+	enableDFB := true
+	linkCode := "PUP"
+	qualifiers := []string{"PMO", "NFE"}
+	suppressDeprecated := true
+
+	override := &NodeOverride{
+		EnableEMSI2:        &enableEMSI2,
+		EnableDFB:          &enableDFB,
+		LinkCode:           &linkCode,
+		LinkQualifiers:     &qualifiers,
+		SuppressDeprecated: &suppressDeprecated,
+	}
+
+	cfg.ApplyOverride(override)
+
+	if cfg.EnableEMSI2 != true {
+		t.Errorf("EnableEMSI2 override failed: got %v", cfg.EnableEMSI2)
+	}
+	if cfg.EnableDFB != true {
+		t.Errorf("EnableDFB override failed: got %v", cfg.EnableDFB)
+	}
+	if cfg.LinkCode != "PUP" {
+		t.Errorf("LinkCode override failed: got %q", cfg.LinkCode)
+	}
+	if len(cfg.LinkQualifiers) != 2 || cfg.LinkQualifiers[0] != "PMO" {
+		t.Errorf("LinkQualifiers override failed: got %v", cfg.LinkQualifiers)
+	}
+	if cfg.SuppressDeprecated != true {
+		t.Errorf("SuppressDeprecated override failed: got %v", cfg.SuppressDeprecated)
+	}
+}
+
+// TestPerAKAFlagsConfig tests PerAKAConfig handling
+func TestPerAKAFlagsConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.EnableEMSI2 = true
+
+	// Create per-AKA flags
+	pickup := true
+	hold := true
+	holdRequests := true
+
+	cfg.PerAKAFlags = map[int]*PerAKAConfig{
+		0: {Pickup: &pickup},
+		1: {Hold: &hold, HoldRequests: &holdRequests},
+	}
+
+	// Test copy preserves per-AKA flags
+	cp := cfg.Copy()
+	if cp.PerAKAFlags == nil {
+		t.Fatal("Copy should preserve PerAKAFlags")
+	}
+	if len(cp.PerAKAFlags) != 2 {
+		t.Errorf("Copy PerAKAFlags length: expected 2, got %d", len(cp.PerAKAFlags))
+	}
+	if cp.PerAKAFlags[0] == nil || cp.PerAKAFlags[0].Pickup == nil || !*cp.PerAKAFlags[0].Pickup {
+		t.Error("Copy PerAKAFlags[0].Pickup not preserved")
+	}
+	if cp.PerAKAFlags[1] == nil || cp.PerAKAFlags[1].Hold == nil || !*cp.PerAKAFlags[1].Hold {
+		t.Error("Copy PerAKAFlags[1].Hold not preserved")
+	}
+
+	// Verify deep copy (modification doesn't affect original)
+	newValue := false
+	cp.PerAKAFlags[0].Pickup = &newValue
+	if !*cfg.PerAKAFlags[0].Pickup {
+		t.Error("Modifying copy affected original PerAKAFlags")
+	}
+}
+
+// TestPerAKAConfigCopy tests PerAKAConfig.Copy method
+func TestPerAKAConfigCopy(t *testing.T) {
+	pickup := true
+	hold := true
+
+	orig := &PerAKAConfig{
+		Pickup: &pickup,
+		Hold:   &hold,
+	}
+
+	cp := orig.Copy()
+
+	// Verify copy has same values
+	if cp.Pickup == nil || !*cp.Pickup {
+		t.Error("Copy should preserve Pickup")
+	}
+	if cp.Hold == nil || !*cp.Hold {
+		t.Error("Copy should preserve Hold")
+	}
+
+	// Verify nil copy
+	var nilConfig *PerAKAConfig
+	if nilConfig.Copy() != nil {
+		t.Error("Copy of nil should return nil")
+	}
+}
+
+// TestEMSI2NodeOverrideCopy tests that EMSI-II fields are properly deep copied in NodeOverride
+func TestEMSI2NodeOverrideCopy(t *testing.T) {
+	qualifiers := []string{"PMO", "NFE"}
+	pickup := true
+
+	orig := &NodeOverride{
+		LinkQualifiers: &qualifiers,
+		PerAKAFlags: map[int]*PerAKAConfig{
+			0: {Pickup: &pickup},
+		},
+	}
+
+	cp := orig.Copy()
+
+	// Verify copy has same values
+	if cp.LinkQualifiers == nil || len(*cp.LinkQualifiers) != 2 {
+		t.Error("Copy should preserve LinkQualifiers")
+	}
+	if cp.PerAKAFlags == nil || len(cp.PerAKAFlags) != 1 {
+		t.Error("Copy should preserve PerAKAFlags")
+	}
+
+	// Modify copy and verify original unchanged
+	newQualifiers := append(*cp.LinkQualifiers, "HXT")
+	cp.LinkQualifiers = &newQualifiers
+
+	if len(*orig.LinkQualifiers) != 2 {
+		t.Error("Modifying copy affected original LinkQualifiers")
+	}
+}
+
+// TestEMSI2MergeFrom tests that non-bool EMSI-II fields are merged correctly
+func TestEMSI2MergeFrom(t *testing.T) {
+	cfg := DefaultConfig()
+
+	other := &Config{
+		LinkCode:       "NPU",
+		LinkQualifiers: []string{"HXT", "HRQ"},
+		PerAKAFlags: map[int]*PerAKAConfig{
+			0: {Hold: boolPtr(true)},
+		},
+	}
+
+	cfg.MergeFrom(other)
+
+	if cfg.LinkCode != "NPU" {
+		t.Errorf("MergeFrom LinkCode failed: got %q", cfg.LinkCode)
+	}
+	if len(cfg.LinkQualifiers) != 2 || cfg.LinkQualifiers[0] != "HXT" {
+		t.Errorf("MergeFrom LinkQualifiers failed: got %v", cfg.LinkQualifiers)
+	}
+	if cfg.PerAKAFlags == nil || len(cfg.PerAKAFlags) != 1 {
+		t.Errorf("MergeFrom PerAKAFlags failed: got %v", cfg.PerAKAFlags)
+	}
+}
+
+// boolPtr is a helper to create a pointer to a bool
+func boolPtr(b bool) *bool {
+	return &b
+}
