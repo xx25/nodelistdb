@@ -9,14 +9,16 @@ import (
 
 // DialResult contains the outcome of a dial attempt
 type DialResult struct {
-	Success       bool          // True if CONNECT was received
-	ConnectSpeed  int           // Connection speed (e.g., 33600)
-	ConnectString string        // Raw CONNECT string from modem (e.g., "CONNECT 33600/ARQ/V34/LAPM")
-	Protocol      string        // Protocol info (e.g., "V34/LAPM/V42BIS")
-	Error         string        // Error message if failed (e.g., "BUSY", "NO CARRIER")
-	RingCount     int           // Number of RINGs detected before answer
-	DialTime      time.Duration // Time from dial to CONNECT/failure
-	CarrierTime   time.Duration // Time from CONNECT to stable DCD
+	Success        bool          // True if CONNECT was received
+	ConnectSpeed   int           // Line speed - min(TX,RX) if available, else first number
+	ConnectSpeedTX int           // Explicit TX speed (0 if not reported)
+	ConnectSpeedRX int           // Explicit RX speed (0 if not reported)
+	ConnectString  string        // Raw CONNECT string from modem (e.g., "CONNECT 33600/ARQ/V34/LAPM")
+	Protocol       string        // Protocol info (e.g., "V34/LAPM/V42BIS")
+	Error          string        // Error message if failed (e.g., "BUSY", "NO CARRIER")
+	RingCount      int           // Number of RINGs detected before answer
+	DialTime       time.Duration // Time from dial to CONNECT/failure
+	CarrierTime    time.Duration // Time from CONNECT to stable DCD
 }
 
 // DialNumber dials a phone number using config timeouts.
@@ -88,10 +90,12 @@ func (m *Modem) Dial(phone string, dialTimeout, carrierTimeout time.Duration) (*
 		// Extract the CONNECT line
 		result.ConnectString = extractConnectLine(response)
 
-		// Parse speed and protocol
-		speed, protocol, _ := ParseConnectSpeed(response)
-		result.ConnectSpeed = speed
-		result.Protocol = protocol
+		// Parse speed and protocol (including TX/RX for ZyXEL modems)
+		info := ParseConnectInfo(response)
+		result.ConnectSpeed = info.Speed
+		result.ConnectSpeedTX = info.SpeedTX
+		result.ConnectSpeedRX = info.SpeedRX
+		result.Protocol = info.Protocol
 
 		// Flush any remaining data after CONNECT line
 		_ = m.port.ResetInputBuffer()

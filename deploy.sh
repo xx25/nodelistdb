@@ -28,6 +28,7 @@ build_binaries() {
 
     # Build for ARM64 (oracle-main.thodin.net)
     echo "  Building for ARM64..."
+    GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.version=$(git describe --tags --always 2>/dev/null || echo dev)'" -o "$BIN_DIR/parser-arm64" ./cmd/parser
     GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.version=$(git describe --tags --always 2>/dev/null || echo dev)'" -o "$BIN_DIR/server-arm64" ./cmd/server
     GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.version=$(git describe --tags --always 2>/dev/null || echo dev)'" -o "$BIN_DIR/testdaemon-arm64" ./cmd/testdaemon
 
@@ -35,7 +36,7 @@ build_binaries() {
     echo ""
 }
 
-# Server 1: oracle-main.thodin.net (ARM64, server + testdaemon)
+# Server 1: oracle-main.thodin.net (ARM64, parser + server + testdaemon)
 deploy_oracle_main() {
     echo -e "${YELLOW}[1/2] Deploying to oracle-main.thodin.net (ARM64)...${NC}"
 
@@ -43,12 +44,15 @@ deploy_oracle_main() {
     REMOTE_PATH="/opt/nodelistdb"
 
     # Check binaries exist
-    if [[ ! -f "$BIN_DIR/server-arm64" ]] || [[ ! -f "$BIN_DIR/testdaemon-arm64" ]]; then
+    if [[ ! -f "$BIN_DIR/parser-arm64" ]] || [[ ! -f "$BIN_DIR/server-arm64" ]] || [[ ! -f "$BIN_DIR/testdaemon-arm64" ]]; then
         echo -e "${RED}Error: ARM64 binaries not found. Run with --build flag.${NC}"
         exit 1
     fi
 
     # Copy binaries
+    echo "  Copying parser..."
+    scp -q "$BIN_DIR/parser-arm64" "$HOST:/tmp/parser-new"
+
     echo "  Copying server..."
     scp -q "$BIN_DIR/server-arm64" "$HOST:/tmp/server-new"
 
@@ -60,13 +64,13 @@ deploy_oracle_main() {
     ssh "$HOST" "sudo systemctl stop nodelistdb nodelistdb-testdaemon"
 
     echo "  Installing binaries..."
-    ssh "$HOST" "sudo cp /tmp/server-new $REMOTE_PATH/server && sudo cp /tmp/testdaemon-new $REMOTE_PATH/testdaemon"
+    ssh "$HOST" "sudo cp /tmp/parser-new $REMOTE_PATH/parser && sudo cp /tmp/server-new $REMOTE_PATH/server && sudo cp /tmp/testdaemon-new $REMOTE_PATH/testdaemon"
 
     echo "  Starting services..."
     ssh "$HOST" "sudo systemctl start nodelistdb nodelistdb-testdaemon"
 
     echo "  Cleaning up..."
-    ssh "$HOST" "rm -f /tmp/server-new /tmp/testdaemon-new"
+    ssh "$HOST" "rm -f /tmp/parser-new /tmp/server-new /tmp/testdaemon-new"
 
     # Verify services are running
     echo "  Verifying..."
@@ -156,7 +160,7 @@ while [[ $# -gt 0 ]]; do
             echo "  (no options)   Deploy to all servers (requires pre-built binaries)"
             echo ""
             echo "Servers:"
-            echo "  oracle-main.thodin.net  ARM64, server + testdaemon"
+            echo "  oracle-main.thodin.net  ARM64, parser + server + testdaemon"
             echo "  nodelist.5001.ru        x86_64, server only"
             exit 0
             ;;
@@ -175,6 +179,7 @@ fi
 # Show binary info
 echo "Binaries to deploy:"
 if [[ -f "$BIN_DIR/server-arm64" ]]; then
+    echo "  - parser-arm64:     $(ls -lh "$BIN_DIR/parser-arm64" | awk '{print $5}')"
     echo "  - server-arm64:     $(ls -lh "$BIN_DIR/server-arm64" | awk '{print $5}')"
     echo "  - testdaemon-arm64: $(ls -lh "$BIN_DIR/testdaemon-arm64" | awk '{print $5}')"
 else

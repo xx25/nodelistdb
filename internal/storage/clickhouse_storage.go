@@ -1,12 +1,14 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/nodelistdb/internal/database"
 )
 
@@ -77,7 +79,13 @@ func NewClickHouseNodeOperations(db database.DatabaseInterface, queryBuilder *Qu
 	}
 }
 
-// InsertNodes inserts a batch of nodes using ClickHouse-optimized batch insertion
+// nativeConnProvider is an interface for database implementations that provide native connections
+type nativeConnProvider interface {
+	NativeConn() driver.Conn
+}
+
+// InsertNodes inserts a batch of nodes using ClickHouse's native batch API.
+// This uses parameterized inserts via PrepareBatch for safety and performance.
 func (cno *ClickHouseNodeOperations) InsertNodes(nodes []database.Node) error {
 	if len(nodes) == 0 {
 		return nil
@@ -86,11 +94,105 @@ func (cno *ClickHouseNodeOperations) InsertNodes(nodes []database.Node) error {
 	cno.mu.Lock()
 	defer cno.mu.Unlock()
 
-	// Use SQL connection for better compatibility with array formatting
+	// Try to get native connection for optimal batch insert
+	if provider, ok := cno.db.(nativeConnProvider); ok {
+		return cno.insertNodesNative(provider.NativeConn(), nodes)
+	}
+
+	// Fallback to SQL-based insert (should not happen with ClickHouse)
 	return cno.insertNodesSQL(nodes)
 }
 
-// insertNodesSQL uses standard SQL interface with ClickHouse-specific query generation
+// insertNodesNative uses ClickHouse's native batch API for safe, parameterized inserts.
+// This is the preferred method as it avoids SQL string building entirely.
+func (cno *ClickHouseNodeOperations) insertNodesNative(conn driver.Conn, nodes []database.Node) error {
+	ctx := context.Background()
+
+	// Process in chunks to avoid memory issues with very large batches
+	chunkSize := DefaultBatchInsertConfig().ChunkSize
+	for i := 0; i < len(nodes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+		chunk := nodes[i:end]
+
+		if err := cno.insertChunkNative(ctx, conn, chunk); err != nil {
+			return fmt.Errorf("failed to insert chunk %d-%d: %w", i, end-1, err)
+		}
+	}
+
+	return nil
+}
+
+// insertChunkNative inserts a chunk using ClickHouse's PrepareBatch API.
+// Values are passed as parameters, eliminating SQL injection risks.
+func (cno *ClickHouseNodeOperations) insertChunkNative(ctx context.Context, conn driver.Conn, chunk []database.Node) error {
+	if len(chunk) == 0 {
+		return nil
+	}
+
+	batch, err := conn.PrepareBatch(ctx, `INSERT INTO nodes (
+		zone, net, node, nodelist_date, day_number,
+		system_name, location, sysop_name, phone, node_type, region, max_speed,
+		is_cm, is_mo,
+		flags, modem_flags,
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+	)`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare batch: %w", err)
+	}
+
+	for _, node := range chunk {
+		// Compute FTS ID if not set
+		if node.FtsId == "" {
+			node.ComputeFtsId()
+		}
+
+		// Convert InternetConfig to string for insertion
+		internetConfigStr := "{}"
+		if len(node.InternetConfig) > 0 {
+			internetConfigStr = string(node.InternetConfig)
+		}
+
+		// Append row with properly typed values - no SQL escaping needed
+		err := batch.Append(
+			node.Zone,
+			node.Net,
+			node.Node,
+			node.NodelistDate,
+			node.DayNumber,
+			node.SystemName,
+			node.Location,
+			node.SysopName,
+			node.Phone,
+			node.NodeType,
+			node.Region, // Nullable - driver handles nil correctly
+			node.MaxSpeed,
+			node.IsCM,
+			node.IsMO,
+			node.Flags,      // []string - driver handles arrays natively
+			node.ModemFlags, // []string - driver handles arrays natively
+			node.ConflictSequence,
+			node.HasConflict,
+			node.HasInet,
+			internetConfigStr,
+			node.FtsId,
+			node.RawLine,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to append row: %w", err)
+		}
+	}
+
+	if err := batch.Send(); err != nil {
+		return fmt.Errorf("failed to send batch: %w", err)
+	}
+
+	return nil
+}
+
+// insertNodesSQL is a fallback using standard SQL interface (legacy, kept for compatibility)
 func (cno *ClickHouseNodeOperations) insertNodesSQL(nodes []database.Node) error {
 	conn := cno.db.Conn()
 
@@ -108,7 +210,7 @@ func (cno *ClickHouseNodeOperations) insertNodesSQL(nodes []database.Node) error
 		}
 		chunk := nodes[i:end]
 
-		if err := cno.insertChunkClickHouse(tx, chunk); err != nil {
+		if err := cno.insertChunkSQL(tx, chunk); err != nil {
 			return fmt.Errorf("failed to insert chunk: %w", err)
 		}
 	}
@@ -116,18 +218,40 @@ func (cno *ClickHouseNodeOperations) insertNodesSQL(nodes []database.Node) error
 	return tx.Commit()
 }
 
-// insertChunkClickHouse inserts a chunk of nodes using ClickHouse-specific SQL generation
-func (cno *ClickHouseNodeOperations) insertChunkClickHouse(tx *sql.Tx, chunk []database.Node) error {
+// insertChunkSQL inserts using parameterized SQL statements (fallback method)
+func (cno *ClickHouseNodeOperations) insertChunkSQL(tx *sql.Tx, chunk []database.Node) error {
 	if len(chunk) == 0 {
 		return nil
 	}
 
-	// Use ClickHouse-specific direct SQL generation with ClickHouse result parser
-	insertSQL := cno.queryBuilder.BuildDirectBatchInsertSQL(chunk, cno.resultParser.ResultParser)
-
-	_, err := tx.Exec(insertSQL)
+	// Use parameterized insert for each node
+	stmt, err := tx.Prepare(cno.queryBuilder.InsertNodeSQL())
 	if err != nil {
-		return fmt.Errorf("failed to execute ClickHouse batch insert: %w", err)
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, node := range chunk {
+		if node.FtsId == "" {
+			node.ComputeFtsId()
+		}
+
+		internetConfigStr := "{}"
+		if len(node.InternetConfig) > 0 {
+			internetConfigStr = string(node.InternetConfig)
+		}
+
+		_, err := stmt.Exec(
+			node.Zone, node.Net, node.Node, node.NodelistDate, node.DayNumber,
+			node.SystemName, node.Location, node.SysopName, node.Phone, node.NodeType,
+			node.Region, node.MaxSpeed, node.IsCM, node.IsMO,
+			node.Flags, node.ModemFlags,
+			node.ConflictSequence, node.HasConflict, node.HasInet,
+			internetConfigStr, node.FtsId, node.RawLine,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to execute insert: %w", err)
+		}
 	}
 
 	return nil

@@ -86,8 +86,8 @@ func New(cfg *Config) (*Server, error) {
 
 	mountFs := NewMountFs(mounts)
 
-	// Create driver
-	driver, err := NewDriver(mountFs, settings)
+	// Create driver with connection limit
+	driver, err := NewDriver(mountFs, settings, cfg.MaxConnections)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create FTP driver: %w", err)
 	}
@@ -150,9 +150,10 @@ func (s *Server) GetStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"enabled": true,
-		"host":    s.host,
-		"port":    s.port,
-		"max_connections": s.maxClients,
+		"enabled":            true,
+		"host":               s.host,
+		"port":               s.port,
+		"max_connections":    s.maxClients,
+		"active_connections": s.driver.ActiveConnections(),
 	}
 }

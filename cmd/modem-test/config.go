@@ -57,6 +57,10 @@ type ModemConfig struct {
 
 	// Stats profile for parsing line statistics: "rockwell", "usr", "zyxel", "raw" (default)
 	StatsProfile string `yaml:"stats_profile"`
+
+	// StatsPagination enables handling of paginated stats output (e.g., MT5634ZBA with ATI11)
+	// When true, sends space to continue when "Press any key" prompt is detected
+	StatsPagination bool `yaml:"stats_pagination"`
 }
 
 // TestConfig contains test execution parameters
@@ -360,6 +364,9 @@ func (c *Config) mergeModemConfig(defaults, override ModemConfig) ModemConfig {
 	}
 	if override.StatsProfile != "" {
 		result.StatsProfile = override.StatsProfile
+	}
+	if override.StatsPagination {
+		result.StatsPagination = override.StatsPagination
 	}
 
 	return result

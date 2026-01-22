@@ -101,6 +101,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Check for multi-modem mode
+	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
+		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
+		runBatchModeMulti(cfg, log, configFile)
+		return
+	}
+
+	// Single modem mode - original flow
 	// Create modem configuration
 	modemCfg := modem.Config{
 		Device:           cfg.Modem.Device,

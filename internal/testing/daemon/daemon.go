@@ -10,6 +10,7 @@ import (
 	"github.com/nodelistdb/internal/cache"
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/protocols"
+	"github.com/nodelistdb/internal/testing/protocols/emsi"
 	"github.com/nodelistdb/internal/testing/services"
 	"github.com/nodelistdb/internal/testing/storage"
 )
@@ -25,6 +26,9 @@ type Daemon struct {
 
 	// Persistent cache (optional) - now uses unified cache interface
 	persistentCache cache.Cache
+
+	// EMSI configuration manager for per-node handshake tuning
+	emsiConfigManager *emsi.ConfigManager
 
 	// Protocol testers
 	binkpTester  protocols.Tester
@@ -170,6 +174,17 @@ func New(cfg *Config) (*Daemon, error) {
 		d.geolocator.SetPersistentCache(geoCache)
 	}
 
+	// Initialize EMSI configuration manager only if EMSI config is provided
+	// This preserves backward compatibility: when no testing.emsi section exists,
+	// the legacy protocols.ifcico.timeout continues to control handshake timing
+	if cfg.Testing.EMSI.Global != nil || len(cfg.Testing.EMSI.Overrides) > 0 {
+		d.emsiConfigManager = emsi.NewConfigManagerWithConfig(cfg.Testing.EMSI.Global)
+		if cfg.Testing.EMSI.Overrides != nil {
+			d.emsiConfigManager.LoadOverrides(cfg.Testing.EMSI.Overrides)
+		}
+		logging.Infof("Initialized EMSI ConfigManager with %d per-node overrides", len(cfg.Testing.EMSI.Overrides))
+	}
+
 	// Set debug mode based on logging level
 	debugMode := cfg.Logging.Level == "debug"
 	d.debug = debugMode
@@ -197,6 +212,12 @@ func New(cfg *Config) (*Daemon, error) {
 			cfg.Protocols.Ifcico.Sysop,
 			cfg.Protocols.Ifcico.Location,
 		)
+		// Wire ConfigManager for per-node EMSI configuration (only if EMSI config exists)
+		if d.emsiConfigManager != nil {
+			if setter, ok := d.ifcicoTester.(protocols.EMSIConfigSetter); ok {
+				setter.SetEMSIConfigManager(d.emsiConfigManager)
+			}
+		}
 		// Set debug mode for ifcico tester
 		if setter, ok := d.ifcicoTester.(protocols.DebugSetter); ok {
 			setter.SetDebug(debugMode)

@@ -20,6 +20,7 @@ type IfcicoTester struct {
 	location     string
 	defaultPort  int
 	debug        bool
+	configMgr    *emsi.ConfigManager // Per-node EMSI configuration manager
 }
 
 // NewIfcicoTester creates a new IFCICO tester
@@ -119,12 +120,25 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		}
 	}
 	
-	// Create EMSI session with custom system info
+	// Get per-node EMSI configuration if available
+	var emsiCfg *emsi.Config
+	if t.configMgr != nil {
+		emsiCfg = t.configMgr.GetConfigForNode(expectedAddress)
+		if t.debug {
+			logging.Debugf("IFCICO: Using per-node config for %s: strategy=%s, masterTimeout=%v",
+				expectedAddress, emsiCfg.InitialStrategy, emsiCfg.MasterTimeout)
+		}
+	}
+
+	// Create EMSI session with custom system info and per-node config
 	if t.debug {
 		logging.Debugf("IFCICO: Creating EMSI session...")
 	}
-	session := emsi.NewSessionWithInfo(conn, t.ourAddress, t.systemName, t.sysop, t.location)
-	session.SetTimeout(t.timeout)
+	session := emsi.NewSessionWithInfoAndConfig(conn, t.ourAddress, t.systemName, t.sysop, t.location, emsiCfg)
+	// Only call SetTimeout if no config manager (legacy mode) - config already has timeouts
+	if t.configMgr == nil {
+		session.SetTimeout(t.timeout)
+	}
 	session.SetDebug(t.debug)
 
 	// Perform EMSI handshake
@@ -235,5 +249,11 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 // SetDebug enables or disables debug mode
 func (t *IfcicoTester) SetDebug(enabled bool) {
 	t.debug = enabled
+}
+
+// SetEMSIConfigManager sets the per-node EMSI configuration manager
+// Implements the EMSIConfigSetter interface
+func (t *IfcicoTester) SetEMSIConfigManager(mgr *emsi.ConfigManager) {
+	t.configMgr = mgr
 }
 

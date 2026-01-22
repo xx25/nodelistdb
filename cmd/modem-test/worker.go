@@ -304,7 +304,16 @@ func (w *ModemWorker) runTest(testNum int, phoneNumber string) testResult {
 		}
 
 		for _, cmd := range cfg.PostDisconnectCommands {
-			response, err := m.SendAT(cmd, cfg.ATCommandTimeout.Duration())
+			var response string
+			var err error
+
+			// Use pagination-aware method if configured (e.g., for MT5634ZBA's ATI11)
+			if cfg.StatsPagination {
+				response, err = m.SendATWithPagination(cmd, cfg.ATCommandTimeout.Duration())
+			} else {
+				response, err = m.SendAT(cmd, cfg.ATCommandTimeout.Duration())
+			}
+
 			if err == nil {
 				w.log.PrintLineStatsWithProfile(response, cfg.StatsProfile)
 				if testRes.lineStats == nil && cfg.StatsProfile != "" && cfg.StatsProfile != "raw" {

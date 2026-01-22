@@ -77,19 +77,25 @@ func (nqb *NodeQueryBuilder) UniqueSysopsWithFilter() string {
 	return nqb.base.UniqueSysopsWithFilterSQL()
 }
 
-// InsertNodesInChunks performs optimized batch inserts
+// InsertNodesInChunks performs optimized batch inserts.
+// Deprecated: Use ClickHouseNodeOperations.InsertNodes instead, which uses
+// the native ClickHouse batch API for better safety and performance.
 func (nqb *NodeQueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error {
 	return nqb.base.InsertNodesInChunks(db, nodes)
 }
 
-// BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT
+// BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT.
+// Deprecated: This method uses string interpolation which has SQL injection risks.
+// Use ClickHouseNodeOperations.InsertNodes instead, which uses parameterized batch inserts.
 func (nqb *NodeQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
 	return nqb.base.BuildDirectBatchInsertSQL(nodes, rp)
 }
 
 // Node-related SQL query methods (LEGACY - These methods are kept on QueryBuilder for backward compatibility)
 
-// InsertNodesInChunks performs optimized batch inserts for ClickHouse with proper array formatting
+// InsertNodesInChunks performs optimized batch inserts for ClickHouse with proper array formatting.
+// Deprecated: This method uses string interpolation via BuildDirectBatchInsertSQL.
+// Use ClickHouseNodeOperations.InsertNodes instead for safe parameterized inserts.
 func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error {
 	if len(nodes) == 0 {
 		return nil
@@ -129,7 +135,9 @@ func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes
 	return tx.Commit()
 }
 
-// BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT for ClickHouse with proper array handling
+// BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT for ClickHouse with proper array handling.
+// Deprecated: This method uses string interpolation with escapeSQL() which has incomplete escaping.
+// Use ClickHouseNodeOperations.InsertNodes instead, which uses the native batch API (PrepareBatch/Append).
 func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
 	if len(nodes) == 0 {
 		return ""

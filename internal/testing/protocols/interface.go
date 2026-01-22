@@ -3,6 +3,8 @@ package protocols
 import (
 	"context"
 	"time"
+
+	"github.com/nodelistdb/internal/testing/protocols/emsi"
 )
 
 // Tester defines the interface for protocol testers
@@ -17,6 +19,12 @@ type Tester interface {
 // DebugSetter is an optional interface for testers that support debug mode
 type DebugSetter interface {
 	SetDebug(enabled bool)
+}
+
+// EMSIConfigSetter is an optional interface for testers that support per-node EMSI configuration
+// Used by IFCICO tester to apply per-node handshake settings
+type EMSIConfigSetter interface {
+	SetEMSIConfigManager(mgr *emsi.ConfigManager)
 }
 
 // TestResult is the base interface for test results

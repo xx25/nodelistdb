@@ -431,6 +431,7 @@ func (h *ModemHandler) storeModemTestResult(ctx context.Context, callerID string
 		CarrierTimeMs:    result.CarrierTimeMs,
 		ModemUsed:        result.ModemUsed,
 		MatchReason:      result.MatchReason,
+		ModemLineStats:   result.ModemLineStats,
 	}
 
 	return h.resultOps.StoreModemTestResult(ctx, input)

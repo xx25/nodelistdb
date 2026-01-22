@@ -182,6 +182,7 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `modem_carrier_time_ms` UInt32 DEFAULT 0,
     `modem_used` String DEFAULT '',
     `modem_match_reason` String DEFAULT '',
+    `modem_line_stats` String DEFAULT '',
     INDEX idx_date test_date TYPE minmax GRANULARITY 1,
     INDEX idx_zone_net (zone, net) TYPE minmax GRANULARITY 1,
     INDEX idx_operational is_operational TYPE minmax GRANULARITY 1,

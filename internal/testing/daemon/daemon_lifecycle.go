@@ -5,6 +5,7 @@ import (
 
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/protocols"
+	"github.com/nodelistdb/internal/testing/protocols/emsi"
 	"github.com/nodelistdb/internal/testing/services"
 	"github.com/nodelistdb/internal/testing/storage"
 )
@@ -113,6 +114,31 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 		d.scheduler.failedRetryInterval = newCfg.Daemon.FailedRetryInterval
 		d.scheduler.staleTestThreshold = newCfg.Daemon.StaleTestThreshold
 		d.scheduler.mu.Unlock()
+	}
+
+	// Reinitialize EMSI configuration manager only if EMSI config is provided
+	// This preserves backward compatibility with configs that don't have testing.emsi
+	if newCfg.Testing.EMSI.Global != nil || len(newCfg.Testing.EMSI.Overrides) > 0 {
+		d.emsiConfigManager = emsi.NewConfigManagerWithConfig(newCfg.Testing.EMSI.Global)
+		if newCfg.Testing.EMSI.Overrides != nil {
+			d.emsiConfigManager.LoadOverrides(newCfg.Testing.EMSI.Overrides)
+		}
+		logging.Infof("Reloaded EMSI ConfigManager with %d per-node overrides", len(newCfg.Testing.EMSI.Overrides))
+
+		// Wire ConfigManager to IFCICO tester if it supports it
+		if d.ifcicoTester != nil {
+			if setter, ok := d.ifcicoTester.(protocols.EMSIConfigSetter); ok {
+				setter.SetEMSIConfigManager(d.emsiConfigManager)
+			}
+		}
+	} else {
+		// No EMSI config provided - clear ConfigManager to use legacy timeout behavior
+		d.emsiConfigManager = nil
+		if d.ifcicoTester != nil {
+			if setter, ok := d.ifcicoTester.(protocols.EMSIConfigSetter); ok {
+				setter.SetEMSIConfigManager(nil)
+			}
+		}
 	}
 
 	// Reload logging configuration

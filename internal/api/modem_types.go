@@ -84,6 +84,7 @@ type ModemTestResultRequest struct {
 	CarrierTimeMs uint32 `json:"carrier_time_ms,omitempty"`
 	ModemUsed     string `json:"modem_used,omitempty"`
 	MatchReason   string `json:"match_reason,omitempty"`
+	ModemLineStats string `json:"modem_line_stats,omitempty"`
 }
 
 // SubmitResultsResponse is the response for POST /api/modem/results

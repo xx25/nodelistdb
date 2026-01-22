@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/nodelistdb/internal/testing/protocols/emsi"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,12 +15,31 @@ type Config struct {
 	ClickHouse      *ClickHouseConfig  `yaml:"clickhouse"`
 	Protocols       ProtocolsConfig    `yaml:"protocols"`
 	Services        ServicesConfig     `yaml:"services"`
+	Testing         TestingConfig      `yaml:"testing"` // Protocol-specific testing configurations
 	Cache           CacheConfig        `yaml:"cache"` // Not used by testdaemon
 	TestdaemonCache CacheConfig        `yaml:"testdaemon_cache"` // Required cache config for testdaemon
 	Logging         LoggingConfig      `yaml:"testdaemon_logging"` // Testdaemon-specific logging config
 	CLI             CLIConfig          `yaml:"cli"`
 	ConfigPath      string             `yaml:"-"` // Path to config file, set when loading
 	Version         string             `yaml:"-"` // Version string, set from main
+}
+
+// TestingConfig contains protocol-specific testing configurations
+type TestingConfig struct {
+	EMSI EMSITestingConfig `yaml:"emsi"`
+}
+
+// EMSITestingConfig contains EMSI handshake configuration
+// Used by IFCICO protocol tester for per-node handshake tuning
+type EMSITestingConfig struct {
+	// Global EMSI config (optional - FSC-0056.001 defaults used if omitted)
+	Global *emsi.Config `yaml:"global"`
+	// Per-node overrides keyed by FidoNet address.
+	// Address format must match the output of node.Address() - typically "zone:net/node"
+	// Examples: "2:5020/2021", "1:123/456"
+	// Note: Point addresses should omit ".0" suffix (use "2:5020/2021" not "2:5020/2021.0")
+	// Domain-qualified addresses (e.g., "2:5020/2021@fidonet") are NOT supported.
+	Overrides map[string]*emsi.NodeOverride `yaml:"overrides"`
 }
 
 // DaemonConfig contains daemon-specific settings
@@ -276,7 +296,63 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.CLI.WelcomeMessage = "NodelistDB Test Daemon CLI v1.0.0\nType 'help' for available commands.\n"
 	}
 
+	// Normalize EMSI duration fields (convert numeric seconds to time.Duration)
+	// EMSI config uses time.Duration which YAML may unmarshal as plain nanoseconds
+	normalizeEMSIConfig(&cfg)
+
 	return &cfg, nil
+}
+
+// normalizeEMSIConfig normalizes duration fields in EMSI configuration.
+// YAML may unmarshal numeric values (e.g., 60) as nanoseconds instead of seconds.
+// This function converts values that look like plain seconds to proper time.Duration.
+func normalizeEMSIConfig(cfg *Config) {
+	const oneSecondInNanos = int64(time.Second)
+
+	// Helper to normalize a duration value
+	normalizeDuration := func(d time.Duration) time.Duration {
+		if d > 0 && d < time.Duration(oneSecondInNanos) {
+			return d * time.Second
+		}
+		return d
+	}
+
+	// Helper to normalize a duration pointer
+	normalizeDurationPtr := func(d *time.Duration) {
+		if d != nil && *d > 0 && *d < time.Duration(oneSecondInNanos) {
+			*d *= time.Second
+		}
+	}
+
+	// Normalize global EMSI config
+	if cfg.Testing.EMSI.Global != nil {
+		g := cfg.Testing.EMSI.Global
+		g.MasterTimeout = normalizeDuration(g.MasterTimeout)
+		g.StepTimeout = normalizeDuration(g.StepTimeout)
+		g.FirstStepTimeout = normalizeDuration(g.FirstStepTimeout)
+		g.CharacterTimeout = normalizeDuration(g.CharacterTimeout)
+		g.RetryDelay = normalizeDuration(g.RetryDelay)
+		g.InitialCRInterval = normalizeDuration(g.InitialCRInterval)
+		g.InitialCRTimeout = normalizeDuration(g.InitialCRTimeout)
+		g.PreventiveINQTimeout = normalizeDuration(g.PreventiveINQTimeout)
+		g.INQInterval = normalizeDuration(g.INQInterval)
+	}
+
+	// Normalize per-node EMSI overrides
+	for _, override := range cfg.Testing.EMSI.Overrides {
+		if override == nil {
+			continue
+		}
+		normalizeDurationPtr(override.MasterTimeout)
+		normalizeDurationPtr(override.StepTimeout)
+		normalizeDurationPtr(override.FirstStepTimeout)
+		normalizeDurationPtr(override.CharacterTimeout)
+		normalizeDurationPtr(override.RetryDelay)
+		normalizeDurationPtr(override.InitialCRInterval)
+		normalizeDurationPtr(override.InitialCRTimeout)
+		normalizeDurationPtr(override.PreventiveINQTimeout)
+		normalizeDurationPtr(override.INQInterval)
+	}
 }
 
 // Validate checks if configuration is valid

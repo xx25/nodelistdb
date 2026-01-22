@@ -112,6 +112,7 @@ type ModemTestResult struct {
 	CarrierTimeMs  uint32 `json:"carrier_time_ms,omitempty"`
 	ModemUsed      string `json:"modem_used,omitempty"`      // Daemon's local modem ID
 	MatchReason    string `json:"match_reason,omitempty"`    // Why this modem was selected
+	ModemLineStats string `json:"modem_line_stats,omitempty"`
 }
 
 // ModemQueueStats contains statistics about the modem test queue

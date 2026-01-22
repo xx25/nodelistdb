@@ -27,33 +27,68 @@ type TestRecord struct {
 	EMSITime      time.Duration
 	EMSIError     string
 
+	// Multi-modem support
+	ModemName string
+
 	// Remote system info (from EMSI)
-	RemoteAddress string
-	RemoteSystem  string
+	RemoteAddress  string
+	RemoteSystem   string
 	RemoteLocation string
-	RemoteSysop   string
-	RemoteMailer  string
+	RemoteSysop    string
+	RemoteMailer   string
 
 	// Line statistics (parsed)
-	TXSpeed       int
-	RXSpeed       int
-	Protocol      string
-	Compression   string
-	LineQuality   int
-	RxLevel       int
-	Retrains      int
-	Termination   string
-	StatsNotes    string
+	TXSpeed     int
+	RXSpeed     int
+	Protocol    string
+	Compression string
+	LineQuality int
+	RxLevel     int
+	Retrains    int
+	Termination string
+	StatsNotes  string
+}
+
+// csvHeader is the current header format with modem_name column
+var csvHeader = []string{
+	"timestamp",
+	"test_num",
+	"phone",
+	"modem_name",
+	"success",
+	"dial_time_s",
+	"connect_speed",
+	"connect_string",
+	"emsi_time_s",
+	"emsi_error",
+	"remote_address",
+	"remote_system",
+	"remote_location",
+	"remote_sysop",
+	"remote_mailer",
+	"tx_speed",
+	"rx_speed",
+	"protocol",
+	"compression",
+	"line_quality",
+	"rx_level",
+	"retrains",
+	"termination",
+	"stats_notes",
 }
 
 // NewCSVWriter creates a new CSV writer for the given file path
 // If the file doesn't exist, it creates it with a header row
-// If the file exists, it appends to it
+// If the file exists, it checks header compatibility before appending
 func NewCSVWriter(path string) (*CSVWriter, error) {
-	// Check if file exists
+	// Check if file exists and validate header
 	exists := false
-	if _, err := os.Stat(path); err == nil {
+	if info, err := os.Stat(path); err == nil && info.Size() > 0 {
 		exists = true
+		// Check header compatibility
+		if err := checkCSVHeader(path); err != nil {
+			return nil, err
+		}
 	}
 
 	// Open file for append (create if doesn't exist)
@@ -66,32 +101,7 @@ func NewCSVWriter(path string) (*CSVWriter, error) {
 
 	// Write header if new file
 	if !exists {
-		header := []string{
-			"timestamp",
-			"test_num",
-			"phone",
-			"success",
-			"dial_time_s",
-			"connect_speed",
-			"connect_string",
-			"emsi_time_s",
-			"emsi_error",
-			"remote_address",
-			"remote_system",
-			"remote_location",
-			"remote_sysop",
-			"remote_mailer",
-			"tx_speed",
-			"rx_speed",
-			"protocol",
-			"compression",
-			"line_quality",
-			"rx_level",
-			"retrains",
-			"termination",
-			"stats_notes",
-		}
-		if err := writer.Write(header); err != nil {
+		if err := writer.Write(csvHeader); err != nil {
 			file.Close()
 			return nil, fmt.Errorf("failed to write CSV header: %w", err)
 		}
@@ -102,6 +112,35 @@ func NewCSVWriter(path string) (*CSVWriter, error) {
 		file:   file,
 		writer: writer,
 	}, nil
+}
+
+// checkCSVHeader verifies the existing CSV file has a compatible header
+func checkCSVHeader(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open CSV file for header check: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	header, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read CSV header: %w", err)
+	}
+
+	// Check header length matches expected
+	if len(header) != len(csvHeader) {
+		return fmt.Errorf("CSV file %s has %d columns, expected %d. "+
+			"Use a new file or delete the existing one", path, len(header), len(csvHeader))
+	}
+
+	// Check if header has modem_name column in correct position
+	if header[3] != "modem_name" {
+		return fmt.Errorf("CSV file %s has incompatible header format (missing or misplaced modem_name column). "+
+			"Use a new file or delete the existing one", path)
+	}
+
+	return nil
 }
 
 // WriteRecord writes a test record to the CSV file
@@ -115,6 +154,7 @@ func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 		rec.Timestamp.Format(time.RFC3339),
 		fmt.Sprintf("%d", rec.TestNum),
 		rec.Phone,
+		rec.ModemName,
 		success,
 		fmt.Sprintf("%.1f", rec.DialTime.Seconds()),
 		fmt.Sprintf("%d", rec.ConnectSpeed),

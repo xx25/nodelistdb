@@ -46,6 +46,7 @@ type ModemTestResultInput struct {
 	CarrierTimeMs uint32
 	ModemUsed     string
 	MatchReason   string
+	ModemLineStats string
 }
 
 // StoreModemTestResult stores a modem test result in the node_test_results table
@@ -66,9 +67,9 @@ func (m *ModemResultOperations) StoreModemTestResult(ctx context.Context, input 
 			modem_connect_speed, modem_protocol, modem_caller_id,
 			modem_phone_dialed, modem_ring_count, modem_carrier_time_ms,
 			modem_error, modem_address_valid, modem_response_type,
-			modem_software_source, modem_used, modem_match_reason,
+			modem_software_source, modem_used, modem_match_reason, modem_line_stats,
 			is_operational, hostname
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := m.db.Conn().ExecContext(ctx, query,
@@ -91,6 +92,7 @@ func (m *ModemResultOperations) StoreModemTestResult(ctx context.Context, input 
 		input.SoftwareSource,
 		input.ModemUsed,
 		input.MatchReason,
+		input.ModemLineStats,
 		input.Success, // is_operational = success for modem tests
 		"modem",       // hostname indicator
 	)
