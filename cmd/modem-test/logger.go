@@ -16,6 +16,7 @@ type TestLogger struct {
 	config    LoggingConfig
 	startTime time.Time
 	output    io.Writer
+	prefix    string // Optional prefix for identifying source (e.g., modem name)
 }
 
 // NewTestLogger creates a new test logger with the given configuration
@@ -32,6 +33,16 @@ func (l *TestLogger) SetOutput(w io.Writer) {
 	l.output = w
 }
 
+// GetOutput returns the current output writer
+func (l *TestLogger) GetOutput() io.Writer {
+	return l.output
+}
+
+// SetPrefix sets a prefix string that appears before the category in each log line
+func (l *TestLogger) SetPrefix(prefix string) {
+	l.prefix = prefix
+}
+
 // timestamp returns the current time formatted for log output
 func (l *TestLogger) timestamp() string {
 	if l.config.Timestamps {
@@ -46,9 +57,15 @@ func (l *TestLogger) log(category, color, message string, args ...interface{}) {
 		return
 	}
 
-	var prefix string
+	var timePrefix string
 	if l.config.Timestamps {
-		prefix = fmt.Sprintf("[%s] ", l.timestamp())
+		timePrefix = fmt.Sprintf("[%s] ", l.timestamp())
+	}
+
+	// Format modem prefix if set
+	var modemPrefix string
+	if l.prefix != "" {
+		modemPrefix = fmt.Sprintf("[%s] ", l.prefix)
 	}
 
 	// Format category with fixed width
@@ -60,7 +77,7 @@ func (l *TestLogger) log(category, color, message string, args ...interface{}) {
 	}
 
 	formattedMsg := fmt.Sprintf(message, args...)
-	fmt.Fprintf(l.output, "%s%s %s\n", prefix, cat, formattedMsg)
+	fmt.Fprintf(l.output, "%s%s%s %s\n", timePrefix, modemPrefix, cat, formattedMsg)
 }
 
 // Colors for terminal output
@@ -360,6 +377,119 @@ func sortStrings(s []string) {
 			}
 		}
 	}
+}
+
+// PrintMultiModemHeader prints the session header for multi-modem mode
+func (l *TestLogger) PrintMultiModemHeader(configPath string, modemNames []string, phones []string, testCount int) {
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output, "                   MULTI-MODEM TEST SESSION")
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	fmt.Fprintf(l.output, "Config:    %s\n", configPath)
+	fmt.Fprintf(l.output, "Modems:    %s (%d total)\n", strings.Join(modemNames, ", "), len(modemNames))
+	if len(phones) == 1 {
+		fmt.Fprintf(l.output, "Phone:     %s\n", phones[0])
+	} else {
+		fmt.Fprintf(l.output, "Phones:    %s (circular)\n", strings.Join(phones, ", "))
+	}
+	if testCount <= 0 {
+		fmt.Fprintln(l.output, "Tests:     Infinite (Ctrl+C to stop)")
+	} else {
+		fmt.Fprintf(l.output, "Tests:     %d\n", testCount)
+	}
+	fmt.Fprintf(l.output, "Started:   %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output)
+}
+
+// PrintMultiModemSummary prints the final test summary for multi-modem mode
+func (l *TestLogger) PrintMultiModemSummary(total, success, failed int, totalDuration time.Duration, avgDialTime, avgEmsiTime time.Duration, results []string, phoneStats map[string]*PhoneStats, modemStats map[string]*WorkerStats) {
+	fmt.Fprintln(l.output)
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output, "                      MULTI-MODEM SUMMARY")
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+
+	fmt.Fprintf(l.output, "Total:     %d tests\n", total)
+
+	successPct := 0.0
+	failedPct := 0.0
+	if total > 0 {
+		successPct = float64(success) / float64(total) * 100
+		failedPct = float64(failed) / float64(total) * 100
+	}
+
+	fmt.Fprintf(l.output, "Success:   %d (%.1f%%)\n", success, successPct)
+	fmt.Fprintf(l.output, "Failed:    %d (%.1f%%)\n", failed, failedPct)
+	fmt.Fprintf(l.output, "Duration:  %s\n", formatDuration(totalDuration))
+	fmt.Fprintln(l.output)
+
+	if success > 0 {
+		fmt.Fprintf(l.output, "Avg dial time:  %.1fs\n", avgDialTime.Seconds())
+		fmt.Fprintf(l.output, "Avg EMSI time:  %.1fs\n", avgEmsiTime.Seconds())
+		fmt.Fprintln(l.output)
+	}
+
+	// Print per-modem statistics
+	if len(modemStats) > 0 {
+		fmt.Fprintln(l.output, "PER-MODEM STATISTICS:")
+		fmt.Fprintf(l.output, "  %-16s %6s %6s %6s %10s %10s\n", "MODEM", "TOTAL", "OK", "FAIL", "AVG DIAL", "AVG EMSI")
+		fmt.Fprintf(l.output, "  %s\n", strings.Repeat("-", 62))
+
+		// Sort modem names for consistent output
+		names := make([]string, 0, len(modemStats))
+		for name := range modemStats {
+			names = append(names, name)
+		}
+		sortStrings(names)
+
+		for _, name := range names {
+			stats := modemStats[name]
+			avgDial := "-"
+			avgEmsi := "-"
+			successRate := 0.0
+			if stats.Success > 0 {
+				avgDial = fmt.Sprintf("%.1fs", (stats.TotalDialTime / time.Duration(stats.Success)).Seconds())
+				avgEmsi = fmt.Sprintf("%.1fs", (stats.TotalEmsiTime / time.Duration(stats.Success)).Seconds())
+			}
+			if stats.Total > 0 {
+				successRate = float64(stats.Success) / float64(stats.Total) * 100
+			}
+			fmt.Fprintf(l.output, "  %-16s %6d %6d %6d %10s %10s  (%.0f%%)\n",
+				name, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, successRate)
+		}
+		fmt.Fprintln(l.output)
+	}
+
+	// Print per-phone statistics
+	if len(phoneStats) > 1 {
+		fmt.Fprintln(l.output, "PER-PHONE STATISTICS:")
+		fmt.Fprintf(l.output, "  %-12s %6s %6s %6s %10s %10s\n", "PHONE", "TOTAL", "OK", "FAIL", "AVG DIAL", "AVG EMSI")
+		fmt.Fprintf(l.output, "  %s\n", strings.Repeat("-", 58))
+
+		phones := make([]string, 0, len(phoneStats))
+		for phone := range phoneStats {
+			phones = append(phones, phone)
+		}
+		sortStrings(phones)
+
+		for _, phone := range phones {
+			stats := phoneStats[phone]
+			avgDial := "-"
+			avgEmsi := "-"
+			if stats.Success > 0 {
+				avgDial = fmt.Sprintf("%.1fs", stats.AvgDialTime().Seconds())
+				avgEmsi = fmt.Sprintf("%.1fs", stats.AvgEmsiTime().Seconds())
+			}
+			fmt.Fprintf(l.output, "  %-12s %6d %6d %6d %10s %10s  (%.0f%%)\n",
+				stats.Phone, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, stats.SuccessRate())
+		}
+		fmt.Fprintln(l.output)
+	}
+
+	fmt.Fprintln(l.output, "RESULTS:")
+	for _, r := range results {
+		fmt.Fprintf(l.output, "  %s\n", r)
+	}
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
 }
 
 // PrintLineStats prints post-disconnect line statistics (raw format)

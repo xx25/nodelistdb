@@ -13,10 +13,24 @@ import (
 
 // Config represents the complete configuration for modem testing
 type Config struct {
-	Modem   ModemConfig   `yaml:"modem"`
-	Test    TestConfig    `yaml:"test"`
-	EMSI    EMSIConfig    `yaml:"emsi"`
-	Logging LoggingConfig `yaml:"logging"`
+	Modem         ModemConfig           `yaml:"modem"`          // Single modem (backward compat)
+	Modems        []ModemInstanceConfig `yaml:"modems"`         // Multi-modem array
+	ModemDefaults ModemConfig           `yaml:"modem_defaults"` // Shared defaults for multi-modem
+	Test          TestConfig            `yaml:"test"`
+	EMSI          EMSIConfig            `yaml:"emsi"`
+	Logging       LoggingConfig         `yaml:"logging"`
+}
+
+// ModemInstanceConfig extends ModemConfig with instance-specific fields
+type ModemInstanceConfig struct {
+	ModemConfig `yaml:",inline"` // Embed all modem config fields
+	Name        string           `yaml:"name"`    // Friendly name (e.g., "modem1", "USR Courier")
+	Enabled     *bool            `yaml:"enabled"` // Allow disabling individual modems (nil = true)
+}
+
+// IsEnabled returns true if this modem instance is enabled
+func (m *ModemInstanceConfig) IsEnabled() bool {
+	return m.Enabled == nil || *m.Enabled
 }
 
 // ModemConfig contains modem hardware and timing settings
@@ -166,6 +180,12 @@ func LoadConfig(path string) (*Config, error) {
 
 // Validate checks configuration for errors
 func (c *Config) Validate() error {
+	// Multi-modem mode validation
+	if c.IsMultiModem() {
+		return c.validateMultiModem()
+	}
+
+	// Single modem validation
 	if c.Modem.Device == "" {
 		return fmt.Errorf("modem.device is required")
 	}
@@ -179,6 +199,170 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("modem.hangup_method must be 'dtr' or 'escape'")
 	}
 	return nil
+}
+
+// validateMultiModem validates multi-modem configuration
+func (c *Config) validateMultiModem() error {
+	enabledCount := 0
+	devices := make(map[string]bool)
+	names := make(map[string]bool)
+
+	for i, m := range c.Modems {
+		if !m.IsEnabled() {
+			continue
+		}
+		enabledCount++
+
+		// Merge with defaults to validate the final config
+		merged := c.mergeModemConfig(c.ModemDefaults, m.ModemConfig)
+
+		// Check device is specified (required, no default)
+		if merged.Device == "" {
+			return fmt.Errorf("modems[%d].device is required", i)
+		}
+
+		// Check for duplicate devices
+		if devices[merged.Device] {
+			return fmt.Errorf("duplicate modem device: %s", merged.Device)
+		}
+		devices[merged.Device] = true
+
+		// Check for duplicate names (if specified)
+		if m.Name != "" {
+			if names[m.Name] {
+				return fmt.Errorf("duplicate modem name: %s", m.Name)
+			}
+			names[m.Name] = true
+		}
+
+		// Validate required fields after merge
+		if merged.BaudRate <= 0 {
+			return fmt.Errorf("modems[%d]: baud_rate must be positive (set in modem_defaults or per-modem)", i)
+		}
+
+		// Validate hangup method (use default if not set)
+		hangup := merged.HangupMethod
+		if hangup == "" {
+			hangup = "dtr" // Default
+		}
+		if hangup != "dtr" && hangup != "escape" {
+			return fmt.Errorf("modems[%d].hangup_method must be 'dtr' or 'escape'", i)
+		}
+	}
+
+	if enabledCount == 0 {
+		return fmt.Errorf("at least one modem must be enabled")
+	}
+
+	if c.Test.Count <= 0 {
+		return fmt.Errorf("test.count must be positive")
+	}
+
+	return nil
+}
+
+// IsMultiModem returns true if multi-modem mode is configured
+func (c *Config) IsMultiModem() bool {
+	return len(c.Modems) > 0
+}
+
+// GetModemConfigs returns the list of modem configurations to use.
+// For multi-modem mode, merges defaults with per-modem settings.
+// For single modem mode, returns single config wrapped in slice.
+func (c *Config) GetModemConfigs() []ModemInstanceConfig {
+	if !c.IsMultiModem() {
+		// Single modem mode - wrap in ModemInstanceConfig
+		return []ModemInstanceConfig{{
+			ModemConfig: c.Modem,
+			Name:        "modem",
+			Enabled:     nil, // nil = enabled
+		}}
+	}
+
+	// Collect all user-provided names first to avoid collisions
+	usedNames := make(map[string]bool)
+	for _, m := range c.Modems {
+		if m.IsEnabled() && m.Name != "" {
+			usedNames[m.Name] = true
+		}
+	}
+
+	// Multi-modem mode - merge defaults with per-modem settings
+	result := make([]ModemInstanceConfig, 0, len(c.Modems))
+	autoIndex := 1
+	for _, m := range c.Modems {
+		if !m.IsEnabled() {
+			continue
+		}
+
+		// Start with defaults, overlay per-modem settings
+		merged := c.mergeModemConfig(c.ModemDefaults, m.ModemConfig)
+
+		name := m.Name
+		if name == "" {
+			// Generate unique name that doesn't collide with user-provided names
+			for {
+				name = fmt.Sprintf("modem%d", autoIndex)
+				autoIndex++
+				if !usedNames[name] {
+					usedNames[name] = true
+					break
+				}
+			}
+		}
+
+		result = append(result, ModemInstanceConfig{
+			ModemConfig: merged,
+			Name:        name,
+			Enabled:     m.Enabled,
+		})
+	}
+
+	return result
+}
+
+// mergeModemConfig merges defaults with overrides, non-zero values in override take precedence
+func (c *Config) mergeModemConfig(defaults, override ModemConfig) ModemConfig {
+	result := defaults
+
+	if override.Device != "" {
+		result.Device = override.Device
+	}
+	if override.BaudRate != 0 {
+		result.BaudRate = override.BaudRate
+	}
+	if override.DialPrefix != "" {
+		result.DialPrefix = override.DialPrefix
+	}
+	if override.HangupMethod != "" {
+		result.HangupMethod = override.HangupMethod
+	}
+	if override.DialTimeout != 0 {
+		result.DialTimeout = override.DialTimeout
+	}
+	if override.CarrierTimeout != 0 {
+		result.CarrierTimeout = override.CarrierTimeout
+	}
+	if override.ATCommandTimeout != 0 {
+		result.ATCommandTimeout = override.ATCommandTimeout
+	}
+	if override.ReadTimeout != 0 {
+		result.ReadTimeout = override.ReadTimeout
+	}
+	if len(override.InitCommands) > 0 {
+		result.InitCommands = override.InitCommands
+	}
+	if len(override.PostDisconnectCommands) > 0 {
+		result.PostDisconnectCommands = override.PostDisconnectCommands
+	}
+	if override.PostDisconnectDelay != 0 {
+		result.PostDisconnectDelay = override.PostDisconnectDelay
+	}
+	if override.StatsProfile != "" {
+		result.StatsProfile = override.StatsProfile
+	}
+
+	return result
 }
 
 // ApplyCLIOverrides applies command-line flag values to the config

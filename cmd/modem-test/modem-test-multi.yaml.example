@@ -1,0 +1,82 @@
+# Multi-Modem Test Configuration Example
+# Example configuration for running multiple modems in parallel
+#
+# Key features:
+# - Multiple modems work in parallel
+# - Phone coordination: same number is never called simultaneously by different modems
+# - Shared defaults: common settings applied to all modems
+# - Per-modem overrides: individual settings for specific modems
+
+# Shared defaults - applied to all modems unless overridden
+modem_defaults:
+  baud_rate: 115200
+  dial_prefix: "ATDT"
+  hangup_method: "dtr"
+
+  # Timeouts
+  dial_timeout: 200s
+  carrier_timeout: 5s
+  at_command_timeout: 5s
+  read_timeout: 1s
+
+  # Default init commands
+  init_commands:
+    - "ATZ"
+    - "ATE0"
+    - "ATV1"
+    - "ATX4"
+    - "ATS0=0"
+
+  # Post-disconnect commands for line statistics
+  post_disconnect_commands:
+    - "AT&V1"
+  post_disconnect_delay: 2s
+  stats_profile: rockwell
+
+# Multiple modems - each runs in its own goroutine
+modems:
+  - name: "USR Sportster"
+    device: "/dev/ttyACM0"
+    # Uses all defaults
+
+  - name: "ZyXEL U336E"
+    device: "/dev/ttyUSB0"
+    # Override init commands for ZyXEL
+    init_commands:
+      - "ATZ"
+      - "ATE0"
+      - "ATV1"
+      - "ATX4"
+      - "AT&K3"     # Hardware flow control
+      - "ATS0=0"
+    # Override stats for ZyXEL
+    post_disconnect_commands:
+      - "ATI11"
+    stats_profile: zyxel
+
+  - name: "Backup Modem"
+    device: "/dev/ttyUSB1"
+    enabled: false    # Disabled - won't be used
+
+test:
+  count: 20
+  inter_delay: 5s
+  phones:
+    - "917"
+    - "918"
+    - "919"
+  csv_file: "multi-modem-results.csv"
+
+emsi:
+  our_address: "2:5001/5001"
+  system_name: "NodelistDB Multi-Tester"
+  sysop: "Test"
+  location: "Test"
+  timeout: 30s
+  protocols: []
+
+logging:
+  debug: true
+  timestamps: true
+  show_rs232: true
+  show_hex: false

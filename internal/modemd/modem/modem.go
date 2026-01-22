@@ -21,6 +21,7 @@ type Config struct {
 	HangupMethod string        // "dtr" (drop DTR) or "escape" (+++ ATH)
 	LineStatsCommand string    // AT command for line stats (default AT&V1)
 	Debug        bool          // Enable debug logging of all modem I/O
+	Name         string        // Optional name for identifying modem in debug logs
 
 	// Timeouts
 	DialTimeout      time.Duration // Timeout for dial (waiting for CONNECT/error), default 200s
@@ -108,24 +109,33 @@ func debugTimestamp() string {
 	return time.Now().Format("15:04:05.000")
 }
 
+// debugPrefix returns the modem identifier for log messages (name or device)
+func (m *Modem) debugPrefix() string {
+	if m.config.Name != "" {
+		return m.config.Name
+	}
+	return m.config.Device
+}
+
 // debugLog prints debug message if debug mode is enabled (uses stderr for unbuffered output)
 func (m *Modem) debugLog(format string, args ...interface{}) {
 	if m.config.Debug {
-		fmt.Fprintf(os.Stderr, "[%s MODEM] "+format+"\n", append([]interface{}{debugTimestamp()}, args...)...)
+		msg := fmt.Sprintf(format, args...)
+		fmt.Fprintf(os.Stderr, "[%s] [%s] MODEM  %s\n", debugTimestamp(), m.debugPrefix(), msg)
 	}
 }
 
 // debugLogTX logs data being sent to modem
 func (m *Modem) debugLogTX(data []byte) {
 	if m.config.Debug {
-		fmt.Fprintf(os.Stderr, "[%s TX] %q\n", debugTimestamp(), string(data))
+		fmt.Fprintf(os.Stderr, "[%s] [%s] TX     %q\n", debugTimestamp(), m.debugPrefix(), string(data))
 	}
 }
 
 // debugLogRX logs data received from modem
 func (m *Modem) debugLogRX(data []byte) {
 	if m.config.Debug {
-		fmt.Fprintf(os.Stderr, "[%s RX] %q\n", debugTimestamp(), string(data))
+		fmt.Fprintf(os.Stderr, "[%s] [%s] RX     %q\n", debugTimestamp(), m.debugPrefix(), string(data))
 	}
 }
 
@@ -136,11 +146,11 @@ func (m *Modem) debugLogStatus(label string) {
 	}
 	status, err := m.getStatusLocked()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[%s RS232] %s: error: %v\n", debugTimestamp(), label, err)
+		fmt.Fprintf(os.Stderr, "[%s] [%s] RS232  %s: error: %v\n", debugTimestamp(), m.debugPrefix(), label, err)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[%s RS232] %s: DCD=%s DSR=%s CTS=%s RI=%s\n",
-		debugTimestamp(), label,
+	fmt.Fprintf(os.Stderr, "[%s] [%s] RS232  %s: DCD=%s DSR=%s CTS=%s RI=%s\n",
+		debugTimestamp(), m.debugPrefix(), label,
 		boolTo01(status.DCD), boolTo01(status.DSR), boolTo01(status.CTS), boolTo01(status.RI))
 }
 
@@ -384,7 +394,7 @@ func (m *Modem) GetLineStats() (string, error) {
 // sendATLocked sends an AT command (caller must hold mutex)
 func (m *Modem) sendATLocked(cmd string, timeout time.Duration) (string, error) {
 	if m.config.Debug {
-		fmt.Fprintf(os.Stderr, "[%s MODEM] sendAT: cmd=%q timeout=%v\n", debugTimestamp(), cmd, timeout)
+		fmt.Fprintf(os.Stderr, "[%s] [%s] MODEM  sendAT: cmd=%q timeout=%v\n", debugTimestamp(), m.debugPrefix(), cmd, timeout)
 	}
 	// Flush input/output buffers before sending
 	_ = m.port.ResetInputBuffer()
@@ -562,7 +572,7 @@ func (m *Modem) hangupDTRLocked() error {
 	status, err := m.getStatusLocked()
 	if err == nil && status.DCD {
 		if m.config.Debug {
-			fmt.Fprintf(os.Stderr, "[%s MODEM] DTR hangup failed (DCD still high), trying escape sequence\n", debugTimestamp())
+			fmt.Fprintf(os.Stderr, "[%s] [%s] MODEM  DTR hangup failed (DCD still high), trying escape sequence\n", debugTimestamp(), m.debugPrefix())
 		}
 		// DTR method failed, try escape sequence as fallback
 		return m.hangupEscapeLocked()
