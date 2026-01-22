@@ -707,6 +707,158 @@ func (m *Modem) FlushBuffers() error {
 	return nil
 }
 
+// SendATWithPagination sends an AT command and handles paginated responses.
+// Some modems (e.g., MT5634ZBA with ATI11) show multi-page output and wait
+// for a keypress at "Press any key to continue" prompts before showing more.
+// This method detects such prompts and sends a space to continue.
+func (m *Modem) SendATWithPagination(cmd string, timeout time.Duration) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.port == nil {
+		return "", errors.New("modem not open")
+	}
+	if m.inDataMode {
+		return "", errors.New("modem in data mode, cannot send AT commands")
+	}
+
+	return m.sendATWithPaginationLocked(cmd, timeout)
+}
+
+// sendATWithPaginationLocked sends AT command handling pagination (caller must hold mutex)
+func (m *Modem) sendATWithPaginationLocked(cmd string, timeout time.Duration) (string, error) {
+	if m.config.Debug {
+		fmt.Fprintf(os.Stderr, "[%s] [%s] MODEM  sendATWithPagination: cmd=%q timeout=%v\n", debugTimestamp(), m.debugPrefix(), cmd, timeout)
+	}
+
+	// Flush input/output buffers before sending
+	_ = m.port.ResetInputBuffer()
+	_ = m.port.ResetOutputBuffer()
+
+	m.debugLogStatus("before TX")
+
+	// Write command with CR
+	cmdBytes := []byte(cmd + "\r")
+	m.debugLogTX(cmdBytes)
+	if _, err := m.port.Write(cmdBytes); err != nil {
+		return "", fmt.Errorf("write failed: %w", err)
+	}
+
+	// Small delay for modem to process and respond
+	time.Sleep(100 * time.Millisecond)
+
+	// Read response with pagination handling
+	return m.readResponseWithPaginationLocked(timeout)
+}
+
+// readResponseWithPaginationLocked reads modem response, handling pagination prompts.
+func (m *Modem) readResponseWithPaginationLocked(timeout time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	var response []byte
+	buf := make([]byte, 64)
+	lastPaginationHandledAt := -1 // Track position of last handled pagination prompt
+
+	const defaultPollTimeout = 50 // milliseconds
+
+	// Restore original read timeout when done
+	defer func() {
+		_ = m.port.SetReadTimeout(int(m.config.ReadTimeout.Milliseconds()))
+	}()
+
+	currentTimeout := defaultPollTimeout
+	_ = m.port.SetReadTimeout(currentTimeout)
+
+	for time.Now().Before(deadline) {
+		// Adjust timeout if remaining time is less than poll timeout
+		remaining := time.Until(deadline)
+		if remaining < time.Duration(defaultPollTimeout)*time.Millisecond {
+			newTimeout := int(remaining.Milliseconds())
+			if newTimeout < 10 {
+				newTimeout = 10
+			}
+			if newTimeout != currentTimeout {
+				currentTimeout = newTimeout
+				_ = m.port.SetReadTimeout(currentTimeout)
+			}
+		}
+
+		n, err := m.port.Read(buf)
+		if n > 0 {
+			m.debugLogRX(buf[:n])
+			response = append(response, buf[:n]...)
+			resp := string(response)
+
+			// Check for terminal responses
+			if IsSuccessResponse(resp) || IsConnectResponse(resp) {
+				m.debugLogStatus("after RX (terminal)")
+				return normalizeResponseLineEndings(resp), nil
+			}
+			if failed, _ := IsFailureResponse(resp); failed {
+				m.debugLogStatus("after RX (failure)")
+				return normalizeResponseLineEndings(resp), nil
+			}
+
+			// Check for pagination prompt (only if we haven't already handled one at this position)
+			if promptPos := m.findPaginationPrompt(resp); promptPos >= 0 && promptPos > lastPaginationHandledAt {
+				m.debugLog("detected pagination prompt, sending space to continue")
+				lastPaginationHandledAt = promptPos
+				// Send space to continue
+				if _, err := m.port.Write([]byte(" ")); err != nil {
+					m.debugLog("failed to send pagination continue: %v", err)
+				}
+				// Small delay for modem to process
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+
+		if err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "closed") || strings.Contains(errStr, "denied") ||
+				strings.Contains(errStr, "no such") || strings.Contains(errStr, "not open") {
+				m.debugLogStatus("after RX (fatal error)")
+				return "", fmt.Errorf("port error: %w", err)
+			}
+
+			if len(response) > 0 {
+				resp := string(response)
+				if IsSuccessResponse(resp) || IsConnectResponse(resp) {
+					m.debugLogStatus("after RX (terminal)")
+					return normalizeResponseLineEndings(resp), nil
+				}
+				if failed, _ := IsFailureResponse(resp); failed {
+					m.debugLogStatus("after RX (failure)")
+					return normalizeResponseLineEndings(resp), nil
+				}
+			}
+			continue
+		}
+
+		if n == 0 {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	m.debugLogStatus("after RX (timeout)")
+	if len(response) > 0 {
+		return normalizeResponseLineEndings(string(response)), nil
+	}
+	return "", fmt.Errorf("timeout waiting for response")
+}
+
+// findPaginationPrompt returns the position of a pagination prompt in response, or -1 if not found.
+func (m *Modem) findPaginationPrompt(response string) int {
+	lower := strings.ToLower(response)
+	// Multi-Tech style: "Press any key to continue; ESC to quit."
+	if pos := strings.Index(lower, "press any key to continue"); pos >= 0 {
+		return pos
+	}
+	// Some modems use "-- More --" style prompts
+	if pos := strings.Index(lower, "-- more --"); pos >= 0 {
+		return pos
+	}
+	return -1
+}
+
 // DrainPendingResponse reads and discards any pending modem output.
 // Waits up to timeout for data, returns what was received.
 // Useful after hangup to consume NO CARRIER before sending new commands.
