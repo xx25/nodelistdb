@@ -538,9 +538,14 @@ func (l *TestLogger) printParsedStats(stats *LineStats) {
 		}
 	}
 
-	// Protocol and compression
-	if stats.Protocol != "" {
+	// Protocol, modulation and compression
+	if stats.Protocol != "" || stats.Modulation != "" {
 		proto := stats.Protocol
+		if proto == "" {
+			proto = stats.Modulation
+		} else if stats.Modulation != "" && stats.Modulation != stats.Protocol {
+			proto = stats.Modulation + "/" + stats.Protocol
+		}
 		if stats.Compression != "" && stats.Compression != "None" {
 			proto += "/" + stats.Compression
 		}
@@ -549,17 +554,47 @@ func (l *TestLogger) printParsedStats(stats *LineStats) {
 
 	// Line quality - show on single line
 	var quality []string
+	if stats.SNR > 0 {
+		quality = append(quality, fmt.Sprintf("SNR:%.1fdB", stats.SNR))
+	}
 	if stats.LineQuality > 0 {
 		quality = append(quality, fmt.Sprintf("Quality:%d", stats.LineQuality))
 	}
 	if stats.RxLevel > 0 {
 		quality = append(quality, fmt.Sprintf("RxLevel:-%ddBm", stats.RxLevel))
 	}
+	if stats.TxPower > 0 {
+		quality = append(quality, fmt.Sprintf("TxPower:-%ddBm", stats.TxPower))
+	}
 	if stats.EQMSum > 0 {
 		quality = append(quality, fmt.Sprintf("EQM:%04X", stats.EQMSum))
 	}
 	if len(quality) > 0 {
 		l.log("STATS", colorGray, "Line:     %s", strings.Join(quality, " "))
+	}
+
+	// Echo levels (ZyXEL)
+	if stats.NearEndEcho != 0 || stats.FarEndEcho != 0 {
+		l.log("STATS", colorGray, "Echo:     Near:%.1fdB Far:%.1fdB", stats.NearEndEcho, stats.FarEndEcho)
+	}
+
+	// Round trip delay
+	if stats.RoundTripDelay > 0 {
+		l.log("STATS", colorGray, "Delay:    %dms", stats.RoundTripDelay)
+	}
+
+	// V.9x capabilities (ZyXEL)
+	if stats.LocalV9xCapability != "" {
+		v9x := fmt.Sprintf("Local:%s", stats.LocalV9xCapability)
+		if stats.RemoteV9xCapability != "" && stats.RemoteV9xCapability != "None" {
+			v9x += fmt.Sprintf(" Remote:%s", stats.RemoteV9xCapability)
+		}
+		l.log("STATS", colorGray, "V.9x:     %s", v9x)
+	}
+
+	// Connection type
+	if stats.ConnectionType != "" {
+		l.log("STATS", colorGray, "Line:     %s", stats.ConnectionType)
 	}
 
 	// Retrains (only if non-zero)
