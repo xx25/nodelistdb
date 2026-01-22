@@ -23,20 +23,20 @@ func main() {
 	}
 	defer port.Close()
 
-	port.SetDTR(true)
+	_ = port.SetDTR(true)
 	time.Sleep(100 * time.Millisecond)
-	port.ResetInputBuffer()
-	port.ResetOutputBuffer()
+	_ = port.ResetInputBuffer()
+	_ = port.ResetOutputBuffer()
 
 	// Init modem
 	fmt.Println("Sending ATZ...")
-	port.Write([]byte("ATZ\r"))
+	_, _ = port.Write([]byte("ATZ\r"))
 	time.Sleep(500 * time.Millisecond)
 	readAll(port)
 
 	// Dial
 	fmt.Println("\nDialing 900...")
-	port.Write([]byte("ATDT900\r"))
+	_, _ = port.Write([]byte("ATDT900\r"))
 
 	// Read for 2 minutes
 	start := time.Now()
@@ -50,9 +50,9 @@ func main() {
 
 	// Hangup
 	fmt.Println("\nHanging up...")
-	port.SetDTR(false)
+	_ = port.SetDTR(false)
 	time.Sleep(500 * time.Millisecond)
-	port.SetDTR(true)
+	_ = port.SetDTR(true)
 }
 
 func readAll(port *serial.Port) {

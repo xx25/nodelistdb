@@ -240,17 +240,14 @@ func (m *Modem) initModem() error {
 	}
 
 	// Enable verbose result codes
-	response, err = m.sendATLocked(ATV1, m.config.ATCommandTimeout)
+	_, err = m.sendATLocked(ATV1, m.config.ATCommandTimeout)
 	if err != nil {
 		return fmt.Errorf("ATV1 failed: %w", err)
 	}
 
 	// Enable extended result codes (BUSY, NO DIALTONE, etc.)
-	response, err = m.sendATLocked(ATX4, m.config.ATCommandTimeout)
-	if err != nil {
-		// Not all modems support X4, continue anyway
-		_ = response
-	}
+	// Not all modems support X4, ignore errors
+	_, _ = m.sendATLocked(ATX4, m.config.ATCommandTimeout)
 
 	// Disable auto-answer
 	_, _ = m.sendATLocked(ATS0, m.config.ATCommandTimeout)
@@ -613,7 +610,7 @@ func (m *Modem) hangupEscapeLocked() error {
 	}
 
 	// Wait for OK
-	response, err = m.readResponseLocked(2 * time.Second)
+	_, err = m.readResponseLocked(2 * time.Second)
 	if err != nil {
 		return fmt.Errorf("ATH failed: %w", err)
 	}
@@ -679,13 +676,6 @@ func (m *Modem) Port() *serial.Port {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.port
-}
-
-// setInDataMode is used internally to mark modem as in data mode
-func (m *Modem) setInDataMode(inData bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.inDataMode = inData
 }
 
 // FlushBuffers flushes serial port input and output buffers

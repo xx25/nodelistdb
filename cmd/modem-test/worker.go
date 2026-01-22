@@ -44,8 +44,6 @@ type ModemWorker struct {
 	results     chan<- WorkerResult
 	log         *TestLogger
 	wg          *sync.WaitGroup
-	mu          sync.Mutex
-	testNum     int
 }
 
 // phoneJob represents a phone number to dial with its test number.
@@ -186,7 +184,7 @@ func (w *ModemWorker) runTest(testNum int, phoneNumber string) testResult {
 
 		// Try to recover
 		w.log.Info("Attempting modem reset...")
-		m.Reset()
+		_ = m.Reset()
 
 		return testResult{
 			success: false,
@@ -280,7 +278,7 @@ func (w *ModemWorker) runTest(testNum int, phoneNumber string) testResult {
 	w.log.Hangup("Disconnecting...")
 	if err := m.Hangup(); err != nil {
 		w.log.Fail("Hangup error: %v, resetting...", err)
-		m.Reset()
+		_ = m.Reset()
 	} else if w.logConfig.ShowRS232 {
 		if status, err := m.GetStatus(); err == nil {
 			w.log.RS232(status.DCD, status.DSR, status.CTS, status.RI)

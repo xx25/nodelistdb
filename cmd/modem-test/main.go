@@ -370,7 +370,7 @@ func runSingleTest(m *modem.Modem, cfg *Config, log *TestLogger, testNum int, ph
 
 		// Try to recover
 		log.Info("Attempting modem reset...")
-		m.Reset()
+		_ = m.Reset()
 
 		return testResult{
 			success: false,
@@ -470,7 +470,7 @@ func runSingleTest(m *modem.Modem, cfg *Config, log *TestLogger, testNum int, ph
 	log.Hangup("Disconnecting...")
 	if err := m.Hangup(); err != nil {
 		log.Fail("Hangup error: %v, resetting...", err)
-		m.Reset()
+		_ = m.Reset()
 	} else {
 		// Log RS232 status after hangup
 		if status, err := m.GetStatus(); err == nil {

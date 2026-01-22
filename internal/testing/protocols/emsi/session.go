@@ -773,12 +773,6 @@ func (s *Session) sendEMSI_DAT() error {
 	return nil
 }
 
-// readEMSIResponse reads and identifies EMSI response using the default StepTimeout
-// Per FSC-0056.001: T1=20s wait for response, T2=60s max handshake time
-func (s *Session) readEMSIResponse() (string, string, error) {
-	return s.readEMSIResponseWithTimeout(s.config.StepTimeout)
-}
-
 // readEMSIResponseWithTimeout reads and identifies EMSI response with a specific timeout
 // We read continuously until we find an EMSI sequence or timeout expires
 func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, string, error) {
