@@ -18,7 +18,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/mfkenney/go-serial/v2 => /home/dp/src/go-serial
+replace github.com/mfkenney/go-serial/v2 => github.com/xx25/go-serial/v2 v2.0.0-20241217201326-d37f8aab742b
 
 require (
 	github.com/ClickHouse/ch-go v0.67.0 // indirect
