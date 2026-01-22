@@ -19,6 +19,7 @@ type Config struct {
 	Test          TestConfig            `yaml:"test"`
 	EMSI          EMSIConfig            `yaml:"emsi"`
 	Logging       LoggingConfig         `yaml:"logging"`
+	CDR           CDRConfig             `yaml:"cdr"` // AudioCodes CDR database (optional)
 }
 
 // ModemInstanceConfig extends ModemConfig with instance-specific fields
@@ -90,6 +91,14 @@ type LoggingConfig struct {
 	ShowHex    bool `yaml:"show_hex"` // Show hex dump of data
 }
 
+// CDRConfig contains AudioCodes CDR database settings for VoIP quality metrics
+type CDRConfig struct {
+	Enabled       bool   `yaml:"enabled"`         // Enable CDR lookup (default: false)
+	DSN           string `yaml:"dsn"`             // PostgreSQL connection string
+	TableName     string `yaml:"table_name"`      // CDR table name (default: "cdr")
+	TimeWindowSec int    `yaml:"time_window_sec"` // Time window for matching calls (default: 120)
+}
+
 // Duration wraps time.Duration for YAML unmarshaling
 type Duration time.Duration
 
@@ -159,6 +168,11 @@ func DefaultConfig() *Config {
 			Timestamps: true,
 			ShowRS232:  true,
 			ShowHex:    false,
+		},
+		CDR: CDRConfig{
+			Enabled:       false,
+			TableName:     "cdr",
+			TimeWindowSec: 120,
 		},
 	}
 }

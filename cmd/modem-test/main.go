@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -92,6 +93,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Logging to: %s\n", *logFile)
 	}
 
+	// Initialize CDR service for VoIP quality metrics (optional)
+	cdrService, err := NewCDRService(cfg.CDR)
+	if err != nil {
+		log.Warn("CDR service unavailable: %v", err)
+		cdrService = &CDRService{} // Use disabled service
+	} else if cdrService.IsEnabled() {
+		log.Info("CDR service enabled for VoIP quality metrics")
+		defer cdrService.Close()
+	}
+
 	// Validate required parameters for batch mode
 	phones := cfg.GetPhones()
 	if *batch && len(phones) == 0 {
@@ -104,7 +115,7 @@ func main() {
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile)
+		runBatchModeMulti(cfg, log, configFile, cdrService)
 		return
 	}
 
@@ -166,7 +177,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile)
+		runBatchMode(m, cfg, log, configFile, cdrService)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -244,7 +255,7 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService) {
 	phones := cfg.GetPhones()
 	testCount := cfg.Test.Count
 	infinite := testCount <= 0
@@ -296,6 +307,21 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		result := runSingleTest(m, cfg, log, i, currentPhone)
 		results = append(results, result.message)
 
+		// Lookup CDR data for VoIP quality metrics
+		if cdrService != nil && cdrService.IsEnabled() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			cdrData, err := cdrService.LookupByPhone(ctx, currentPhone, time.Now())
+			cancel()
+			if err != nil {
+				log.Debug("CDR lookup failed: %v", err)
+			} else if cdrData != nil {
+				result.cdrData = cdrData
+				log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s",
+					float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
+					cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec)
+			}
+		}
+
 		// Write to CSV if enabled
 		if csvWriter != nil {
 			rec := RecordFromTestResult(
@@ -309,6 +335,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				result.emsiError,
 				result.emsiInfo,
 				result.lineStats,
+				result.cdrData,
 			)
 			if err := csvWriter.WriteRecord(rec); err != nil {
 				log.Error("Failed to write CSV record: %v", err)
@@ -358,6 +385,7 @@ type testResult struct {
 	emsiError     error
 	emsiInfo      *EMSIDetails
 	lineStats     *LineStats
+	cdrData       *CDRData // VoIP quality metrics from AudioCodes CDR
 }
 
 func runSingleTest(m *modem.Modem, cfg *Config, log *TestLogger, testNum int, phoneNumber string) testResult {

@@ -12,7 +12,7 @@ import (
 )
 
 // runBatchModeMulti orchestrates batch testing with multiple modems.
-func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string) {
+func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService) {
 	phones := cfg.GetPhones()
 	testCount := cfg.Test.Count
 	infinite := testCount <= 0
@@ -114,6 +114,22 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string) {
 
 			results = append(results, result.Result.message)
 
+			// Lookup CDR data for VoIP quality metrics
+			var cdrData *CDRData
+			if cdrService != nil && cdrService.IsEnabled() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				var err error
+				cdrData, err = cdrService.LookupByPhone(ctx, result.Phone, result.Timestamp)
+				cancel()
+				if err != nil {
+					log.Debug("CDR lookup failed for %s: %v", result.Phone, err)
+				} else if cdrData != nil {
+					log.Info("[%s] CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d",
+						result.WorkerName, float64(cdrData.LocalMOSCQ)/10.0,
+						cdrData.RTPJitter, cdrData.RTPDelay, cdrData.PacketLoss)
+				}
+			}
+
 			// Write CSV
 			if csvWriter != nil {
 				rec := RecordFromTestResult(
@@ -127,6 +143,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string) {
 					result.Result.emsiError,
 					result.Result.emsiInfo,
 					result.Result.lineStats,
+					cdrData,
 				)
 				rec.ModemName = result.WorkerName
 				if err := csvWriter.WriteRecord(rec); err != nil {

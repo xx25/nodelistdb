@@ -47,6 +47,20 @@ type TestRecord struct {
 	Retrains    int
 	Termination string
 	StatsNotes  string
+
+	// CDR VoIP Quality Metrics (from AudioCodes gateway)
+	CDRSessionID        string
+	CDRCodec            string
+	CDRRTPJitter        int     // ms
+	CDRRTPDelay         int     // ms
+	CDRPacketLoss       int
+	CDRRemotePacketLoss int
+	CDRLocalMOS         float64 // 1.0-5.0 scale
+	CDRRemoteMOS        float64
+	CDRLocalRFactor     int
+	CDRRemoteRFactor    int
+	CDRTermReason       string
+	CDRTermCategory     string
 }
 
 // csvHeader is the current header format with modem_name column
@@ -75,6 +89,19 @@ var csvHeader = []string{
 	"retrains",
 	"termination",
 	"stats_notes",
+	// CDR VoIP quality metrics
+	"cdr_session_id",
+	"cdr_codec",
+	"cdr_rtp_jitter_ms",
+	"cdr_rtp_delay_ms",
+	"cdr_packet_loss",
+	"cdr_remote_packet_loss",
+	"cdr_local_mos",
+	"cdr_remote_mos",
+	"cdr_local_r_factor",
+	"cdr_remote_r_factor",
+	"cdr_term_reason",
+	"cdr_term_category",
 }
 
 // NewCSVWriter creates a new CSV writer for the given file path
@@ -175,6 +202,19 @@ func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 		fmt.Sprintf("%d", rec.Retrains),
 		rec.Termination,
 		rec.StatsNotes,
+		// CDR fields
+		rec.CDRSessionID,
+		rec.CDRCodec,
+		fmt.Sprintf("%d", rec.CDRRTPJitter),
+		fmt.Sprintf("%d", rec.CDRRTPDelay),
+		fmt.Sprintf("%d", rec.CDRPacketLoss),
+		fmt.Sprintf("%d", rec.CDRRemotePacketLoss),
+		fmt.Sprintf("%.1f", rec.CDRLocalMOS),
+		fmt.Sprintf("%.1f", rec.CDRRemoteMOS),
+		fmt.Sprintf("%d", rec.CDRLocalRFactor),
+		fmt.Sprintf("%d", rec.CDRRemoteRFactor),
+		rec.CDRTermReason,
+		rec.CDRTermCategory,
 	}
 
 	if err := w.writer.Write(row); err != nil {
@@ -202,6 +242,7 @@ func RecordFromTestResult(
 	emsiErr error,
 	emsiInfo *EMSIDetails,
 	lineStats *LineStats,
+	cdrData *CDRData,
 ) *TestRecord {
 	rec := &TestRecord{
 		Timestamp:    time.Now(),
@@ -245,6 +286,23 @@ func RecordFromTestResult(
 		if len(lineStats.Messages) > 0 {
 			rec.StatsNotes = strings.Join(lineStats.Messages, "; ")
 		}
+	}
+
+	// Add CDR VoIP quality metrics if available
+	if cdrData != nil {
+		rec.CDRSessionID = cdrData.SessionID
+		rec.CDRCodec = cdrData.Codec
+		rec.CDRRTPJitter = cdrData.RTPJitter
+		rec.CDRRTPDelay = cdrData.RTPDelay
+		rec.CDRPacketLoss = cdrData.PacketLoss
+		rec.CDRRemotePacketLoss = cdrData.RemotePacketLoss
+		// Convert MOS from integer (e.g., 43) to float (4.3)
+		rec.CDRLocalMOS = float64(cdrData.LocalMOSCQ) / 10.0
+		rec.CDRRemoteMOS = float64(cdrData.RemoteMOSCQ) / 10.0
+		rec.CDRLocalRFactor = cdrData.LocalRFactor
+		rec.CDRRemoteRFactor = cdrData.RemoteRFactor
+		rec.CDRTermReason = cdrData.TermReason
+		rec.CDRTermCategory = cdrData.TermReasonCategory
 	}
 
 	return rec
