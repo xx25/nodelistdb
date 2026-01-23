@@ -88,8 +88,8 @@ func main() {
 			os.Exit(1)
 		}
 		defer f.Close()
-		// Write to both stderr and file
-		log.SetOutput(io.MultiWriter(os.Stderr, f))
+		// Write to both stderr (with colors) and file (without colors)
+		log.SetOutput(io.MultiWriter(os.Stderr, NewStripANSIWriter(f)))
 		fmt.Fprintf(os.Stderr, "Logging to: %s\n", *logFile)
 	}
 
@@ -99,8 +99,28 @@ func main() {
 		log.Warn("CDR service unavailable: %v", err)
 		cdrService = &CDRService{} // Use disabled service
 	} else if cdrService.IsEnabled() {
-		log.Info("CDR service enabled for VoIP quality metrics")
+		log.Info("AudioCodes CDR service enabled for VoIP quality metrics")
 		defer cdrService.Close()
+	}
+
+	// Initialize Asterisk CDR service for call routing info (optional)
+	asteriskCDRService, err := NewAsteriskCDRService(cfg.AsteriskCDR)
+	if err != nil {
+		log.Warn("Asterisk CDR service unavailable: %v", err)
+		asteriskCDRService = &AsteriskCDRService{} // Use disabled service
+	} else if asteriskCDRService.IsEnabled() {
+		log.Info("Asterisk CDR service enabled for call routing info")
+		defer asteriskCDRService.Close()
+	}
+
+	// Initialize PostgreSQL results writer (optional)
+	pgWriter, err := NewPostgresResultsWriter(cfg.PostgresResults)
+	if err != nil {
+		log.Warn("PostgreSQL results writer unavailable: %v", err)
+		pgWriter = &PostgresResultsWriter{} // Use disabled writer
+	} else if pgWriter.IsEnabled() {
+		log.Info("PostgreSQL results writer enabled: table=%s", cfg.PostgresResults.TableName)
+		defer pgWriter.Close()
 	}
 
 	// Validate required parameters for batch mode
@@ -115,7 +135,7 @@ func main() {
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter)
 		return
 	}
 
@@ -129,10 +149,16 @@ func main() {
 		DialPrefix:       cfg.Modem.DialPrefix,
 		HangupMethod:     cfg.Modem.HangupMethod,
 		Debug:            cfg.Logging.Debug,
+		DebugWriter:      log.GetOutput(),
 		DialTimeout:      cfg.Modem.DialTimeout.Duration(),
 		CarrierTimeout:   cfg.Modem.CarrierTimeout.Duration(),
 		ATCommandTimeout: cfg.Modem.ATCommandTimeout.Duration(),
 		ReadTimeout:      cfg.Modem.ReadTimeout.Duration(),
+		// DTR hangup timing
+		DTRHoldTime:      cfg.Modem.DTRHoldTime.Duration(),
+		DTRWaitInterval:  cfg.Modem.DTRWaitInterval.Duration(),
+		DTRMaxWaitTime:   cfg.Modem.DTRMaxWaitTime.Duration(),
+		DTRStabilizeTime: cfg.Modem.DTRStabilizeTime.Duration(),
 	}
 
 	// Set line stats command from post-disconnect commands
@@ -177,7 +203,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -255,7 +281,7 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter) {
 	phones := cfg.GetPhones()
 	testCount := cfg.Test.Count
 	infinite := testCount <= 0
@@ -307,24 +333,39 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		result := runSingleTest(m, cfg, log, i, currentPhone)
 		results = append(results, result.message)
 
-		// Lookup CDR data for VoIP quality metrics
+		// Lookup CDR data for VoIP quality metrics (AudioCodes)
 		if cdrService != nil && cdrService.IsEnabled() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			cdrData, err := cdrService.LookupByPhone(ctx, currentPhone, time.Now())
 			cancel()
 			if err != nil {
-				log.Debug("CDR lookup failed: %v", err)
+				log.Debug("AudioCodes CDR lookup failed: %v", err)
 			} else if cdrData != nil {
 				result.cdrData = cdrData
-				log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s",
+				log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s term=%s",
 					float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
-					cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec)
+					cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec, cdrData.TermReason)
+			}
+		}
+
+		// Lookup Asterisk CDR for call routing info
+		if asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			asteriskCDR, err := asteriskCDRService.LookupByPhone(ctx, currentPhone, time.Now())
+			cancel()
+			if err != nil {
+				log.Debug("Asterisk CDR lookup failed: %v", err)
+			} else if asteriskCDR != nil {
+				result.asteriskCDR = asteriskCDR
+				log.Info("Asterisk: disposition=%s peer=%s duration=%ds",
+					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
 			}
 		}
 
 		// Write to CSV if enabled
-		if csvWriter != nil {
-			rec := RecordFromTestResult(
+		var rec *TestRecord
+		if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) {
+			rec = RecordFromTestResult(
 				i,
 				currentPhone,
 				result.success,
@@ -336,9 +377,19 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				result.emsiInfo,
 				result.lineStats,
 				result.cdrData,
+				result.asteriskCDR,
 			)
+		}
+		if csvWriter != nil && rec != nil {
 			if err := csvWriter.WriteRecord(rec); err != nil {
 				log.Error("Failed to write CSV record: %v", err)
+			}
+		}
+
+		// Write to PostgreSQL if enabled
+		if pgWriter != nil && pgWriter.IsEnabled() && rec != nil {
+			if err := pgWriter.WriteRecord(rec); err != nil {
+				log.Error("Failed to write PostgreSQL record: %v", err)
 			}
 		}
 
@@ -385,7 +436,8 @@ type testResult struct {
 	emsiError     error
 	emsiInfo      *EMSIDetails
 	lineStats     *LineStats
-	cdrData       *CDRData // VoIP quality metrics from AudioCodes CDR
+	cdrData       *CDRData         // VoIP quality metrics from AudioCodes CDR
+	asteriskCDR   *AsteriskCDRData // Call routing info from Asterisk CDR
 }
 
 func runSingleTest(m *modem.Modem, cfg *Config, log *TestLogger, testNum int, phoneNumber string) testResult {

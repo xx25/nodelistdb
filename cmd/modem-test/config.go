@@ -13,13 +13,15 @@ import (
 
 // Config represents the complete configuration for modem testing
 type Config struct {
-	Modem         ModemConfig           `yaml:"modem"`          // Single modem (backward compat)
-	Modems        []ModemInstanceConfig `yaml:"modems"`         // Multi-modem array
-	ModemDefaults ModemConfig           `yaml:"modem_defaults"` // Shared defaults for multi-modem
-	Test          TestConfig            `yaml:"test"`
-	EMSI          EMSIConfig            `yaml:"emsi"`
-	Logging       LoggingConfig         `yaml:"logging"`
-	CDR           CDRConfig             `yaml:"cdr"` // AudioCodes CDR database (optional)
+	Modem           ModemConfig           `yaml:"modem"`            // Single modem (backward compat)
+	Modems          []ModemInstanceConfig `yaml:"modems"`           // Multi-modem array
+	ModemDefaults   ModemConfig           `yaml:"modem_defaults"`   // Shared defaults for multi-modem
+	Test            TestConfig            `yaml:"test"`
+	EMSI            EMSIConfig            `yaml:"emsi"`
+	Logging         LoggingConfig         `yaml:"logging"`
+	CDR             CDRConfig             `yaml:"cdr"`              // AudioCodes CDR database (optional)
+	AsteriskCDR     AsteriskCDRConfig     `yaml:"asterisk_cdr"`     // Asterisk CDR database (optional)
+	PostgresResults PostgresResultsConfig `yaml:"postgres_results"` // PostgreSQL results storage (optional)
 }
 
 // ModemInstanceConfig extends ModemConfig with instance-specific fields
@@ -46,6 +48,12 @@ type ModemConfig struct {
 	CarrierTimeout   Duration `yaml:"carrier_timeout"`
 	ATCommandTimeout Duration `yaml:"at_command_timeout"`
 	ReadTimeout      Duration `yaml:"read_timeout"`
+
+	// DTR Hangup timing (only used when hangup_method is "dtr")
+	DTRHoldTime      Duration `yaml:"dtr_hold_time"`      // How long to hold DTR low initially (default 500ms)
+	DTRWaitInterval  Duration `yaml:"dtr_wait_interval"`  // Interval between DCD checks (default 150ms)
+	DTRMaxWaitTime   Duration `yaml:"dtr_max_wait_time"`  // Max time to wait for DCD drop (default 1500ms)
+	DTRStabilizeTime Duration `yaml:"dtr_stabilize_time"` // Time to wait after raising DTR (default 200ms)
 
 	// Init commands - executed in order during modem initialization
 	InitCommands []string `yaml:"init_commands"`
@@ -94,6 +102,14 @@ type LoggingConfig struct {
 // CDRConfig contains AudioCodes CDR database settings for VoIP quality metrics
 type CDRConfig struct {
 	Enabled       bool   `yaml:"enabled"`         // Enable CDR lookup (default: false)
+	DSN           string `yaml:"dsn"`             // PostgreSQL connection string
+	TableName     string `yaml:"table_name"`      // CDR table name (default: "cdr")
+	TimeWindowSec int    `yaml:"time_window_sec"` // Time window for matching calls (default: 120)
+}
+
+// AsteriskCDRConfig contains Asterisk CDR database settings for call routing info
+type AsteriskCDRConfig struct {
+	Enabled       bool   `yaml:"enabled"`         // Enable Asterisk CDR lookup (default: false)
 	DSN           string `yaml:"dsn"`             // PostgreSQL connection string
 	TableName     string `yaml:"table_name"`      // CDR table name (default: "cdr")
 	TimeWindowSec int    `yaml:"time_window_sec"` // Time window for matching calls (default: 120)
@@ -173,6 +189,15 @@ func DefaultConfig() *Config {
 			Enabled:       false,
 			TableName:     "cdr",
 			TimeWindowSec: 120,
+		},
+		AsteriskCDR: AsteriskCDRConfig{
+			Enabled:       false,
+			TableName:     "cdr",
+			TimeWindowSec: 120,
+		},
+		PostgresResults: PostgresResultsConfig{
+			Enabled:   false,
+			TableName: "modem_test_results",
 		},
 	}
 }
@@ -366,6 +391,19 @@ func (c *Config) mergeModemConfig(defaults, override ModemConfig) ModemConfig {
 	}
 	if override.ReadTimeout != 0 {
 		result.ReadTimeout = override.ReadTimeout
+	}
+	// DTR hangup timing overrides
+	if override.DTRHoldTime != 0 {
+		result.DTRHoldTime = override.DTRHoldTime
+	}
+	if override.DTRWaitInterval != 0 {
+		result.DTRWaitInterval = override.DTRWaitInterval
+	}
+	if override.DTRMaxWaitTime != 0 {
+		result.DTRMaxWaitTime = override.DTRMaxWaitTime
+	}
+	if override.DTRStabilizeTime != 0 {
+		result.DTRStabilizeTime = override.DTRStabilizeTime
 	}
 	if len(override.InitCommands) > 0 {
 		result.InitCommands = override.InitCommands

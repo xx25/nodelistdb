@@ -3,6 +3,7 @@ package modem
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ type Config struct {
 	HangupMethod string        // "dtr" (drop DTR) or "escape" (+++ ATH)
 	LineStatsCommand string    // AT command for line stats (default AT&V1)
 	Debug        bool          // Enable debug logging of all modem I/O
+	DebugWriter  io.Writer     // Output writer for debug logs (default: os.Stderr)
 	Name         string        // Optional name for identifying modem in debug logs
 
 	// Timeouts
@@ -28,6 +30,12 @@ type Config struct {
 	CarrierTimeout   time.Duration // Timeout for DCD after CONNECT, default 5s
 	ATCommandTimeout time.Duration // Timeout for AT command responses
 	ReadTimeout      time.Duration // Default read timeout for serial port
+
+	// DTR Hangup timing
+	DTRHoldTime      time.Duration // How long to hold DTR low initially, default 500ms
+	DTRWaitInterval  time.Duration // Interval between DCD checks while waiting, default 150ms
+	DTRMaxWaitTime   time.Duration // Max time to wait for DCD drop after initial hold, default 1500ms
+	DTRStabilizeTime time.Duration // Time to wait after raising DTR, default 200ms
 }
 
 // DefaultConfig returns a config with sensible defaults
@@ -42,6 +50,11 @@ func DefaultConfig() Config {
 		CarrierTimeout:   5 * time.Second,
 		ATCommandTimeout: 5 * time.Second,
 		ReadTimeout:      1 * time.Second,
+		// DTR hangup timing defaults
+		DTRHoldTime:      500 * time.Millisecond,
+		DTRWaitInterval:  150 * time.Millisecond,
+		DTRMaxWaitTime:   1500 * time.Millisecond,
+		DTRStabilizeTime: 200 * time.Millisecond,
 	}
 }
 
@@ -98,6 +111,9 @@ func New(cfg Config) (*Modem, error) {
 	if cfg.ReadTimeout == 0 {
 		cfg.ReadTimeout = 1 * time.Second
 	}
+	if cfg.DebugWriter == nil {
+		cfg.DebugWriter = os.Stderr
+	}
 
 	return &Modem{
 		config: cfg,
@@ -117,25 +133,25 @@ func (m *Modem) debugPrefix() string {
 	return m.config.Device
 }
 
-// debugLog prints debug message if debug mode is enabled (uses stderr for unbuffered output)
+// debugLog prints debug message if debug mode is enabled
 func (m *Modem) debugLog(format string, args ...interface{}) {
 	if m.config.Debug {
 		msg := fmt.Sprintf(format, args...)
-		fmt.Fprintf(os.Stderr, "[%s] [%s] MODEM  %s\n", debugTimestamp(), m.debugPrefix(), msg)
+		fmt.Fprintf(m.config.DebugWriter, "[%s] [%s] MODEM  %s\n", debugTimestamp(), m.debugPrefix(), msg)
 	}
 }
 
 // debugLogTX logs data being sent to modem
 func (m *Modem) debugLogTX(data []byte) {
 	if m.config.Debug {
-		fmt.Fprintf(os.Stderr, "[%s] [%s] TX     %q\n", debugTimestamp(), m.debugPrefix(), string(data))
+		fmt.Fprintf(m.config.DebugWriter, "[%s] [%s] TX     %q\n", debugTimestamp(), m.debugPrefix(), string(data))
 	}
 }
 
 // debugLogRX logs data received from modem
 func (m *Modem) debugLogRX(data []byte) {
 	if m.config.Debug {
-		fmt.Fprintf(os.Stderr, "[%s] [%s] RX     %q\n", debugTimestamp(), m.debugPrefix(), string(data))
+		fmt.Fprintf(m.config.DebugWriter, "[%s] [%s] RX     %q\n", debugTimestamp(), m.debugPrefix(), string(data))
 	}
 }
 
@@ -146,10 +162,10 @@ func (m *Modem) debugLogStatus(label string) {
 	}
 	status, err := m.getStatusLocked()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[%s] [%s] RS232  %s: error: %v\n", debugTimestamp(), m.debugPrefix(), label, err)
+		fmt.Fprintf(m.config.DebugWriter, "[%s] [%s] RS232  %s: error: %v\n", debugTimestamp(), m.debugPrefix(), label, err)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[%s] [%s] RS232  %s: DCD=%s DSR=%s CTS=%s RI=%s\n",
+	fmt.Fprintf(m.config.DebugWriter, "[%s] [%s] RS232  %s: DCD=%s DSR=%s CTS=%s RI=%s\n",
 		debugTimestamp(), m.debugPrefix(), label,
 		boolTo01(status.DCD), boolTo01(status.DSR), boolTo01(status.CTS), boolTo01(status.RI))
 }
@@ -391,7 +407,7 @@ func (m *Modem) GetLineStats() (string, error) {
 // sendATLocked sends an AT command (caller must hold mutex)
 func (m *Modem) sendATLocked(cmd string, timeout time.Duration) (string, error) {
 	if m.config.Debug {
-		fmt.Fprintf(os.Stderr, "[%s] [%s] MODEM  sendAT: cmd=%q timeout=%v\n", debugTimestamp(), m.debugPrefix(), cmd, timeout)
+		fmt.Fprintf(m.config.DebugWriter, "[%s] [%s] MODEM  sendAT: cmd=%q timeout=%v\n", debugTimestamp(), m.debugPrefix(), cmd, timeout)
 	}
 	// Flush input/output buffers before sending
 	_ = m.port.ResetInputBuffer()
@@ -542,37 +558,77 @@ func (m *Modem) Hangup() error {
 
 // hangupDTRLocked hangs up by dropping DTR (caller must hold mutex)
 func (m *Modem) hangupDTRLocked() error {
+	// Get timing config with defaults
+	holdTime := m.config.DTRHoldTime
+	if holdTime == 0 {
+		holdTime = 500 * time.Millisecond
+	}
+	waitInterval := m.config.DTRWaitInterval
+	if waitInterval == 0 {
+		waitInterval = 150 * time.Millisecond
+	}
+	maxWaitTime := m.config.DTRMaxWaitTime
+	if maxWaitTime == 0 {
+		maxWaitTime = 1500 * time.Millisecond
+	}
+	stabilizeTime := m.config.DTRStabilizeTime
+	if stabilizeTime == 0 {
+		stabilizeTime = 200 * time.Millisecond
+	}
+
 	// Drop DTR
 	if err := m.port.SetDTR(false); err != nil {
 		return fmt.Errorf("failed to drop DTR: %w", err)
 	}
 
-	// Wait for modem to detect DTR drop and check DCD
-	for i := 0; i < 10; i++ {
-		time.Sleep(100 * time.Millisecond)
-		status, err := m.getStatusLocked()
-		if err == nil && !status.DCD {
-			// Carrier dropped, hangup successful
-			break
+	// Hold DTR low for configured time to ensure modem recognizes the drop
+	// (S25 register typically controls DTR recognition time, default ~50ms,
+	// but we need extra time for the modem to actually disconnect)
+	time.Sleep(holdTime)
+
+	// Check if DCD dropped
+	dcdDropped := false
+	status, err := m.getStatusLocked()
+	if err == nil && !status.DCD {
+		dcdDropped = true
+	}
+
+	// If DCD still high, wait longer (up to maxWaitTime)
+	if !dcdDropped {
+		iterations := int(maxWaitTime / waitInterval)
+		if iterations < 1 {
+			iterations = 1
+		}
+		for i := 0; i < iterations; i++ {
+			time.Sleep(waitInterval)
+			status, err = m.getStatusLocked()
+			if err == nil && !status.DCD {
+				dcdDropped = true
+				break
+			}
 		}
 	}
 
-	// Raise DTR
+	// Now raise DTR (after confirming disconnect or timeout)
 	if err := m.port.SetDTR(true); err != nil {
 		return fmt.Errorf("failed to raise DTR: %w", err)
 	}
 
-	// Wait for modem to stabilize
-	time.Sleep(100 * time.Millisecond)
+	// Wait for modem to stabilize after DTR raised
+	time.Sleep(stabilizeTime)
 
-	// Check if DCD is still high (hangup failed)
-	status, err := m.getStatusLocked()
-	if err == nil && status.DCD {
-		if m.config.Debug {
-			fmt.Fprintf(os.Stderr, "[%s] [%s] MODEM  DTR hangup failed (DCD still high), trying escape sequence\n", debugTimestamp(), m.debugPrefix())
+	// If DCD never dropped, try escape sequence as fallback
+	if !dcdDropped {
+		// Re-check DCD one more time after raising DTR
+		status, err = m.getStatusLocked()
+		if err == nil && status.DCD {
+			if m.config.Debug {
+				totalWait := holdTime + maxWaitTime
+				fmt.Fprintf(m.config.DebugWriter, "[%s] [%s] MODEM  DTR hangup failed (DCD still high after %v), trying escape sequence\n", debugTimestamp(), m.debugPrefix(), totalWait)
+			}
+			// DTR method failed, try escape sequence as fallback
+			return m.hangupEscapeLocked()
 		}
-		// DTR method failed, try escape sequence as fallback
-		return m.hangupEscapeLocked()
 	}
 
 	// Flush buffers (modem may emit garbage during hangup)
@@ -718,7 +774,7 @@ func (m *Modem) SendATWithPagination(cmd string, timeout time.Duration) (string,
 // sendATWithPaginationLocked sends AT command handling pagination (caller must hold mutex)
 func (m *Modem) sendATWithPaginationLocked(cmd string, timeout time.Duration) (string, error) {
 	if m.config.Debug {
-		fmt.Fprintf(os.Stderr, "[%s] [%s] MODEM  sendATWithPagination: cmd=%q timeout=%v\n", debugTimestamp(), m.debugPrefix(), cmd, timeout)
+		fmt.Fprintf(m.config.DebugWriter, "[%s] [%s] MODEM  sendATWithPagination: cmd=%q timeout=%v\n", debugTimestamp(), m.debugPrefix(), cmd, timeout)
 	}
 
 	// Flush input/output buffers before sending

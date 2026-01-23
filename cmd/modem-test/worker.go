@@ -74,11 +74,17 @@ func newModemWorker(
 		DialPrefix:       config.DialPrefix,
 		HangupMethod:     config.HangupMethod,
 		Debug:            logConfig.Debug,
+		DebugWriter:      logOutput,
 		Name:             name,
 		DialTimeout:      config.DialTimeout.Duration(),
 		CarrierTimeout:   config.CarrierTimeout.Duration(),
 		ATCommandTimeout: config.ATCommandTimeout.Duration(),
 		ReadTimeout:      config.ReadTimeout.Duration(),
+		// DTR hangup timing
+		DTRHoldTime:      config.DTRHoldTime.Duration(),
+		DTRWaitInterval:  config.DTRWaitInterval.Duration(),
+		DTRMaxWaitTime:   config.DTRMaxWaitTime.Duration(),
+		DTRStabilizeTime: config.DTRStabilizeTime.Duration(),
 	}
 
 	// Set line stats command
