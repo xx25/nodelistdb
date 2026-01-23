@@ -110,7 +110,8 @@ type LoggingConfig struct {
 // CDRConfig contains AudioCodes CDR database settings for VoIP quality metrics
 type CDRConfig struct {
 	Enabled       bool   `yaml:"enabled"`         // Enable CDR lookup (default: false)
-	DSN           string `yaml:"dsn"`             // PostgreSQL connection string
+	Driver        string `yaml:"driver"`          // Database driver: "postgres" or "mysql" (default: "postgres")
+	DSN           string `yaml:"dsn"`             // Database connection string
 	TableName     string `yaml:"table_name"`      // CDR table name (default: "cdr")
 	TimeWindowSec int    `yaml:"time_window_sec"` // Time window for matching calls (default: 120)
 }
@@ -118,7 +119,8 @@ type CDRConfig struct {
 // AsteriskCDRConfig contains Asterisk CDR database settings for call routing info
 type AsteriskCDRConfig struct {
 	Enabled       bool   `yaml:"enabled"`         // Enable Asterisk CDR lookup (default: false)
-	DSN           string `yaml:"dsn"`             // PostgreSQL connection string
+	Driver        string `yaml:"driver"`          // Database driver: "postgres" or "mysql" (default: "postgres")
+	DSN           string `yaml:"dsn"`             // Database connection string
 	TableName     string `yaml:"table_name"`      // CDR table name (default: "cdr")
 	TimeWindowSec int    `yaml:"time_window_sec"` // Time window for matching calls (default: 120)
 }
@@ -195,11 +197,13 @@ func DefaultConfig() *Config {
 		},
 		CDR: CDRConfig{
 			Enabled:       false,
+			Driver:        "postgres",
 			TableName:     "cdr",
 			TimeWindowSec: 120,
 		},
 		AsteriskCDR: AsteriskCDRConfig{
 			Enabled:       false,
+			Driver:        "postgres",
 			TableName:     "cdr",
 			TimeWindowSec: 120,
 		},

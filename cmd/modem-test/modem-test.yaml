@@ -91,3 +91,21 @@ logging:
 #   enabled: true
 #   dsn: "user:password@tcp(localhost:3306)/testresults?parseTime=true"
 #   table_name: "modem_test_results"  # optional, defaults to "modem_test_results"
+
+# AudioCodes CDR configuration (optional) - VoIP quality metrics
+# cdr:
+#   enabled: true
+#   driver: "mysql"      # "postgres" or "mysql" (default: "postgres")
+#   dsn: "user:password@tcp(localhost:3306)/voip_db?parseTime=true"  # MySQL DSN
+#   # dsn: "postgres://user:password@localhost:5432/voip_db"         # PostgreSQL DSN
+#   table_name: "cdr"           # optional, defaults to "cdr"
+#   time_window_sec: 120        # time window for matching calls (default: 120)
+
+# Asterisk CDR configuration (optional) - call routing info
+# asterisk_cdr:
+#   enabled: true
+#   driver: "mysql"      # "postgres" or "mysql" (default: "postgres")
+#   dsn: "user:password@tcp(localhost:3306)/asterisk?parseTime=true"  # MySQL DSN
+#   # dsn: "postgres://user:password@localhost:5432/asterisk"         # PostgreSQL DSN
+#   table_name: "cdr"           # optional, defaults to "cdr"
+#   time_window_sec: 120        # time window for matching calls (default: 120)

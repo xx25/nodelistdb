@@ -41,6 +41,7 @@ type ModemWorker struct {
 	config      ModemInstanceConfig
 	emsiConfig  EMSIConfig
 	logConfig   LoggingConfig
+	interDelay  time.Duration
 	coordinator *PhoneCoordinator
 	phoneQueue  <-chan phoneJob
 	results     chan<- WorkerResult
@@ -63,6 +64,7 @@ func newModemWorker(
 	config ModemInstanceConfig,
 	emsiConfig EMSIConfig,
 	logConfig LoggingConfig,
+	interDelay time.Duration,
 	logOutput io.Writer,
 	coordinator *PhoneCoordinator,
 	phoneQueue <-chan phoneJob,
@@ -115,6 +117,7 @@ func newModemWorker(
 		config:      config,
 		emsiConfig:  emsiConfig,
 		logConfig:   logConfig,
+		interDelay:  interDelay,
 		coordinator: coordinator,
 		phoneQueue:  phoneQueue,
 		results:     results,
@@ -183,6 +186,16 @@ func (w *ModemWorker) Run(ctx context.Context) {
 			}:
 			case <-ctx.Done():
 				return
+			}
+
+			// Apply inter-test delay before picking up next job
+			if w.interDelay > 0 {
+				w.log.Info("Waiting %v before next test...", w.interDelay)
+				select {
+				case <-time.After(w.interDelay):
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}
@@ -352,6 +365,7 @@ type ModemPool struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	log         *TestLogger
+	interDelay  time.Duration
 }
 
 // NewModemPool creates a pool of modem workers from the given configurations.
@@ -359,6 +373,7 @@ func NewModemPool(
 	configs []ModemInstanceConfig,
 	emsiCfg EMSIConfig,
 	logCfg LoggingConfig,
+	interDelay time.Duration,
 	logOutput io.Writer,
 ) (*ModemPool, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -370,6 +385,7 @@ func NewModemPool(
 		ctx:         ctx,
 		cancel:      cancel,
 		log:         NewTestLogger(logCfg),
+		interDelay:  interDelay,
 	}
 
 	// Create workers for each modem
@@ -384,6 +400,7 @@ func NewModemPool(
 			cfg,
 			emsiCfg,
 			logCfg,
+			interDelay,
 			logOutput,
 			p.coordinator,
 			p.phoneQueue,

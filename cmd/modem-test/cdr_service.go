@@ -1,5 +1,5 @@
 // Package main provides CDR (Call Detail Record) integration for modem testing.
-// This service queries AudioCodes CDR data from PostgreSQL to enrich
+// This service queries AudioCodes CDR data from PostgreSQL or MySQL to enrich
 // modem test results with VoIP quality metrics.
 package main
 
@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	_ "github.com/go-sql-driver/mysql" // MySQL driver
+	_ "github.com/lib/pq"              // PostgreSQL driver
 )
 
 // CDRData represents VoIP quality metrics from AudioCodes CDR
@@ -48,6 +49,7 @@ type CDRService struct {
 	tableName  string
 	timeWindow time.Duration
 	enabled    bool
+	driver     string // "postgres" or "mysql"
 }
 
 // NewCDRService creates a CDR service from config
@@ -56,7 +58,16 @@ func NewCDRService(cfg CDRConfig) (*CDRService, error) {
 		return &CDRService{enabled: false}, nil
 	}
 
-	db, err := sql.Open("postgres", cfg.DSN)
+	// Default to postgres for backward compatibility
+	driver := cfg.Driver
+	if driver == "" {
+		driver = "postgres"
+	}
+	if driver != "postgres" && driver != "mysql" {
+		return nil, fmt.Errorf("unsupported CDR database driver: %s (use 'postgres' or 'mysql')", driver)
+	}
+
+	db, err := sql.Open(driver, cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open CDR database: %w", err)
 	}
@@ -88,6 +99,7 @@ func NewCDRService(cfg CDRConfig) (*CDRService, error) {
 		tableName:  tableName,
 		timeWindow: timeWindow,
 		enabled:    true,
+		driver:     driver,
 	}, nil
 }
 
@@ -107,25 +119,47 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 	startTime := callTime.Add(-s.timeWindow)
 	endTime := callTime.Add(s.timeWindow)
 
-	query := fmt.Sprintf(`
-		SELECT session_id, setup_time, connect_time, release_time, durat,
-		       src_phone_num, dst_phone_num, coder,
-		       rtp_jitter, rtp_delay, pack_loss, remote_pack_loss,
-		       local_mos_cq, remote_mos_cq, local_r_factor, remote_r_factor,
-		       trm_reason, trm_reason_category, trm_sd, pstn_term_reason
-		FROM %s
-		WHERE dst_phone_num LIKE $1
-		  AND (setup_time BETWEEN $2 AND $3
-		       OR release_time BETWEEN $2 AND $3
-		       OR connect_time BETWEEN $2 AND $3)
-		ORDER BY ABS(EXTRACT(EPOCH FROM (COALESCE(release_time, setup_time) - $4))) ASC
-		LIMIT 1
-	`, s.tableName)
-
 	// Match phone with wildcard prefix (CDR may have full number with area code)
 	phonePattern := "%" + phone
 
-	row := s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, callTime)
+	var query string
+	var row *sql.Row
+
+	if s.driver == "mysql" {
+		// MySQL query with ? placeholders and TIMESTAMPDIFF
+		query = fmt.Sprintf(`
+			SELECT session_id, setup_time, connect_time, release_time, durat,
+			       src_phone_num, dst_phone_num, coder,
+			       rtp_jitter, rtp_delay, pack_loss, remote_pack_loss,
+			       local_mos_cq, remote_mos_cq, local_r_factor, remote_r_factor,
+			       trm_reason, trm_reason_category, trm_sd, pstn_term_reason
+			FROM %s
+			WHERE dst_phone_num LIKE ?
+			  AND (setup_time BETWEEN ? AND ?
+			       OR release_time BETWEEN ? AND ?
+			       OR connect_time BETWEEN ? AND ?)
+			ORDER BY ABS(TIMESTAMPDIFF(SECOND, COALESCE(release_time, setup_time), ?)) ASC
+			LIMIT 1
+		`, s.tableName)
+		row = s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, startTime, endTime, startTime, endTime, callTime)
+	} else {
+		// PostgreSQL query with $N placeholders and EXTRACT(EPOCH)
+		query = fmt.Sprintf(`
+			SELECT session_id, setup_time, connect_time, release_time, durat,
+			       src_phone_num, dst_phone_num, coder,
+			       rtp_jitter, rtp_delay, pack_loss, remote_pack_loss,
+			       local_mos_cq, remote_mos_cq, local_r_factor, remote_r_factor,
+			       trm_reason, trm_reason_category, trm_sd, pstn_term_reason
+			FROM %s
+			WHERE dst_phone_num LIKE $1
+			  AND (setup_time BETWEEN $2 AND $3
+			       OR release_time BETWEEN $2 AND $3
+			       OR connect_time BETWEEN $2 AND $3)
+			ORDER BY ABS(EXTRACT(EPOCH FROM (COALESCE(release_time, setup_time) - $4))) ASC
+			LIMIT 1
+		`, s.tableName)
+		row = s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, callTime)
+	}
 
 	var cdr CDRData
 	var setupTime, connectTime, releaseTime sql.NullTime

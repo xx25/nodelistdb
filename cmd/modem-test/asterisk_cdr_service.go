@@ -1,5 +1,5 @@
 // Package main provides Asterisk CDR integration for modem testing.
-// This service queries Asterisk CDR data from PostgreSQL to enrich
+// This service queries Asterisk CDR data from PostgreSQL or MySQL to enrich
 // modem test results with call routing and disposition information.
 package main
 
@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	_ "github.com/go-sql-driver/mysql" // MySQL driver
+	_ "github.com/lib/pq"              // PostgreSQL driver
 )
 
 // AsteriskCDRData represents call routing info from Asterisk CDR
@@ -33,6 +34,7 @@ type AsteriskCDRService struct {
 	tableName  string
 	timeWindow time.Duration
 	enabled    bool
+	driver     string // "postgres" or "mysql"
 }
 
 // NewAsteriskCDRService creates an Asterisk CDR service from config
@@ -41,7 +43,16 @@ func NewAsteriskCDRService(cfg AsteriskCDRConfig) (*AsteriskCDRService, error) {
 		return &AsteriskCDRService{enabled: false}, nil
 	}
 
-	db, err := sql.Open("postgres", cfg.DSN)
+	// Default to postgres for backward compatibility
+	driver := cfg.Driver
+	if driver == "" {
+		driver = "postgres"
+	}
+	if driver != "postgres" && driver != "mysql" {
+		return nil, fmt.Errorf("unsupported Asterisk CDR database driver: %s (use 'postgres' or 'mysql')", driver)
+	}
+
+	db, err := sql.Open(driver, cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open Asterisk CDR database: %w", err)
 	}
@@ -73,6 +84,7 @@ func NewAsteriskCDRService(cfg AsteriskCDRConfig) (*AsteriskCDRService, error) {
 		tableName:  tableName,
 		timeWindow: timeWindow,
 		enabled:    true,
+		driver:     driver,
 	}, nil
 }
 
@@ -92,20 +104,37 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 	startTime := callTime.Add(-s.timeWindow)
 	endTime := callTime.Add(s.timeWindow)
 
-	query := fmt.Sprintf(`
-		SELECT uniqueid, calldate, src, dst, duration, billsec,
-		       disposition, channel, dstchannel
-		FROM %s
-		WHERE dst LIKE $1
-		  AND calldate BETWEEN $2 AND $3
-		ORDER BY ABS(EXTRACT(EPOCH FROM (calldate - $4))) ASC
-		LIMIT 1
-	`, s.tableName)
-
 	// Match phone - may need wildcard prefix for full numbers
-	phonePattern := "%%" + phone
+	phonePattern := "%" + phone
 
-	row := s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, callTime)
+	var query string
+	var row *sql.Row
+
+	if s.driver == "mysql" {
+		// MySQL query with ? placeholders and TIMESTAMPDIFF
+		query = fmt.Sprintf(`
+			SELECT uniqueid, calldate, src, dst, duration, billsec,
+			       disposition, channel, dstchannel
+			FROM %s
+			WHERE dst LIKE ?
+			  AND calldate BETWEEN ? AND ?
+			ORDER BY ABS(TIMESTAMPDIFF(SECOND, calldate, ?)) ASC
+			LIMIT 1
+		`, s.tableName)
+		row = s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, callTime)
+	} else {
+		// PostgreSQL query with $N placeholders and EXTRACT(EPOCH)
+		query = fmt.Sprintf(`
+			SELECT uniqueid, calldate, src, dst, duration, billsec,
+			       disposition, channel, dstchannel
+			FROM %s
+			WHERE dst LIKE $1
+			  AND calldate BETWEEN $2 AND $3
+			ORDER BY ABS(EXTRACT(EPOCH FROM (calldate - $4))) ASC
+			LIMIT 1
+		`, s.tableName)
+		row = s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, callTime)
+	}
 
 	var cdr AsteriskCDRData
 	var uniqueID, src, dst, disposition, channel, dstChannel sql.NullString
