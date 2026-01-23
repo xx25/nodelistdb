@@ -61,6 +61,12 @@ type TestRecord struct {
 	CDRRemoteRFactor    int
 	CDRTermReason       string
 	CDRTermCategory     string
+
+	// Asterisk CDR fields (call routing info)
+	AstDisposition string // ANSWERED, NO ANSWER, BUSY, FAILED
+	AstPeer        string // Outbound peer/trunk name
+	AstDuration    int    // Total duration (ring + talk)
+	AstBillSec     int    // Billable seconds (talk time)
 }
 
 // csvHeader is the current header format with modem_name column
@@ -89,7 +95,7 @@ var csvHeader = []string{
 	"retrains",
 	"termination",
 	"stats_notes",
-	// CDR VoIP quality metrics
+	// CDR VoIP quality metrics (AudioCodes)
 	"cdr_session_id",
 	"cdr_codec",
 	"cdr_rtp_jitter_ms",
@@ -102,6 +108,11 @@ var csvHeader = []string{
 	"cdr_remote_r_factor",
 	"cdr_term_reason",
 	"cdr_term_category",
+	// Asterisk CDR fields
+	"ast_disposition",
+	"ast_peer",
+	"ast_duration",
+	"ast_billsec",
 }
 
 // NewCSVWriter creates a new CSV writer for the given file path
@@ -202,7 +213,7 @@ func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 		fmt.Sprintf("%d", rec.Retrains),
 		rec.Termination,
 		rec.StatsNotes,
-		// CDR fields
+		// CDR fields (AudioCodes)
 		rec.CDRSessionID,
 		rec.CDRCodec,
 		fmt.Sprintf("%d", rec.CDRRTPJitter),
@@ -215,6 +226,11 @@ func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 		fmt.Sprintf("%d", rec.CDRRemoteRFactor),
 		rec.CDRTermReason,
 		rec.CDRTermCategory,
+		// Asterisk CDR fields
+		rec.AstDisposition,
+		rec.AstPeer,
+		fmt.Sprintf("%d", rec.AstDuration),
+		fmt.Sprintf("%d", rec.AstBillSec),
 	}
 
 	if err := w.writer.Write(row); err != nil {
@@ -243,6 +259,7 @@ func RecordFromTestResult(
 	emsiInfo *EMSIDetails,
 	lineStats *LineStats,
 	cdrData *CDRData,
+	asteriskCDR *AsteriskCDRData,
 ) *TestRecord {
 	rec := &TestRecord{
 		Timestamp:    time.Now(),
@@ -288,7 +305,7 @@ func RecordFromTestResult(
 		}
 	}
 
-	// Add CDR VoIP quality metrics if available
+	// Add CDR VoIP quality metrics if available (AudioCodes)
 	if cdrData != nil {
 		rec.CDRSessionID = cdrData.SessionID
 		rec.CDRCodec = cdrData.Codec
@@ -303,6 +320,14 @@ func RecordFromTestResult(
 		rec.CDRRemoteRFactor = cdrData.RemoteRFactor
 		rec.CDRTermReason = cdrData.TermReason
 		rec.CDRTermCategory = cdrData.TermReasonCategory
+	}
+
+	// Add Asterisk CDR data if available
+	if asteriskCDR != nil {
+		rec.AstDisposition = asteriskCDR.Disposition
+		rec.AstPeer = asteriskCDR.Peer
+		rec.AstDuration = asteriskCDR.Duration
+		rec.AstBillSec = asteriskCDR.BillSec
 	}
 
 	return rec

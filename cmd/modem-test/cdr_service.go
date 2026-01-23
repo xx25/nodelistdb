@@ -115,9 +115,10 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 		       trm_reason, trm_reason_category, trm_sd, pstn_term_reason
 		FROM %s
 		WHERE dst_phone_num LIKE $1
-		  AND (release_time BETWEEN $2 AND $3
+		  AND (setup_time BETWEEN $2 AND $3
+		       OR release_time BETWEEN $2 AND $3
 		       OR connect_time BETWEEN $2 AND $3)
-		ORDER BY ABS(EXTRACT(EPOCH FROM (release_time - $4))) ASC
+		ORDER BY ABS(EXTRACT(EPOCH FROM (COALESCE(release_time, setup_time) - $4))) ASC
 		LIMIT 1
 	`, s.tableName)
 

@@ -17,6 +17,7 @@ type TestLogger struct {
 	startTime time.Time
 	output    io.Writer
 	prefix    string // Optional prefix for identifying source (e.g., modem name)
+	useColors bool   // Whether to use ANSI color codes
 }
 
 // NewTestLogger creates a new test logger with the given configuration
@@ -25,12 +26,67 @@ func NewTestLogger(cfg LoggingConfig) *TestLogger {
 		config:    cfg,
 		startTime: time.Now(),
 		output:    os.Stderr,
+		useColors: isTerminal(os.Stderr),
 	}
+}
+
+// isTerminal checks if a writer is a terminal
+func isTerminal(w io.Writer) bool {
+	if f, ok := w.(*os.File); ok {
+		stat, err := f.Stat()
+		if err != nil {
+			return false
+		}
+		return (stat.Mode() & os.ModeCharDevice) != 0
+	}
+	return false
+}
+
+// ansiStripper wraps a writer and strips ANSI escape codes
+type ansiStripper struct {
+	w io.Writer
+}
+
+// Write implements io.Writer, stripping ANSI escape sequences
+func (s *ansiStripper) Write(p []byte) (n int, err error) {
+	// Strip ANSI escape sequences: \033[...m
+	clean := stripANSI(p)
+	_, err = s.w.Write(clean)
+	return len(p), err // Return original length for caller
+}
+
+// stripANSI removes ANSI escape sequences from byte slice
+func stripANSI(b []byte) []byte {
+	result := make([]byte, 0, len(b))
+	i := 0
+	for i < len(b) {
+		if b[i] == '\033' && i+1 < len(b) && b[i+1] == '[' {
+			// Skip until 'm' (end of color code)
+			j := i + 2
+			for j < len(b) && b[j] != 'm' {
+				j++
+			}
+			if j < len(b) {
+				i = j + 1
+				continue
+			}
+		}
+		result = append(result, b[i])
+		i++
+	}
+	return result
+}
+
+// NewStripANSIWriter creates a writer that strips ANSI codes
+func NewStripANSIWriter(w io.Writer) io.Writer {
+	return &ansiStripper{w: w}
 }
 
 // SetOutput sets the output writer (can be used with io.MultiWriter)
 func (l *TestLogger) SetOutput(w io.Writer) {
 	l.output = w
+	// Keep colors enabled - file output should use NewStripANSIWriter
+	// to remove colors while keeping them for terminal
 }
 
 // GetOutput returns the current output writer
@@ -71,8 +127,8 @@ func (l *TestLogger) log(category, color, message string, args ...interface{}) {
 	// Format category with fixed width
 	cat := fmt.Sprintf("%-6s", category)
 
-	// Apply color codes for terminal
-	if color != "" {
+	// Apply color codes only for terminal output
+	if color != "" && l.useColors {
 		cat = color + cat + "\033[0m"
 	}
 

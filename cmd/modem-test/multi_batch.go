@@ -12,7 +12,7 @@ import (
 )
 
 // runBatchModeMulti orchestrates batch testing with multiple modems.
-func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService) {
+func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter) {
 	phones := cfg.GetPhones()
 	testCount := cfg.Test.Count
 	infinite := testCount <= 0
@@ -114,7 +114,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 
 			results = append(results, result.Result.message)
 
-			// Lookup CDR data for VoIP quality metrics
+			// Lookup CDR data for VoIP quality metrics (AudioCodes)
 			var cdrData *CDRData
 			if cdrService != nil && cdrService.IsEnabled() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -122,16 +122,31 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 				cdrData, err = cdrService.LookupByPhone(ctx, result.Phone, result.Timestamp)
 				cancel()
 				if err != nil {
-					log.Debug("CDR lookup failed for %s: %v", result.Phone, err)
+					log.Debug("AudioCodes CDR lookup failed for %s: %v", result.Phone, err)
 				} else if cdrData != nil {
-					log.Info("[%s] CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d",
+					log.Info("[%s] CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d term=%s",
 						result.WorkerName, float64(cdrData.LocalMOSCQ)/10.0,
-						cdrData.RTPJitter, cdrData.RTPDelay, cdrData.PacketLoss)
+						cdrData.RTPJitter, cdrData.RTPDelay, cdrData.PacketLoss, cdrData.TermReason)
 				}
 			}
 
-			// Write CSV
-			if csvWriter != nil {
+			// Lookup Asterisk CDR for call routing info
+			var asteriskCDR *AsteriskCDRData
+			if asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				var err error
+				asteriskCDR, err = asteriskCDRService.LookupByPhone(ctx, result.Phone, result.Timestamp)
+				cancel()
+				if err != nil {
+					log.Debug("Asterisk CDR lookup failed for %s: %v", result.Phone, err)
+				} else if asteriskCDR != nil {
+					log.Info("[%s] Asterisk: disposition=%s peer=%s duration=%ds",
+						result.WorkerName, asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
+				}
+			}
+
+			// Write CSV and PostgreSQL
+			if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) {
 				rec := RecordFromTestResult(
 					result.TestNum,
 					result.Phone,
@@ -144,10 +159,20 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 					result.Result.emsiInfo,
 					result.Result.lineStats,
 					cdrData,
+					asteriskCDR,
 				)
 				rec.ModemName = result.WorkerName
-				if err := csvWriter.WriteRecord(rec); err != nil {
-					log.Error("Failed to write CSV record: %v", err)
+
+				if csvWriter != nil {
+					if err := csvWriter.WriteRecord(rec); err != nil {
+						log.Error("Failed to write CSV record: %v", err)
+					}
+				}
+
+				if pgWriter != nil && pgWriter.IsEnabled() {
+					if err := pgWriter.WriteRecord(rec); err != nil {
+						log.Error("Failed to write PostgreSQL record: %v", err)
+					}
 				}
 			}
 
