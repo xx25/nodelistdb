@@ -273,6 +273,10 @@ func (s *Storage) GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, e
 	return s.searchOperations.GetPioneersByRegion(zone, region, limit)
 }
 
+func (s *Storage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
+	return s.analyticsOperations.GetPSTNCMNodes(limit)
+}
+
 // --- Utility Methods ---
 
 // GetQueryBuilder returns the query builder for direct access

@@ -339,6 +339,7 @@ type Operations interface {
 	GetNodesByProvider(provider string, days int) ([]NodeTestResult, error)
 	GetOnThisDayNodes(month, day, limit int, activeOnly bool) ([]OnThisDayNode, error)
 	GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error)
+	GetPSTNCMNodes(limit int) ([]PSTNNode, error)
 
 	// Utility operations (delegated to NodeOps())
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
@@ -452,6 +453,23 @@ const (
 
 	NodeInsertPlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
 )
+
+// PSTNNode represents a node with PSTN (phone) access from the nodelist
+// Used for PSTN analytics reports showing nodes with phone numbers and CM flag
+type PSTNNode struct {
+	Zone         int       `json:"zone"`
+	Net          int       `json:"net"`
+	Node         int       `json:"node"`
+	SystemName   string    `json:"system_name"`
+	Location     string    `json:"location"`
+	SysopName    string    `json:"sysop_name"`
+	Phone        string    `json:"phone"`
+	IsCM         bool      `json:"is_cm"`          // Continuous Mail (24/7 availability)
+	NodelistDate time.Time `json:"nodelist_date"`  // Date of nodelist entry
+	NodeType     string    `json:"node_type"`      // Zone, Region, Host, Hub, Pvt, Down, Hold
+	MaxSpeed     uint32    `json:"max_speed"`      // Maximum baud rate
+	Flags        []string  `json:"flags"`          // Node flags
+}
 
 // OnThisDayNode represents a node that was first added on this day in a previous year
 // It tracks when a new sysop appeared with a node address that wasn't theirs before

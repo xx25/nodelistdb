@@ -490,6 +490,89 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 	return results, nil
 }
 
+// GetPSTNCMNodes returns nodes from the latest nodelist that have valid phone numbers and CM flag
+// Phone numbers like "-Unpublished-" and "000-000-000-000" are excluded
+// Down and Hold nodes are excluded as they are not operational
+func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
+	ao.mu.RLock()
+	defer ao.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	}
+	if limit > MaxSearchLimit {
+		limit = MaxSearchLimit
+	}
+
+	conn := ao.db.Conn()
+
+	query := `
+		WITH latest_date AS (
+			SELECT MAX(nodelist_date) as max_date FROM nodes
+		)
+		SELECT
+			zone,
+			net,
+			node,
+			system_name,
+			location,
+			sysop_name,
+			phone,
+			is_cm,
+			nodelist_date,
+			node_type,
+			max_speed,
+			flags
+		FROM nodes
+		WHERE nodelist_date = (SELECT max_date FROM latest_date)
+		  AND conflict_sequence = 0
+		  AND is_cm = true
+		  AND phone != ''
+		  AND phone != '-Unpublished-'
+		  AND phone != '000-000-000-000'
+		  AND node != 0
+		  AND node_type NOT IN ('Down', 'Hold')
+		ORDER BY zone, net, node
+		LIMIT ?`
+
+	rows, err := conn.Query(query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query PSTN CM nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []PSTNNode
+	for rows.Next() {
+		var n PSTNNode
+		var flags []string
+		err := rows.Scan(
+			&n.Zone,
+			&n.Net,
+			&n.Node,
+			&n.SystemName,
+			&n.Location,
+			&n.SysopName,
+			&n.Phone,
+			&n.IsCM,
+			&n.NodelistDate,
+			&n.NodeType,
+			&n.MaxSpeed,
+			&flags,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan PSTN CM node row: %w", err)
+		}
+		n.Flags = flags
+		results = append(results, n)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating PSTN CM rows: %w", err)
+	}
+
+	return results, nil
+}
+
 // Close closes the analytics operations
 func (ao *AnalyticsOperations) Close() error {
 	ao.mu.Lock()

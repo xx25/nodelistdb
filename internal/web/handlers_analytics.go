@@ -548,6 +548,57 @@ func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderProtocolAnalytics(w, r, config, s.storage.GetFTPEnabledNodes)
 }
 
+// PSTNCMAnalyticsHandler shows nodes with phone numbers and CM (24/7) flag
+func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse limit parameter
+	query := r.URL.Query()
+	limit := 500 // Default limit
+	if limitStr := query.Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Fetch PSTN CM nodes
+	pstnNodes, err := s.storage.GetPSTNCMNodes(limit)
+	var displayError error
+	if err != nil {
+		log.Printf("[ERROR] PSTN CM Analytics: Error fetching nodes: %v", err)
+		pstnNodes = []storage.PSTNNode{}
+		displayError = fmt.Errorf("Failed to fetch PSTN analytics data. Please try again later")
+	}
+
+	// Build template data
+	data := struct {
+		Title      string
+		ActivePage string
+		Version    string
+		PSTNNodes  []storage.PSTNNode
+		Limit      int
+		Error      error
+	}{
+		Title:      "PSTN CM Nodes (24/7 Phone Access)",
+		ActivePage: "analytics",
+		Version:    version.GetVersionInfo(),
+		PSTNNodes:  pstnNodes,
+		Limit:      limit,
+		Error:      displayError,
+	}
+
+	// Use PSTN analytics template
+	tmpl, exists := s.templates["pstn_analytics"]
+	if !exists {
+		log.Printf("[ERROR] PSTN CM Analytics: Template 'pstn_analytics' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] PSTN CM Analytics: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // IPv6WeeklyNewsHandler shows weekly IPv6 connectivity changes
 func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse common parameters

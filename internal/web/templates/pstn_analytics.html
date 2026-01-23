@@ -1,0 +1,75 @@
+{{template "base" .}}
+
+{{define "title"}}PSTN CM Nodes{{end}}
+
+{{define "page_title"}}PSTN CM Nodes (24/7 Phone Access){{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">Nodes from the latest nodelist with phone numbers and CM (Continuous Mail) flag</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+{{if .Error}}
+<div class="alert alert-danger">
+    <strong>Error:</strong> {{.Error}}
+</div>
+{{end}}
+
+{{if .PSTNNodes}}
+<div class="stats-box">
+    <h3>Found {{len .PSTNNodes}} PSTN CM Nodes</h3>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">System Name</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="string">Sysop</th>
+                <th data-sortable data-type="string">Phone</th>
+                <th data-sortable data-type="number">Max Speed</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .PSTNNodes}}
+            <tr>
+                <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}">
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                        {{.Zone}}:{{.Net}}/{{.Node}}
+                    </a>
+                </td>
+                <td>{{replaceUnderscores .SystemName}}</td>
+                <td>{{replaceUnderscores .Location}}</td>
+                <td>{{replaceUnderscores .SysopName}}</td>
+                <td>
+                    <span class="badge badge-success">{{.Phone}}</span>
+                </td>
+                <td data-value="{{.MaxSpeed}}">{{.MaxSpeed}} bps</td>
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>About this report:</strong> This page lists FidoNet nodes that have published phone numbers and are marked with the CM (Continuous Mail) flag, indicating they are available 24 hours a day, 7 days a week for incoming connections.</p>
+    <p><strong>CM Flag:</strong> The CM flag signifies that the node operates in Continuous Mail mode, meaning it can receive mail at any time without requiring scheduled mail events (ZMH - Zone Mail Hour).</p>
+    <p><strong>Phone Numbers:</strong> Phone numbers are displayed as published in the nodelist. Nodes with unpublished or invalid phone numbers are excluded from this report.</p>
+    <p><strong>Note:</strong> This data comes from the latest nodelist in the database. Actual PSTN connectivity depends on the node's modem equipment and phone line status.</p>
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>No PSTN CM nodes found.</strong><br>
+    No nodes with valid phone numbers and CM flag were found in the latest nodelist.
+</div>
+{{end}}
+{{end}}
