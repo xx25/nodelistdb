@@ -71,6 +71,15 @@ type ModemConfig struct {
 	// StatsPagination enables handling of paginated stats output (e.g., MT5634ZBA with ATI11)
 	// When true, sends space to continue when "Press any key" prompt is detected
 	StatsPagination bool `yaml:"stats_pagination"`
+
+	// BusyRetryCount is the number of times to retry dialing when BUSY is received.
+	// Set to 0 to disable retries. Default is 0 (no retries).
+	// When enabled, the modem will keep retrying the same number with the same operator
+	// until a non-BUSY result is received or the retry count is exhausted.
+	BusyRetryCount int `yaml:"busy_retry_count"`
+
+	// BusyRetryDelay is the delay between retry attempts on BUSY (default: 5s)
+	BusyRetryDelay Duration `yaml:"busy_retry_delay"`
 }
 
 // TestConfig contains test execution parameters
@@ -435,6 +444,12 @@ func (c *Config) mergeModemConfig(defaults, override ModemConfig) ModemConfig {
 	}
 	if override.StatsPagination {
 		result.StatsPagination = override.StatsPagination
+	}
+	if override.BusyRetryCount != 0 {
+		result.BusyRetryCount = override.BusyRetryCount
+	}
+	if override.BusyRetryDelay != 0 {
+		result.BusyRetryDelay = override.BusyRetryDelay
 	}
 
 	return result

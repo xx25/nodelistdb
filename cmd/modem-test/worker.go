@@ -167,7 +167,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 
 			// Run the test with operator prefix prepended
 			dialPhone := job.operatorPrefix + job.phone
-			result := w.runTest(job.testNum, dialPhone)
+			result := w.runTest(ctx, job.testNum, dialPhone)
 
 			// Release phone lock
 			w.coordinator.ReleasePhone(job.phone)
@@ -202,30 +202,83 @@ func (w *ModemWorker) Run(ctx context.Context) {
 }
 
 // runTest executes a single test call.
-func (w *ModemWorker) runTest(testNum int, phoneNumber string) testResult {
+func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber string) testResult {
 	m := w.modem
 	cfg := &w.config
 
-	// Dial
-	w.log.Dial("%s -> ATDT%s", phoneNumber, phoneNumber)
-	result, err := m.DialNumber(phoneNumber)
-	if err != nil {
-		msg := fmt.Sprintf("Test %d [%s] %s: DIAL ERROR - %v", testNum, w.name, phoneNumber, err)
-		w.log.Fail("DIAL ERROR - %v", err)
+	// Determine busy retry settings
+	busyRetryCount := cfg.BusyRetryCount
+	busyRetryDelay := cfg.BusyRetryDelay.Duration()
+	if busyRetryDelay == 0 {
+		busyRetryDelay = 5 * time.Second // Default delay between retries
+	}
 
-		// Try to recover
-		w.log.Info("Attempting modem reset...")
-		_ = m.Reset()
+	var result *modem.DialResult
+	var err error
+	busyAttempts := 0
 
-		return testResult{
-			success: false,
-			message: msg,
+	// Dial with retry on BUSY
+	for {
+		// Check for cancellation before retry wait
+		if busyAttempts > 0 {
+			w.log.Info("BUSY retry %d/%d, waiting %v...", busyAttempts, busyRetryCount, busyRetryDelay)
+			select {
+			case <-time.After(busyRetryDelay):
+			case <-ctx.Done():
+				w.log.Info("Cancelled during BUSY retry wait")
+				return testResult{
+					success: false,
+					message: fmt.Sprintf("Test %d [%s] %s: CANCELLED", testNum, w.name, phoneNumber),
+				}
+			}
 		}
+
+		// Check for cancellation before dialing
+		select {
+		case <-ctx.Done():
+			w.log.Info("Cancelled before dial")
+			return testResult{
+				success: false,
+				message: fmt.Sprintf("Test %d [%s] %s: CANCELLED", testNum, w.name, phoneNumber),
+			}
+		default:
+		}
+
+		w.log.Dial("%s -> ATDT%s", phoneNumber, phoneNumber)
+		result, err = m.DialNumber(phoneNumber)
+
+		if err != nil {
+			msg := fmt.Sprintf("Test %d [%s] %s: DIAL ERROR - %v", testNum, w.name, phoneNumber, err)
+			w.log.Fail("DIAL ERROR - %v", err)
+
+			// Try to recover
+			w.log.Info("Attempting modem reset...")
+			_ = m.Reset()
+
+			return testResult{
+				success: false,
+				message: msg,
+			}
+		}
+
+		// Check if BUSY and should retry
+		if !result.Success && result.Error == "BUSY" && busyRetryCount > 0 && busyAttempts < busyRetryCount {
+			w.log.Fail("DIAL FAILED - BUSY (%.1fs)", result.DialTime.Seconds())
+			busyAttempts++
+			continue
+		}
+
+		// Not BUSY or retries exhausted
+		break
 	}
 
 	if !result.Success {
-		msg := fmt.Sprintf("Test %d [%s] %s: DIAL FAILED - %s (%.1fs)", testNum, w.name, phoneNumber, result.Error, result.DialTime.Seconds())
-		w.log.Fail("DIAL FAILED - %s (%.1fs)", result.Error, result.DialTime.Seconds())
+		retryInfo := ""
+		if busyAttempts > 0 {
+			retryInfo = fmt.Sprintf(" [after %d BUSY retries]", busyAttempts)
+		}
+		msg := fmt.Sprintf("Test %d [%s] %s: DIAL FAILED - %s (%.1fs)%s", testNum, w.name, phoneNumber, result.Error, result.DialTime.Seconds(), retryInfo)
+		w.log.Fail("DIAL FAILED - %s (%.1fs)%s", result.Error, result.DialTime.Seconds(), retryInfo)
 		return testResult{
 			success: false,
 			message: msg,

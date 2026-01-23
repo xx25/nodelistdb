@@ -40,6 +40,10 @@ modem:
   # Profiles: "rockwell" (USR/Conexant), "zyxel", "raw" (no parsing)
   stats_profile: rockwell
 
+  # BUSY retry settings - keep retrying same number/operator on BUSY
+  # busy_retry_count: 20    # Number of retries on BUSY (0 = disabled, default)
+  # busy_retry_delay: 5s    # Delay between BUSY retries (default: 5s)
+
 test:
   count: 10
   inter_delay: 5s
