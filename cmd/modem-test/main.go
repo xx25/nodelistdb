@@ -408,12 +408,14 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			cdrData, err := cdrService.LookupByPhone(ctx, currentPhone, time.Now())
 			cancel()
 			if err != nil {
-				log.Debug("AudioCodes CDR lookup failed: %v", err)
+				log.Warn("AudioCodes CDR lookup failed for %s: %v", currentPhone, err)
 			} else if cdrData != nil {
 				result.cdrData = cdrData
 				log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s term=%s",
 					float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
 					cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec, cdrData.TermReason)
+			} else {
+				log.Warn("AudioCodes CDR not found for phone %s", currentPhone)
 			}
 		}
 
@@ -423,11 +425,13 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			asteriskCDR, err := asteriskCDRService.LookupByPhone(ctx, currentPhone, time.Now())
 			cancel()
 			if err != nil {
-				log.Debug("Asterisk CDR lookup failed: %v", err)
+				log.Warn("Asterisk CDR lookup failed for %s: %v", currentPhone, err)
 			} else if asteriskCDR != nil {
 				result.asteriskCDR = asteriskCDR
 				log.Info("Asterisk: disposition=%s peer=%s duration=%ds",
 					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
+			} else {
+				log.Warn("Asterisk CDR not found for phone %s", currentPhone)
 			}
 		}
 

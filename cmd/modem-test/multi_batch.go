@@ -156,11 +156,13 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 				cdrData, err = cdrService.LookupByPhone(ctx, result.Phone, result.Timestamp)
 				cancel()
 				if err != nil {
-					log.Debug("AudioCodes CDR lookup failed for %s: %v", result.Phone, err)
+					log.Warn("[%s] AudioCodes CDR lookup failed for %s: %v", result.WorkerName, result.Phone, err)
 				} else if cdrData != nil {
 					log.Info("[%s] CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d term=%s",
 						result.WorkerName, float64(cdrData.LocalMOSCQ)/10.0,
 						cdrData.RTPJitter, cdrData.RTPDelay, cdrData.PacketLoss, cdrData.TermReason)
+				} else {
+					log.Warn("[%s] AudioCodes CDR not found for phone %s", result.WorkerName, result.Phone)
 				}
 			}
 
@@ -172,10 +174,12 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 				asteriskCDR, err = asteriskCDRService.LookupByPhone(ctx, result.Phone, result.Timestamp)
 				cancel()
 				if err != nil {
-					log.Debug("Asterisk CDR lookup failed for %s: %v", result.Phone, err)
+					log.Warn("[%s] Asterisk CDR lookup failed for %s: %v", result.WorkerName, result.Phone, err)
 				} else if asteriskCDR != nil {
 					log.Info("[%s] Asterisk: disposition=%s peer=%s duration=%ds",
 						result.WorkerName, asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
+				} else {
+					log.Warn("[%s] Asterisk CDR not found for phone %s", result.WorkerName, result.Phone)
 				}
 			}
 
