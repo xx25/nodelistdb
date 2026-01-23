@@ -123,6 +123,16 @@ func main() {
 		defer pgWriter.Close()
 	}
 
+	// Initialize MySQL results writer (optional)
+	mysqlWriter, err := NewMySQLResultsWriter(cfg.MySQLResults)
+	if err != nil {
+		log.Warn("MySQL results writer unavailable: %v", err)
+		mysqlWriter = &MySQLResultsWriter{} // Use disabled writer
+	} else if mysqlWriter.IsEnabled() {
+		log.Info("MySQL results writer enabled: table=%s", cfg.MySQLResults.TableName)
+		defer mysqlWriter.Close()
+	}
+
 	// Validate required parameters for batch mode
 	phones := cfg.GetPhones()
 	if *batch && len(phones) == 0 {
@@ -135,7 +145,7 @@ func main() {
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter)
 		return
 	}
 
@@ -203,7 +213,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -281,17 +291,35 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter) {
 	phones := cfg.GetPhones()
+	operators := cfg.GetOperators()
 	testCount := cfg.Test.Count
 	infinite := testCount <= 0
 	interDelay := cfg.Test.InterDelay.Duration()
+
+	// If no operators configured, use a single "no operator" entry for simpler loop logic
+	if len(operators) == 0 {
+		operators = []OperatorConfig{{Name: "", Prefix: ""}}
+	}
 
 	// Print session header
 	if infinite {
 		log.PrintHeader(configFile, cfg.Modem.Device, phones, -1) // -1 signals infinite
 	} else {
 		log.PrintHeader(configFile, cfg.Modem.Device, phones, testCount)
+	}
+
+	// Log operator configuration if multiple operators configured
+	if len(operators) > 1 || (len(operators) == 1 && operators[0].Name != "") {
+		log.Info("Operator rotation enabled with %d operator(s):", len(operators))
+		for _, op := range operators {
+			if op.Prefix == "" {
+				log.Info("  - %s (direct dial)", op.Name)
+			} else {
+				log.Info("  - %s (prefix: %s)", op.Name, op.Prefix)
+			}
+		}
 	}
 
 	// Initialize CSV writer if configured
@@ -319,10 +347,24 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		phoneStats[phone] = &PhoneStats{Phone: phone}
 	}
 
+	// Per-operator statistics
+	operatorStats := make(map[string]*OperatorStats)
+	for _, op := range operators {
+		operatorStats[op.Name] = &OperatorStats{Name: op.Name, Prefix: op.Prefix}
+	}
+
+	// Calculate total combinations for rotation
+	totalCombinations := len(phones) * len(operators)
+
 	for i := 1; infinite || i <= testCount; i++ {
-		// Select phone in circular order
-		phoneIndex := (i - 1) % len(phones)
+		// Select phone and operator in rotation order:
+		// Test all operators for phone 1, then all for phone 2, etc.
+		comboIndex := (i - 1) % totalCombinations
+		phoneIndex := comboIndex / len(operators)
+		operatorIndex := comboIndex % len(operators)
+
 		currentPhone := phones[phoneIndex]
+		currentOperator := operators[operatorIndex]
 
 		if infinite {
 			log.PrintTestHeader(i, 0) // 0 signals infinite
@@ -330,10 +372,18 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			log.PrintTestHeader(i, testCount)
 		}
 
-		result := runSingleTest(m, cfg, log, i, currentPhone)
+		// Log operator info if configured
+		if currentOperator.Name != "" {
+			log.Info("Operator: %s (prefix: %q)", currentOperator.Name, currentOperator.Prefix)
+		}
+
+		// Dial with operator prefix prepended
+		dialPhone := currentOperator.Prefix + currentPhone
+		result := runSingleTest(m, cfg, log, i, dialPhone)
 		results = append(results, result.message)
 
 		// Lookup CDR data for VoIP quality metrics (AudioCodes)
+		// Note: Use original phone (without operator prefix) for CDR lookup
 		if cdrService != nil && cdrService.IsEnabled() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			cdrData, err := cdrService.LookupByPhone(ctx, currentPhone, time.Now())
@@ -362,12 +412,14 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			}
 		}
 
-		// Write to CSV if enabled
+		// Write to CSV and databases if enabled
 		var rec *TestRecord
-		if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) {
+		if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) {
 			rec = RecordFromTestResult(
 				i,
-				currentPhone,
+				currentPhone, // Store original phone without operator prefix
+				currentOperator.Name,
+				currentOperator.Prefix,
 				result.success,
 				result.dialTime,
 				result.connectSpeed,
@@ -393,20 +445,35 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			}
 		}
 
+		// Write to MySQL if enabled
+		if mysqlWriter != nil && mysqlWriter.IsEnabled() && rec != nil {
+			if err := mysqlWriter.WriteRecord(rec); err != nil {
+				log.Error("Failed to write MySQL record: %v", err)
+			}
+		}
+
 		// Update per-phone stats
 		stats := phoneStats[currentPhone]
 		stats.Total++
 
+		// Update per-operator stats
+		opStats := operatorStats[currentOperator.Name]
+		opStats.Total++
+
 		if result.success {
 			success++
 			stats.Success++
+			opStats.Success++
 			totalDialTime += result.dialTime
 			totalEmsiTime += result.emsiTime
 			stats.TotalDialTime += result.dialTime
 			stats.TotalEmsiTime += result.emsiTime
+			opStats.TotalDialTime += result.dialTime
+			opStats.TotalEmsiTime += result.emsiTime
 		} else {
 			failed++
 			stats.Failed++
+			opStats.Failed++
 		}
 
 		if infinite || i < testCount {
@@ -422,8 +489,8 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		avgEmsiTime = totalEmsiTime / time.Duration(success)
 	}
 
-	// Print summary with per-phone stats
-	log.PrintSummaryWithPhoneStats(testCount, success, failed, time.Since(sessionStart), avgDialTime, avgEmsiTime, results, phoneStats)
+	// Print summary with per-phone and per-operator stats
+	log.PrintSummaryWithStats(testCount, success, failed, time.Since(sessionStart), avgDialTime, avgEmsiTime, results, phoneStats, operatorStats)
 }
 
 type testResult struct {

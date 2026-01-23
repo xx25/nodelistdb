@@ -22,6 +22,7 @@ type Config struct {
 	CDR             CDRConfig             `yaml:"cdr"`              // AudioCodes CDR database (optional)
 	AsteriskCDR     AsteriskCDRConfig     `yaml:"asterisk_cdr"`     // Asterisk CDR database (optional)
 	PostgresResults PostgresResultsConfig `yaml:"postgres_results"` // PostgreSQL results storage (optional)
+	MySQLResults    MySQLResultsConfig    `yaml:"mysql_results"`    // MySQL results storage (optional)
 }
 
 // ModemInstanceConfig extends ModemConfig with instance-specific fields
@@ -74,11 +75,18 @@ type ModemConfig struct {
 
 // TestConfig contains test execution parameters
 type TestConfig struct {
-	Count      int      `yaml:"count"`
-	InterDelay Duration `yaml:"inter_delay"`
-	Phone      string   `yaml:"phone"`   // Single phone (for backward compatibility)
-	Phones     []string `yaml:"phones"`  // Multiple phones (called in circular order)
-	CSVFile    string   `yaml:"csv_file"` // Path to CSV output file (optional)
+	Count      int              `yaml:"count"`
+	InterDelay Duration         `yaml:"inter_delay"`
+	Phone      string           `yaml:"phone"`     // Single phone (for backward compatibility)
+	Phones     []string         `yaml:"phones"`    // Multiple phones (called in circular order)
+	Operators  []OperatorConfig `yaml:"operators"` // Operator prefixes for routing comparison (optional)
+	CSVFile    string           `yaml:"csv_file"`  // Path to CSV output file (optional)
+}
+
+// OperatorConfig contains operator/carrier routing configuration
+type OperatorConfig struct {
+	Name   string `yaml:"name"`   // Friendly name for reports (e.g., "Verizon", "VoIP-A")
+	Prefix string `yaml:"prefix"` // Dial prefix to prepend (e.g., "1#", "2#", "" for direct)
 }
 
 // EMSIConfig contains EMSI handshake parameters
@@ -196,6 +204,10 @@ func DefaultConfig() *Config {
 			TimeWindowSec: 120,
 		},
 		PostgresResults: PostgresResultsConfig{
+			Enabled:   false,
+			TableName: "modem_test_results",
+		},
+		MySQLResults: MySQLResultsConfig{
 			Enabled:   false,
 			TableName: "modem_test_results",
 		},
@@ -465,6 +477,12 @@ func (c *Config) GetPhones() []string {
 		return parsePhoneList(c.Test.Phone)
 	}
 	return nil
+}
+
+// GetOperators returns the list of operator configurations for routing comparison.
+// Returns empty slice if no operators are configured (no prefix rotation).
+func (c *Config) GetOperators() []OperatorConfig {
+	return c.Test.Operators
 }
 
 // parsePhoneList splits a comma-separated phone list into individual numbers.

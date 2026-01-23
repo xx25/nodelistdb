@@ -1,4 +1,4 @@
-// Package main provides PostgreSQL storage for modem test results.
+// Package main provides MySQL storage for modem test results.
 package main
 
 import (
@@ -7,30 +7,30 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	_ "github.com/go-sql-driver/mysql" // MySQL driver
 )
 
-// PostgresResultsConfig contains PostgreSQL results database settings
-type PostgresResultsConfig struct {
-	Enabled   bool   `yaml:"enabled"`    // Enable PostgreSQL result writing (default: false)
-	DSN       string `yaml:"dsn"`        // PostgreSQL connection string
+// MySQLResultsConfig contains MySQL results database settings
+type MySQLResultsConfig struct {
+	Enabled   bool   `yaml:"enabled"`    // Enable MySQL result writing (default: false)
+	DSN       string `yaml:"dsn"`        // MySQL connection string (user:password@tcp(host:port)/database)
 	TableName string `yaml:"table_name"` // Table name (default: "modem_test_results")
 }
 
-// PostgresResultsWriter writes test results to PostgreSQL
-type PostgresResultsWriter struct {
+// MySQLResultsWriter writes test results to MySQL
+type MySQLResultsWriter struct {
 	db        *sql.DB
 	tableName string
 	enabled   bool
 	stmt      *sql.Stmt // Prepared statement for inserts
 }
 
-// Table creation DDL
-const createTableSQL = `
+// Table creation DDL for MySQL
+const mysqlCreateTableSQL = `
 CREATE TABLE IF NOT EXISTS %s (
-    id                      BIGSERIAL PRIMARY KEY,
-    timestamp               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    test_num                INTEGER NOT NULL,
+    id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    timestamp               DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    test_num                INT NOT NULL,
     phone                   VARCHAR(32) NOT NULL,
     modem_name              VARCHAR(64) NOT NULL DEFAULT '',
     operator_name           VARCHAR(64) NOT NULL DEFAULT '',
@@ -38,10 +38,10 @@ CREATE TABLE IF NOT EXISTS %s (
     success                 BOOLEAN NOT NULL,
 
     -- Connection
-    dial_time_seconds       REAL NOT NULL DEFAULT 0,
-    connect_speed           INTEGER NOT NULL DEFAULT 0,
+    dial_time_seconds       FLOAT NOT NULL DEFAULT 0,
+    connect_speed           INT NOT NULL DEFAULT 0,
     connect_string          VARCHAR(256) NOT NULL DEFAULT '',
-    emsi_time_seconds       REAL NOT NULL DEFAULT 0,
+    emsi_time_seconds       FLOAT NOT NULL DEFAULT 0,
     emsi_error              VARCHAR(128) NOT NULL DEFAULT '',
 
     -- Remote system (EMSI)
@@ -52,53 +52,53 @@ CREATE TABLE IF NOT EXISTS %s (
     remote_mailer           VARCHAR(128) NOT NULL DEFAULT '',
 
     -- Line statistics
-    tx_speed                INTEGER NOT NULL DEFAULT 0,
-    rx_speed                INTEGER NOT NULL DEFAULT 0,
+    tx_speed                INT NOT NULL DEFAULT 0,
+    rx_speed                INT NOT NULL DEFAULT 0,
     protocol                VARCHAR(32) NOT NULL DEFAULT '',
     compression             VARCHAR(32) NOT NULL DEFAULT '',
-    line_quality            INTEGER NOT NULL DEFAULT 0,
-    rx_level                INTEGER NOT NULL DEFAULT 0,
-    retrains                INTEGER NOT NULL DEFAULT 0,
+    line_quality            INT NOT NULL DEFAULT 0,
+    rx_level                INT NOT NULL DEFAULT 0,
+    retrains                INT NOT NULL DEFAULT 0,
     termination             VARCHAR(64) NOT NULL DEFAULT '',
-    stats_notes             TEXT NOT NULL DEFAULT '',
+    stats_notes             TEXT NOT NULL,
 
     -- AudioCodes CDR
     cdr_session_id          VARCHAR(64) NOT NULL DEFAULT '',
     cdr_codec               VARCHAR(32) NOT NULL DEFAULT '',
-    cdr_rtp_jitter_ms       INTEGER NOT NULL DEFAULT 0,
-    cdr_rtp_delay_ms        INTEGER NOT NULL DEFAULT 0,
-    cdr_packet_loss         INTEGER NOT NULL DEFAULT 0,
-    cdr_remote_packet_loss  INTEGER NOT NULL DEFAULT 0,
-    cdr_local_mos           REAL NOT NULL DEFAULT 0,
-    cdr_remote_mos          REAL NOT NULL DEFAULT 0,
-    cdr_local_r_factor      INTEGER NOT NULL DEFAULT 0,
-    cdr_remote_r_factor     INTEGER NOT NULL DEFAULT 0,
+    cdr_rtp_jitter_ms       INT NOT NULL DEFAULT 0,
+    cdr_rtp_delay_ms        INT NOT NULL DEFAULT 0,
+    cdr_packet_loss         INT NOT NULL DEFAULT 0,
+    cdr_remote_packet_loss  INT NOT NULL DEFAULT 0,
+    cdr_local_mos           FLOAT NOT NULL DEFAULT 0,
+    cdr_remote_mos          FLOAT NOT NULL DEFAULT 0,
+    cdr_local_r_factor      INT NOT NULL DEFAULT 0,
+    cdr_remote_r_factor     INT NOT NULL DEFAULT 0,
     cdr_term_reason         VARCHAR(64) NOT NULL DEFAULT '',
     cdr_term_category       VARCHAR(64) NOT NULL DEFAULT '',
 
     -- Asterisk CDR
     ast_disposition         VARCHAR(32) NOT NULL DEFAULT '',
     ast_peer                VARCHAR(64) NOT NULL DEFAULT '',
-    ast_duration            INTEGER NOT NULL DEFAULT 0,
-    ast_billsec             INTEGER NOT NULL DEFAULT 0,
+    ast_duration            INT NOT NULL DEFAULT 0,
+    ast_billsec             INT NOT NULL DEFAULT 0,
 
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+    created_at              DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s (timestamp);
-CREATE INDEX IF NOT EXISTS idx_%s_phone ON %s (phone);
-CREATE INDEX IF NOT EXISTS idx_%s_modem_name ON %s (modem_name);
-CREATE INDEX IF NOT EXISTS idx_%s_operator_name ON %s (operator_name);
-CREATE INDEX IF NOT EXISTS idx_%s_success ON %s (success);
+    INDEX idx_timestamp (timestamp),
+    INDEX idx_phone (phone),
+    INDEX idx_modem_name (modem_name),
+    INDEX idx_operator_name (operator_name),
+    INDEX idx_success (success)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 `
 
-// NewPostgresResultsWriter creates a new PostgreSQL results writer
-func NewPostgresResultsWriter(cfg PostgresResultsConfig) (*PostgresResultsWriter, error) {
+// NewMySQLResultsWriter creates a new MySQL results writer
+func NewMySQLResultsWriter(cfg MySQLResultsConfig) (*MySQLResultsWriter, error) {
 	if !cfg.Enabled || cfg.DSN == "" {
-		return &PostgresResultsWriter{enabled: false}, nil
+		return &MySQLResultsWriter{enabled: false}, nil
 	}
 
-	db, err := sql.Open("postgres", cfg.DSN)
+	db, err := sql.Open("mysql", cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open results database: %w", err)
 	}
@@ -121,7 +121,7 @@ func NewPostgresResultsWriter(cfg PostgresResultsConfig) (*PostgresResultsWriter
 		tableName = "modem_test_results"
 	}
 
-	w := &PostgresResultsWriter{
+	w := &MySQLResultsWriter{
 		db:        db,
 		tableName: tableName,
 		enabled:   true,
@@ -143,12 +143,12 @@ func NewPostgresResultsWriter(cfg PostgresResultsConfig) (*PostgresResultsWriter
 }
 
 // IsEnabled returns true if the writer is active
-func (w *PostgresResultsWriter) IsEnabled() bool {
+func (w *MySQLResultsWriter) IsEnabled() bool {
 	return w.enabled
 }
 
-// WriteRecord writes a test record to PostgreSQL
-func (w *PostgresResultsWriter) WriteRecord(rec *TestRecord) error {
+// WriteRecord writes a test record to MySQL
+func (w *MySQLResultsWriter) WriteRecord(rec *TestRecord) error {
 	if !w.enabled || w.db == nil {
 		return nil
 	}
@@ -207,7 +207,7 @@ func (w *PostgresResultsWriter) WriteRecord(rec *TestRecord) error {
 }
 
 // Close closes the database connection
-func (w *PostgresResultsWriter) Close() error {
+func (w *MySQLResultsWriter) Close() error {
 	if w.stmt != nil {
 		w.stmt.Close()
 	}
@@ -218,22 +218,14 @@ func (w *PostgresResultsWriter) Close() error {
 }
 
 // createTable creates the results table if it doesn't exist
-func (w *PostgresResultsWriter) createTable(ctx context.Context) error {
-	// Format DDL with table name for table and indexes
-	ddl := fmt.Sprintf(createTableSQL,
-		w.tableName,
-		w.tableName, w.tableName, // timestamp index
-		w.tableName, w.tableName, // phone index
-		w.tableName, w.tableName, // modem_name index
-		w.tableName, w.tableName, // operator_name index
-		w.tableName, w.tableName, // success index
-	)
+func (w *MySQLResultsWriter) createTable(ctx context.Context) error {
+	ddl := fmt.Sprintf(mysqlCreateTableSQL, w.tableName)
 	_, err := w.db.ExecContext(ctx, ddl)
 	return err
 }
 
 // prepareStatement prepares the insert statement for reuse
-func (w *PostgresResultsWriter) prepareStatement() error {
+func (w *MySQLResultsWriter) prepareStatement() error {
 	query := fmt.Sprintf(`
 		INSERT INTO %s (
 			timestamp, test_num, phone, modem_name, operator_name, operator_prefix, success,
@@ -244,11 +236,11 @@ func (w *PostgresResultsWriter) prepareStatement() error {
 			cdr_local_mos, cdr_remote_mos, cdr_local_r_factor, cdr_remote_r_factor, cdr_term_reason, cdr_term_category,
 			ast_disposition, ast_peer, ast_duration, ast_billsec
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-			$11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-			$21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-			$31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-			$41, $42
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?
 		)
 	`, w.tableName)
 

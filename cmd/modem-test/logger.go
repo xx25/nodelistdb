@@ -358,6 +358,41 @@ func (s *PhoneStats) AvgEmsiTime() time.Duration {
 	return s.TotalEmsiTime / time.Duration(s.Success)
 }
 
+// OperatorStats tracks per-operator test statistics
+type OperatorStats struct {
+	Name          string // Operator friendly name
+	Prefix        string // Dial prefix used
+	Total         int
+	Success       int
+	Failed        int
+	TotalDialTime time.Duration
+	TotalEmsiTime time.Duration
+}
+
+// SuccessRate returns the success percentage for this operator
+func (s *OperatorStats) SuccessRate() float64 {
+	if s.Total == 0 {
+		return 0
+	}
+	return float64(s.Success) / float64(s.Total) * 100
+}
+
+// AvgDialTime returns the average dial time for successful tests
+func (s *OperatorStats) AvgDialTime() time.Duration {
+	if s.Success == 0 {
+		return 0
+	}
+	return s.TotalDialTime / time.Duration(s.Success)
+}
+
+// AvgEmsiTime returns the average EMSI handshake time for successful tests
+func (s *OperatorStats) AvgEmsiTime() time.Duration {
+	if s.Success == 0 {
+		return 0
+	}
+	return s.TotalEmsiTime / time.Duration(s.Success)
+}
+
 // PrintSummary prints the final test summary
 func (l *TestLogger) PrintSummary(total, success, failed int, totalDuration time.Duration, avgDialTime, avgEmsiTime time.Duration, results []string) {
 	l.PrintSummaryWithPhoneStats(total, success, failed, totalDuration, avgDialTime, avgEmsiTime, results, nil)
@@ -435,6 +470,112 @@ func sortStrings(s []string) {
 	}
 }
 
+// PrintSummaryWithStats prints the final test summary with per-phone and per-operator statistics
+func (l *TestLogger) PrintSummaryWithStats(total, success, failed int, totalDuration time.Duration, avgDialTime, avgEmsiTime time.Duration, results []string, phoneStats map[string]*PhoneStats, operatorStats map[string]*OperatorStats) {
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+	fmt.Fprintln(l.output, "                           SUMMARY")
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+
+	fmt.Fprintf(l.output, "Total:     %d tests\n", total)
+
+	successPct := 0.0
+	failedPct := 0.0
+	if total > 0 {
+		successPct = float64(success) / float64(total) * 100
+		failedPct = float64(failed) / float64(total) * 100
+	}
+
+	fmt.Fprintf(l.output, "Success:   %d (%.1f%%)\n", success, successPct)
+	fmt.Fprintf(l.output, "Failed:    %d (%.1f%%)\n", failed, failedPct)
+	fmt.Fprintf(l.output, "Duration:  %s\n", formatDuration(totalDuration))
+	fmt.Fprintln(os.Stderr)
+
+	if success > 0 {
+		fmt.Fprintf(l.output, "Avg dial time:  %.1fs\n", avgDialTime.Seconds())
+		fmt.Fprintf(l.output, "Avg EMSI time:  %.1fs\n", avgEmsiTime.Seconds())
+		fmt.Fprintln(os.Stderr)
+	}
+
+	// Print per-operator statistics if multiple operators were configured
+	if len(operatorStats) > 1 || (len(operatorStats) == 1 && hasNamedOperator(operatorStats)) {
+		fmt.Fprintln(l.output, "PER-OPERATOR STATISTICS:")
+		fmt.Fprintf(l.output, "  %-16s %-8s %6s %6s %6s %10s %10s\n", "OPERATOR", "PREFIX", "TOTAL", "OK", "FAIL", "AVG DIAL", "AVG EMSI")
+		fmt.Fprintf(l.output, "  %s\n", strings.Repeat("-", 70))
+
+		// Sort operators for consistent output
+		opNames := make([]string, 0, len(operatorStats))
+		for name := range operatorStats {
+			opNames = append(opNames, name)
+		}
+		sortStrings(opNames)
+
+		for _, name := range opNames {
+			stats := operatorStats[name]
+			avgDial := "-"
+			avgEmsi := "-"
+			if stats.Success > 0 {
+				avgDial = fmt.Sprintf("%.1fs", stats.AvgDialTime().Seconds())
+				avgEmsi = fmt.Sprintf("%.1fs", stats.AvgEmsiTime().Seconds())
+			}
+			prefix := stats.Prefix
+			if prefix == "" {
+				prefix = "(direct)"
+			}
+			displayName := stats.Name
+			if displayName == "" {
+				displayName = "(default)"
+			}
+			fmt.Fprintf(l.output, "  %-16s %-8s %6d %6d %6d %10s %10s  (%.0f%%)\n",
+				displayName, prefix, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, stats.SuccessRate())
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
+	// Print per-phone statistics if multiple phones were tested
+	if len(phoneStats) > 1 {
+		fmt.Fprintln(l.output, "PER-PHONE STATISTICS:")
+		fmt.Fprintf(l.output, "  %-12s %6s %6s %6s %10s %10s\n", "PHONE", "TOTAL", "OK", "FAIL", "AVG DIAL", "AVG EMSI")
+		fmt.Fprintf(l.output, "  %s\n", strings.Repeat("-", 58))
+
+		// Sort phones for consistent output
+		phones := make([]string, 0, len(phoneStats))
+		for phone := range phoneStats {
+			phones = append(phones, phone)
+		}
+		sortStrings(phones)
+
+		for _, phone := range phones {
+			stats := phoneStats[phone]
+			avgDial := "-"
+			avgEmsi := "-"
+			if stats.Success > 0 {
+				avgDial = fmt.Sprintf("%.1fs", stats.AvgDialTime().Seconds())
+				avgEmsi = fmt.Sprintf("%.1fs", stats.AvgEmsiTime().Seconds())
+			}
+			fmt.Fprintf(l.output, "  %-12s %6d %6d %6d %10s %10s  (%.0f%%)\n",
+				stats.Phone, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, stats.SuccessRate())
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
+	fmt.Fprintln(l.output, "RESULTS:")
+	for _, r := range results {
+		fmt.Fprintf(l.output, "  %s\n", r)
+	}
+	fmt.Fprintln(l.output, strings.Repeat("=", 80))
+}
+
+// hasNamedOperator returns true if any operator in the map has a non-empty name
+func hasNamedOperator(stats map[string]*OperatorStats) bool {
+	for _, s := range stats {
+		if s.Name != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // PrintMultiModemHeader prints the session header for multi-modem mode
 func (l *TestLogger) PrintMultiModemHeader(configPath string, modemNames []string, phones []string, testCount int) {
 	fmt.Fprintln(l.output, strings.Repeat("=", 80))
@@ -459,6 +600,11 @@ func (l *TestLogger) PrintMultiModemHeader(configPath string, modemNames []strin
 
 // PrintMultiModemSummary prints the final test summary for multi-modem mode
 func (l *TestLogger) PrintMultiModemSummary(total, success, failed int, totalDuration time.Duration, avgDialTime, avgEmsiTime time.Duration, results []string, phoneStats map[string]*PhoneStats, modemStats map[string]*WorkerStats) {
+	l.PrintMultiModemSummaryWithOperators(total, success, failed, totalDuration, avgDialTime, avgEmsiTime, results, phoneStats, modemStats, nil)
+}
+
+// PrintMultiModemSummaryWithOperators prints the final test summary for multi-modem mode with operator stats
+func (l *TestLogger) PrintMultiModemSummaryWithOperators(total, success, failed int, totalDuration time.Duration, avgDialTime, avgEmsiTime time.Duration, results []string, phoneStats map[string]*PhoneStats, modemStats map[string]*WorkerStats, operatorStats map[string]*OperatorStats) {
 	fmt.Fprintln(l.output)
 	fmt.Fprintln(l.output, strings.Repeat("=", 80))
 	fmt.Fprintln(l.output, "                      MULTI-MODEM SUMMARY")
@@ -481,6 +627,41 @@ func (l *TestLogger) PrintMultiModemSummary(total, success, failed int, totalDur
 	if success > 0 {
 		fmt.Fprintf(l.output, "Avg dial time:  %.1fs\n", avgDialTime.Seconds())
 		fmt.Fprintf(l.output, "Avg EMSI time:  %.1fs\n", avgEmsiTime.Seconds())
+		fmt.Fprintln(l.output)
+	}
+
+	// Print per-operator statistics if multiple operators were configured
+	if len(operatorStats) > 1 || (len(operatorStats) == 1 && hasNamedOperator(operatorStats)) {
+		fmt.Fprintln(l.output, "PER-OPERATOR STATISTICS:")
+		fmt.Fprintf(l.output, "  %-16s %-8s %6s %6s %6s %10s %10s\n", "OPERATOR", "PREFIX", "TOTAL", "OK", "FAIL", "AVG DIAL", "AVG EMSI")
+		fmt.Fprintf(l.output, "  %s\n", strings.Repeat("-", 70))
+
+		// Sort operators for consistent output
+		opNames := make([]string, 0, len(operatorStats))
+		for name := range operatorStats {
+			opNames = append(opNames, name)
+		}
+		sortStrings(opNames)
+
+		for _, name := range opNames {
+			stats := operatorStats[name]
+			avgDial := "-"
+			avgEmsi := "-"
+			if stats.Success > 0 {
+				avgDial = fmt.Sprintf("%.1fs", stats.AvgDialTime().Seconds())
+				avgEmsi = fmt.Sprintf("%.1fs", stats.AvgEmsiTime().Seconds())
+			}
+			prefix := stats.Prefix
+			if prefix == "" {
+				prefix = "(direct)"
+			}
+			displayName := stats.Name
+			if displayName == "" {
+				displayName = "(default)"
+			}
+			fmt.Fprintf(l.output, "  %-16s %-8s %6d %6d %6d %10s %10s  (%.0f%%)\n",
+				displayName, prefix, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, stats.SuccessRate())
+		}
 		fmt.Fprintln(l.output)
 	}
 

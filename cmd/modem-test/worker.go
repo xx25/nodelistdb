@@ -14,12 +14,14 @@ import (
 
 // WorkerResult holds the result of a single test from a worker.
 type WorkerResult struct {
-	WorkerID   int
-	WorkerName string
-	Phone      string
-	TestNum    int
-	Result     testResult
-	Timestamp  time.Time
+	WorkerID       int
+	WorkerName     string
+	Phone          string // Original phone number (without operator prefix)
+	OperatorName   string // Operator friendly name
+	OperatorPrefix string // Dial prefix used
+	TestNum        int
+	Result         testResult
+	Timestamp      time.Time
 }
 
 // WorkerStats holds per-worker statistics.
@@ -46,10 +48,12 @@ type ModemWorker struct {
 	wg          *sync.WaitGroup
 }
 
-// phoneJob represents a phone number to dial with its test number.
+// phoneJob represents a phone number to dial with its test number and operator info.
 type phoneJob struct {
-	phone   string
-	testNum int
+	phone          string
+	operatorName   string
+	operatorPrefix string
+	testNum        int
 }
 
 // newModemWorker creates a new modem worker.
@@ -153,8 +157,14 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			// Run the test
-			result := w.runTest(job.testNum, job.phone)
+			// Log operator info if configured
+			if job.operatorName != "" {
+				w.log.Info("Operator: %s (prefix: %q)", job.operatorName, job.operatorPrefix)
+			}
+
+			// Run the test with operator prefix prepended
+			dialPhone := job.operatorPrefix + job.phone
+			result := w.runTest(job.testNum, dialPhone)
 
 			// Release phone lock
 			w.coordinator.ReleasePhone(job.phone)
@@ -162,12 +172,14 @@ func (w *ModemWorker) Run(ctx context.Context) {
 			// Send result
 			select {
 			case w.results <- WorkerResult{
-				WorkerID:   w.id,
-				WorkerName: w.name,
-				Phone:      job.phone,
-				TestNum:    job.testNum,
-				Result:     result,
-				Timestamp:  time.Now(),
+				WorkerID:       w.id,
+				WorkerName:     w.name,
+				Phone:          job.phone, // Original phone without prefix
+				OperatorName:   job.operatorName,
+				OperatorPrefix: job.operatorPrefix,
+				TestNum:        job.testNum,
+				Result:         result,
+				Timestamp:      time.Now(),
 			}:
 			case <-ctx.Done():
 				return
@@ -419,8 +431,14 @@ func (p *ModemPool) Stop() {
 // SubmitPhone adds a phone to the queue for any available worker.
 // Returns false if context is cancelled or pool is stopped.
 func (p *ModemPool) SubmitPhone(ctx context.Context, phone string, testNum int) bool {
+	return p.SubmitPhoneWithOperator(ctx, phone, "", "", testNum)
+}
+
+// SubmitPhoneWithOperator adds a phone with operator info to the queue.
+// Returns false if context is cancelled or pool is stopped.
+func (p *ModemPool) SubmitPhoneWithOperator(ctx context.Context, phone, operatorName, operatorPrefix string, testNum int) bool {
 	select {
-	case p.phoneQueue <- phoneJob{phone: phone, testNum: testNum}:
+	case p.phoneQueue <- phoneJob{phone: phone, operatorName: operatorName, operatorPrefix: operatorPrefix, testNum: testNum}:
 		return true
 	case <-ctx.Done():
 		return false

@@ -30,6 +30,10 @@ type TestRecord struct {
 	// Multi-modem support
 	ModemName string
 
+	// Operator routing support (for comparing different carriers/routes)
+	OperatorName   string // Friendly name (e.g., "Verizon", "VoIP-A")
+	OperatorPrefix string // Dial prefix used (e.g., "1#", "2#")
+
 	// Remote system info (from EMSI)
 	RemoteAddress  string
 	RemoteSystem   string
@@ -75,6 +79,8 @@ var csvHeader = []string{
 	"test_num",
 	"phone",
 	"modem_name",
+	"operator_name",
+	"operator_prefix",
 	"success",
 	"dial_time_s",
 	"connect_speed",
@@ -193,6 +199,8 @@ func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 		fmt.Sprintf("%d", rec.TestNum),
 		rec.Phone,
 		rec.ModemName,
+		rec.OperatorName,
+		rec.OperatorPrefix,
 		success,
 		fmt.Sprintf("%.1f", rec.DialTime.Seconds()),
 		fmt.Sprintf("%d", rec.ConnectSpeed),
@@ -250,6 +258,8 @@ func (w *CSVWriter) Close() error {
 func RecordFromTestResult(
 	testNum int,
 	phone string,
+	operatorName string,
+	operatorPrefix string,
 	success bool,
 	dialTime time.Duration,
 	connectSpeed int,
@@ -262,14 +272,16 @@ func RecordFromTestResult(
 	asteriskCDR *AsteriskCDRData,
 ) *TestRecord {
 	rec := &TestRecord{
-		Timestamp:    time.Now(),
-		TestNum:      testNum,
-		Phone:        phone,
-		Success:      success,
-		DialTime:     dialTime,
-		ConnectSpeed: connectSpeed,
-		ConnectString: connectString,
-		EMSITime:     emsiTime,
+		Timestamp:      time.Now(),
+		TestNum:        testNum,
+		Phone:          phone,
+		OperatorName:   operatorName,
+		OperatorPrefix: operatorPrefix,
+		Success:        success,
+		DialTime:       dialTime,
+		ConnectSpeed:   connectSpeed,
+		ConnectString:  connectString,
+		EMSITime:       emsiTime,
 	}
 
 	if emsiErr != nil {

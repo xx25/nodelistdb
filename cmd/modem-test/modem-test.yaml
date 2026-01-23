@@ -48,6 +48,21 @@ test:
   #   - "917"
   #   - "918"
   #   - "919"
+
+  # operators:             # Operator prefixes for routing comparison (optional)
+  #   - name: "Direct"     # Friendly name for reports
+  #     prefix: ""         # No prefix (direct dial)
+  #   - name: "VoIP-A"
+  #     prefix: "1#"       # Dial prefix to prepend
+  #   - name: "VoIP-B"
+  #     prefix: "2#"
+  # When operators are configured, each phone is tested with all operators in sequence:
+  # Test 1: 917 via Direct → ATDT917
+  # Test 2: 917 via VoIP-A → ATDT1#917
+  # Test 3: 917 via VoIP-B → ATDT2#917
+  # Test 4: 918 via Direct → ATDT918
+  # ... and so on
+
   # csv_file: "modem-test-results.csv"  # Optional: output results to CSV file
 
 emsi:
@@ -64,3 +79,15 @@ logging:
   timestamps: true
   show_rs232: true   # Show DCD/DSR/CTS/RI status changes
   show_hex: false    # Show hex dump of TX/RX data (very verbose)
+
+# PostgreSQL results storage (optional)
+# postgres_results:
+#   enabled: true
+#   dsn: "postgres://user:password@localhost:5432/testresults"
+#   table_name: "modem_test_results"  # optional, defaults to "modem_test_results"
+
+# MySQL results storage (optional)
+# mysql_results:
+#   enabled: true
+#   dsn: "user:password@tcp(localhost:3306)/testresults?parseTime=true"
+#   table_name: "modem_test_results"  # optional, defaults to "modem_test_results"
