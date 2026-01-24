@@ -132,7 +132,7 @@ deploy_5001() {
 DEPLOY_ALL=true
 DEPLOY_ORACLE=""
 DEPLOY_5001=""
-DO_BUILD=""
+DO_BUILD=true  # Build by default
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -150,14 +150,18 @@ while [[ $# -gt 0 ]]; do
             DO_BUILD=true
             shift
             ;;
+        --no-build)
+            DO_BUILD=""
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --build        Build binaries before deploying"
+            echo "  --no-build     Skip building, use existing binaries"
             echo "  --oracle-main  Deploy only to oracle-main.thodin.net (ARM64)"
             echo "  --5001         Deploy only to nodelist.5001.ru (x86_64)"
-            echo "  (no options)   Deploy to all servers (requires pre-built binaries)"
+            echo "  (default)      Build and deploy to all servers"
             echo ""
             echo "Servers:"
             echo "  oracle-main.thodin.net  ARM64, parser + server + testdaemon"

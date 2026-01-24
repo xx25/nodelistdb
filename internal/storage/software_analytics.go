@@ -66,7 +66,6 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int) (
 			WHERE binkp_tested = true
 				AND binkp_success = true
 				AND test_date >= today() - ?
-				AND is_aggregated = true
 			GROUP BY zone, net, node
 			HAVING binkp_version <> ''
 		) AS latest_tests
@@ -166,7 +165,6 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int) 
 			WHERE ifcico_tested = true
 				AND ifcico_success = true
 				AND test_date >= today() - ?
-				AND is_aggregated = true
 			GROUP BY zone, net, node
 			HAVING ifcico_mailer_info <> ''
 		) AS latest_tests
@@ -262,7 +260,6 @@ func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int) (*Softwa
 			WHERE binkp_tested = true
 				AND binkp_success = true
 				AND test_date >= today() - ?
-				AND is_aggregated = true
 			GROUP BY zone, net, node
 			HAVING binkp_version LIKE 'binkd/%'
 		) AS latest_tests
@@ -536,6 +533,8 @@ func parseBinkPVersion(version string) *softwareInfo {
 }
 
 func parseIFCICOMailerInfo(mailerInfo string) *softwareInfo {
+	// Trim whitespace before checking
+	mailerInfo = strings.TrimSpace(mailerInfo)
 	if mailerInfo == "" {
 		return nil
 	}
@@ -562,8 +561,28 @@ func parseIFCICOMailerInfo(mailerInfo string) *softwareInfo {
 			groups:   []string{"version"},
 		},
 		{
+			regex:    regexp.MustCompile(`qico-m19\s+([0-9.a-z]+)`),
+			software: "qico",
+			groups:   []string{"version"},
+		},
+		{
 			regex:    regexp.MustCompile(`qico\s+([0-9.a-z]+)`),
 			software: "qico",
+			groups:   []string{"version"},
+		},
+		{
+			regex:    regexp.MustCompile(`binkleyforce\s+([0-9.a-z]+)`),
+			software: "binkleyforce",
+			groups:   []string{"version"},
+		},
+		{
+			regex:    regexp.MustCompile(`FTNMail\s+([0-9.]+)`),
+			software: "FTNMail",
+			groups:   []string{"version"},
+		},
+		{
+			regex:    regexp.MustCompile(`Rex\s+([0-9.]+)`),
+			software: "Rex",
 			groups:   []string{"version"},
 		},
 		{
