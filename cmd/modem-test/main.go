@@ -398,7 +398,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 
 		// Dial with operator prefix prepended
 		dialPhone := currentOperator.Prefix + currentPhone
-		result := runSingleTest(ctx, m, cfg, log, i, dialPhone)
+		result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, dialPhone, currentPhone)
 		results = append(results, result.message)
 
 		// Lookup CDR data for VoIP quality metrics (AudioCodes)
@@ -534,7 +534,7 @@ type testResult struct {
 	asteriskCDR   *AsteriskCDRData // Call routing info from Asterisk CDR
 }
 
-func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, testNum int, phoneNumber string) testResult {
+func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, testNum int, phoneNumber string, originalPhone string) testResult {
 	// Determine busy retry settings
 	busyRetryCount := cfg.Modem.BusyRetryCount
 	busyRetryDelay := cfg.Modem.BusyRetryDelay.Duration()
@@ -594,6 +594,36 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 		if !result.Success && result.Error == "BUSY" && busyRetryCount > 0 && busyAttempts < busyRetryCount {
 			log.Fail("DIAL FAILED - BUSY (%.1fs)", result.DialTime.Seconds())
 			busyAttempts++
+
+			// CDR lookup to diagnose what really happened
+			if cdrService != nil && cdrService.IsEnabled() {
+				lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				cdrData, err := cdrService.LookupByPhone(lookupCtx, originalPhone, time.Now())
+				cancel()
+				if err != nil {
+					log.Warn("AudioCodes CDR lookup failed for %s (BUSY): %v", originalPhone, err)
+				} else if cdrData != nil {
+					log.Info("AudioCodes CDR (BUSY): term=%s codec=%s MOS=%.1f jitter=%dms",
+						cdrData.TermReason, cdrData.Codec,
+						float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter)
+				} else {
+					log.Warn("AudioCodes CDR not found for %s (BUSY)", originalPhone)
+				}
+			}
+			if asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
+				lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				asteriskCDR, err := asteriskCDRService.LookupByPhone(lookupCtx, originalPhone, time.Now())
+				cancel()
+				if err != nil {
+					log.Warn("Asterisk CDR lookup failed for %s (BUSY): %v", originalPhone, err)
+				} else if asteriskCDR != nil {
+					log.Info("Asterisk CDR (BUSY): disposition=%s peer=%s duration=%ds",
+						asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
+				} else {
+					log.Warn("Asterisk CDR not found for %s (BUSY)", originalPhone)
+				}
+			}
+
 			continue
 		}
 

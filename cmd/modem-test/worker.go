@@ -35,18 +35,20 @@ type WorkerStats struct {
 
 // ModemWorker manages a single modem's test execution goroutine.
 type ModemWorker struct {
-	id          int
-	name        string
-	modem       *modem.Modem
-	config      ModemInstanceConfig
-	emsiConfig  EMSIConfig
-	logConfig   LoggingConfig
-	interDelay  time.Duration
-	coordinator *PhoneCoordinator
-	phoneQueue  <-chan phoneJob
-	results     chan<- WorkerResult
-	log         *TestLogger
-	wg          *sync.WaitGroup
+	id                 int
+	name               string
+	modem              *modem.Modem
+	config             ModemInstanceConfig
+	emsiConfig         EMSIConfig
+	logConfig          LoggingConfig
+	interDelay         time.Duration
+	cdrService         *CDRService
+	asteriskCDRService *AsteriskCDRService
+	coordinator        *PhoneCoordinator
+	phoneQueue         <-chan phoneJob
+	results            chan<- WorkerResult
+	log                *TestLogger
+	wg                 *sync.WaitGroup
 }
 
 // phoneJob represents a phone number to dial with its test number and operator info.
@@ -65,6 +67,8 @@ func newModemWorker(
 	emsiConfig EMSIConfig,
 	logConfig LoggingConfig,
 	interDelay time.Duration,
+	cdrService *CDRService,
+	asteriskCDRService *AsteriskCDRService,
 	logOutput io.Writer,
 	coordinator *PhoneCoordinator,
 	phoneQueue <-chan phoneJob,
@@ -111,18 +115,20 @@ func newModemWorker(
 	workerLog.SetPrefix(name)
 
 	return &ModemWorker{
-		id:          id,
-		name:        name,
-		modem:       m,
-		config:      config,
-		emsiConfig:  emsiConfig,
-		logConfig:   logConfig,
-		interDelay:  interDelay,
-		coordinator: coordinator,
-		phoneQueue:  phoneQueue,
-		results:     results,
-		log:         workerLog,
-		wg:          wg,
+		id:                 id,
+		name:               name,
+		modem:              m,
+		config:             config,
+		emsiConfig:         emsiConfig,
+		logConfig:          logConfig,
+		interDelay:         interDelay,
+		cdrService:         cdrService,
+		asteriskCDRService: asteriskCDRService,
+		coordinator:        coordinator,
+		phoneQueue:         phoneQueue,
+		results:            results,
+		log:                workerLog,
+		wg:                 wg,
 	}, nil
 }
 
@@ -167,12 +173,41 @@ func (w *ModemWorker) Run(ctx context.Context) {
 
 			// Run the test with operator prefix prepended
 			dialPhone := job.operatorPrefix + job.phone
-			result := w.runTest(ctx, job.testNum, dialPhone)
+
+			// Callback for BUSY attempts - emits result and does CDR lookup
+			onBusyAttempt := func(attempt int, dialTime time.Duration) {
+				busyResult := testResult{
+					success:  false,
+					message:  fmt.Sprintf("Test %d [%s] %s: DIAL FAILED - BUSY (%.1fs) [attempt %d]", job.testNum, w.name, dialPhone, dialTime.Seconds(), attempt),
+					dialTime: dialTime,
+				}
+
+				// Emit BUSY result
+				select {
+				case w.results <- WorkerResult{
+					WorkerID:       w.id,
+					WorkerName:     w.name,
+					Phone:          job.phone,
+					OperatorName:   job.operatorName,
+					OperatorPrefix: job.operatorPrefix,
+					TestNum:        job.testNum,
+					Result:         busyResult,
+					Timestamp:      time.Now(),
+				}:
+				case <-ctx.Done():
+					return
+				}
+
+				// CDR lookup to diagnose what really happened
+				w.lookupAndLogCDR(ctx, job.phone, "BUSY")
+			}
+
+			result := w.runTest(ctx, job.testNum, dialPhone, job.phone, onBusyAttempt)
 
 			// Release phone lock
 			w.coordinator.ReleasePhone(job.phone)
 
-			// Send result
+			// Send final result (non-BUSY or after retries exhausted)
 			select {
 			case w.results <- WorkerResult{
 				WorkerID:       w.id,
@@ -201,8 +236,45 @@ func (w *ModemWorker) Run(ctx context.Context) {
 	}
 }
 
+// lookupAndLogCDR does CDR lookup for debugging purposes (e.g., during BUSY retries)
+func (w *ModemWorker) lookupAndLogCDR(ctx context.Context, phone string, reason string) {
+	// AudioCodes CDR lookup
+	if w.cdrService != nil && w.cdrService.IsEnabled() {
+		lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		cdrData, err := w.cdrService.LookupByPhone(lookupCtx, phone, time.Now())
+		cancel()
+		if err != nil {
+			w.log.Warn("AudioCodes CDR lookup failed for %s (%s): %v", phone, reason, err)
+		} else if cdrData != nil {
+			w.log.Info("AudioCodes CDR (%s): term=%s codec=%s MOS=%.1f jitter=%dms",
+				reason, cdrData.TermReason, cdrData.Codec,
+				float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter)
+		} else {
+			w.log.Warn("AudioCodes CDR not found for %s (%s)", phone, reason)
+		}
+	}
+
+	// Asterisk CDR lookup
+	if w.asteriskCDRService != nil && w.asteriskCDRService.IsEnabled() {
+		lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		asteriskCDR, err := w.asteriskCDRService.LookupByPhone(lookupCtx, phone, time.Now())
+		cancel()
+		if err != nil {
+			w.log.Warn("Asterisk CDR lookup failed for %s (%s): %v", phone, reason, err)
+		} else if asteriskCDR != nil {
+			w.log.Info("Asterisk CDR (%s): disposition=%s peer=%s duration=%ds",
+				reason, asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
+		} else {
+			w.log.Warn("Asterisk CDR not found for %s (%s)", phone, reason)
+		}
+	}
+}
+
+// BusyAttemptCallback is called for each BUSY attempt before retry
+type BusyAttemptCallback func(attempt int, dialTime time.Duration)
+
 // runTest executes a single test call.
-func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber string) testResult {
+func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber string, originalPhone string, onBusyAttempt BusyAttemptCallback) testResult {
 	m := w.modem
 	cfg := &w.config
 
@@ -265,6 +337,12 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 		if !result.Success && result.Error == "BUSY" && busyRetryCount > 0 && busyAttempts < busyRetryCount {
 			w.log.Fail("DIAL FAILED - BUSY (%.1fs)", result.DialTime.Seconds())
 			busyAttempts++
+
+			// Call callback to emit result and do CDR lookup for this BUSY attempt
+			if onBusyAttempt != nil {
+				onBusyAttempt(busyAttempts, result.DialTime)
+			}
+
 			continue
 		}
 
@@ -427,6 +505,8 @@ func NewModemPool(
 	emsiCfg EMSIConfig,
 	logCfg LoggingConfig,
 	interDelay time.Duration,
+	cdrService *CDRService,
+	asteriskCDRService *AsteriskCDRService,
 	logOutput io.Writer,
 ) (*ModemPool, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -454,6 +534,8 @@ func NewModemPool(
 			emsiCfg,
 			logCfg,
 			interDelay,
+			cdrService,
+			asteriskCDRService,
 			logOutput,
 			p.coordinator,
 			p.phoneQueue,
