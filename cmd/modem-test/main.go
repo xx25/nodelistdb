@@ -294,9 +294,11 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
-	testCount := cfg.Test.Count
-	infinite := testCount <= 0
+	testCount := cfg.GetTotalTestCount()
+	infinite := testCount <= 0 && !cfg.IsPerOperatorMode() // Per-operator mode is never infinite
 	interDelay := cfg.Test.InterDelay.Duration()
+	perOperatorMode := cfg.IsPerOperatorMode()
+	callsPerOperator := cfg.Test.CallsPerOperator
 
 	// Setup context for cancellation (e.g., Ctrl-C during BUSY retry)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -366,8 +368,21 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		operatorStats[op.Name] = &OperatorStats{Name: op.Name, Prefix: op.Prefix}
 	}
 
+	// Track calls per phone+operator combination (for per-operator mode)
+	type comboKey struct {
+		phone    string
+		operator string
+	}
+	callCounts := make(map[comboKey]int)
+
 	// Calculate total combinations for rotation
 	totalCombinations := len(phones) * len(operators)
+
+	// Log per-operator mode info
+	if perOperatorMode {
+		log.Info("Per-operator mode: %d calls per operator per phone (total: %d calls)",
+			callsPerOperator, testCount)
+	}
 
 	for i := 1; infinite || i <= testCount; i++ {
 		// Check for cancellation
@@ -376,14 +391,40 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			break
 		}
 
-		// Select phone and operator in rotation order:
-		// Test all operators for phone 1, then all for phone 2, etc.
-		comboIndex := (i - 1) % totalCombinations
-		phoneIndex := comboIndex / len(operators)
-		operatorIndex := comboIndex % len(operators)
+		var currentPhone string
+		var currentOperator OperatorConfig
 
-		currentPhone := phones[phoneIndex]
-		currentOperator := operators[operatorIndex]
+		if perOperatorMode {
+			// Per-operator mode: find next combo that hasn't reached its limit
+			found := false
+			for _, phone := range phones {
+				for _, op := range operators {
+					key := comboKey{phone: phone, operator: op.Name}
+					if callCounts[key] < callsPerOperator {
+						currentPhone = phone
+						currentOperator = op
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				// All combinations have reached their limit
+				log.Info("All phone+operator combinations completed")
+				break
+			}
+			callCounts[comboKey{phone: currentPhone, operator: currentOperator.Name}]++
+		} else {
+			// Legacy mode: round-robin through all combinations
+			comboIndex := (i - 1) % totalCombinations
+			phoneIndex := comboIndex / len(operators)
+			operatorIndex := comboIndex % len(operators)
+			currentPhone = phones[phoneIndex]
+			currentOperator = operators[operatorIndex]
+		}
 
 		if infinite {
 			log.PrintTestHeader(i, 0) // 0 signals infinite
@@ -535,26 +576,25 @@ type testResult struct {
 }
 
 func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, testNum int, phoneNumber string, originalPhone string) testResult {
-	// Determine busy retry settings
-	busyRetryCount := cfg.Modem.BusyRetryCount
-	busyRetryDelay := cfg.Modem.BusyRetryDelay.Duration()
-	if busyRetryDelay == 0 {
-		busyRetryDelay = 5 * time.Second // Default delay between retries
-	}
+	// Determine retry settings
+	retryCount := cfg.GetRetryCount()
+	retryDelay := cfg.GetRetryDelay()
+	cdrLookupDelay := cfg.GetCDRLookupDelay()
 
 	var result *modem.DialResult
 	var err error
-	busyAttempts := 0
+	retryAttempts := 0
+	var lastRetryReason string
 
-	// Dial with retry on BUSY
+	// Dial with retry on BUSY or CDR-detected failures
 	for {
 		// Check for cancellation before retry wait
-		if busyAttempts > 0 {
-			log.Info("BUSY retry %d/%d, waiting %v...", busyAttempts, busyRetryCount, busyRetryDelay)
+		if retryAttempts > 0 {
+			log.Info("Retry %d/%d (%s), waiting %v...", retryAttempts, retryCount, lastRetryReason, retryDelay)
 			select {
-			case <-time.After(busyRetryDelay):
+			case <-time.After(retryDelay):
 			case <-ctx.Done():
-				log.Info("Cancelled during BUSY retry wait")
+				log.Info("Cancelled during retry wait")
 				return testResult{
 					success: false,
 					message: fmt.Sprintf("Test %d [%s]: CANCELLED", testNum, phoneNumber),
@@ -575,6 +615,7 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 
 		log.Dial("%s -> ATDT%s", phoneNumber, phoneNumber)
 		result, err = m.DialNumber(phoneNumber)
+		callTime := time.Now()
 
 		if err != nil {
 			msg := fmt.Sprintf("Test %d [%s]: DIAL ERROR - %v", testNum, phoneNumber, err)
@@ -590,51 +631,115 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 			}
 		}
 
-		// Check if BUSY and should retry
-		if !result.Success && result.Error == "BUSY" && busyRetryCount > 0 && busyAttempts < busyRetryCount {
-			log.Fail("DIAL FAILED - BUSY (%.1fs)", result.DialTime.Seconds())
-			busyAttempts++
+		// Determine if we should retry
+		shouldRetry := false
+		retryReason := ""
 
-			// CDR lookup to diagnose what really happened
+		// Check 1: Modem returned BUSY
+		if !result.Success && result.Error == "BUSY" {
+			shouldRetry = true
+			retryReason = "BUSY (modem)"
+		}
+
+		// Check 2: CDR-based retry (only if not already retrying for modem BUSY)
+		// Wait for CDR to be written, then check disposition
+		if !shouldRetry && asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
+			// Wait for CDR to be written
+			log.Info("Waiting %v for CDR to be written...", cdrLookupDelay)
+			select {
+			case <-time.After(cdrLookupDelay):
+			case <-ctx.Done():
+				log.Info("Cancelled during CDR lookup delay")
+				// Don't fail, just skip CDR check
+			}
+
+			lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			asteriskCDR, lookupErr := asteriskCDRService.LookupByPhone(lookupCtx, originalPhone, callTime)
+			cancel()
+
+			if lookupErr != nil {
+				log.Warn("Asterisk CDR lookup failed for %s: %v (not retrying)", originalPhone, lookupErr)
+			} else if asteriskCDR != nil {
+				if reason := asteriskCDR.RetryReason(); reason != "" {
+					shouldRetry = true
+					retryReason = reason
+					log.Info("Asterisk CDR indicates retry: %s", reason)
+				}
+				// Log CDR info for diagnostics
+				log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d",
+					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec)
+			} else {
+				log.Warn("Asterisk CDR not found for %s (not retrying)", originalPhone)
+			}
+		}
+
+		// Should we retry?
+		if shouldRetry && retryCount > 0 && retryAttempts < retryCount {
+			log.Fail("DIAL FAILED - %s (%.1fs)", retryReason, result.DialTime.Seconds())
+			retryAttempts++
+			lastRetryReason = retryReason
+
+			// IMPORTANT: If modem is in data mode (connected), hang up before retrying
+			// This can happen when CDR says NO ANSWER but modem got CONNECT
+			if m.InDataMode() {
+				log.Info("Modem in data mode, hanging up before retry...")
+				if err := m.Hangup(); err != nil {
+					log.Warn("Hangup before retry failed: %v, resetting...", err)
+					_ = m.Reset()
+				}
+			}
+
+			// Wait for CDR to be written before diagnostic lookups
+			log.Info("Waiting %v for CDR to be written...", cdrLookupDelay)
+			select {
+			case <-time.After(cdrLookupDelay):
+			case <-ctx.Done():
+				// Cancelled, skip CDR lookups
+				continue
+			}
+
+			// AudioCodes CDR lookup for additional diagnostics
 			if cdrService != nil && cdrService.IsEnabled() {
 				lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				cdrData, err := cdrService.LookupByPhone(lookupCtx, originalPhone, time.Now())
+				cdrData, lookupErr := cdrService.LookupByPhone(lookupCtx, originalPhone, callTime)
 				cancel()
-				if err != nil {
-					log.Warn("AudioCodes CDR lookup failed for %s (BUSY): %v", originalPhone, err)
+				if lookupErr != nil {
+					log.Warn("AudioCodes CDR lookup failed for %s: %v", originalPhone, lookupErr)
 				} else if cdrData != nil {
-					log.Info("AudioCodes CDR (BUSY): term=%s codec=%s MOS=%.1f jitter=%dms",
+					log.Info("AudioCodes CDR: term=%s codec=%s MOS=%.1f jitter=%dms",
 						cdrData.TermReason, cdrData.Codec,
 						float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter)
 				} else {
-					log.Warn("AudioCodes CDR not found for %s (BUSY)", originalPhone)
+					log.Warn("AudioCodes CDR not found for %s", originalPhone)
 				}
 			}
+
+			// Asterisk CDR lookup for call routing diagnostics
 			if asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
 				lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				asteriskCDR, err := asteriskCDRService.LookupByPhone(lookupCtx, originalPhone, time.Now())
+				asteriskCDR, lookupErr := asteriskCDRService.LookupByPhone(lookupCtx, originalPhone, callTime)
 				cancel()
-				if err != nil {
-					log.Warn("Asterisk CDR lookup failed for %s (BUSY): %v", originalPhone, err)
+				if lookupErr != nil {
+					log.Warn("Asterisk CDR lookup failed for %s: %v", originalPhone, lookupErr)
 				} else if asteriskCDR != nil {
-					log.Info("Asterisk CDR (BUSY): disposition=%s peer=%s duration=%ds",
-						asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
+					log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d",
+						asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec)
 				} else {
-					log.Warn("Asterisk CDR not found for %s (BUSY)", originalPhone)
+					log.Warn("Asterisk CDR not found for %s", originalPhone)
 				}
 			}
 
 			continue
 		}
 
-		// Not BUSY or retries exhausted
+		// Not retrying
 		break
 	}
 
 	if !result.Success {
 		retryInfo := ""
-		if busyAttempts > 0 {
-			retryInfo = fmt.Sprintf(" [after %d BUSY retries]", busyAttempts)
+		if retryAttempts > 0 {
+			retryInfo = fmt.Sprintf(" [after %d retries]", retryAttempts)
 		}
 		msg := fmt.Sprintf("Test %d [%s]: DIAL FAILED - %s (%.1fs)%s", testNum, phoneNumber, result.Error, result.DialTime.Seconds(), retryInfo)
 		log.Fail("%s", msg)
@@ -729,9 +834,15 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 		log.Fail("Hangup error: %v, resetting...", err)
 		_ = m.Reset()
 	} else {
-		// Log RS232 status after hangup
-		if status, err := m.GetStatus(); err == nil {
-			log.RS232(status.DCD, status.DSR, status.CTS, status.RI)
+		// Verify hangup actually worked - modem should not be in data mode
+		if m.InDataMode() {
+			log.Warn("Modem still in data mode after hangup, resetting...")
+			_ = m.Reset()
+		} else {
+			// Log RS232 status after hangup
+			if status, err := m.GetStatus(); err == nil {
+				log.RS232(status.DCD, status.DSR, status.CTS, status.RI)
+			}
 		}
 	}
 

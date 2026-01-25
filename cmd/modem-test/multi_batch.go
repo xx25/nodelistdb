@@ -15,9 +15,14 @@ import (
 func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
-	testCount := cfg.Test.Count
-	infinite := testCount <= 0
+	testCount := cfg.GetTotalTestCount()
+	infinite := testCount <= 0 && !cfg.IsPerOperatorMode() // Per-operator mode is never infinite
 	interDelay := cfg.Test.InterDelay.Duration()
+	perOperatorMode := cfg.IsPerOperatorMode()
+	callsPerOperator := cfg.Test.CallsPerOperator
+	retryCount := cfg.GetRetryCount()
+	retryDelay := cfg.GetRetryDelay()
+	cdrLookupDelay := cfg.GetCDRLookupDelay()
 
 	// If no operators configured, use a single "no operator" entry for simpler loop logic
 	if len(operators) == 0 {
@@ -28,7 +33,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	modemConfigs := cfg.GetModemConfigs()
 
 	// Create modem pool
-	pool, err := NewModemPool(modemConfigs, cfg.EMSI, cfg.Logging, interDelay, cdrService, asteriskCDRService, log.GetOutput())
+	pool, err := NewModemPool(modemConfigs, cfg.EMSI, cfg.Logging, interDelay, retryCount, retryDelay, cdrLookupDelay, cdrService, asteriskCDRService, log.GetOutput())
 	if err != nil {
 		log.Error("Failed to create modem pool: %v", err)
 		os.Exit(1)
@@ -148,40 +153,10 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 
 			results = append(results, result.Result.message)
 
-			// Lookup CDR data for VoIP quality metrics (AudioCodes)
-			var cdrData *CDRData
-			if cdrService != nil && cdrService.IsEnabled() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				var err error
-				cdrData, err = cdrService.LookupByPhone(ctx, result.Phone, result.Timestamp)
-				cancel()
-				if err != nil {
-					log.Warn("[%s] AudioCodes CDR lookup failed for %s: %v", result.WorkerName, result.Phone, err)
-				} else if cdrData != nil {
-					log.Info("[%s] CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d term=%s",
-						result.WorkerName, float64(cdrData.LocalMOSCQ)/10.0,
-						cdrData.RTPJitter, cdrData.RTPDelay, cdrData.PacketLoss, cdrData.TermReason)
-				} else {
-					log.Warn("[%s] AudioCodes CDR not found for phone %s", result.WorkerName, result.Phone)
-				}
-			}
-
-			// Lookup Asterisk CDR for call routing info
-			var asteriskCDR *AsteriskCDRData
-			if asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				var err error
-				asteriskCDR, err = asteriskCDRService.LookupByPhone(ctx, result.Phone, result.Timestamp)
-				cancel()
-				if err != nil {
-					log.Warn("[%s] Asterisk CDR lookup failed for %s: %v", result.WorkerName, result.Phone, err)
-				} else if asteriskCDR != nil {
-					log.Info("[%s] Asterisk: disposition=%s peer=%s duration=%ds",
-						result.WorkerName, asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
-				} else {
-					log.Warn("[%s] Asterisk CDR not found for phone %s", result.WorkerName, result.Phone)
-				}
-			}
+			// CDR lookups are now done in runTest() with proper delay
+			// Use CDR data from the result if available
+			cdrData := result.Result.cdrData
+			asteriskCDR := result.Result.asteriskCDR
 
 			// Write CSV and databases
 			if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) {
@@ -243,8 +218,21 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		}
 	}
 
+	// Track calls per phone+operator combination (for per-operator mode)
+	type comboKey struct {
+		phone    string
+		operator string
+	}
+	callCounts := make(map[comboKey]int)
+
 	// Calculate total combinations for rotation
 	totalCombinations := len(phones) * len(operators)
+
+	// Log per-operator mode info
+	if perOperatorMode {
+		log.Info("Per-operator mode: %d calls per operator per phone (total: %d calls)",
+			callsPerOperator, testCount)
+	}
 
 	submitted := 0
 	for i := 0; infinite || submitted < testCount; i++ {
@@ -254,14 +242,41 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		default:
 		}
 
-		// Select phone and operator in rotation order:
-		// Test all operators for phone 1, then all for phone 2, etc.
-		comboIndex := i % totalCombinations
-		phoneIndex := comboIndex / len(operators)
-		operatorIndex := comboIndex % len(operators)
+		var phone string
+		var operator OperatorConfig
 
-		phone := phones[phoneIndex]
-		operator := operators[operatorIndex]
+		if perOperatorMode {
+			// Per-operator mode: find next combo that hasn't reached its limit
+			found := false
+			for _, p := range phones {
+				for _, op := range operators {
+					key := comboKey{phone: p, operator: op.Name}
+					if callCounts[key] < callsPerOperator {
+						phone = p
+						operator = op
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				// All combinations have reached their limit
+				log.Info("All phone+operator combinations completed")
+				goto cleanup
+			}
+			callCounts[comboKey{phone: phone, operator: operator.Name}]++
+		} else {
+			// Legacy mode: round-robin through all combinations
+			comboIndex := i % totalCombinations
+			phoneIndex := comboIndex / len(operators)
+			operatorIndex := comboIndex % len(operators)
+			phone = phones[phoneIndex]
+			operator = operators[operatorIndex]
+		}
+
 		submitted++
 
 		if !pool.SubmitPhoneWithOperator(ctx, phone, operator.Name, operator.Prefix, submitted) {

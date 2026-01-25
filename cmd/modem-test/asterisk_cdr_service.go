@@ -22,10 +22,50 @@ type AsteriskCDRData struct {
 	Destination string // dst - dialed number
 	Duration    int    // total duration (ring + talk)
 	BillSec     int    // billable seconds (talk time)
-	Disposition string // ANSWERED, NO ANSWER, BUSY, FAILED
+	Disposition string // ANSWERED, NO ANSWER, BUSY, FAILED, CONGESTION
 	Channel     string // source channel
 	DstChannel  string // destination channel (contains peer info)
 	Peer        string // extracted peer name from dstchannel
+}
+
+// retryDispositions are CDR dispositions that trigger retry when billsec=0
+var retryDispositions = map[string]bool{
+	"NO ANSWER":  true,
+	"BUSY":       true,
+	"FAILED":     true,
+	"CONGESTION": true,
+}
+
+// ShouldRetry returns true if the call should be retried based on CDR data.
+// A call should be retried if billsec=0 (no actual talk time) AND
+// disposition indicates a failed/unanswered call (NO ANSWER, BUSY, FAILED, CONGESTION).
+func (cdr *AsteriskCDRData) ShouldRetry() bool {
+	if cdr == nil {
+		return false // No CDR data, don't retry
+	}
+
+	// Only retry if billsec is 0 (no actual talk time)
+	if cdr.BillSec > 0 {
+		return false
+	}
+
+	// Check if disposition is one that warrants retry
+	return retryDispositions[cdr.Disposition]
+}
+
+// RetryReason returns a human-readable reason if the call should be retried.
+// Returns empty string if no retry is needed.
+func (cdr *AsteriskCDRData) RetryReason() string {
+	if cdr == nil {
+		return ""
+	}
+	if cdr.BillSec > 0 {
+		return ""
+	}
+	if retryDispositions[cdr.Disposition] {
+		return fmt.Sprintf("CDR: %s (billsec=0)", cdr.Disposition)
+	}
+	return ""
 }
 
 // AsteriskCDRService manages Asterisk CDR database queries
@@ -111,6 +151,13 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 	var row *sql.Row
 
 	if s.driver == "mysql" {
+		// Format times as strings to avoid Go MySQL driver's UTC conversion
+		// (database stores local time, driver converts time.Time to UTC)
+		const timeFmt = "2006-01-02 15:04:05"
+		startStr := startTime.Format(timeFmt)
+		endStr := endTime.Format(timeFmt)
+		callTimeStr := callTime.Format(timeFmt)
+
 		// MySQL query with ? placeholders and TIMESTAMPDIFF
 		query = fmt.Sprintf(`
 			SELECT uniqueid, calldate, src, dst, duration, billsec,
@@ -121,7 +168,7 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 			ORDER BY ABS(TIMESTAMPDIFF(SECOND, calldate, ?)) ASC
 			LIMIT 1
 		`, s.tableName)
-		row = s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, callTime)
+		row = s.db.QueryRowContext(ctx, query, phonePattern, startStr, endStr, callTimeStr)
 	} else {
 		// PostgreSQL query with $N placeholders and EXTRACT(EPOCH)
 		query = fmt.Sprintf(`

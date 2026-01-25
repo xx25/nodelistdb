@@ -126,6 +126,13 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 	var row *sql.Row
 
 	if s.driver == "mysql" {
+		// Format times as strings to avoid Go MySQL driver's UTC conversion
+		// (database stores local time, driver converts time.Time to UTC)
+		const timeFmt = "2006-01-02 15:04:05"
+		startStr := startTime.Format(timeFmt)
+		endStr := endTime.Format(timeFmt)
+		callTimeStr := callTime.Format(timeFmt)
+
 		// MySQL query with ? placeholders and TIMESTAMPDIFF
 		query = fmt.Sprintf(`
 			SELECT session_id, setup_time, connect_time, release_time, durat,
@@ -141,7 +148,7 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 			ORDER BY ABS(TIMESTAMPDIFF(SECOND, COALESCE(release_time, setup_time), ?)) ASC
 			LIMIT 1
 		`, s.tableName)
-		row = s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, startTime, endTime, startTime, endTime, callTime)
+		row = s.db.QueryRowContext(ctx, query, phonePattern, startStr, endStr, startStr, endStr, startStr, endStr, callTimeStr)
 	} else {
 		// PostgreSQL query with $N placeholders and EXTRACT(EPOCH)
 		query = fmt.Sprintf(`
