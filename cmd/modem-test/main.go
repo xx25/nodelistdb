@@ -621,9 +621,20 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 			msg := fmt.Sprintf("Test %d [%s]: DIAL ERROR - %v", testNum, phoneNumber, err)
 			log.Fail("%s", msg)
 
-			// Try to recover
+			// Try to recover - first with software reset
 			log.Info("Attempting modem reset...")
-			_ = m.Reset()
+			if resetErr := m.Reset(); resetErr != nil {
+				log.Warn("Software reset failed: %v", resetErr)
+				// Try USB reset as last resort
+				if m.IsUSBDevice() {
+					log.Info("Attempting USB reset...")
+					if usbErr := m.USBReset(); usbErr != nil {
+						log.Error("USB reset failed: %v", usbErr)
+					} else {
+						log.OK("USB reset successful")
+					}
+				}
+			}
 
 			return testResult{
 				success: false,

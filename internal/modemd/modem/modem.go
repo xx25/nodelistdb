@@ -74,6 +74,10 @@ type Modem struct {
 	mu          sync.Mutex
 	initialized bool
 	inDataMode  bool // true after CONNECT, false after hangup/reset
+
+	// USB device info (for USB reset capability)
+	usbVendor  string
+	usbProduct string
 }
 
 // New creates a new Modem instance with the given configuration.
@@ -201,6 +205,14 @@ func (m *Modem) Open() error {
 	}
 
 	m.port = port
+
+	// Discover USB device IDs (for USB reset capability)
+	// This is non-fatal - device may not be USB-based
+	if vendor, product, err := GetUSBDeviceID(m.config.Device); err == nil {
+		m.usbVendor = vendor
+		m.usbProduct = product
+		m.debugLog("USB device detected: %s:%s", vendor, product)
+	}
 
 	// Ensure DTR is high (modem ready)
 	if err := port.SetDTR(true); err != nil {
@@ -366,6 +378,109 @@ func (m *Modem) Reset() error {
 
 	// Re-initialize
 	return m.initModem()
+}
+
+// USBReset performs a hardware-level USB reset of the modem.
+// This is a last-resort recovery when software reset fails.
+// Requires sudo permissions for usbreset command.
+func (m *Modem) USBReset() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.usbVendor == "" || m.usbProduct == "" {
+		return errors.New("not a USB device or USB IDs unknown")
+	}
+
+	m.debugLog("Attempting USB reset for %s:%s", m.usbVendor, m.usbProduct)
+
+	// Close serial port first
+	if m.port != nil {
+		_ = m.port.Close()
+		m.port = nil
+	}
+	m.initialized = false
+	m.inDataMode = false
+
+	// Reset USB device
+	if err := ResetUSBDevice(m.usbVendor, m.usbProduct); err != nil {
+		return fmt.Errorf("USB reset failed: %w", err)
+	}
+
+	// Wait for device to reappear
+	if err := WaitForDevice(m.config.Device, 10*time.Second); err != nil {
+		return fmt.Errorf("device did not reappear after USB reset: %w", err)
+	}
+
+	m.debugLog("USB reset complete, reopening modem")
+
+	// Reopen the modem
+	return m.openLocked()
+}
+
+// openLocked opens the serial port (caller must hold mutex)
+func (m *Modem) openLocked() error {
+	if m.port != nil {
+		return errors.New("modem already open")
+	}
+
+	// Open serial port with modem-appropriate settings
+	port, err := serial.Open(m.config.Device,
+		serial.WithBaudrate(m.config.BaudRate),
+		serial.WithDataBits(8),
+		serial.WithParity(serial.NoParity),
+		serial.WithStopBits(serial.OneStopBit),
+		serial.WithReadTimeout(int(m.config.ReadTimeout.Milliseconds())),
+		serial.WithHUPCL(true),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to open serial port %s: %w", m.config.Device, err)
+	}
+
+	m.port = port
+
+	// Re-discover USB device IDs (may have changed after reset)
+	if vendor, product, err := GetUSBDeviceID(m.config.Device); err == nil {
+		m.usbVendor = vendor
+		m.usbProduct = product
+	}
+
+	// Ensure DTR is high
+	if err := port.SetDTR(true); err != nil {
+		port.Close()
+		m.port = nil
+		return fmt.Errorf("failed to set DTR: %w", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Initialize modem
+	if err := m.initModem(); err != nil {
+		port.Close()
+		m.port = nil
+		return fmt.Errorf("failed to initialize modem: %w", err)
+	}
+
+	m.initialized = true
+	m.inDataMode = false
+
+	return nil
+}
+
+// IsUSBDevice returns true if this modem is connected via USB
+func (m *Modem) IsUSBDevice() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.usbVendor != "" && m.usbProduct != ""
+}
+
+// GetUSBID returns the USB vendor:product ID string, or empty if not USB
+func (m *Modem) GetUSBID() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.usbVendor == "" || m.usbProduct == "" {
+		return ""
+	}
+	return m.usbVendor + ":" + m.usbProduct
 }
 
 // SendAT sends an AT command and waits for response.
