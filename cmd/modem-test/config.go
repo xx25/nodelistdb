@@ -90,18 +90,19 @@ type ModemConfig struct {
 
 // TestConfig contains test execution parameters
 type TestConfig struct {
-	Count            int              `yaml:"count"`
-	CallsPerOperator int              `yaml:"calls_per_operator"` // Calls per operator per phone (overrides Count if set)
-	InterDelay       Duration         `yaml:"inter_delay"`
-	Phone            string           `yaml:"phone"`     // Single phone (for backward compatibility)
-	Phones           []string         `yaml:"phones"`    // Multiple phones (called in circular order)
-	Operators        []OperatorConfig `yaml:"operators"` // Operator prefixes for routing comparison (optional)
-	CSVFile          string           `yaml:"csv_file"`  // Path to CSV output file (optional)
-	Prefix           string           `yaml:"prefix"`    // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
+	// CLI-only fields (not loaded from YAML, set via flags)
+	Count            int      `yaml:"-"` // Total test calls (set via -count)
+	CallsPerOperator int      `yaml:"-"` // Calls per operator per phone (set via -per-operator)
+	RetryCount       int      `yaml:"-"` // Number of retries (set via -retry)
+	RetryDelay       Duration `yaml:"-"` // Delay between retries (set via -retry-delay)
 
-	// Retry settings for failed calls (CDR-based: NO ANSWER, BUSY, FAILED, CONGESTION with billsec=0)
-	RetryCount int      `yaml:"retry_count"` // Number of retries (0 = disabled, default: 20)
-	RetryDelay Duration `yaml:"retry_delay"` // Delay between retries (default: 5s)
+	// Config file fields
+	InterDelay Duration         `yaml:"inter_delay"`
+	Phone      string           `yaml:"phone"`     // Single phone (for backward compatibility)
+	Phones     []string         `yaml:"phones"`    // Multiple phones (called in circular order)
+	Operators  []OperatorConfig `yaml:"operators"` // Operator prefixes for routing comparison (optional)
+	CSVFile    string           `yaml:"csv_file"`  // Path to CSV output file (optional)
+	Prefix     string           `yaml:"prefix"`    // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
 }
 
 // OperatorConfig contains operator/carrier routing configuration
@@ -201,10 +202,7 @@ func DefaultConfig() *Config {
 			StatsProfile:        "rockwell",                // Default parser profile
 		},
 		Test: TestConfig{
-			Count:      10,
 			InterDelay: Duration(5 * time.Second),
-			RetryCount: 20,
-			RetryDelay: Duration(5 * time.Second),
 		},
 		EMSI: EMSIConfig{
 			OurAddress: "2:5001/5001",
@@ -281,14 +279,6 @@ func (c *Config) Validate() error {
 	if c.Modem.BaudRate <= 0 {
 		return fmt.Errorf("modem.baud_rate must be positive")
 	}
-	// count and calls_per_operator are mutually exclusive
-	if c.Test.Count > 0 && c.Test.CallsPerOperator > 0 {
-		return fmt.Errorf("test.count and test.calls_per_operator are mutually exclusive; set only one")
-	}
-	// Require either count, calls_per_operator, or prefix to be set
-	if c.Test.Count <= 0 && c.Test.CallsPerOperator <= 0 && c.Test.Prefix == "" {
-		return fmt.Errorf("either test.count or test.calls_per_operator must be positive")
-	}
 	if c.Modem.HangupMethod != "dtr" && c.Modem.HangupMethod != "escape" {
 		return fmt.Errorf("modem.hangup_method must be 'dtr' or 'escape'")
 	}
@@ -350,15 +340,6 @@ func (c *Config) validateMultiModem() error {
 
 	if enabledCount == 0 {
 		return fmt.Errorf("at least one modem must be enabled")
-	}
-
-	// count and calls_per_operator are mutually exclusive
-	if c.Test.Count > 0 && c.Test.CallsPerOperator > 0 {
-		return fmt.Errorf("test.count and test.calls_per_operator are mutually exclusive; set only one")
-	}
-	// Require either count, calls_per_operator, or prefix to be set
-	if c.Test.Count <= 0 && c.Test.CallsPerOperator <= 0 && c.Test.Prefix == "" {
-		return fmt.Errorf("either test.count or test.calls_per_operator must be positive")
 	}
 
 	// Asterisk CDR is required for CDR-based retry logic (skip in prefix mode)
@@ -496,9 +477,7 @@ func (c *Config) mergeModemConfig(defaults, override ModemConfig) ModemConfig {
 }
 
 // ApplyCLIOverrides applies command-line flag values to the config.
-// count and perOperator use -1 as sentinel for "not specified" (use config default).
-// They are mutually exclusive (validated before this call).
-func (c *Config) ApplyCLIOverrides(device, phone string, count, perOperator int, debug bool, csvFile string) {
+func (c *Config) ApplyCLIOverrides(device, phone string, debug bool, csvFile string) {
 	if device != "" {
 		c.Modem.Device = device
 	}
@@ -507,14 +486,6 @@ func (c *Config) ApplyCLIOverrides(device, phone string, count, perOperator int,
 		phones := parsePhoneList(phone)
 		c.Test.Phones = phones
 		c.Test.Phone = "" // Clear single phone - use Phones list
-	}
-	if count >= 0 {
-		c.Test.Count = count // 0 = infinite
-		c.Test.CallsPerOperator = 0
-	}
-	if perOperator >= 0 {
-		c.Test.CallsPerOperator = perOperator
-		c.Test.Count = 0
 	}
 	if csvFile != "" {
 		c.Test.CSVFile = csvFile
@@ -586,29 +557,13 @@ func (c *Config) GetCDRLookupDelay() time.Duration {
 }
 
 // GetRetryCount returns the number of retries for failed calls.
-// Checks test.retry_count first, falls back to modem.busy_retry_count for backward compatibility.
 func (c *Config) GetRetryCount() int {
-	if c.Test.RetryCount > 0 {
-		return c.Test.RetryCount
-	}
-	// Backward compatibility: check modem config
-	if c.Modem.BusyRetryCount > 0 {
-		return c.Modem.BusyRetryCount
-	}
-	return 20 // Default
+	return c.Test.RetryCount
 }
 
 // GetRetryDelay returns the delay between retry attempts.
-// Checks test.retry_delay first, falls back to modem.busy_retry_delay for backward compatibility.
 func (c *Config) GetRetryDelay() time.Duration {
-	if c.Test.RetryDelay.Duration() > 0 {
-		return c.Test.RetryDelay.Duration()
-	}
-	// Backward compatibility: check modem config
-	if c.Modem.BusyRetryDelay.Duration() > 0 {
-		return c.Modem.BusyRetryDelay.Duration()
-	}
-	return 5 * time.Second // Default
+	return c.Test.RetryDelay.Duration()
 }
 
 // parsePhoneList splits a comma-separated phone list into individual numbers.

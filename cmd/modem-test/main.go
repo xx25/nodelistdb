@@ -29,9 +29,11 @@ var (
 	logFile     = flag.String("log", "", "Output log to file (in addition to stderr)")
 	interactive = flag.Bool("interactive", false, "Interactive AT command mode")
 	batch       = flag.Bool("batch", false, "Run batch test mode")
-	prefix      = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
-	cmOnly      = flag.Bool("cm-only", false, "Only test CM (24/7) nodes (prefix mode only)")
-	perOperator = flag.Int("per-operator", -1, "Calls per operator per phone (mutually exclusive with -count)")
+	prefix       = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
+	cmOnly       = flag.Bool("cm-only", false, "Only test CM (24/7) nodes (prefix mode only)")
+	perOperator  = flag.Int("per-operator", -1, "Calls per operator per phone (mutually exclusive with -count)")
+	retryCount   = flag.Int("retry", 20, "Number of retries for failed calls (0=disabled)")
+	retryDelayStr = flag.String("retry-delay", "5s", "Delay between retry attempts")
 )
 
 func main() {
@@ -90,8 +92,23 @@ func main() {
 		cfg = DefaultConfig()
 	}
 
-	// Apply CLI overrides
-	cfg.ApplyCLIOverrides(*device, *phone, *count, *perOperator, *debug, *csvFile)
+	// Apply CLI overrides (config-file fields only)
+	cfg.ApplyCLIOverrides(*device, *phone, *debug, *csvFile)
+
+	// Set CLI-only test parameters
+	if *count >= 0 {
+		cfg.Test.Count = *count
+	}
+	if *perOperator > 0 {
+		cfg.Test.CallsPerOperator = *perOperator
+	}
+	cfg.Test.RetryCount = *retryCount
+	retryDelay, err := time.ParseDuration(*retryDelayStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: invalid -retry-delay value %q: %v\n", *retryDelayStr, err)
+		os.Exit(1)
+	}
+	cfg.Test.RetryDelay = Duration(retryDelay)
 
 	// Create logger
 	log := NewTestLogger(cfg.Logging)
@@ -220,6 +237,12 @@ func main() {
 
 		// Auto-enable batch mode
 		*batch = true
+	}
+
+	// Validate: need count or per-operator (unless prefix mode set defaults)
+	if *batch && cfg.Test.Count <= 0 && cfg.Test.CallsPerOperator <= 0 && pfx == "" {
+		fmt.Fprintf(os.Stderr, "ERROR: specify -count N (total calls) or -per-operator N (calls per operator per phone)\n")
+		os.Exit(1)
 	}
 
 	// Validate required parameters for batch mode
