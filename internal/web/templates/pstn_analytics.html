@@ -98,8 +98,8 @@
                 <td>{{.PhoneNormalized}}</td>
                 <td data-value="{{.MaxSpeed}}">{{.MaxSpeed}} bps</td>
                 <td>
-                    {{if .IsCM}}<span class="badge badge-success">CM</span>
-                    {{else}}<span class="badge badge-warning">Sched</span>{{end}}
+                    {{if .IsCM}}<span class="flag-tooltip"><span class="badge badge-success">CM</span><span class="tooltip-text">{{formatPSTNSchedule .}}</span></span>
+                    {{else}}<span class="flag-tooltip"><span class="badge badge-warning">Sched</span><span class="tooltip-text">{{formatPSTNSchedule .}}</span></span>{{end}}
                 </td>
                 <td>{{if .ModemFlags}}{{join .ModemFlags ", "}}{{end}}</td>
                 <td>

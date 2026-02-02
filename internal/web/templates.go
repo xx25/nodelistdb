@@ -12,6 +12,8 @@ import (
 
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/flags"
+	"github.com/nodelistdb/internal/storage"
+	"github.com/nodelistdb/internal/testing/timeavail"
 )
 
 // loadTemplates loads HTML templates from files
@@ -298,6 +300,26 @@ func (s *Server) loadTemplates() {
 			default:
 				return 0
 			}
+		},
+		"formatPSTNSchedule": func(node storage.PSTNNode) string {
+			if node.IsCM {
+				return "Continuous Mail — available 24/7"
+			}
+			avail, err := timeavail.ParseAvailability(node.Flags, node.Zone, node.Phone)
+			if err != nil || len(avail.Windows) == 0 {
+				// No T-flags found; show ZMH default for the zone
+				zmh := timeavail.GetZMHWindow(node.Zone)
+				if zmh != nil {
+					return fmt.Sprintf("ZMH only: %s-%s UTC daily",
+						zmh.StartUTC.Format("15:04"), zmh.EndUTC.Format("15:04"))
+				}
+				return "Schedule unknown"
+			}
+			var parts []string
+			for _, w := range avail.Windows {
+				parts = append(parts, timeavail.FormatTimeWindow(w))
+			}
+			return strings.Join(parts, "\n")
 		},
 		"countryFlag": func(countryCode string) string {
 			// Convert ISO 3166-1 alpha-2 country code to flag emoji

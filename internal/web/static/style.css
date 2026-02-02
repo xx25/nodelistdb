@@ -1274,6 +1274,7 @@ table a:hover {
     transition-delay: 0.3s;
     font-size: 0.8rem;
     line-height: 1.3;
+    white-space: pre-line;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     pointer-events: none;
 }
