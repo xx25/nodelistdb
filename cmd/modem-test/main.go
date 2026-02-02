@@ -16,6 +16,7 @@ import (
 
 	"github.com/nodelistdb/internal/modemd/modem"
 	"github.com/nodelistdb/internal/testing/protocols/emsi"
+	"github.com/nodelistdb/internal/testing/timeavail"
 )
 
 // CLI flags
@@ -29,6 +30,7 @@ var (
 	logFile     = flag.String("log", "", "Output log to file (in addition to stderr)")
 	interactive = flag.Bool("interactive", false, "Interactive AT command mode")
 	batch       = flag.Bool("batch", false, "Run batch test mode")
+	prefix      = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
 )
 
 func main() {
@@ -133,6 +135,57 @@ func main() {
 		defer mysqlWriter.Close()
 	}
 
+	// Prefix mode: fetch PSTN nodes from API and replace phone list
+	var nodeLookup map[string]*NodeTarget
+
+	pfx := *prefix
+	if pfx == "" {
+		pfx = cfg.Test.Prefix
+	}
+	if pfx != "" {
+		if cfg.NodelistDB.URL == "" {
+			fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.url is required when using -prefix\n")
+			os.Exit(1)
+		}
+		if *phone != "" {
+			fmt.Fprintf(os.Stderr, "WARNING: -phone is ignored when -prefix is set\n")
+		}
+
+		log.Info("Fetching PSTN nodes from %s...", cfg.NodelistDB.URL)
+		allNodes, err := FetchPSTNNodes(cfg.NodelistDB.URL, 30*time.Second)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch PSTN nodes: %v\n", err)
+			os.Exit(1)
+		}
+		log.Info("Fetched %d PSTN nodes total", len(allNodes))
+
+		if len(allNodes) >= 10000 {
+			log.Warn("Fetched exactly %d nodes — results may be truncated by API limit", len(allNodes))
+		}
+
+		filtered := FilterByPrefix(allNodes, pfx)
+		log.Info("Filtered to %d nodes matching prefix %q", len(filtered), pfx)
+
+		if len(filtered) == 0 {
+			fmt.Fprintf(os.Stderr, "ERROR: No PSTN nodes found matching prefix %q\n", pfx)
+			os.Exit(1)
+		}
+
+		// Replace phone list with API-sourced phones
+		cfg.Test.Phones = UniquePhones(filtered)
+		cfg.Test.Phone = ""
+
+		// Default to 1 call per operator if nothing explicitly set
+		if cfg.Test.CallsPerOperator <= 0 && cfg.Test.Count <= 0 {
+			cfg.Test.CallsPerOperator = 1
+		}
+
+		nodeLookup = BuildNodeLookupByPhone(filtered)
+
+		// Auto-enable batch mode
+		*batch = true
+	}
+
 	// Validate required parameters for batch mode
 	phones := cfg.GetPhones()
 	if *batch && len(phones) == 0 {
@@ -145,7 +198,7 @@ func main() {
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, nodeLookup)
 		return
 	}
 
@@ -213,7 +266,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, nodeLookup)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -291,7 +344,7 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, nodeLookup map[string]*NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	testCount := cfg.GetTotalTestCount()
@@ -430,6 +483,35 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			log.PrintTestHeader(i, 0) // 0 signals infinite
 		} else {
 			log.PrintTestHeader(i, testCount)
+		}
+
+		// Log node info and check time availability if using prefix mode
+		if nodeLookup != nil {
+			if target, ok := nodeLookup[currentPhone]; ok {
+				log.Info("Node: %s %s (sysop: %s)",
+					target.Address(),
+					strings.ReplaceAll(target.SystemName, "_", " "),
+					strings.ReplaceAll(target.SysopName, "_", " "))
+				// Check callable time window
+				avail := GetNodeAvailability(target)
+				if avail != nil && !avail.IsCallableNow(time.Now().UTC()) {
+					sched := timeavail.NewScheduler(time.Now().UTC())
+					cs := sched.GetNextCallTime(avail)
+					if !cs.NextCall.IsZero() {
+						waitDur := time.Until(cs.NextCall)
+						if waitDur > 0 {
+							log.Info("Waiting %v until call window at %s UTC",
+								waitDur.Round(time.Second), cs.NextCall.Format("15:04"))
+							select {
+							case <-time.After(waitDur):
+							case <-ctx.Done():
+								log.Info("Cancelled during call window wait")
+								break
+							}
+						}
+					}
+				}
+			}
 		}
 
 		// Log operator info if configured

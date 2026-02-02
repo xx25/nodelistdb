@@ -60,6 +60,9 @@ type phoneJob struct {
 	operatorName   string
 	operatorPrefix string
 	testNum        int
+	nodeAddress    string // FidoNet address, e.g., "2:5020/100" (empty if not from API)
+	nodeSystemName string // BBS name (empty if not from API)
+	nodeSysop      string // Sysop name (empty if not from API)
 }
 
 // newModemWorker creates a new modem worker.
@@ -173,6 +176,11 @@ func (w *ModemWorker) Run(ctx context.Context) {
 			if !w.coordinator.AcquirePhone(ctx, job.phone, w.name) {
 				// Context cancelled while waiting
 				continue
+			}
+
+			// Log node info if from API
+			if job.nodeAddress != "" {
+				w.log.Info("Node: %s %s (sysop: %s)", job.nodeAddress, job.nodeSystemName, job.nodeSysop)
 			}
 
 			// Log operator info if configured
@@ -711,8 +719,14 @@ func (p *ModemPool) SubmitPhone(ctx context.Context, phone string, testNum int) 
 // SubmitPhoneWithOperator adds a phone with operator info to the queue.
 // Returns false if context is cancelled or pool is stopped.
 func (p *ModemPool) SubmitPhoneWithOperator(ctx context.Context, phone, operatorName, operatorPrefix string, testNum int) bool {
+	return p.SubmitJob(ctx, phoneJob{phone: phone, operatorName: operatorName, operatorPrefix: operatorPrefix, testNum: testNum})
+}
+
+// SubmitJob adds a phoneJob directly to the queue.
+// Returns false if context is cancelled or pool is stopped.
+func (p *ModemPool) SubmitJob(ctx context.Context, job phoneJob) bool {
 	select {
-	case p.phoneQueue <- phoneJob{phone: phone, operatorName: operatorName, operatorPrefix: operatorPrefix, testNum: testNum}:
+	case p.phoneQueue <- job:
 		return true
 	case <-ctx.Done():
 		return false

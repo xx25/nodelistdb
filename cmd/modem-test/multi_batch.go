@@ -12,7 +12,7 @@ import (
 )
 
 // runBatchModeMulti orchestrates batch testing with multiple modems.
-func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter) {
+func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, nodeLookup map[string]*NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	testCount := cfg.GetTotalTestCount()
@@ -279,7 +279,20 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 
 		submitted++
 
-		if !pool.SubmitPhoneWithOperator(ctx, phone, operator.Name, operator.Prefix, submitted) {
+		job := phoneJob{
+			phone:          phone,
+			operatorName:   operator.Name,
+			operatorPrefix: operator.Prefix,
+			testNum:        submitted,
+		}
+		if nodeLookup != nil {
+			if target, ok := nodeLookup[phone]; ok {
+				job.nodeAddress = target.Address()
+				job.nodeSystemName = target.SystemName
+				job.nodeSysop = target.SysopName
+			}
+		}
+		if !pool.SubmitJob(ctx, job) {
 			// Context cancelled
 			goto cleanup
 		}

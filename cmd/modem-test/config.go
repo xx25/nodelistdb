@@ -23,6 +23,12 @@ type Config struct {
 	AsteriskCDR     AsteriskCDRConfig     `yaml:"asterisk_cdr"`     // Asterisk CDR database (optional)
 	PostgresResults PostgresResultsConfig `yaml:"postgres_results"` // PostgreSQL results storage (optional)
 	MySQLResults    MySQLResultsConfig    `yaml:"mysql_results"`    // MySQL results storage (optional)
+	NodelistDB      NodelistDBConfig      `yaml:"nodelistdb"`       // NodelistDB API server (for -prefix mode)
+}
+
+// NodelistDBConfig contains API connection settings for fetching PSTN nodes.
+type NodelistDBConfig struct {
+	URL string `yaml:"url"` // API server URL, e.g., "http://localhost:8080"
 }
 
 // ModemInstanceConfig extends ModemConfig with instance-specific fields
@@ -91,6 +97,7 @@ type TestConfig struct {
 	Phones           []string         `yaml:"phones"`    // Multiple phones (called in circular order)
 	Operators        []OperatorConfig `yaml:"operators"` // Operator prefixes for routing comparison (optional)
 	CSVFile          string           `yaml:"csv_file"`  // Path to CSV output file (optional)
+	Prefix           string           `yaml:"prefix"`    // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
 
 	// Retry settings for failed calls (CDR-based: NO ANSWER, BUSY, FAILED, CONGESTION with billsec=0)
 	RetryCount int      `yaml:"retry_count"` // Number of retries (0 = disabled, default: 20)
@@ -256,6 +263,11 @@ func LoadConfig(path string) (*Config, error) {
 
 // Validate checks configuration for errors
 func (c *Config) Validate() error {
+	// Prefix mode validation
+	if c.Test.Prefix != "" && c.NodelistDB.URL == "" {
+		return fmt.Errorf("nodelistdb.url is required when test.prefix is set")
+	}
+
 	// Multi-modem mode validation
 	if c.IsMultiModem() {
 		return c.validateMultiModem()
@@ -268,15 +280,15 @@ func (c *Config) Validate() error {
 	if c.Modem.BaudRate <= 0 {
 		return fmt.Errorf("modem.baud_rate must be positive")
 	}
-	// Require either count or calls_per_operator to be positive
-	if c.Test.Count <= 0 && c.Test.CallsPerOperator <= 0 {
+	// Require either count, calls_per_operator, or prefix to be set
+	if c.Test.Count <= 0 && c.Test.CallsPerOperator <= 0 && c.Test.Prefix == "" {
 		return fmt.Errorf("either test.count or test.calls_per_operator must be positive")
 	}
 	if c.Modem.HangupMethod != "dtr" && c.Modem.HangupMethod != "escape" {
 		return fmt.Errorf("modem.hangup_method must be 'dtr' or 'escape'")
 	}
-	// Asterisk CDR is required for CDR-based retry logic
-	if c.AsteriskCDR.DSN == "" {
+	// Asterisk CDR is required for CDR-based retry logic (skip in prefix mode)
+	if c.AsteriskCDR.DSN == "" && c.Test.Prefix == "" {
 		return fmt.Errorf("asterisk_cdr.dsn is required for CDR-based retry logic")
 	}
 	return nil
@@ -335,13 +347,13 @@ func (c *Config) validateMultiModem() error {
 		return fmt.Errorf("at least one modem must be enabled")
 	}
 
-	// Require either count or calls_per_operator to be positive
-	if c.Test.Count <= 0 && c.Test.CallsPerOperator <= 0 {
+	// Require either count, calls_per_operator, or prefix to be set
+	if c.Test.Count <= 0 && c.Test.CallsPerOperator <= 0 && c.Test.Prefix == "" {
 		return fmt.Errorf("either test.count or test.calls_per_operator must be positive")
 	}
 
-	// Asterisk CDR is required for CDR-based retry logic
-	if c.AsteriskCDR.DSN == "" {
+	// Asterisk CDR is required for CDR-based retry logic (skip in prefix mode)
+	if c.AsteriskCDR.DSN == "" && c.Test.Prefix == "" {
 		return fmt.Errorf("asterisk_cdr.dsn is required for CDR-based retry logic")
 	}
 
