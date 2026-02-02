@@ -135,6 +135,7 @@ func (s *Server) loadTemplates() {
 				return fmt.Sprintf("%d B", size)
 			}
 		},
+		"join": strings.Join,
 		"replaceUnderscores": func(s string) string {
 			return strings.ReplaceAll(s, "_", " ")
 		},

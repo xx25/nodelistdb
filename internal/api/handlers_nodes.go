@@ -279,3 +279,51 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 
 	WriteJSONSuccess(w, response)
 }
+
+// GetPSTNNodesHandler returns all nodes with valid phone numbers from the latest nodelist.
+// GET /api/nodes/pstn?zone=2&limit=5000
+func (s *Server) GetPSTNNodesHandler(w http.ResponseWriter, r *http.Request) {
+	if !CheckMethod(w, r, http.MethodGet) {
+		return
+	}
+
+	query := r.URL.Query()
+
+	// Parse optional zone filter
+	zone := 0
+	if zoneStr := query.Get("zone"); zoneStr != "" {
+		parsed, err := strconv.Atoi(zoneStr)
+		if err != nil || parsed < 0 {
+			WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
+			return
+		}
+		zone = parsed
+	}
+
+	// Parse limit (default 5000, max 10000)
+	limit := 5000
+	if limitStr := query.Get("limit"); limitStr != "" {
+		parsed, err := strconv.Atoi(limitStr)
+		if err != nil || parsed < 1 {
+			WriteJSONError(w, "Invalid limit parameter", http.StatusBadRequest)
+			return
+		}
+		if parsed > 10000 {
+			parsed = 10000
+		}
+		limit = parsed
+	}
+
+	nodes, err := s.storage.GetPSTNNodes(limit, zone)
+	if err != nil {
+		WriteJSONError(w, fmt.Sprintf("Failed to fetch PSTN nodes: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"nodes": nodes,
+		"count": len(nodes),
+	}
+
+	WriteJSONSuccess(w, response)
+}

@@ -26,6 +26,7 @@ func (s *Server) SetupRouter() http.Handler {
 	// Node routes
 	r.Route("/api/nodes", func(r chi.Router) {
 		r.Get("/", s.SearchNodesHandler)
+		r.Get("/pstn", s.GetPSTNNodesHandler)
 		r.Get("/{zone}/{net}/{node}", s.GetNodeHandler)
 		r.Get("/{zone}/{net}/{node}/history", s.GetNodeHistoryHandler)
 		r.Get("/{zone}/{net}/{node}/changes", s.GetNodeChangesHandler)

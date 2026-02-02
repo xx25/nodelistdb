@@ -1,10 +1,10 @@
 {{template "base" .}}
 
-{{define "title"}}PSTN CM Nodes{{end}}
+{{define "title"}}PSTN Nodes{{end}}
 
-{{define "page_title"}}PSTN CM Nodes (24/7 Phone Access){{end}}
+{{define "page_title"}}PSTN Nodes (Phone Access){{end}}
 
-{{define "page_subtitle"}}<p class="subtitle">Nodes from the latest nodelist with phone numbers and CM (Continuous Mail) flag</p>{{end}}
+{{define "page_subtitle"}}<p class="subtitle">All nodes from the latest nodelist with valid phone numbers</p>{{end}}
 
 {{define "head_scripts"}}
 <script src="/static/sortable-table.js"></script>
@@ -18,10 +18,53 @@
 {{end}}
 
 {{if .PSTNNodes}}
-<div class="stats-box">
-    <h3>Found {{len .PSTNNodes}} PSTN CM Nodes</h3>
+<!-- Summary Statistics -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h3>{{.Stats.TotalCount}}</h3>
+        <p>Total PSTN Nodes</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.CMCount}}</h3>
+        <p>CM (24/7)</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.NonCMCount}}</h3>
+        <p>Non-CM (Scheduled)</p>
+    </div>
 </div>
 
+<!-- Zone Breakdown and Speed Tiers side by side -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+    {{if .Stats.ZoneCounts}}
+    <div class="stats-box">
+        <h4>By Zone</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Zone</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range $zone, $count := .Stats.ZoneCounts}}
+                <tr><td>Zone {{$zone}}</td><td>{{$count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+    {{if .Stats.SpeedTiers}}
+    <div class="stats-box">
+        <h4>By Max Speed</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Speed</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range $speed, $count := .Stats.SpeedTiers}}
+                <tr><td>{{$speed}} bps</td><td>{{$count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+</div>
+
+<!-- Main Node Table -->
 <div class="table-responsive">
     <table class="data-table sortable-table">
         <thead>
@@ -31,7 +74,10 @@
                 <th data-sortable data-type="string">Location</th>
                 <th data-sortable data-type="string">Sysop</th>
                 <th data-sortable data-type="string">Phone</th>
+                <th data-sortable data-type="string">Normalized</th>
                 <th data-sortable data-type="number">Max Speed</th>
+                <th data-sortable data-type="string">CM</th>
+                <th data-sortable data-type="string">Modem Flags</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -49,7 +95,13 @@
                 <td>
                     <span class="badge badge-success">{{.Phone}}</span>
                 </td>
+                <td>{{.PhoneNormalized}}</td>
                 <td data-value="{{.MaxSpeed}}">{{.MaxSpeed}} bps</td>
+                <td>
+                    {{if .IsCM}}<span class="badge badge-success">CM</span>
+                    {{else}}<span class="badge badge-warning">Sched</span>{{end}}
+                </td>
+                <td>{{if .ModemFlags}}{{join .ModemFlags ", "}}{{end}}</td>
                 <td>
                     <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a>
                 </td>
@@ -60,16 +112,17 @@
 </div>
 
 <div class="info-box" style="margin-top: 2rem;">
-    <p><strong>About this report:</strong> This page lists FidoNet nodes that have published phone numbers and are marked with the CM (Continuous Mail) flag, indicating they are available 24 hours a day, 7 days a week for incoming connections.</p>
-    <p><strong>CM Flag:</strong> The CM flag signifies that the node operates in Continuous Mail mode, meaning it can receive mail at any time without requiring scheduled mail events (ZMH - Zone Mail Hour).</p>
-    <p><strong>Phone Numbers:</strong> Phone numbers are displayed as published in the nodelist. Nodes with unpublished or invalid phone numbers are excluded from this report.</p>
+    <p><strong>About this report:</strong> This page lists all FidoNet nodes that have published phone numbers in the latest nodelist, including both CM (Continuous Mail, 24/7) and scheduled-availability nodes.</p>
+    <p><strong>CM Flag:</strong> Nodes marked CM operate in Continuous Mail mode and can receive connections at any time. Non-CM nodes are available only during scheduled mail hours (ZMH or T-flag windows).</p>
+    <p><strong>Modem Flags:</strong> ITU-T modem standards supported by each node (e.g., V34 = 28.8 kbps, V42B = error correction with data compression, V32B = 14.4 kbps).</p>
+    <p><strong>Phone Numbers:</strong> Phone numbers are displayed as published in the nodelist. The "Normalized" column shows the international format (+country code + number). Nodes with unpublished or invalid phone numbers are excluded.</p>
     <p><strong>Note:</strong> This data comes from the latest nodelist in the database. Actual PSTN connectivity depends on the node's modem equipment and phone line status.</p>
 </div>
 
 {{else}}
 <div class="alert alert-warning">
-    <strong>No PSTN CM nodes found.</strong><br>
-    No nodes with valid phone numbers and CM flag were found in the latest nodelist.
+    <strong>No PSTN nodes found.</strong><br>
+    No nodes with valid phone numbers were found in the latest nodelist.
 </div>
 {{end}}
 {{end}}

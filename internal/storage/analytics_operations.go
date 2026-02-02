@@ -2,6 +2,8 @@ package storage
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -490,6 +492,34 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 	return results, nil
 }
 
+// pstnPhoneCleanRegex removes non-digit characters except leading +
+var pstnPhoneCleanRegex = regexp.MustCompile(`[^\d+]`)
+
+// normalizePhone converts a phone number to standard format for display.
+// Duplicates modem.NormalizePhone logic to avoid import cycle (modem imports storage).
+func normalizePhone(phone string) string {
+	if phone == "" {
+		return ""
+	}
+	phone = strings.TrimSpace(phone)
+	lower := strings.ToLower(phone)
+	if lower == "-unpublished-" || lower == "unpublished" || lower == "-" || lower == "none" {
+		return ""
+	}
+	cleaned := pstnPhoneCleanRegex.ReplaceAllString(phone, "")
+	if !strings.HasPrefix(cleaned, "+") {
+		cleaned = "+" + cleaned
+	}
+	if len(cleaned) < 4 {
+		return ""
+	}
+	return cleaned
+}
+
+// MaxPSTNSearchLimit is the maximum number of PSTN nodes that can be returned.
+// Higher than MaxSearchLimit because modem-tester needs the full list.
+const MaxPSTNSearchLimit = 10000
+
 // GetPSTNCMNodes returns nodes from the latest nodelist that have valid phone numbers and CM flag
 // Phone numbers like "-Unpublished-" and "000-000-000-000" are excluded
 // Down and Hold nodes are excluded as they are not operational
@@ -522,7 +552,8 @@ func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 			nodelist_date,
 			node_type,
 			max_speed,
-			flags
+			flags,
+			modem_flags
 		FROM nodes
 		WHERE nodelist_date = (SELECT max_date FROM latest_date)
 		  AND conflict_sequence = 0
@@ -545,6 +576,7 @@ func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 	for rows.Next() {
 		var n PSTNNode
 		var flags []string
+		var modemFlags []string
 		err := rows.Scan(
 			&n.Zone,
 			&n.Net,
@@ -558,16 +590,113 @@ func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 			&n.NodeType,
 			&n.MaxSpeed,
 			&flags,
+			&modemFlags,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan PSTN CM node row: %w", err)
 		}
 		n.Flags = flags
+		n.ModemFlags = modemFlags
+		n.PhoneNormalized = normalizePhone(n.Phone)
 		results = append(results, n)
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating PSTN CM rows: %w", err)
+	}
+
+	return results, nil
+}
+
+// GetPSTNNodes returns ALL nodes from the latest nodelist that have valid phone numbers.
+// Unlike GetPSTNCMNodes, this includes both CM and non-CM nodes.
+// Excludes Down/Hold nodes, coordinators (node=0), and unpublished/invalid phones.
+// zone=0 returns all zones.
+func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
+	ao.mu.RLock()
+	defer ao.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	}
+	if limit > MaxPSTNSearchLimit {
+		limit = MaxPSTNSearchLimit
+	}
+
+	conn := ao.db.Conn()
+
+	query := `
+		WITH latest_date AS (
+			SELECT MAX(nodelist_date) as max_date FROM nodes
+		)
+		SELECT
+			zone,
+			net,
+			node,
+			system_name,
+			location,
+			sysop_name,
+			phone,
+			is_cm,
+			nodelist_date,
+			node_type,
+			max_speed,
+			flags,
+			modem_flags
+		FROM nodes
+		WHERE nodelist_date = (SELECT max_date FROM latest_date)
+		  AND conflict_sequence = 0
+		  AND phone != ''
+		  AND phone != '-Unpublished-'
+		  AND phone != '000-000-000-000'
+		  AND node != 0
+		  AND node_type NOT IN ('Down', 'Hold')`
+
+	args := []interface{}{}
+	if zone > 0 {
+		query += " AND zone = ?"
+		args = append(args, zone)
+	}
+	query += " ORDER BY zone, net, node LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query PSTN nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []PSTNNode
+	for rows.Next() {
+		var n PSTNNode
+		var flags []string
+		var modemFlags []string
+		err := rows.Scan(
+			&n.Zone,
+			&n.Net,
+			&n.Node,
+			&n.SystemName,
+			&n.Location,
+			&n.SysopName,
+			&n.Phone,
+			&n.IsCM,
+			&n.NodelistDate,
+			&n.NodeType,
+			&n.MaxSpeed,
+			&flags,
+			&modemFlags,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan PSTN node row: %w", err)
+		}
+		n.Flags = flags
+		n.ModemFlags = modemFlags
+		n.PhoneNormalized = normalizePhone(n.Phone)
+		results = append(results, n)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating PSTN rows: %w", err)
 	}
 
 	return results, nil

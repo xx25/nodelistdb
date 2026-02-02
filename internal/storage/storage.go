@@ -277,6 +277,10 @@ func (s *Storage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 	return s.analyticsOperations.GetPSTNCMNodes(limit)
 }
 
+func (s *Storage) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
+	return s.analyticsOperations.GetPSTNNodes(limit, zone)
+}
+
 // --- Utility Methods ---
 
 // GetQueryBuilder returns the query builder for direct access

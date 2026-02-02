@@ -340,6 +340,7 @@ type Operations interface {
 	GetOnThisDayNodes(month, day, limit int, activeOnly bool) ([]OnThisDayNode, error)
 	GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error)
 	GetPSTNCMNodes(limit int) ([]PSTNNode, error)
+	GetPSTNNodes(limit int, zone int) ([]PSTNNode, error)
 
 	// Utility operations (delegated to NodeOps())
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
@@ -455,20 +456,22 @@ const (
 )
 
 // PSTNNode represents a node with PSTN (phone) access from the nodelist
-// Used for PSTN analytics reports showing nodes with phone numbers and CM flag
+// Used for PSTN analytics reports showing nodes with phone numbers
 type PSTNNode struct {
-	Zone         int       `json:"zone"`
-	Net          int       `json:"net"`
-	Node         int       `json:"node"`
-	SystemName   string    `json:"system_name"`
-	Location     string    `json:"location"`
-	SysopName    string    `json:"sysop_name"`
-	Phone        string    `json:"phone"`
-	IsCM         bool      `json:"is_cm"`          // Continuous Mail (24/7 availability)
-	NodelistDate time.Time `json:"nodelist_date"`  // Date of nodelist entry
-	NodeType     string    `json:"node_type"`      // Zone, Region, Host, Hub, Pvt, Down, Hold
-	MaxSpeed     uint32    `json:"max_speed"`      // Maximum baud rate
-	Flags        []string  `json:"flags"`          // Node flags
+	Zone            int       `json:"zone"`
+	Net             int       `json:"net"`
+	Node            int       `json:"node"`
+	SystemName      string    `json:"system_name"`
+	Location        string    `json:"location"`
+	SysopName       string    `json:"sysop_name"`
+	Phone           string    `json:"phone"`
+	PhoneNormalized string    `json:"phone_normalized"` // Normalized via modem.NormalizePhone
+	IsCM            bool      `json:"is_cm"`            // Continuous Mail (24/7 availability)
+	NodelistDate    time.Time `json:"nodelist_date"`    // Date of nodelist entry
+	NodeType        string    `json:"node_type"`        // Zone, Region, Host, Hub, Pvt, Down, Hold
+	MaxSpeed        uint32    `json:"max_speed"`        // Maximum baud rate
+	Flags           []string  `json:"flags"`            // Node flags
+	ModemFlags      []string  `json:"modem_flags"`      // Modem capability flags (V34, V42B, etc.)
 }
 
 // OnThisDayNode represents a node that was first added on this day in a previous year

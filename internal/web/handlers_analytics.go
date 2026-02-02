@@ -548,25 +548,70 @@ func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderProtocolAnalytics(w, r, config, s.storage.GetFTPEnabledNodes)
 }
 
-// PSTNCMAnalyticsHandler shows nodes with phone numbers and CM (24/7) flag
+// PSTNSummaryStats holds summary statistics for PSTN nodes
+type PSTNSummaryStats struct {
+	TotalCount      int
+	CMCount         int
+	NonCMCount      int
+	ZoneCounts      map[int]int
+	SpeedTiers      map[string]int
+	ModemFlagCounts map[string]int
+}
+
+// computePSTNStats calculates summary statistics from a list of PSTN nodes
+func computePSTNStats(nodes []storage.PSTNNode) PSTNSummaryStats {
+	stats := PSTNSummaryStats{
+		TotalCount:      len(nodes),
+		ZoneCounts:      make(map[int]int),
+		SpeedTiers:      make(map[string]int),
+		ModemFlagCounts: make(map[string]int),
+	}
+	for _, n := range nodes {
+		if n.IsCM {
+			stats.CMCount++
+		} else {
+			stats.NonCMCount++
+		}
+		stats.ZoneCounts[n.Zone]++
+		switch {
+		case n.MaxSpeed >= 28800:
+			stats.SpeedTiers["28800+"]++
+		case n.MaxSpeed >= 14400:
+			stats.SpeedTiers["14400"]++
+		case n.MaxSpeed >= 9600:
+			stats.SpeedTiers["9600"]++
+		default:
+			stats.SpeedTiers["300-2400"]++
+		}
+		for _, mf := range n.ModemFlags {
+			stats.ModemFlagCounts[mf]++
+		}
+	}
+	return stats
+}
+
+// PSTNCMAnalyticsHandler shows all nodes with valid phone numbers from the latest nodelist
 func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse limit parameter
 	query := r.URL.Query()
-	limit := 500 // Default limit
+	limit := 5000 // Default limit - high to capture all PSTN nodes
 	if limitStr := query.Get("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 10000 {
 			limit = parsed
 		}
 	}
 
-	// Fetch PSTN CM nodes
-	pstnNodes, err := s.storage.GetPSTNCMNodes(limit)
+	// Fetch ALL PSTN nodes (CM and non-CM)
+	pstnNodes, err := s.storage.GetPSTNNodes(limit, 0)
 	var displayError error
 	if err != nil {
-		log.Printf("[ERROR] PSTN CM Analytics: Error fetching nodes: %v", err)
+		log.Printf("[ERROR] PSTN Analytics: Error fetching nodes: %v", err)
 		pstnNodes = []storage.PSTNNode{}
 		displayError = fmt.Errorf("Failed to fetch PSTN analytics data. Please try again later")
 	}
+
+	// Compute summary statistics
+	stats := computePSTNStats(pstnNodes)
 
 	// Build template data
 	data := struct {
@@ -574,13 +619,15 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 		ActivePage string
 		Version    string
 		PSTNNodes  []storage.PSTNNode
+		Stats      PSTNSummaryStats
 		Limit      int
 		Error      error
 	}{
-		Title:      "PSTN CM Nodes (24/7 Phone Access)",
+		Title:      "PSTN Nodes (Phone Access)",
 		ActivePage: "analytics",
 		Version:    version.GetVersionInfo(),
 		PSTNNodes:  pstnNodes,
+		Stats:      stats,
 		Limit:      limit,
 		Error:      displayError,
 	}
@@ -588,13 +635,13 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	// Use PSTN analytics template
 	tmpl, exists := s.templates["pstn_analytics"]
 	if !exists {
-		log.Printf("[ERROR] PSTN CM Analytics: Template 'pstn_analytics' not found")
+		log.Printf("[ERROR] PSTN Analytics: Template 'pstn_analytics' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] PSTN CM Analytics: Error executing template: %v", err)
+		log.Printf("[ERROR] PSTN Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
