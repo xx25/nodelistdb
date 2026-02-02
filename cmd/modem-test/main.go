@@ -16,7 +16,6 @@ import (
 
 	"github.com/nodelistdb/internal/modemd/modem"
 	"github.com/nodelistdb/internal/testing/protocols/emsi"
-	"github.com/nodelistdb/internal/testing/timeavail"
 )
 
 // CLI flags
@@ -137,6 +136,7 @@ func main() {
 
 	// Prefix mode: fetch PSTN nodes from API and replace phone list
 	var nodeLookup map[string]*NodeTarget
+	var filteredNodes []NodeTarget
 
 	pfx := *prefix
 	if pfx == "" {
@@ -171,6 +171,12 @@ func main() {
 			os.Exit(1)
 		}
 
+		// Strip leading + from phone numbers for modem dialing.
+		// Prefix matching is already done, and ATDT doesn't understand +.
+		for i := range filtered {
+			filtered[i].Phone = strings.TrimPrefix(filtered[i].Phone, "+")
+		}
+
 		// Replace phone list with API-sourced phones
 		cfg.Test.Phones = UniquePhones(filtered)
 		cfg.Test.Phone = ""
@@ -181,6 +187,7 @@ func main() {
 		}
 
 		nodeLookup = BuildNodeLookupByPhone(filtered)
+		filteredNodes = filtered
 
 		// Auto-enable batch mode
 		*batch = true
@@ -198,7 +205,7 @@ func main() {
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, nodeLookup)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, nodeLookup, filteredNodes)
 		return
 	}
 
@@ -266,7 +273,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, nodeLookup)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, filteredNodes)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -344,7 +351,7 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, nodeLookup map[string]*NodeTarget) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	testCount := cfg.GetTotalTestCount()
@@ -437,7 +444,13 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			callsPerOperator, testCount)
 	}
 
-	for i := 1; infinite || i <= testCount; i++ {
+	// Prefix mode: use ScheduleNodes for time-aware job ordering
+	var schedChan <-chan phoneJob
+	if len(filteredNodes) > 0 {
+		schedChan = ScheduleNodes(ctx, filteredNodes, operators, cfg.Test.CallsPerOperator, log)
+	}
+
+	for i := 1; ; i++ {
 		// Check for cancellation
 		if cancelled {
 			log.Info("Test loop cancelled")
@@ -447,7 +460,23 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		var currentPhone string
 		var currentOperator OperatorConfig
 
-		if perOperatorMode {
+		if schedChan != nil {
+			// Prefix/schedule mode: consume pre-scheduled, time-aware jobs
+			job, ok := <-schedChan
+			if !ok {
+				// All scheduled nodes processed
+				break
+			}
+			currentPhone = job.phone
+			currentOperator = OperatorConfig{Name: job.operatorName, Prefix: job.operatorPrefix}
+
+			log.PrintTestHeader(i, testCount)
+
+			// Log node info
+			if job.nodeAddress != "" {
+				log.Info("Node: %s %s (sysop: %s)", job.nodeAddress, job.nodeSystemName, job.nodeSysop)
+			}
+		} else if perOperatorMode {
 			// Per-operator mode: find next combo that hasn't reached its limit
 			found := false
 			for _, phone := range phones {
@@ -470,47 +499,27 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				break
 			}
 			callCounts[comboKey{phone: currentPhone, operator: currentOperator.Name}]++
+
+			if infinite {
+				log.PrintTestHeader(i, 0)
+			} else {
+				log.PrintTestHeader(i, testCount)
+			}
 		} else {
 			// Legacy mode: round-robin through all combinations
+			if !infinite && i > testCount {
+				break
+			}
 			comboIndex := (i - 1) % totalCombinations
 			phoneIndex := comboIndex / len(operators)
 			operatorIndex := comboIndex % len(operators)
 			currentPhone = phones[phoneIndex]
 			currentOperator = operators[operatorIndex]
-		}
 
-		if infinite {
-			log.PrintTestHeader(i, 0) // 0 signals infinite
-		} else {
-			log.PrintTestHeader(i, testCount)
-		}
-
-		// Log node info and check time availability if using prefix mode
-		if nodeLookup != nil {
-			if target, ok := nodeLookup[currentPhone]; ok {
-				log.Info("Node: %s %s (sysop: %s)",
-					target.Address(),
-					strings.ReplaceAll(target.SystemName, "_", " "),
-					strings.ReplaceAll(target.SysopName, "_", " "))
-				// Check callable time window
-				avail := GetNodeAvailability(target)
-				if avail != nil && !avail.IsCallableNow(time.Now().UTC()) {
-					sched := timeavail.NewScheduler(time.Now().UTC())
-					cs := sched.GetNextCallTime(avail)
-					if !cs.NextCall.IsZero() {
-						waitDur := time.Until(cs.NextCall)
-						if waitDur > 0 {
-							log.Info("Waiting %v until call window at %s UTC",
-								waitDur.Round(time.Second), cs.NextCall.Format("15:04"))
-							select {
-							case <-time.After(waitDur):
-							case <-ctx.Done():
-								log.Info("Cancelled during call window wait")
-								break
-							}
-						}
-					}
-				}
+			if infinite {
+				log.PrintTestHeader(i, 0)
+			} else {
+				log.PrintTestHeader(i, testCount)
 			}
 		}
 
@@ -551,8 +560,9 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				log.Warn("Asterisk CDR lookup failed for %s: %v", currentPhone, err)
 			} else if asteriskCDR != nil {
 				result.asteriskCDR = asteriskCDR
-				log.Info("Asterisk: disposition=%s peer=%s duration=%ds",
-					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
+				log.Info("Asterisk: disposition=%s peer=%s duration=%ds cause=%d src=%s early_media=%t",
+					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration,
+					asteriskCDR.HangupCause, asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
 			} else {
 				log.Warn("Asterisk CDR not found for phone %s", currentPhone)
 			}
@@ -759,8 +769,9 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 					log.Info("Asterisk CDR indicates retry: %s", reason)
 				}
 				// Log CDR info for diagnostics
-				log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d",
-					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec)
+				log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d cause=%d src=%s early_media=%t",
+					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec,
+					asteriskCDR.HangupCause, asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
 			} else {
 				log.Warn("Asterisk CDR not found for %s (not retrying)", originalPhone)
 			}
@@ -815,8 +826,9 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 				if lookupErr != nil {
 					log.Warn("Asterisk CDR lookup failed for %s: %v", originalPhone, lookupErr)
 				} else if asteriskCDR != nil {
-					log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d",
-						asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec)
+					log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d cause=%d src=%s early_media=%t",
+						asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec,
+						asteriskCDR.HangupCause, asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
 				} else {
 					log.Warn("Asterisk CDR not found for %s", originalPhone)
 				}

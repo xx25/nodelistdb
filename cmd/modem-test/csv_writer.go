@@ -67,10 +67,13 @@ type TestRecord struct {
 	CDRTermCategory     string
 
 	// Asterisk CDR fields (call routing info)
-	AstDisposition string // ANSWERED, NO ANSWER, BUSY, FAILED
-	AstPeer        string // Outbound peer/trunk name
-	AstDuration    int    // Total duration (ring + talk)
-	AstBillSec     int    // Billable seconds (talk time)
+	AstDisposition  string // ANSWERED, NO ANSWER, BUSY, FAILED
+	AstPeer         string // Outbound peer/trunk name
+	AstDuration     int    // Total duration (ring + talk)
+	AstBillSec      int    // Billable seconds (talk time)
+	AstHangupCause  int    // SIP hangup cause code (e.g., 16=Normal, 17=Busy)
+	AstHangupSource string // Which side hung up
+	AstEarlyMedia   bool   // Whether early media was received before answer
 }
 
 // csvHeader is the current header format with modem_name column
@@ -119,6 +122,9 @@ var csvHeader = []string{
 	"ast_peer",
 	"ast_duration",
 	"ast_billsec",
+	"ast_hangupcause",
+	"ast_hangupsource",
+	"ast_early_media",
 }
 
 // NewCSVWriter creates a new CSV writer for the given file path
@@ -239,6 +245,9 @@ func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 		rec.AstPeer,
 		fmt.Sprintf("%d", rec.AstDuration),
 		fmt.Sprintf("%d", rec.AstBillSec),
+		fmt.Sprintf("%d", rec.AstHangupCause),
+		rec.AstHangupSource,
+		fmt.Sprintf("%t", rec.AstEarlyMedia),
 	}
 
 	if err := w.writer.Write(row); err != nil {
@@ -340,6 +349,9 @@ func RecordFromTestResult(
 		rec.AstPeer = asteriskCDR.Peer
 		rec.AstDuration = asteriskCDR.Duration
 		rec.AstBillSec = asteriskCDR.BillSec
+		rec.AstHangupCause = asteriskCDR.HangupCause
+		rec.AstHangupSource = asteriskCDR.HangupSource
+		rec.AstEarlyMedia = asteriskCDR.EarlyMedia
 	}
 
 	return rec

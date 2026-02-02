@@ -167,9 +167,10 @@ type nodeCallSchedule struct {
 
 // ScheduleNodes returns a channel that emits phoneJobs in time-aware order.
 // CM and currently-callable nodes are emitted first, then deferred nodes are
-// emitted when their call window opens. The goroutine exits when all nodes
+// emitted when their call window opens. Each node×operator combination is
+// emitted callsPerOperator times. The goroutine exits when all nodes
 // have been emitted or ctx is cancelled.
-func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []OperatorConfig, log *TestLogger) <-chan phoneJob {
+func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []OperatorConfig, callsPerOperator int, log *TestLogger) <-chan phoneJob {
 	jobs := make(chan phoneJob, 100)
 
 	go func() {
@@ -177,6 +178,9 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []Operator
 
 		if len(operators) == 0 {
 			operators = []OperatorConfig{{Name: "", Prefix: ""}}
+		}
+		if callsPerOperator <= 0 {
+			callsPerOperator = 1
 		}
 
 		now := time.Now().UTC()
@@ -234,23 +238,25 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []Operator
 				}
 			}
 
-			// Emit one job per operator for this node
+			// Emit callsPerOperator jobs per operator for this node
 			for _, op := range operators {
-				testNum++
-				job := phoneJob{
-					phone:          n.Phone,
-					operatorName:   op.Name,
-					operatorPrefix: op.Prefix,
-					testNum:        testNum,
-					nodeAddress:    n.Address(),
-					nodeSystemName: strings.ReplaceAll(n.SystemName, "_", " "),
-					nodeSysop:      strings.ReplaceAll(n.SysopName, "_", " "),
-				}
+				for repeat := 0; repeat < callsPerOperator; repeat++ {
+					testNum++
+					job := phoneJob{
+						phone:          n.Phone,
+						operatorName:   op.Name,
+						operatorPrefix: op.Prefix,
+						testNum:        testNum,
+						nodeAddress:    n.Address(),
+						nodeSystemName: strings.ReplaceAll(n.SystemName, "_", " "),
+						nodeSysop:      strings.ReplaceAll(n.SysopName, "_", " "),
+					}
 
-				select {
-				case jobs <- job:
-				case <-ctx.Done():
-					return
+					select {
+					case jobs <- job:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
 		}

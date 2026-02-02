@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS %s (
     ast_peer                VARCHAR(64) NOT NULL DEFAULT '',
     ast_duration            INT NOT NULL DEFAULT 0,
     ast_billsec             INT NOT NULL DEFAULT 0,
+    ast_hangupcause         INT NOT NULL DEFAULT 0,
+    ast_hangupsource        VARCHAR(80) NOT NULL DEFAULT '',
+    ast_early_media         TINYINT(1) NOT NULL DEFAULT 0,
 
     created_at              DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
@@ -199,6 +202,9 @@ func (w *MySQLResultsWriter) WriteRecord(rec *TestRecord) error {
 		rec.AstPeer,
 		rec.AstDuration,
 		rec.AstBillSec,
+		rec.AstHangupCause,
+		rec.AstHangupSource,
+		rec.AstEarlyMedia,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert test result: %w", err)
@@ -234,13 +240,14 @@ func (w *MySQLResultsWriter) prepareStatement() error {
 			tx_speed, rx_speed, protocol, compression, line_quality, rx_level, retrains, termination, stats_notes,
 			cdr_session_id, cdr_codec, cdr_rtp_jitter_ms, cdr_rtp_delay_ms, cdr_packet_loss, cdr_remote_packet_loss,
 			cdr_local_mos, cdr_remote_mos, cdr_local_r_factor, cdr_remote_r_factor, cdr_term_reason, cdr_term_category,
-			ast_disposition, ast_peer, ast_duration, ast_billsec
+			ast_disposition, ast_peer, ast_duration, ast_billsec,
+			ast_hangupcause, ast_hangupsource, ast_early_media
 		) VALUES (
 			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-			?, ?
+			?, ?, ?, ?, ?
 		)
 	`, w.tableName)
 

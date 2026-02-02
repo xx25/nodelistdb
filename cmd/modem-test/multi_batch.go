@@ -12,7 +12,7 @@ import (
 )
 
 // runBatchModeMulti orchestrates batch testing with multiple modems.
-func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, nodeLookup map[string]*NodeTarget) {
+func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	testCount := cfg.GetTotalTestCount()
@@ -235,74 +235,98 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	}
 
 	submitted := 0
-	for i := 0; infinite || submitted < testCount; i++ {
-		select {
-		case <-ctx.Done():
-			goto cleanup
-		default:
+
+	if len(filteredNodes) > 0 {
+		// Prefix mode: use ScheduleNodes for time-aware job ordering.
+		// ScheduleNodes sorts callable nodes first, waits for call windows,
+		// and emits one job per operator per node.
+		jobs := ScheduleNodes(ctx, filteredNodes, operators, cfg.Test.CallsPerOperator, log)
+		for job := range jobs {
+			submitted++
+			job.testNum = submitted
+			if !pool.SubmitJob(ctx, job) {
+				goto cleanup
+			}
+			// Pace submissions to maintain overall test rate
+			if submissionDelay > 0 {
+				select {
+				case <-time.After(submissionDelay):
+				case <-ctx.Done():
+					goto cleanup
+				}
+			}
 		}
+	} else {
+		// Legacy submission loop: round-robin or per-operator mode
+		for i := 0; infinite || submitted < testCount; i++ {
+			select {
+			case <-ctx.Done():
+				goto cleanup
+			default:
+			}
 
-		var phone string
-		var operator OperatorConfig
+			var phone string
+			var operator OperatorConfig
 
-		if perOperatorMode {
-			// Per-operator mode: find next combo that hasn't reached its limit
-			found := false
-			for _, p := range phones {
-				for _, op := range operators {
-					key := comboKey{phone: p, operator: op.Name}
-					if callCounts[key] < callsPerOperator {
-						phone = p
-						operator = op
-						found = true
+			if perOperatorMode {
+				// Per-operator mode: find next combo that hasn't reached its limit
+				found := false
+				for _, p := range phones {
+					for _, op := range operators {
+						key := comboKey{phone: p, operator: op.Name}
+						if callCounts[key] < callsPerOperator {
+							phone = p
+							operator = op
+							found = true
+							break
+						}
+					}
+					if found {
 						break
 					}
 				}
-				if found {
-					break
+				if !found {
+					// All combinations have reached their limit
+					log.Info("All phone+operator combinations completed")
+					goto cleanup
+				}
+				callCounts[comboKey{phone: phone, operator: operator.Name}]++
+			} else {
+				// Legacy mode: round-robin through all combinations
+				comboIndex := i % totalCombinations
+				phoneIndex := comboIndex / len(operators)
+				operatorIndex := comboIndex % len(operators)
+				phone = phones[phoneIndex]
+				operator = operators[operatorIndex]
+			}
+
+			submitted++
+
+			job := phoneJob{
+				phone:          phone,
+				operatorName:   operator.Name,
+				operatorPrefix: operator.Prefix,
+				testNum:        submitted,
+			}
+			if nodeLookup != nil {
+				if target, ok := nodeLookup[phone]; ok {
+					job.nodeAddress = target.Address()
+					job.nodeSystemName = target.SystemName
+					job.nodeSysop = target.SysopName
 				}
 			}
-			if !found {
-				// All combinations have reached their limit
-				log.Info("All phone+operator combinations completed")
+			if !pool.SubmitJob(ctx, job) {
+				// Context cancelled
 				goto cleanup
 			}
-			callCounts[comboKey{phone: phone, operator: operator.Name}]++
-		} else {
-			// Legacy mode: round-robin through all combinations
-			comboIndex := i % totalCombinations
-			phoneIndex := comboIndex / len(operators)
-			operatorIndex := comboIndex % len(operators)
-			phone = phones[phoneIndex]
-			operator = operators[operatorIndex]
-		}
 
-		submitted++
-
-		job := phoneJob{
-			phone:          phone,
-			operatorName:   operator.Name,
-			operatorPrefix: operator.Prefix,
-			testNum:        submitted,
-		}
-		if nodeLookup != nil {
-			if target, ok := nodeLookup[phone]; ok {
-				job.nodeAddress = target.Address()
-				job.nodeSystemName = target.SystemName
-				job.nodeSysop = target.SysopName
-			}
-		}
-		if !pool.SubmitJob(ctx, job) {
-			// Context cancelled
-			goto cleanup
-		}
-
-		// Pace submissions to maintain overall test rate
-		if submissionDelay > 0 && (infinite || submitted < testCount) {
-			select {
-			case <-time.After(submissionDelay):
-			case <-ctx.Done():
-				goto cleanup
+			// Pace submissions to maintain overall test rate
+			if submissionDelay > 0 && (infinite || submitted < testCount) {
+				select {
+				case <-time.After(submissionDelay):
+				case <-ctx.Done():
+					goto cleanup
+				}
 			}
 		}
 	}

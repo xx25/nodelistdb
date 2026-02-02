@@ -26,6 +26,11 @@ type AsteriskCDRData struct {
 	Channel     string // source channel
 	DstChannel  string // destination channel (contains peer info)
 	Peer        string // extracted peer name from dstchannel
+
+	// SIP-level fields
+	HangupCause  int    // SIP hangup cause code (e.g., 16=Normal, 17=Busy, 19=No Answer)
+	HangupSource string // Which side hung up (channel name)
+	EarlyMedia   bool   // Whether early media (ringback/announcements) was received
 }
 
 // retryDispositions are CDR dispositions that trigger retry when billsec=0
@@ -161,7 +166,8 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 		// MySQL query with ? placeholders and TIMESTAMPDIFF
 		query = fmt.Sprintf(`
 			SELECT uniqueid, calldate, src, dst, duration, billsec,
-			       disposition, channel, dstchannel
+			       disposition, channel, dstchannel,
+			       hangupcause, hangupsource, early_media_rx
 			FROM %s
 			WHERE dst LIKE ?
 			  AND calldate BETWEEN ? AND ?
@@ -173,7 +179,8 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 		// PostgreSQL query with $N placeholders and EXTRACT(EPOCH)
 		query = fmt.Sprintf(`
 			SELECT uniqueid, calldate, src, dst, duration, billsec,
-			       disposition, channel, dstchannel
+			       disposition, channel, dstchannel,
+			       hangupcause, hangupsource, early_media_rx
 			FROM %s
 			WHERE dst LIKE $1
 			  AND calldate BETWEEN $2 AND $3
@@ -185,12 +192,14 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 
 	var cdr AsteriskCDRData
 	var uniqueID, src, dst, disposition, channel, dstChannel sql.NullString
+	var hangupsource sql.NullString
 	var callDate sql.NullTime
-	var duration, billSec sql.NullInt64
+	var duration, billSec, hangupcause, earlyMediaRx sql.NullInt64
 
 	err := row.Scan(
 		&uniqueID, &callDate, &src, &dst, &duration, &billSec,
 		&disposition, &channel, &dstChannel,
+		&hangupcause, &hangupsource, &earlyMediaRx,
 	)
 
 	if err == sql.ErrNoRows {
@@ -207,6 +216,7 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 	cdr.Disposition = disposition.String
 	cdr.Channel = channel.String
 	cdr.DstChannel = dstChannel.String
+	cdr.HangupSource = hangupsource.String
 
 	if callDate.Valid {
 		cdr.CallDate = callDate.Time
@@ -216,6 +226,12 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 	}
 	if billSec.Valid {
 		cdr.BillSec = int(billSec.Int64)
+	}
+	if hangupcause.Valid {
+		cdr.HangupCause = int(hangupcause.Int64)
+	}
+	if earlyMediaRx.Valid {
+		cdr.EarlyMedia = earlyMediaRx.Int64 != 0
 	}
 
 	// Extract peer name from dstchannel

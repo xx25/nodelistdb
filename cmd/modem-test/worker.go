@@ -277,8 +277,9 @@ func (w *ModemWorker) lookupAndLogCDR(ctx context.Context, phone string, reason 
 		if err != nil {
 			w.log.Warn("Asterisk CDR lookup failed for %s (%s): %v", phone, reason, err)
 		} else if asteriskCDR != nil {
-			w.log.Info("Asterisk CDR (%s): disposition=%s peer=%s duration=%ds",
-				reason, asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration)
+			w.log.Info("Asterisk CDR (%s): disposition=%s peer=%s duration=%ds cause=%d src=%s early_media=%t",
+				reason, asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration,
+				asteriskCDR.HangupCause, asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
 		} else {
 			w.log.Warn("Asterisk CDR not found for %s (%s)", phone, reason)
 		}
@@ -393,8 +394,9 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 					w.log.Info("Asterisk CDR indicates retry: %s", reason)
 				}
 				// Log CDR info for diagnostics
-				w.log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d",
-					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec)
+				w.log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d cause=%d src=%s early_media=%t",
+					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec,
+					asteriskCDR.HangupCause, asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
 			} else {
 				w.log.Warn("Asterisk CDR not found for %s (not retrying)", originalPhone)
 			}
@@ -454,8 +456,9 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 				if lookupErr != nil {
 					w.log.Warn("Asterisk CDR lookup failed for %s: %v", originalPhone, lookupErr)
 				} else if asteriskCDR != nil {
-					w.log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d",
-						asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec)
+					w.log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d cause=%d src=%s early_media=%t",
+						asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec,
+						asteriskCDR.HangupCause, asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
 				} else {
 					w.log.Warn("Asterisk CDR not found for %s", originalPhone)
 				}

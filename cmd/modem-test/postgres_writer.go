@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS %s (
     ast_peer                VARCHAR(64) NOT NULL DEFAULT '',
     ast_duration            INTEGER NOT NULL DEFAULT 0,
     ast_billsec             INTEGER NOT NULL DEFAULT 0,
+    ast_hangupcause         INTEGER NOT NULL DEFAULT 0,
+    ast_hangupsource        VARCHAR(80) NOT NULL DEFAULT '',
+    ast_early_media         BOOLEAN NOT NULL DEFAULT FALSE,
 
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -199,6 +202,9 @@ func (w *PostgresResultsWriter) WriteRecord(rec *TestRecord) error {
 		rec.AstPeer,
 		rec.AstDuration,
 		rec.AstBillSec,
+		rec.AstHangupCause,
+		rec.AstHangupSource,
+		rec.AstEarlyMedia,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert test result: %w", err)
@@ -242,13 +248,14 @@ func (w *PostgresResultsWriter) prepareStatement() error {
 			tx_speed, rx_speed, protocol, compression, line_quality, rx_level, retrains, termination, stats_notes,
 			cdr_session_id, cdr_codec, cdr_rtp_jitter_ms, cdr_rtp_delay_ms, cdr_packet_loss, cdr_remote_packet_loss,
 			cdr_local_mos, cdr_remote_mos, cdr_local_r_factor, cdr_remote_r_factor, cdr_term_reason, cdr_term_category,
-			ast_disposition, ast_peer, ast_duration, ast_billsec
+			ast_disposition, ast_peer, ast_duration, ast_billsec,
+			ast_hangupcause, ast_hangupsource, ast_early_media
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 			$11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
 			$21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
 			$31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-			$41, $42
+			$41, $42, $43, $44, $45
 		)
 	`, w.tableName)
 
