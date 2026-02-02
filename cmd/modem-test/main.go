@@ -31,6 +31,7 @@ var (
 	batch       = flag.Bool("batch", false, "Run batch test mode")
 	prefix      = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
 	cmOnly      = flag.Bool("cm-only", false, "Only test CM (24/7) nodes (prefix mode only)")
+	perOperator = flag.Int("per-operator", -1, "Calls per operator per phone (mutually exclusive with -count)")
 )
 
 func main() {
@@ -54,11 +55,24 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s -config modem.yaml -phone 917 -device /dev/ttyUSB0 -batch\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Output results to CSV file\n")
 		fmt.Fprintf(os.Stderr, "  %s -phone 917 -count 10 -csv results.csv -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # 2 calls per operator per phone (with operators in config)\n")
+		fmt.Fprintf(os.Stderr, "  %s -config modem-test.yaml -per-operator 2 -phone 917 -batch\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Save log to file (also outputs to stderr)\n")
 		fmt.Fprintf(os.Stderr, "  %s -phone 917 -log session.log -batch\n", os.Args[0])
 	}
 
 	flag.Parse()
+
+	// Validate mutually exclusive flags
+	if *count >= 0 && *perOperator >= 0 {
+		fmt.Fprintf(os.Stderr, "ERROR: -count and -per-operator are mutually exclusive\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+	if *perOperator == 0 {
+		fmt.Fprintf(os.Stderr, "ERROR: -per-operator must be positive\n")
+		os.Exit(1)
+	}
 
 	// Load or create config
 	var cfg *Config
@@ -77,7 +91,7 @@ func main() {
 	}
 
 	// Apply CLI overrides
-	cfg.ApplyCLIOverrides(*device, *phone, *count, *debug, *csvFile)
+	cfg.ApplyCLIOverrides(*device, *phone, *count, *perOperator, *debug, *csvFile)
 
 	// Create logger
 	log := NewTestLogger(cfg.Logging)
@@ -890,6 +904,9 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 	conn := m.GetConn()
 	emsiCfg := emsi.DefaultConfig()
 	emsiCfg.Protocols = cfg.EMSI.Protocols
+	if cfg.EMSI.InitialStrategy != "" {
+		emsiCfg.InitialStrategy = cfg.EMSI.InitialStrategy
+	}
 	session := emsi.NewSessionWithInfoAndConfig(
 		conn,
 		cfg.EMSI.OurAddress,

@@ -112,12 +112,13 @@ type OperatorConfig struct {
 
 // EMSIConfig contains EMSI handshake parameters
 type EMSIConfig struct {
-	OurAddress string   `yaml:"our_address"`
-	SystemName string   `yaml:"system_name"`
-	Sysop      string   `yaml:"sysop"`
-	Location   string   `yaml:"location"`
-	Timeout    Duration `yaml:"timeout"`
-	Protocols  []string `yaml:"protocols"` // Empty = NCP (no file transfer)
+	OurAddress      string   `yaml:"our_address"`
+	SystemName      string   `yaml:"system_name"`
+	Sysop           string   `yaml:"sysop"`
+	Location        string   `yaml:"location"`
+	Timeout         Duration `yaml:"timeout"`
+	Protocols       []string `yaml:"protocols"`        // Empty = NCP (no file transfer)
+	InitialStrategy string   `yaml:"initial_strategy"` // "wait" (default), "send_inq", "send_cr"
 }
 
 // LoggingConfig controls output verbosity and format
@@ -280,6 +281,10 @@ func (c *Config) Validate() error {
 	if c.Modem.BaudRate <= 0 {
 		return fmt.Errorf("modem.baud_rate must be positive")
 	}
+	// count and calls_per_operator are mutually exclusive
+	if c.Test.Count > 0 && c.Test.CallsPerOperator > 0 {
+		return fmt.Errorf("test.count and test.calls_per_operator are mutually exclusive; set only one")
+	}
 	// Require either count, calls_per_operator, or prefix to be set
 	if c.Test.Count <= 0 && c.Test.CallsPerOperator <= 0 && c.Test.Prefix == "" {
 		return fmt.Errorf("either test.count or test.calls_per_operator must be positive")
@@ -347,6 +352,10 @@ func (c *Config) validateMultiModem() error {
 		return fmt.Errorf("at least one modem must be enabled")
 	}
 
+	// count and calls_per_operator are mutually exclusive
+	if c.Test.Count > 0 && c.Test.CallsPerOperator > 0 {
+		return fmt.Errorf("test.count and test.calls_per_operator are mutually exclusive; set only one")
+	}
 	// Require either count, calls_per_operator, or prefix to be set
 	if c.Test.Count <= 0 && c.Test.CallsPerOperator <= 0 && c.Test.Prefix == "" {
 		return fmt.Errorf("either test.count or test.calls_per_operator must be positive")
@@ -486,9 +495,10 @@ func (c *Config) mergeModemConfig(defaults, override ModemConfig) ModemConfig {
 	return result
 }
 
-// ApplyCLIOverrides applies command-line flag values to the config
-// count: -1 means "not specified" (use config default), 0 means infinite, >0 is the count
-func (c *Config) ApplyCLIOverrides(device, phone string, count int, debug bool, csvFile string) {
+// ApplyCLIOverrides applies command-line flag values to the config.
+// count and perOperator use -1 as sentinel for "not specified" (use config default).
+// They are mutually exclusive (validated before this call).
+func (c *Config) ApplyCLIOverrides(device, phone string, count, perOperator int, debug bool, csvFile string) {
 	if device != "" {
 		c.Modem.Device = device
 	}
@@ -500,8 +510,11 @@ func (c *Config) ApplyCLIOverrides(device, phone string, count int, debug bool, 
 	}
 	if count >= 0 {
 		c.Test.Count = count // 0 = infinite
-		// Also clear calls_per_operator to ensure -count takes precedence
 		c.Test.CallsPerOperator = 0
+	}
+	if perOperator >= 0 {
+		c.Test.CallsPerOperator = perOperator
+		c.Test.Count = 0
 	}
 	if csvFile != "" {
 		c.Test.CSVFile = csvFile

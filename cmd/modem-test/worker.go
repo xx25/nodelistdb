@@ -469,6 +469,9 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 	conn := m.GetConn()
 	emsiCfg := emsi.DefaultConfig()
 	emsiCfg.Protocols = w.emsiConfig.Protocols
+	if w.emsiConfig.InitialStrategy != "" {
+		emsiCfg.InitialStrategy = w.emsiConfig.InitialStrategy
+	}
 	session := emsi.NewSessionWithInfoAndConfig(
 		conn,
 		w.emsiConfig.OurAddress,
