@@ -38,6 +38,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-sqlite3 v1.14.33 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect

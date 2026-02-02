@@ -175,6 +175,16 @@ func main() {
 		defer mysqlWriter.Close()
 	}
 
+	// Initialize SQLite results writer (optional)
+	sqliteWriter, err := NewSQLiteResultsWriter(cfg.SQLiteResults)
+	if err != nil {
+		log.Warn("SQLite results writer unavailable: %v", err)
+		sqliteWriter = &SQLiteResultsWriter{} // Use disabled writer
+	} else if sqliteWriter.IsEnabled() {
+		log.Info("SQLite results writer enabled: %s table=%s", cfg.SQLiteResults.Path, cfg.SQLiteResults.TableName)
+		defer sqliteWriter.Close()
+	}
+
 	// Prefix mode: fetch PSTN nodes from API and replace phone list
 	var nodeLookup map[string]*NodeTarget
 	var filteredNodes []NodeTarget
@@ -266,7 +276,7 @@ func main() {
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, nodeLookup, filteredNodes)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, nodeLookup, filteredNodes)
 		return
 	}
 
@@ -334,7 +344,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, filteredNodes)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, filteredNodes)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -412,7 +422,7 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, filteredNodes []NodeTarget) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	testCount := cfg.GetTotalTestCount()
@@ -631,7 +641,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 
 		// Write to CSV and databases if enabled
 		var rec *TestRecord
-		if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) {
+		if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) || (sqliteWriter != nil && sqliteWriter.IsEnabled()) {
 			rec = RecordFromTestResult(
 				i,
 				currentPhone, // Store original phone without operator prefix
@@ -666,6 +676,13 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		if mysqlWriter != nil && mysqlWriter.IsEnabled() && rec != nil {
 			if err := mysqlWriter.WriteRecord(rec); err != nil {
 				log.Error("Failed to write MySQL record: %v", err)
+			}
+		}
+
+		// Write to SQLite if enabled
+		if sqliteWriter != nil && sqliteWriter.IsEnabled() && rec != nil {
+			if err := sqliteWriter.WriteRecord(rec); err != nil {
+				log.Error("Failed to write SQLite record: %v", err)
 			}
 		}
 

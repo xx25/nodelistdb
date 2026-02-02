@@ -23,6 +23,7 @@ type Config struct {
 	AsteriskCDR     AsteriskCDRConfig     `yaml:"asterisk_cdr"`     // Asterisk CDR database (optional)
 	PostgresResults PostgresResultsConfig `yaml:"postgres_results"` // PostgreSQL results storage (optional)
 	MySQLResults    MySQLResultsConfig    `yaml:"mysql_results"`    // MySQL results storage (optional)
+	SQLiteResults   SQLiteResultsConfig   `yaml:"sqlite_results"`   // SQLite results storage (optional)
 	NodelistDB      NodelistDBConfig      `yaml:"nodelistdb"`       // NodelistDB API server (for -prefix mode)
 }
 
@@ -235,6 +236,10 @@ func DefaultConfig() *Config {
 			TableName: "modem_test_results",
 		},
 		MySQLResults: MySQLResultsConfig{
+			Enabled:   false,
+			TableName: "modem_test_results",
+		},
+		SQLiteResults: SQLiteResultsConfig{
 			Enabled:   false,
 			TableName: "modem_test_results",
 		},

@@ -12,7 +12,7 @@ import (
 )
 
 // runBatchModeMulti orchestrates batch testing with multiple modems.
-func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
+func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	testCount := cfg.GetTotalTestCount()
@@ -159,7 +159,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			asteriskCDR := result.Result.asteriskCDR
 
 			// Write CSV and databases
-			if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) {
+			if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) || (sqliteWriter != nil && sqliteWriter.IsEnabled()) {
 				rec := RecordFromTestResult(
 					result.TestNum,
 					result.Phone,
@@ -193,6 +193,12 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 				if mysqlWriter != nil && mysqlWriter.IsEnabled() {
 					if err := mysqlWriter.WriteRecord(rec); err != nil {
 						log.Error("Failed to write MySQL record: %v", err)
+					}
+				}
+
+				if sqliteWriter != nil && sqliteWriter.IsEnabled() {
+					if err := sqliteWriter.WriteRecord(rec); err != nil {
+						log.Error("Failed to write SQLite record: %v", err)
 					}
 				}
 			}
