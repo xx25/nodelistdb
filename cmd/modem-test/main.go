@@ -32,8 +32,9 @@ var (
 	prefix       = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
 	cmOnly       = flag.Bool("cm-only", false, "Only test CM (24/7) nodes (prefix mode only)")
 	perOperator  = flag.Int("per-operator", -1, "Calls per operator per phone (mutually exclusive with -count)")
-	retryCount   = flag.Int("retry", 20, "Number of retries for failed calls (0=disabled)")
+	retryCount    = flag.Int("retry", 20, "Number of retries for failed calls (0=disabled)")
 	retryDelayStr = flag.String("retry-delay", "5s", "Delay between retry attempts")
+	interDelayStr = flag.String("delay", "", "Delay between consecutive tests (default: config inter_delay or 5s)")
 )
 
 func main() {
@@ -109,6 +110,14 @@ func main() {
 		os.Exit(1)
 	}
 	cfg.Test.RetryDelay = Duration(retryDelay)
+	if *interDelayStr != "" {
+		interDelay, err := time.ParseDuration(*interDelayStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: invalid -delay value %q: %v\n", *interDelayStr, err)
+			os.Exit(1)
+		}
+		cfg.Test.InterDelay = Duration(interDelay)
+	}
 
 	// Create logger
 	log := NewTestLogger(cfg.Logging)
