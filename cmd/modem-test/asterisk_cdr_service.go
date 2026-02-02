@@ -73,6 +73,70 @@ func (cdr *AsteriskCDRData) RetryReason() string {
 	return ""
 }
 
+// q931Causes maps Q.850/Q.931 cause codes to human-readable descriptions.
+// Synced with Asterisk 22 include/asterisk/causes.h.
+var q931Causes = map[int]string{
+	0:   "Not defined",
+	1:   "Unallocated number",
+	2:   "No route to transit network",
+	3:   "No route to destination",
+	5:   "Misdialled trunk prefix",
+	6:   "Channel unacceptable",
+	7:   "Call awarded/delivered",
+	8:   "Pre-empted",
+	14:  "Number ported, not here",
+	16:  "Normal clearing",
+	17:  "User busy",
+	18:  "No user responding",
+	19:  "No answer",
+	20:  "Subscriber absent",
+	21:  "Call rejected",
+	22:  "Number changed",
+	23:  "Redirected to new destination",
+	26:  "Answered elsewhere",
+	27:  "Destination out of order",
+	28:  "Invalid number format",
+	29:  "Facility rejected",
+	30:  "Response to status enquiry",
+	31:  "Normal, unspecified",
+	34:  "No circuit/channel available",
+	38:  "Network out of order",
+	41:  "Temporary failure",
+	42:  "Switching equipment congestion",
+	43:  "Access info discarded",
+	44:  "Requested channel not available",
+	50:  "Facility not subscribed",
+	52:  "Outgoing calls barred",
+	54:  "Incoming calls barred",
+	57:  "Bearer capability not authorized",
+	58:  "Bearer capability not available",
+	65:  "Bearer capability not implemented",
+	66:  "Channel not implemented",
+	69:  "Facility not implemented",
+	81:  "Invalid call reference",
+	88:  "Incompatible destination",
+	95:  "Invalid message, unspecified",
+	96:  "Mandatory IE missing",
+	97:  "Message type nonexistent",
+	98:  "Wrong message",
+	99:  "IE nonexistent",
+	100: "Invalid IE contents",
+	101: "Wrong call state",
+	102: "Recovery on timer expiry",
+	103: "Mandatory IE length error",
+	111: "Protocol error",
+	127: "Interworking, unspecified",
+}
+
+// HangupCauseString returns a formatted string like "17 (User busy)".
+// Falls back to just the number if the code is unknown.
+func (cdr *AsteriskCDRData) HangupCauseString() string {
+	if desc, ok := q931Causes[cdr.HangupCause]; ok {
+		return fmt.Sprintf("%d (%s)", cdr.HangupCause, desc)
+	}
+	return fmt.Sprintf("%d", cdr.HangupCause)
+}
+
 // AsteriskCDRService manages Asterisk CDR database queries
 type AsteriskCDRService struct {
 	db         *sql.DB
