@@ -251,40 +251,6 @@ func (w *ModemWorker) Run(ctx context.Context) {
 	}
 }
 
-// lookupAndLogCDR does CDR lookup for debugging purposes (e.g., during BUSY retries)
-func (w *ModemWorker) lookupAndLogCDR(ctx context.Context, phone string, reason string) {
-	// AudioCodes CDR lookup
-	if w.cdrService != nil && w.cdrService.IsEnabled() {
-		lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		cdrData, err := w.cdrService.LookupByPhone(lookupCtx, phone, time.Now())
-		cancel()
-		if err != nil {
-			w.log.Warn("AudioCodes CDR lookup failed for %s (%s): %v", phone, reason, err)
-		} else if cdrData != nil {
-			w.log.Info("AudioCodes CDR (%s): term=%s codec=%s MOS=%.1f jitter=%dms",
-				reason, cdrData.TermReason, cdrData.Codec,
-				float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter)
-		} else {
-			w.log.Warn("AudioCodes CDR not found for %s (%s)", phone, reason)
-		}
-	}
-
-	// Asterisk CDR lookup
-	if w.asteriskCDRService != nil && w.asteriskCDRService.IsEnabled() {
-		lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		asteriskCDR, err := w.asteriskCDRService.LookupByPhone(lookupCtx, phone, time.Now())
-		cancel()
-		if err != nil {
-			w.log.Warn("Asterisk CDR lookup failed for %s (%s): %v", phone, reason, err)
-		} else if asteriskCDR != nil {
-			w.log.Info("Asterisk CDR (%s): disposition=%s peer=%s duration=%ds cause=%d src=%s early_media=%t",
-				reason, asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration,
-				asteriskCDR.HangupCause, asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
-		} else {
-			w.log.Warn("Asterisk CDR not found for %s (%s)", phone, reason)
-		}
-	}
-}
 
 // RetryAttemptCallback is called for each retry attempt before waiting
 type RetryAttemptCallback func(attempt int, dialTime time.Duration, reason string)

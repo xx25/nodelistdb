@@ -30,6 +30,7 @@ var (
 	interactive = flag.Bool("interactive", false, "Interactive AT command mode")
 	batch       = flag.Bool("batch", false, "Run batch test mode")
 	prefix      = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
+	cmOnly      = flag.Bool("cm-only", false, "Only test CM (24/7) nodes (prefix mode only)")
 )
 
 func main() {
@@ -165,6 +166,17 @@ func main() {
 
 		filtered := FilterByPrefix(allNodes, pfx)
 		log.Info("Filtered to %d nodes matching prefix %q", len(filtered), pfx)
+
+		if *cmOnly {
+			var cmNodes []NodeTarget
+			for _, n := range filtered {
+				if n.IsCM {
+					cmNodes = append(cmNodes, n)
+				}
+			}
+			log.Info("CM-only filter: %d of %d nodes are CM (24/7)", len(cmNodes), len(filtered))
+			filtered = cmNodes
+		}
 
 		if len(filtered) == 0 {
 			fmt.Fprintf(os.Stderr, "ERROR: No PSTN nodes found matching prefix %q\n", pfx)
