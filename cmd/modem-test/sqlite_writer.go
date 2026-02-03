@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS %s (
     modem_name              TEXT NOT NULL DEFAULT '',
     operator_name           TEXT NOT NULL DEFAULT '',
     operator_prefix         TEXT NOT NULL DEFAULT '',
+    node_address            TEXT NOT NULL DEFAULT '',
+    node_system_name        TEXT NOT NULL DEFAULT '',
+    node_location           TEXT NOT NULL DEFAULT '',
+    node_sysop              TEXT NOT NULL DEFAULT '',
     success                 INTEGER NOT NULL,
 
     -- Connection
@@ -164,6 +168,10 @@ func (w *SQLiteResultsWriter) WriteRecord(rec *TestRecord) error {
 		rec.ModemName,
 		rec.OperatorName,
 		rec.OperatorPrefix,
+		rec.NodeAddress,
+		rec.NodeSystemName,
+		rec.NodeLocation,
+		rec.NodeSysop,
 		rec.Success,
 		rec.DialTime.Seconds(),
 		rec.ConnectSpeed,
@@ -239,7 +247,8 @@ func (w *SQLiteResultsWriter) createTable(ctx context.Context) error {
 func (w *SQLiteResultsWriter) prepareStatement() error {
 	query := fmt.Sprintf(`
 		INSERT INTO %s (
-			timestamp, test_num, phone, modem_name, operator_name, operator_prefix, success,
+			timestamp, test_num, phone, modem_name, operator_name, operator_prefix,
+			node_address, node_system_name, node_location, node_sysop, success,
 			dial_time_seconds, connect_speed, connect_string, emsi_time_seconds, emsi_error,
 			remote_address, remote_system, remote_location, remote_sysop, remote_mailer,
 			tx_speed, rx_speed, protocol, compression, line_quality, rx_level, retrains, termination, stats_notes,
@@ -252,7 +261,7 @@ func (w *SQLiteResultsWriter) prepareStatement() error {
 			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?
+			?, ?, ?, ?, ?, ?, ?, ?, ?
 		)
 	`, w.tableName)
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -165,6 +166,10 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 					result.Phone,
 					result.OperatorName,
 					result.OperatorPrefix,
+					result.NodeAddress,
+					result.NodeSystemName,
+					result.NodeLocation,
+					result.NodeSysop,
 					result.Result.success,
 					result.Result.dialTime,
 					result.Result.connectSpeed,
@@ -317,8 +322,9 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			if nodeLookup != nil {
 				if target, ok := nodeLookup[phone]; ok {
 					job.nodeAddress = target.Address()
-					job.nodeSystemName = target.SystemName
-					job.nodeSysop = target.SysopName
+					job.nodeSystemName = strings.ReplaceAll(target.SystemName, "_", " ")
+					job.nodeLocation = strings.ReplaceAll(target.Location, "_", " ")
+					job.nodeSysop = strings.ReplaceAll(target.SysopName, "_", " ")
 				}
 			}
 			if !pool.SubmitJob(ctx, job) {

@@ -34,6 +34,12 @@ type TestRecord struct {
 	OperatorName   string // Friendly name (e.g., "Verizon", "VoIP-A")
 	OperatorPrefix string // Dial prefix used (e.g., "1#", "2#")
 
+	// Node info from API (known before call, available even on failure)
+	NodeAddress    string // FidoNet address from API (e.g., "2:5020/100")
+	NodeSystemName string // BBS name from API
+	NodeLocation   string // Location from API
+	NodeSysop      string // Sysop name from API
+
 	// Remote system info (from EMSI)
 	RemoteAddress  string
 	RemoteSystem   string
@@ -84,6 +90,10 @@ var csvHeader = []string{
 	"modem_name",
 	"operator_name",
 	"operator_prefix",
+	"node_address",
+	"node_system_name",
+	"node_location",
+	"node_sysop",
 	"success",
 	"dial_time_s",
 	"connect_speed",
@@ -207,6 +217,10 @@ func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 		rec.ModemName,
 		rec.OperatorName,
 		rec.OperatorPrefix,
+		rec.NodeAddress,
+		rec.NodeSystemName,
+		rec.NodeLocation,
+		rec.NodeSysop,
 		success,
 		fmt.Sprintf("%.1f", rec.DialTime.Seconds()),
 		fmt.Sprintf("%d", rec.ConnectSpeed),
@@ -269,6 +283,10 @@ func RecordFromTestResult(
 	phone string,
 	operatorName string,
 	operatorPrefix string,
+	nodeAddress string,
+	nodeSystemName string,
+	nodeLocation string,
+	nodeSysop string,
 	success bool,
 	dialTime time.Duration,
 	connectSpeed int,
@@ -286,6 +304,10 @@ func RecordFromTestResult(
 		Phone:          phone,
 		OperatorName:   operatorName,
 		OperatorPrefix: operatorPrefix,
+		NodeAddress:    nodeAddress,
+		NodeSystemName: nodeSystemName,
+		NodeLocation:   nodeLocation,
+		NodeSysop:      nodeSysop,
 		Success:        success,
 		DialTime:       dialTime,
 		ConnectSpeed:   connectSpeed,

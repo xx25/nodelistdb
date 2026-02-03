@@ -344,7 +344,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, filteredNodes)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, nodeLookup, filteredNodes)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -422,7 +422,7 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, filteredNodes []NodeTarget) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	testCount := cfg.GetTotalTestCount()
@@ -530,6 +530,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 
 		var currentPhone string
 		var currentOperator OperatorConfig
+		var currentNodeAddress, currentNodeSystemName, currentNodeLocation, currentNodeSysop string
 
 		if schedChan != nil {
 			// Prefix/schedule mode: consume pre-scheduled, time-aware jobs
@@ -540,6 +541,10 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			}
 			currentPhone = job.phone
 			currentOperator = OperatorConfig{Name: job.operatorName, Prefix: job.operatorPrefix}
+			currentNodeAddress = job.nodeAddress
+			currentNodeSystemName = job.nodeSystemName
+			currentNodeLocation = job.nodeLocation
+			currentNodeSysop = job.nodeSysop
 
 			log.PrintTestHeader(i, testCount)
 
@@ -591,6 +596,16 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				log.PrintTestHeader(i, 0)
 			} else {
 				log.PrintTestHeader(i, testCount)
+			}
+		}
+
+		// Look up node info from nodeLookup if available (non-schedule modes)
+		if currentNodeAddress == "" && nodeLookup != nil {
+			if target, ok := nodeLookup[currentPhone]; ok {
+				currentNodeAddress = target.Address()
+				currentNodeSystemName = strings.ReplaceAll(target.SystemName, "_", " ")
+				currentNodeLocation = strings.ReplaceAll(target.Location, "_", " ")
+				currentNodeSysop = strings.ReplaceAll(target.SysopName, "_", " ")
 			}
 		}
 
@@ -647,6 +662,10 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				currentPhone, // Store original phone without operator prefix
 				currentOperator.Name,
 				currentOperator.Prefix,
+				currentNodeAddress,
+				currentNodeSystemName,
+				currentNodeLocation,
+				currentNodeSysop,
 				result.success,
 				result.dialTime,
 				result.connectSpeed,

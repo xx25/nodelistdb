@@ -19,6 +19,10 @@ type WorkerResult struct {
 	Phone          string // Original phone number (without operator prefix)
 	OperatorName   string // Operator friendly name
 	OperatorPrefix string // Dial prefix used
+	NodeAddress    string // FidoNet address from API (e.g., "2:5020/100")
+	NodeSystemName string // BBS name from API
+	NodeLocation   string // Location from API
+	NodeSysop      string // Sysop name from API
 	TestNum        int
 	Result         testResult
 	Timestamp      time.Time
@@ -62,6 +66,7 @@ type phoneJob struct {
 	testNum        int
 	nodeAddress    string // FidoNet address, e.g., "2:5020/100" (empty if not from API)
 	nodeSystemName string // BBS name (empty if not from API)
+	nodeLocation   string // Location (empty if not from API)
 	nodeSysop      string // Sysop name (empty if not from API)
 }
 
@@ -207,6 +212,10 @@ func (w *ModemWorker) Run(ctx context.Context) {
 					Phone:          job.phone,
 					OperatorName:   job.operatorName,
 					OperatorPrefix: job.operatorPrefix,
+					NodeAddress:    job.nodeAddress,
+					NodeSystemName: job.nodeSystemName,
+					NodeLocation:   job.nodeLocation,
+					NodeSysop:      job.nodeSysop,
 					TestNum:        job.testNum,
 					Result:         retryResult,
 					Timestamp:      time.Now(),
@@ -230,6 +239,10 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				Phone:          job.phone, // Original phone without prefix
 				OperatorName:   job.operatorName,
 				OperatorPrefix: job.operatorPrefix,
+				NodeAddress:    job.nodeAddress,
+				NodeSystemName: job.nodeSystemName,
+				NodeLocation:   job.nodeLocation,
+				NodeSysop:      job.nodeSysop,
 				TestNum:        job.testNum,
 				Result:         result,
 				Timestamp:      time.Now(),

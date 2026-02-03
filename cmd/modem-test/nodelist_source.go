@@ -249,6 +249,7 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []Operator
 						testNum:        testNum,
 						nodeAddress:    n.Address(),
 						nodeSystemName: strings.ReplaceAll(n.SystemName, "_", " "),
+						nodeLocation:   strings.ReplaceAll(n.Location, "_", " "),
 						nodeSysop:      strings.ReplaceAll(n.SysopName, "_", " "),
 					}
 

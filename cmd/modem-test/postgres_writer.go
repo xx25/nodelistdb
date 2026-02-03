@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS %s (
     modem_name              VARCHAR(64) NOT NULL DEFAULT '',
     operator_name           VARCHAR(64) NOT NULL DEFAULT '',
     operator_prefix         VARCHAR(16) NOT NULL DEFAULT '',
+    node_address            VARCHAR(32) NOT NULL DEFAULT '',
+    node_system_name        VARCHAR(128) NOT NULL DEFAULT '',
+    node_location           VARCHAR(128) NOT NULL DEFAULT '',
+    node_sysop              VARCHAR(128) NOT NULL DEFAULT '',
     success                 BOOLEAN NOT NULL,
 
     -- Connection
@@ -166,6 +170,10 @@ func (w *PostgresResultsWriter) WriteRecord(rec *TestRecord) error {
 		rec.ModemName,
 		rec.OperatorName,
 		rec.OperatorPrefix,
+		rec.NodeAddress,
+		rec.NodeSystemName,
+		rec.NodeLocation,
+		rec.NodeSysop,
 		rec.Success,
 		rec.DialTime.Seconds(),
 		rec.ConnectSpeed,
@@ -242,7 +250,8 @@ func (w *PostgresResultsWriter) createTable(ctx context.Context) error {
 func (w *PostgresResultsWriter) prepareStatement() error {
 	query := fmt.Sprintf(`
 		INSERT INTO %s (
-			timestamp, test_num, phone, modem_name, operator_name, operator_prefix, success,
+			timestamp, test_num, phone, modem_name, operator_name, operator_prefix,
+			node_address, node_system_name, node_location, node_sysop, success,
 			dial_time_seconds, connect_speed, connect_string, emsi_time_seconds, emsi_error,
 			remote_address, remote_system, remote_location, remote_sysop, remote_mailer,
 			tx_speed, rx_speed, protocol, compression, line_quality, rx_level, retrains, termination, stats_notes,
@@ -255,7 +264,7 @@ func (w *PostgresResultsWriter) prepareStatement() error {
 			$11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
 			$21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
 			$31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-			$41, $42, $43, $44, $45
+			$41, $42, $43, $44, $45, $46, $47, $48, $49
 		)
 	`, w.tableName)
 
