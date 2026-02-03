@@ -341,6 +341,7 @@ type Operations interface {
 	GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error)
 	GetPSTNCMNodes(limit int) ([]PSTNNode, error)
 	GetPSTNNodes(limit int, zone int) ([]PSTNNode, error)
+	GetFileRequestNodes(limit int) ([]FileRequestNode, error)
 
 	// Utility operations (delegated to NodeOps())
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
@@ -488,6 +489,21 @@ type OnThisDayNode struct {
 	YearsActive   int       `json:"years_active"`   // Years from first to last appearance
 	StillActive   bool      `json:"still_active"`   // Whether still in latest nodelist
 	RawLine       string    `json:"raw_line"`       // Original nodelist line from first appearance
+}
+
+// FileRequestNode represents a node with file request capabilities (XA, XB, XC, XP, XR, XW, XX)
+// Used for File Request analytics reports based on FTS-5001 specification
+type FileRequestNode struct {
+	Zone            int       `json:"zone"`
+	Net             int       `json:"net"`
+	Node            int       `json:"node"`
+	SystemName      string    `json:"system_name"`
+	Location        string    `json:"location"`
+	SysopName       string    `json:"sysop_name"`
+	FileRequestFlag string    `json:"file_request_flag"` // XA, XB, XC, XP, XR, XW, or XX
+	NodelistDate    time.Time `json:"nodelist_date"`
+	NodeType        string    `json:"node_type"`
+	Flags           []string  `json:"flags"`
 }
 
 // Error messages for consistent error handling

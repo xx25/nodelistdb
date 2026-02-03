@@ -702,6 +702,81 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, er
 	return results, nil
 }
 
+// GetFileRequestNodes returns nodes from the latest nodelist that have file request flags (XA-XX)
+// Excludes Down/Hold nodes, coordinators (node=0), and conflict duplicates
+func (ao *AnalyticsOperations) GetFileRequestNodes(limit int) ([]FileRequestNode, error) {
+	ao.mu.RLock()
+	defer ao.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	}
+	if limit > MaxPSTNSearchLimit {
+		limit = MaxPSTNSearchLimit
+	}
+
+	conn := ao.db.Conn()
+
+	query := `
+		WITH latest_date AS (
+			SELECT MAX(nodelist_date) as max_date FROM nodes
+		)
+		SELECT
+			zone,
+			net,
+			node,
+			system_name,
+			location,
+			sysop_name,
+			arrayFirst(f -> f IN ('XA', 'XB', 'XC', 'XP', 'XR', 'XW', 'XX'), flags) as file_request_flag,
+			nodelist_date,
+			node_type,
+			flags
+		FROM nodes
+		WHERE nodelist_date = (SELECT max_date FROM latest_date)
+		  AND conflict_sequence = 0
+		  AND hasAny(flags, ['XA', 'XB', 'XC', 'XP', 'XR', 'XW', 'XX'])
+		  AND node != 0
+		  AND node_type NOT IN ('Down', 'Hold')
+		ORDER BY zone, net, node
+		LIMIT ?`
+
+	rows, err := conn.Query(query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query file request nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []FileRequestNode
+	for rows.Next() {
+		var n FileRequestNode
+		var flags []string
+		err := rows.Scan(
+			&n.Zone,
+			&n.Net,
+			&n.Node,
+			&n.SystemName,
+			&n.Location,
+			&n.SysopName,
+			&n.FileRequestFlag,
+			&n.NodelistDate,
+			&n.NodeType,
+			&flags,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan file request node row: %w", err)
+		}
+		n.Flags = flags
+		results = append(results, n)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating file request rows: %w", err)
+	}
+
+	return results, nil
+}
+
 // Close closes the analytics operations
 func (ao *AnalyticsOperations) Close() error {
 	ao.mu.Lock()

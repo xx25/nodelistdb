@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nodelistdb/internal/flags"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 )
@@ -642,6 +643,155 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 
 	if err := tmpl.Execute(w, data); err != nil {
 		log.Printf("[ERROR] PSTN Analytics: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+// FileRequestFlagCount holds count for a single flag (for ordered display)
+type FileRequestFlagCount struct {
+	Flag  string
+	Count int
+}
+
+// FileRequestZoneCount holds count for a single zone (for ordered display)
+type FileRequestZoneCount struct {
+	Zone  int
+	Count int
+}
+
+// FileRequestSummaryStats holds summary statistics for file request nodes
+type FileRequestSummaryStats struct {
+	TotalCount      int
+	FlagCounts      []FileRequestFlagCount // Ordered by flag name
+	ZoneCounts      []FileRequestZoneCount // Ordered by zone number
+	CapabilityStats struct {
+		BarkFileRequest    int
+		BarkUpdateRequest  int
+		WaZOOFileRequest   int
+		WaZOOUpdateRequest int
+	}
+}
+
+// computeFileRequestStats calculates summary statistics from file request nodes
+func computeFileRequestStats(nodes []storage.FileRequestNode) FileRequestSummaryStats {
+	stats := FileRequestSummaryStats{
+		TotalCount: len(nodes),
+	}
+
+	// Use maps for counting, then convert to ordered slices
+	flagCountMap := make(map[string]int)
+	zoneCountMap := make(map[int]int)
+
+	for _, n := range nodes {
+		flagCountMap[n.FileRequestFlag]++
+		zoneCountMap[n.Zone]++
+
+		// Calculate capability stats using existing flags package
+		if caps, ok := flags.GetFileRequestCapabilities(n.FileRequestFlag); ok {
+			if caps.BarkFileRequest {
+				stats.CapabilityStats.BarkFileRequest++
+			}
+			if caps.BarkUpdateRequest {
+				stats.CapabilityStats.BarkUpdateRequest++
+			}
+			if caps.WaZOOFileRequest {
+				stats.CapabilityStats.WaZOOFileRequest++
+			}
+			if caps.WaZOOUpdateRequest {
+				stats.CapabilityStats.WaZOOUpdateRequest++
+			}
+		}
+	}
+
+	// Convert flag counts to ordered slice (using flags.FileRequestFlagList order)
+	for _, flag := range flags.FileRequestFlagList {
+		if count, ok := flagCountMap[flag]; ok && count > 0 {
+			stats.FlagCounts = append(stats.FlagCounts, FileRequestFlagCount{Flag: flag, Count: count})
+		}
+	}
+
+	// Convert zone counts to ordered slice (sorted by zone number)
+	// First collect zones, then sort
+	var zones []int
+	for zone := range zoneCountMap {
+		zones = append(zones, zone)
+	}
+	// Sort zones (simple insertion sort for small number of zones)
+	for i := 1; i < len(zones); i++ {
+		for j := i; j > 0 && zones[j] < zones[j-1]; j-- {
+			zones[j], zones[j-1] = zones[j-1], zones[j]
+		}
+	}
+	for _, zone := range zones {
+		stats.ZoneCounts = append(stats.ZoneCounts, FileRequestZoneCount{Zone: zone, Count: zoneCountMap[zone]})
+	}
+
+	return stats
+}
+
+// getFileRequestCapabilities is a template-safe wrapper for flags.GetFileRequestCapabilities
+// Go templates require functions to return a single value or (value, error), not (value, bool)
+func getFileRequestCapabilities(flag string) flags.FileRequestCapabilities {
+	caps, _ := flags.GetFileRequestCapabilities(flag)
+	return caps
+}
+
+// FileRequestAnalyticsHandler shows nodes with file request capabilities (XA-XX)
+func (s *Server) FileRequestAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse limit parameter
+	query := r.URL.Query()
+	limit := 5000 // Default limit - high to capture all file request nodes
+	if limitStr := query.Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 10000 {
+			limit = parsed
+		}
+	}
+
+	// Fetch file request nodes
+	fileRequestNodes, err := s.storage.GetFileRequestNodes(limit)
+	var displayError error
+	if err != nil {
+		log.Printf("[ERROR] File Request Analytics: Error fetching nodes: %v", err)
+		fileRequestNodes = []storage.FileRequestNode{}
+		displayError = fmt.Errorf("Failed to fetch file request analytics data. Please try again later")
+	}
+
+	// Compute summary statistics
+	stats := computeFileRequestStats(fileRequestNodes)
+
+	// Build template data
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		FileRequestNodes []storage.FileRequestNode
+		Stats            FileRequestSummaryStats
+		CapabilityMatrix []string
+		GetCapabilities  func(string) flags.FileRequestCapabilities
+		Limit            int
+		Error            error
+	}{
+		Title:            "File Request Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		FileRequestNodes: fileRequestNodes,
+		Stats:            stats,
+		CapabilityMatrix: flags.FileRequestFlagList,
+		GetCapabilities:  getFileRequestCapabilities,
+		Limit:            limit,
+		Error:            displayError,
+	}
+
+	// Use file request analytics template
+	tmpl, exists := s.templates["filerequest_analytics"]
+	if !exists {
+		log.Printf("[ERROR] File Request Analytics: Template 'filerequest_analytics' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] File Request Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }

@@ -30,6 +30,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/vmodem", s.VModemAnalyticsHandler)
 	mux.HandleFunc("/analytics/ftp", s.FTPAnalyticsHandler)
 	mux.HandleFunc("/analytics/pstn", s.PSTNCMAnalyticsHandler)
+	mux.HandleFunc("/analytics/file-request", s.FileRequestAnalyticsHandler)
 	mux.HandleFunc("/analytics/software/binkp", s.BinkPSoftwareHandler)
 	mux.HandleFunc("/analytics/software/ifcico", s.IfcicoSoftwareHandler)
 	mux.HandleFunc("/analytics/geo-hosting", s.GeoHostingAnalyticsHandler)

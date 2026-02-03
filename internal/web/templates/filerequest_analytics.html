@@ -1,0 +1,159 @@
+{{template "base" .}}
+
+{{define "title"}}File Request Nodes{{end}}
+
+{{define "page_title"}}File Request Nodes (FREQ){{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">Nodes supporting file requests via Bark and WaZOO protocols (FTS-5001)</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+{{if .Error}}
+<div class="alert alert-danger">
+    <strong>Error:</strong> {{.Error}}
+</div>
+{{end}}
+
+{{if .FileRequestNodes}}
+<!-- Summary Statistics -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h3>{{.Stats.TotalCount}}</h3>
+        <p>Total FREQ Nodes</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.CapabilityStats.BarkFileRequest}}</h3>
+        <p>Bark File Request</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.CapabilityStats.WaZOOFileRequest}}</h3>
+        <p>WaZOO File Request</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.CapabilityStats.BarkUpdateRequest}}</h3>
+        <p>Bark Update Request</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.CapabilityStats.WaZOOUpdateRequest}}</h3>
+        <p>WaZOO Update Request</p>
+    </div>
+</div>
+
+<!-- Flag Distribution and Capability Matrix side by side -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+    <!-- Flag Counts -->
+    <div class="stats-box">
+        <h4>By Flag</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Flag</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range .Stats.FlagCounts}}
+                <tr><td><span class="badge badge-info">{{.Flag}}</span></td><td>{{.Count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Capability Matrix Reference -->
+    <div class="stats-box">
+        <h4>Capability Matrix (FTS-5001)</h4>
+        <table class="data-table" style="margin: 0; font-size: 0.85em;">
+            <thead>
+                <tr>
+                    <th>Flag</th>
+                    <th>Bark File</th>
+                    <th>Bark Update</th>
+                    <th>WaZOO File</th>
+                    <th>WaZOO Update</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .CapabilityMatrix}}
+                {{$caps := call $.GetCapabilities .}}
+                <tr>
+                    <td><span class="badge badge-info">{{.}}</span></td>
+                    <td>{{if $caps.BarkFileRequest}}<span style="color: #28a745;">&#10003;</span>{{else}}<span style="color: #999;">-</span>{{end}}</td>
+                    <td>{{if $caps.BarkUpdateRequest}}<span style="color: #28a745;">&#10003;</span>{{else}}<span style="color: #999;">-</span>{{end}}</td>
+                    <td>{{if $caps.WaZOOFileRequest}}<span style="color: #28a745;">&#10003;</span>{{else}}<span style="color: #999;">-</span>{{end}}</td>
+                    <td>{{if $caps.WaZOOUpdateRequest}}<span style="color: #28a745;">&#10003;</span>{{else}}<span style="color: #999;">-</span>{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Zone Distribution -->
+{{if .Stats.ZoneCounts}}
+<div class="stats-box" style="margin-bottom: 2rem;">
+    <h4>By Zone</h4>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        {{range .Stats.ZoneCounts}}
+        <div style="background: #f0f0f0; padding: 0.5rem 1rem; border-radius: 4px;">
+            <strong>Zone {{.Zone}}:</strong> {{.Count}}
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+<!-- Main Node Table -->
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">System Name</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="string">Sysop</th>
+                <th data-sortable data-type="string">Flag</th>
+                <th>Capabilities</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .FileRequestNodes}}
+            <tr>
+                <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}">
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                        {{.Zone}}:{{.Net}}/{{.Node}}
+                    </a>
+                </td>
+                <td>{{replaceUnderscores .SystemName}}</td>
+                <td>{{replaceUnderscores .Location}}</td>
+                <td>{{replaceUnderscores .SysopName}}</td>
+                <td><span class="badge badge-success">{{.FileRequestFlag}}</span></td>
+                <td>
+                    {{$caps := call $.GetCapabilities .FileRequestFlag}}
+                    {{if $caps.BarkFileRequest}}<span class="badge badge-info" title="Bark File Request">BF</span> {{end}}
+                    {{if $caps.BarkUpdateRequest}}<span class="badge badge-info" title="Bark Update Request">BU</span> {{end}}
+                    {{if $caps.WaZOOFileRequest}}<span class="badge badge-info" title="WaZOO File Request">WF</span> {{end}}
+                    {{if $caps.WaZOOUpdateRequest}}<span class="badge badge-info" title="WaZOO Update Request">WU</span> {{end}}
+                </td>
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>About File Request Flags:</strong> These flags (XA, XB, XC, XP, XR, XW, XX) indicate a node's file request (FREQ) capabilities using Bark and WaZOO protocols as defined in FTS-5001.</p>
+    <p><strong>Bark Protocol:</strong> The original FidoNet file request protocol supporting file and update requests.</p>
+    <p><strong>WaZOO Protocol:</strong> Extended protocol with improved file request capabilities, used by modern mailers.</p>
+    <p><strong>Capability Badges:</strong> BF = Bark File, BU = Bark Update, WF = WaZOO File, WU = WaZOO Update.</p>
+    <p><strong>XA (Full Support):</strong> Nodes with XA flag support all file/update request types via both Bark and WaZOO protocols.</p>
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>No file request nodes found.</strong><br>
+    No nodes with file request flags (XA, XB, XC, XP, XR, XW, XX) were found in the latest nodelist.
+</div>
+{{end}}
+{{end}}
