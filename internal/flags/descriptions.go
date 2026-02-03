@@ -2,7 +2,7 @@ package flags
 
 // FlagInfo contains metadata about flag types
 type FlagInfo struct {
-	Category    string `json:"category"`    // modem, internet, capability, schedule, user
+	Category    string `json:"category"`    // modem, internet, capability, filerequest, schedule, user
 	HasValue    bool   `json:"has_value"`   // whether flag takes a parameter
 	Description string `json:"description"` // human-readable description
 }
@@ -95,14 +95,17 @@ func GetFlagDescriptions() map[string]FlagInfo {
 		"CM": {Category: "capability", HasValue: false, Description: "Continuous Mail"},
 		"MO": {Category: "capability", HasValue: false, Description: "Mail Only"},
 		"LO": {Category: "capability", HasValue: false, Description: "Local Only"},
-		"XA": {Category: "capability", HasValue: false, Description: "Extended addressing"},
-		"XB": {Category: "capability", HasValue: false, Description: "Bark requests"},
-		"XC": {Category: "capability", HasValue: false, Description: "Compressed mail"},
-		"XP": {Category: "capability", HasValue: false, Description: "Extended protocol"},
-		"XR": {Category: "capability", HasValue: false, Description: "Accepts file requests"},
-		"XW": {Category: "capability", HasValue: false, Description: "X.75 windowing"},
-		"XX": {Category: "capability", HasValue: false, Description: "No file/update requests"},
 		"MN": {Category: "capability", HasValue: false, Description: "No compression supported"},
+
+		// File/Update Request Flags (FTS-5001 Section 5.4)
+		// These indicate file request capabilities via Bark and WaZOO protocols
+		"XA": {Category: "filerequest", HasValue: false, Description: "Supports Bark and WaZOO file/update requests"},
+		"XB": {Category: "filerequest", HasValue: false, Description: "Supports Bark file/update and WaZOO file requests"},
+		"XC": {Category: "filerequest", HasValue: false, Description: "Supports Bark file and WaZOO file/update requests"},
+		"XP": {Category: "filerequest", HasValue: false, Description: "Supports Bark file/update requests only"},
+		"XR": {Category: "filerequest", HasValue: false, Description: "Supports Bark file and WaZOO file requests"},
+		"XW": {Category: "filerequest", HasValue: false, Description: "Supports WaZOO file requests only"},
+		"XX": {Category: "filerequest", HasValue: false, Description: "Supports WaZOO file/update requests only"},
 
 		// Schedule flags
 		"U":  {Category: "schedule", HasValue: true, Description: "Availability"},
