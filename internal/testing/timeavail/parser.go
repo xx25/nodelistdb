@@ -69,6 +69,18 @@ func (p *Parser) ParseNodeFlags(flags []string, zone int, phoneNumber string) (*
 		}
 	}
 
+	// Apply ZMH as default for non-CM PSTN nodes without explicit time windows.
+	// Per FidoNet standards (FRL-1017), nodes without CM and without Txx/#nn flags
+	// default to ZMH-only operation for PSTN calls.
+	// ICM nodes follow this rule for PSTN (ICM only affects IP availability).
+	// IP-only nodes (no phone number) don't need ZMH since it's a PSTN concept.
+	if !availability.IsCM && availability.HasPSTN && len(timWindows) == 0 {
+		if zmhWindow := GetZMHWindow(zone); zmhWindow != nil {
+			timWindows = append(timWindows, *zmhWindow)
+			availability.IsDefaultZMH = true
+		}
+	}
+
 	if len(timWindows) > 0 {
 		availability.Windows = OptimizeWindows(timWindows)
 	}
@@ -159,5 +171,10 @@ func FormatAvailability(availability *NodeAvailability) string {
 		windowStrs = append(windowStrs, FormatTimeWindow(window))
 	}
 
-	return strings.Join(windowStrs, ", ")
+	result := strings.Join(windowStrs, ", ")
+	if availability.IsDefaultZMH {
+		result += " (default ZMH)"
+	}
+
+	return result
 }

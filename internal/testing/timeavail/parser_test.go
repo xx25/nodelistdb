@@ -273,17 +273,19 @@ func TestWindowMerger(t *testing.T) {
 
 func TestZMHDefaults(t *testing.T) {
 	tests := []struct {
-		zone      int
-		wantStart int
-		wantEnd   int
+		zone        int
+		wantStart   int
+		wantStartM  int // minute
+		wantEnd     int
+		wantEndM    int // minute
 	}{
-		{zone: 1, wantStart: 9, wantEnd: 10},
-		{zone: 2, wantStart: 2, wantEnd: 3},
-		{zone: 3, wantStart: 18, wantEnd: 19},
-		{zone: 4, wantStart: 8, wantEnd: 9},
-		{zone: 5, wantStart: 2, wantEnd: 3},
-		{zone: 6, wantStart: 22, wantEnd: 23},
-		{zone: 999, wantStart: 2, wantEnd: 3}, // Default for unknown zone
+		{zone: 1, wantStart: 9, wantStartM: 0, wantEnd: 10, wantEndM: 0},
+		{zone: 2, wantStart: 2, wantStartM: 30, wantEnd: 3, wantEndM: 30}, // 02:30-03:30 UTC
+		{zone: 3, wantStart: 18, wantStartM: 0, wantEnd: 19, wantEndM: 0},
+		{zone: 4, wantStart: 8, wantStartM: 0, wantEnd: 9, wantEndM: 0},
+		{zone: 5, wantStart: 2, wantStartM: 30, wantEnd: 3, wantEndM: 30}, // Same as Zone 2
+		{zone: 6, wantStart: 22, wantStartM: 0, wantEnd: 23, wantEndM: 0},
+		{zone: 999, wantStart: 2, wantStartM: 30, wantEnd: 3, wantEndM: 30}, // Default = Zone 2
 	}
 
 	for _, tt := range tests {
@@ -295,8 +297,14 @@ func TestZMHDefaults(t *testing.T) {
 			if window.StartUTC.Hour() != tt.wantStart {
 				t.Errorf("Start hour = %d, want %d", window.StartUTC.Hour(), tt.wantStart)
 			}
+			if window.StartUTC.Minute() != tt.wantStartM {
+				t.Errorf("Start minute = %d, want %d", window.StartUTC.Minute(), tt.wantStartM)
+			}
 			if window.EndUTC.Hour() != tt.wantEnd {
 				t.Errorf("End hour = %d, want %d", window.EndUTC.Hour(), tt.wantEnd)
+			}
+			if window.EndUTC.Minute() != tt.wantEndM {
+				t.Errorf("End minute = %d, want %d", window.EndUTC.Minute(), tt.wantEndM)
 			}
 			if window.Source != SourceZMH {
 				t.Errorf("Source = %s, want %s", window.Source, SourceZMH)
@@ -336,6 +344,122 @@ func TestParseNumberFlag(t *testing.T) {
 				} else if window.StartUTC.Hour() != tt.wantHour {
 					t.Errorf("Start hour = %d, want %d", window.StartUTC.Hour(), tt.wantHour)
 				}
+			}
+		})
+	}
+}
+
+func TestZMHDefaultBehavior(t *testing.T) {
+	// Test that PSTN nodes without CM and without time flags get ZMH as default
+	// Per FidoNet standards (FRL-1017)
+	tests := []struct {
+		name          string
+		flags         []string
+		zone          int
+		phoneNumber   string
+		expectZMH     bool
+		expectDefault bool // IsDefaultZMH flag
+		windowCount   int
+	}{
+		{
+			name:          "PSTN node without flags - should get ZMH default",
+			flags:         []string{},
+			zone:          2,
+			phoneNumber:   "+1234567890",
+			expectZMH:     true,
+			expectDefault: true,
+			windowCount:   1,
+		},
+		{
+			name:          "PSTN node with only modem flags - should get ZMH default",
+			flags:         []string{"V34", "V42B"},
+			zone:          2,
+			phoneNumber:   "+1234567890",
+			expectZMH:     true,
+			expectDefault: true,
+			windowCount:   1,
+		},
+		{
+			name:          "IP-only node without flags - no ZMH needed",
+			flags:         []string{"IBN"},
+			zone:          2,
+			phoneNumber:   "",
+			expectZMH:     false,
+			expectDefault: false,
+			windowCount:   0,
+		},
+		{
+			name:          "ICM node without phone - IP 24/7, no PSTN",
+			flags:         []string{"ICM", "IBN"},
+			zone:          2,
+			phoneNumber:   "",
+			expectZMH:     false,
+			expectDefault: false,
+			windowCount:   0,
+		},
+		{
+			name:          "ICM dual-capable node - PSTN gets ZMH default",
+			flags:         []string{"ICM", "IBN"},
+			zone:          2,
+			phoneNumber:   "+1234567890",
+			expectZMH:     true,
+			expectDefault: true,
+			windowCount:   1,
+		},
+		{
+			name:          "CM node - always available, no ZMH needed",
+			flags:         []string{"CM"},
+			zone:          2,
+			phoneNumber:   "+1234567890",
+			expectZMH:     false,
+			expectDefault: false,
+			windowCount:   0,
+		},
+		{
+			name:          "Node with Txy flag - uses that window, not ZMH default",
+			flags:         []string{"TA"},
+			zone:          2,
+			phoneNumber:   "+1234567890",
+			expectZMH:     false,
+			expectDefault: false,
+			windowCount:   1,
+		},
+		{
+			name:          "Node with explicit ZMH flag - not a default",
+			flags:         []string{"ZMH"},
+			zone:          2,
+			phoneNumber:   "+1234567890",
+			expectZMH:     true,
+			expectDefault: false, // Explicit ZMH, not default
+			windowCount:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			availability, err := ParseAvailability(tt.flags, tt.zone, tt.phoneNumber)
+			if err != nil {
+				t.Fatalf("ParseAvailability() error = %v", err)
+			}
+
+			if len(availability.Windows) != tt.windowCount {
+				t.Errorf("Windows count = %d, want %d", len(availability.Windows), tt.windowCount)
+			}
+
+			if availability.IsDefaultZMH != tt.expectDefault {
+				t.Errorf("IsDefaultZMH = %v, want %v", availability.IsDefaultZMH, tt.expectDefault)
+			}
+
+			// Check if ZMH window is present
+			hasZMH := false
+			for _, w := range availability.Windows {
+				if w.Source == SourceZMH {
+					hasZMH = true
+					break
+				}
+			}
+			if hasZMH != tt.expectZMH {
+				t.Errorf("Has ZMH window = %v, want %v", hasZMH, tt.expectZMH)
 			}
 		})
 	}

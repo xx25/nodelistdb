@@ -521,21 +521,18 @@ func (m *ModemQueueOperations) scanQueueEntries(rows *sql.Rows) ([]ModemQueueEnt
 	return entries, nil
 }
 
-// isCallableNow checks if a node is callable at the current time
+// isCallableNow checks if a node is callable at the current time.
+// This function is used by the modem queue which is PSTN-only.
 func isCallableNow(isCM bool, timeFlags []string, zone uint16, now time.Time) bool {
 	// CM nodes are always callable
 	if isCM {
 		return true
 	}
 
-	// If no time flags, assume node follows ZMH - caller should check zone-specific hours
-	// For simplicity, default to callable (daemon can filter further)
-	if len(timeFlags) == 0 {
-		return true
-	}
-
-	// Parse flags and compute availability using timeavail package
-	avail, err := timeavail.ParseAvailability(timeFlags, int(zone), "")
+	// Parse flags and compute availability using timeavail package.
+	// Pass a dummy phone number to indicate this is a PSTN node (modem queue is PSTN-only).
+	// Per FidoNet standards (FRL-1017), non-CM nodes without time flags default to ZMH.
+	avail, err := timeavail.ParseAvailability(timeFlags, int(zone), "PSTN")
 	if err != nil {
 		// If parsing fails, assume callable
 		return true

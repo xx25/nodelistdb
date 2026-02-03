@@ -25,6 +25,7 @@ type NodeAvailability struct {
 	Windows      []TimeWindow
 	IsCM         bool
 	IsICM        bool
+	IsDefaultZMH bool // True if ZMH was applied as default (no CM, no explicit time flags)
 	HasPSTN      bool
 	PhoneNumber  string
 	TimeZone     *time.Location
@@ -53,10 +54,12 @@ func (na *NodeAvailability) IsCallableNow(now time.Time) bool {
 			windowStart := window.StartUTC.In(localTime.Location()).Format("15:04")
 			windowEnd := window.EndUTC.In(localTime.Location()).Format("15:04")
 
-			if windowStart <= currentTime && currentTime <= windowEnd {
+			// Use exclusive end time (half-open interval) for consistency with scheduler.go
+			if windowStart <= currentTime && currentTime < windowEnd {
 				return true
 			}
-			if windowStart > windowEnd && (currentTime >= windowStart || currentTime <= windowEnd) {
+			// Handle overnight windows (end time wraps to next day)
+			if windowStart > windowEnd && (currentTime >= windowStart || currentTime < windowEnd) {
 				return true
 			}
 		}
