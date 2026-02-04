@@ -29,6 +29,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/telnet", s.TelnetAnalyticsHandler)
 	mux.HandleFunc("/analytics/vmodem", s.VModemAnalyticsHandler)
 	mux.HandleFunc("/analytics/ftp", s.FTPAnalyticsHandler)
+	mux.HandleFunc("/analytics/aka-mismatch", s.AKAMismatchAnalyticsHandler)
 	mux.HandleFunc("/analytics/pstn", s.PSTNCMAnalyticsHandler)
 	mux.HandleFunc("/analytics/file-request", s.FileRequestAnalyticsHandler)
 	mux.HandleFunc("/analytics/software/binkp", s.BinkPSoftwareHandler)

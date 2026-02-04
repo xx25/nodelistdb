@@ -42,6 +42,32 @@ func containsFormatVerb(s string) bool {
 		strings.Contains(s, "%v") || strings.Contains(s, "%f")
 }
 
+// AKAMismatchPageConfig holds page-specific configuration for AKA mismatch analytics pages.
+// Used for showing nodes where announced AKA doesn't match expected nodelist address.
+type AKAMismatchPageConfig struct {
+	PageTitle       string        // e.g., "Nodes with AKA Mismatch"
+	PageSubtitle    template.HTML // HTML subtitle displayed below page title
+	StatsHeading    string        // e.g., "AKA Mismatch" (used in "Found X {StatsHeading} Nodes")
+	InfoText        []string      // Info paragraphs (can use %d for days substitution)
+	EmptyStateTitle string        // Title when no results found
+	EmptyStateDesc  string        // Description when no results found
+}
+
+// processInfoText converts InfoText strings to template.HTML, substituting %d with days.
+func (c *AKAMismatchPageConfig) processInfoText(days int) []template.HTML {
+	result := make([]template.HTML, len(c.InfoText))
+	for i, text := range c.InfoText {
+		var processed string
+		if containsFormatVerb(text) {
+			processed = fmt.Sprintf(text, days)
+		} else {
+			processed = text
+		}
+		result[i] = template.HTML(processed)
+	}
+	return result
+}
+
 // GeoPageConfig holds page-specific configuration for geo-hosting analytics pages.
 // Used for country and provider node listing pages.
 // This enables configuration-driven rendering with a single unified template.

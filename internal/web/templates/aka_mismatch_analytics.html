@@ -1,0 +1,104 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+<script src="/static/tooltip.js"></script>
+{{end}}
+
+{{define "content"}}
+{{template "analytics_filters" .}}
+{{template "error_display" .}}
+
+{{if .MismatchNodes}}
+<div class="stats-box">
+    <h3>Found {{len .MismatchNodes}} {{.Config.StatsHeading}} Nodes</h3>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Expected Address</th>
+                <th data-sortable data-type="string">Hostname</th>
+                <th data-sortable data-type="string">Protocol</th>
+                <th>Announced AKAs</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .MismatchNodes}}
+            <tr>
+                {{/* Expected Address */}}
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                        <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
+                    </a>
+                </td>
+
+                {{/* Hostname */}}
+                {{template "hostname_cell_simple" .}}
+
+                {{/* Protocol with mismatch indicator */}}
+                <td>
+                    {{if and .BinkPTested .BinkPSuccess}}
+                        <span class="badge badge-warning">BinkP</span>
+                    {{end}}
+                    {{if and .IfcicoTested .IfcicoSuccess}}
+                        <span class="badge badge-warning">IFCICO</span>
+                    {{end}}
+                </td>
+
+                {{/* Announced AKAs */}}
+                <td>
+                    {{if and .BinkPSuccess (gt (len .BinkPAddresses) 0)}}
+                        <div class="aka-list">
+                            <small class="text-muted">BinkP:</small>
+                            {{range .BinkPAddresses}}
+                                <span class="badge badge-secondary">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                    {{if and .IfcicoSuccess (gt (len .IfcicoAddresses) 0)}}
+                        <div class="aka-list">
+                            <small class="text-muted">IFCICO:</small>
+                            {{range .IfcicoAddresses}}
+                                <span class="badge badge-secondary">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                    {{if and (not (and .BinkPSuccess (gt (len .BinkPAddresses) 0))) (not (and .IfcicoSuccess (gt (len .IfcicoAddresses) 0)))}}
+                        <span class="text-muted">No AKAs received</span>
+                    {{end}}
+                </td>
+
+                {{template "location_cell" .}}
+                {{template "timestamp_cell" .}}
+                {{template "action_buttons_cell" .}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    {{range .ProcessedInfo}}
+    <p>{{.}}</p>
+    {{end}}
+    <p><strong>Tip:</strong> Click on a node address to view its full test history and details, including all announced AKAs over time.</p>
+</div>
+
+{{else}}
+<div class="alert alert-success">
+    <strong>{{.Config.EmptyStateTitle}}</strong><br>
+    {{.Config.EmptyStateDesc}}
+</div>
+{{end}}
+{{end}}

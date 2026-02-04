@@ -549,6 +549,78 @@ func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderProtocolAnalytics(w, r, config, s.storage.GetFTPEnabledNodes)
 }
 
+// akaMismatchAnalyticsData holds template data for AKA mismatch analytics pages
+type akaMismatchAnalyticsData struct {
+	Title            string
+	ActivePage       string
+	Version          string
+	MismatchNodes    []storage.NodeTestResult
+	Days             int
+	Limit            int
+	IncludeZeroNodes bool
+	Error            error
+	Config           AKAMismatchPageConfig
+	ProcessedInfo    []template.HTML
+}
+
+// AKAMismatchAnalyticsHandler shows nodes with AKA address mismatches
+func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	config := AKAMismatchPageConfig{
+		PageTitle:    "Nodes with AKA Mismatch",
+		PageSubtitle: template.HTML(`<p class="subtitle">Nodes where the announced AKA address doesn't match the expected nodelist address</p>`),
+		StatsHeading: "AKA Mismatch",
+		InfoText: []string{
+			`<strong>What is an AKA mismatch?</strong> During BinkP or IFCICO handshakes, nodes announce their addresses (AKAs). An AKA mismatch occurs when the expected nodelist address (zone:net/node) is not found in the list of addresses the node announces.`,
+			`<strong>Common causes:</strong> Misconfigured mailer software, outdated address lists, node address changes, or AKA consolidation where a node responds for multiple addresses.`,
+			`<strong>Note:</strong> This report shows nodes that were operational (responded successfully) but announced different addresses than expected over the last %d days.`,
+		},
+		EmptyStateTitle: "No AKA mismatches found for the selected period.",
+		EmptyStateDesc:  "This means all operational nodes announced their expected addresses correctly, or no nodes met the criteria during this period.",
+	}
+
+	// Parse common parameters
+	params := parseAnalyticsParams(r)
+
+	// Fetch mismatch nodes
+	mismatchNodes, err := s.storage.GetAKAMismatchNodes(params.Limit, params.Days, params.IncludeZeroNodes)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] AKA Mismatch Analytics: Error fetching nodes: %v", err)
+		mismatchNodes = []storage.NodeTestResult{}
+		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
+	} else if params.ValidationError != "" {
+		displayError = fmt.Errorf("%s", params.ValidationError)
+	}
+
+	// Build template data
+	data := akaMismatchAnalyticsData{
+		Title:            config.PageTitle,
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		MismatchNodes:    mismatchNodes,
+		Days:             params.Days,
+		Limit:            params.Limit,
+		IncludeZeroNodes: params.IncludeZeroNodes,
+		Error:            displayError,
+		Config:           config,
+		ProcessedInfo:    config.processInfoText(params.Days),
+	}
+
+	// Use AKA mismatch analytics template
+	tmpl, exists := s.templates["aka_mismatch_analytics"]
+	if !exists {
+		log.Printf("[ERROR] AKA Mismatch Analytics: Template 'aka_mismatch_analytics' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] AKA Mismatch Analytics: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // PSTNSummaryStats holds summary statistics for PSTN nodes
 type PSTNSummaryStats struct {
 	TotalCount      int

@@ -1308,3 +1308,17 @@ table a:hover {
     right: 0;
     margin-left: 0;
 }
+
+/* AKA Mismatch list styling */
+.aka-list {
+    margin-bottom: 0.25rem;
+}
+
+.aka-list:last-child {
+    margin-bottom: 0;
+}
+
+.aka-list .badge {
+    margin-right: 0.25rem;
+    margin-bottom: 0.125rem;
+}

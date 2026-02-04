@@ -16,6 +16,7 @@ type TestOperationsRefactored struct {
 	ipv6Ops            *IPv6QueryOperations
 	softwareOps        *SoftwareAnalyticsOperations
 	geoOps             *GeoAnalyticsOperations
+	akaMismatchOps     *AKAMismatchOperations
 }
 
 // NewTestOperationsRefactored creates a new refactored TestOperations instance
@@ -33,6 +34,7 @@ func NewTestOperationsRefactored(db database.DatabaseInterface, queryBuilder Que
 		ipv6Ops:            NewIPv6QueryOperations(db, testQueryBuilder, resultParser),
 		softwareOps:        NewSoftwareAnalyticsOperations(db),
 		geoOps:             NewGeoAnalyticsOperations(db),
+		akaMismatchOps:     NewAKAMismatchOperations(db, testQueryBuilder, resultParser),
 	}
 }
 
@@ -156,4 +158,11 @@ func (to *TestOperationsRefactored) GetPureIPv6OnlyNodes(limit int, days int, in
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes
 func (to *TestOperationsRefactored) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
 	return to.ipv6Ops.GetIPv6WeeklyNews(limit, includeZeroNodes)
+}
+
+// ===== AKA Mismatch Operations (delegated to AKAMismatchOperations) =====
+
+// GetAKAMismatchNodes returns nodes where announced AKA doesn't match expected nodelist address
+func (to *TestOperationsRefactored) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return to.akaMismatchOps.GetAKAMismatchNodes(limit, days, includeZeroNodes)
 }

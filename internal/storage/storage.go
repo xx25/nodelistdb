@@ -241,6 +241,10 @@ func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool)
 	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes)
 }
 
+func (s *Storage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	return s.testOperations.GetAKAMismatchNodes(limit, days, includeZeroNodes)
+}
+
 func (s *Storage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
 	return s.testOperations.GetBinkPSoftwareDistribution(days)
 }

@@ -331,6 +331,7 @@ type Operations interface {
 	GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error)
 	GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error)
 	GetBinkdDetailedStats(days int) (*SoftwareDistribution, error)
