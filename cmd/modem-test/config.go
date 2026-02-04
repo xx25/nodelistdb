@@ -199,7 +199,7 @@ func DefaultConfig() *Config {
 			OperatorCache: OperatorCacheConfig{
 				Enabled: true, // Enabled by default when multiple operators configured
 				Path:    "",   // Default: ~/.modem-test/operator_cache
-				TTL:     Duration(30 * 24 * time.Hour), // 30 days
+				TTL:     Duration(360 * 24 * time.Hour), // 360 days
 			},
 		},
 		EMSI: EMSIConfig{

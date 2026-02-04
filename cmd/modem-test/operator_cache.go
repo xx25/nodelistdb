@@ -20,7 +20,7 @@ import (
 type OperatorCacheConfig struct {
 	Enabled bool     `yaml:"enabled"` // Enable operator caching (default: true when multiple operators)
 	Path    string   `yaml:"path"`    // Cache directory path (default: ~/.modem-test/operator_cache)
-	TTL     Duration `yaml:"ttl"`     // Cache entry TTL (default: 720h = 30 days)
+	TTL     Duration `yaml:"ttl"`     // Cache entry TTL (default: 8640h = 360 days)
 }
 
 // CachedOperator stores the cached operator information for a phone number.
@@ -85,7 +85,7 @@ func NewOperatorCache(cfg OperatorCacheConfig, log *TestLogger) (*OperatorCache,
 	// Determine TTL
 	ttl := cfg.TTL.Duration()
 	if ttl == 0 {
-		ttl = 30 * 24 * time.Hour // Default: 30 days
+		ttl = 360 * 24 * time.Hour // Default: 360 days
 	}
 
 	cache := &OperatorCache{
