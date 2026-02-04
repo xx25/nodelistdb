@@ -387,14 +387,18 @@ func (s *Session) ValidateAddress(expectedAddress string) bool {
 func normalizeAddress(addr string) string {
 	// Remove leading/trailing spaces
 	addr = strings.TrimSpace(addr)
-	
+
 	// Convert to lowercase
 	addr = strings.ToLower(addr)
-	
+
 	// Remove @domain if present (e.g., @fidonet)
 	if idx := strings.Index(addr, "@"); idx != -1 {
 		addr = addr[:idx]
 	}
-	
+
+	// Remove .0 point suffix (point 0 is implicit)
+	// e.g., 2:222/0.0 -> 2:222/0
+	addr = strings.TrimSuffix(addr, ".0")
+
 	return addr
 }

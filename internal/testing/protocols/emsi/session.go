@@ -943,6 +943,10 @@ func normalizeAddress(addr string) string {
 		addr = addr[:idx]
 	}
 
+	// Remove .0 point suffix (point 0 is implicit)
+	// e.g., 2:222/0.0 -> 2:222/0
+	addr = strings.TrimSuffix(addr, ".0")
+
 	return addr
 }
 // formatResponsePreview formats response data for error messages.
