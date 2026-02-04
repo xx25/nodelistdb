@@ -27,9 +27,13 @@ type Config struct {
 	NodelistDB      NodelistDBConfig      `yaml:"nodelistdb"`       // NodelistDB API server (for -prefix mode)
 }
 
-// NodelistDBConfig contains API connection settings for fetching PSTN nodes.
+// NodelistDBConfig contains API connection settings for fetching PSTN nodes
+// and optionally submitting test results.
 type NodelistDBConfig struct {
-	URL string `yaml:"url"` // API server URL, e.g., "http://localhost:8080"
+	URL       string `yaml:"url"`        // API server URL, e.g., "http://localhost:8080"
+	APIKey    string `yaml:"api_key"`    // API key for result submission (Bearer token)
+	Submit    bool   `yaml:"submit"`     // Enable result submission to server (default: false)
+	BatchSize int    `yaml:"batch_size"` // Number of results to batch before sending (default: 10)
 }
 
 // ModemInstanceConfig extends ModemConfig with instance-specific fields
@@ -78,32 +82,20 @@ type ModemConfig struct {
 	// StatsPagination enables handling of paginated stats output (e.g., MT5634ZBA with ATI11)
 	// When true, sends space to continue when "Press any key" prompt is detected
 	StatsPagination bool `yaml:"stats_pagination"`
-
-	// BusyRetryCount is the number of times to retry dialing when BUSY is received.
-	// Set to 0 to disable retries. Default is 0 (no retries).
-	// When enabled, the modem will keep retrying the same number with the same operator
-	// until a non-BUSY result is received or the retry count is exhausted.
-	BusyRetryCount int `yaml:"busy_retry_count"`
-
-	// BusyRetryDelay is the delay between retry attempts on BUSY (default: 5s)
-	BusyRetryDelay Duration `yaml:"busy_retry_delay"`
 }
 
 // TestConfig contains test execution parameters
 type TestConfig struct {
 	// CLI-only fields (not loaded from YAML, set via flags)
-	Count            int      `yaml:"-"` // Total test calls (set via -count)
-	CallsPerOperator int      `yaml:"-"` // Calls per operator per phone (set via -per-operator)
-	RetryCount       int      `yaml:"-"` // Number of retries (set via -retry)
-	RetryDelay       Duration `yaml:"-"` // Delay between retries (set via -retry-delay)
+	RetryCount int `yaml:"-"` // Number of retries (set via -retry)
 
 	// Config file fields
-	InterDelay Duration         `yaml:"inter_delay"`
-	Phone      string           `yaml:"phone"`     // Single phone (for backward compatibility)
-	Phones     []string         `yaml:"phones"`    // Multiple phones (called in circular order)
-	Operators  []OperatorConfig `yaml:"operators"` // Operator prefixes for routing comparison (optional)
-	CSVFile    string           `yaml:"csv_file"`  // Path to CSV output file (optional)
-	Prefix     string           `yaml:"prefix"`    // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
+	Pause     Duration         `yaml:"pause"`     // Single pause for all inter-call delays (default: 60s)
+	Phone     string           `yaml:"phone"`     // Single phone (for backward compatibility)
+	Phones    []string         `yaml:"phones"`    // Multiple phones (called in circular order)
+	Operators []OperatorConfig `yaml:"operators"` // Operator prefixes for routing comparison (optional)
+	CSVFile   string           `yaml:"csv_file"`  // Path to CSV output file (optional)
+	Prefix    string           `yaml:"prefix"`    // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
 }
 
 // OperatorConfig contains operator/carrier routing configuration
@@ -142,12 +134,11 @@ type CDRConfig struct {
 
 // AsteriskCDRConfig contains Asterisk CDR database settings for call routing info
 type AsteriskCDRConfig struct {
-	Enabled        bool     `yaml:"enabled"`          // Enable Asterisk CDR lookup (default: false)
-	Driver         string   `yaml:"driver"`           // Database driver: "postgres" or "mysql" (default: "postgres")
-	DSN            string   `yaml:"dsn"`              // Database connection string
-	TableName      string   `yaml:"table_name"`       // CDR table name (default: "cdr")
-	TimeWindowSec  int      `yaml:"time_window_sec"`  // Time window for matching calls (default: 120)
-	CDRLookupDelay Duration `yaml:"cdr_lookup_delay"` // Delay before CDR lookup for retry decision (default: 2s)
+	Enabled       bool   `yaml:"enabled"`         // Enable Asterisk CDR lookup (default: false)
+	Driver        string `yaml:"driver"`          // Database driver: "postgres" or "mysql" (default: "postgres")
+	DSN           string `yaml:"dsn"`             // Database connection string
+	TableName     string `yaml:"table_name"`      // CDR table name (default: "cdr")
+	TimeWindowSec int    `yaml:"time_window_sec"` // Time window for matching calls (default: 120)
 }
 
 // Duration wraps time.Duration for YAML unmarshaling
@@ -203,7 +194,7 @@ func DefaultConfig() *Config {
 			StatsProfile:        "rockwell",                // Default parser profile
 		},
 		Test: TestConfig{
-			InterDelay: Duration(5 * time.Second),
+			Pause: Duration(60 * time.Second),
 		},
 		EMSI: EMSIConfig{
 			OurAddress: "2:5001/5001",
@@ -226,7 +217,7 @@ func DefaultConfig() *Config {
 			TimeWindowSec: 120,
 		},
 		AsteriskCDR: AsteriskCDRConfig{
-			Enabled:       true, // Required for CDR-based retry logic
+			Enabled:       false, // Optional - used for CDR-based retry logic if configured
 			Driver:        "postgres",
 			TableName:     "cdr",
 			TimeWindowSec: 120,
@@ -287,10 +278,6 @@ func (c *Config) Validate() error {
 	if c.Modem.HangupMethod != "dtr" && c.Modem.HangupMethod != "escape" {
 		return fmt.Errorf("modem.hangup_method must be 'dtr' or 'escape'")
 	}
-	// Asterisk CDR is required for CDR-based retry logic (skip in prefix mode)
-	if c.AsteriskCDR.DSN == "" && c.Test.Prefix == "" {
-		return fmt.Errorf("asterisk_cdr.dsn is required for CDR-based retry logic")
-	}
 	return nil
 }
 
@@ -345,11 +332,6 @@ func (c *Config) validateMultiModem() error {
 
 	if enabledCount == 0 {
 		return fmt.Errorf("at least one modem must be enabled")
-	}
-
-	// Asterisk CDR is required for CDR-based retry logic (skip in prefix mode)
-	if c.AsteriskCDR.DSN == "" && c.Test.Prefix == "" {
-		return fmt.Errorf("asterisk_cdr.dsn is required for CDR-based retry logic")
 	}
 
 	return nil
@@ -471,12 +453,6 @@ func (c *Config) mergeModemConfig(defaults, override ModemConfig) ModemConfig {
 	if override.StatsPagination {
 		result.StatsPagination = override.StatsPagination
 	}
-	if override.BusyRetryCount != 0 {
-		result.BusyRetryCount = override.BusyRetryCount
-	}
-	if override.BusyRetryDelay != 0 {
-		result.BusyRetryDelay = override.BusyRetryDelay
-	}
 
 	return result
 }
@@ -520,45 +496,13 @@ func (c *Config) GetPhones() []string {
 	return nil
 }
 
-// GetOperators returns the list of operator configurations for routing comparison.
-// Returns empty slice if no operators are configured (no prefix rotation).
-func (c *Config) GetOperators() []OperatorConfig {
-	return c.Test.Operators
-}
-
-// GetTotalTestCount returns the total number of tests to run based on configuration.
-// If CallsPerOperator is set, returns calls_per_operator * phones * operators.
-// Otherwise returns Count for legacy mode.
-// Returns -1 for infinite mode (count <= 0 and calls_per_operator not set).
-func (c *Config) GetTotalTestCount() int {
-	phones := c.GetPhones()
-	operators := c.GetOperators()
-
-	// If using calls_per_operator mode
-	if c.Test.CallsPerOperator > 0 {
-		numOperators := len(operators)
-		if numOperators == 0 {
-			numOperators = 1 // At least one "no operator" entry
-		}
-		return c.Test.CallsPerOperator * len(phones) * numOperators
+// GetPause returns the configured pause duration between calls, retries, and CDR lookups.
+// Defaults to 60 seconds if not configured.
+func (c *Config) GetPause() time.Duration {
+	if c.Test.Pause.Duration() > 0 {
+		return c.Test.Pause.Duration()
 	}
-
-	// Legacy mode: return count as-is (0 or negative means infinite)
-	return c.Test.Count
-}
-
-// IsPerOperatorMode returns true if calls_per_operator mode is enabled
-func (c *Config) IsPerOperatorMode() bool {
-	return c.Test.CallsPerOperator > 0
-}
-
-// GetCDRLookupDelay returns the configured delay before CDR lookup for retry decisions.
-// Returns default of 2 seconds if not configured.
-func (c *Config) GetCDRLookupDelay() time.Duration {
-	if c.AsteriskCDR.CDRLookupDelay.Duration() > 0 {
-		return c.AsteriskCDR.CDRLookupDelay.Duration()
-	}
-	return 2 * time.Second
+	return 60 * time.Second
 }
 
 // GetRetryCount returns the number of retries for failed calls.
@@ -566,9 +510,9 @@ func (c *Config) GetRetryCount() int {
 	return c.Test.RetryCount
 }
 
-// GetRetryDelay returns the delay between retry attempts.
-func (c *Config) GetRetryDelay() time.Duration {
-	return c.Test.RetryDelay.Duration()
+// GetOperators returns the configured operators for routing comparison.
+func (c *Config) GetOperators() []OperatorConfig {
+	return c.Test.Operators
 }
 
 // parsePhoneList splits a comma-separated phone list into individual numbers.

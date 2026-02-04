@@ -548,7 +548,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 	// Use ScheduleNodes for time-aware job ordering (handles CM, availability windows)
 	var schedChan <-chan phoneJob
 	if len(filteredNodes) > 0 {
-		schedChan = ScheduleNodes(ctx, filteredNodes, log)
+		schedChan = ScheduleNodes(ctx, filteredNodes, cfg.GetOperators(), log)
 	}
 
 	for i := 1; ; i++ {

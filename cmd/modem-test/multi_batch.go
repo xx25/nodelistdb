@@ -15,14 +15,21 @@ import (
 // runBatchModeMulti orchestrates batch testing with multiple modems.
 func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodelistDBWriter *NodelistDBWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
-	// Test count is the number of phones (or filtered nodes if in prefix mode)
-	testCount := len(phones)
-	if len(filteredNodes) > 0 {
-		testCount = len(filteredNodes)
-	}
-	infinite := false // In multi-modem mode, run through all phones once
+	operators := cfg.GetOperators()
 	pause := cfg.GetPause()
 	retryCount := cfg.GetRetryCount()
+
+	// If no operators configured, use a single "no operator" entry for simpler loop logic
+	if len(operators) == 0 {
+		operators = []OperatorConfig{{Name: "", Prefix: ""}}
+	}
+
+	// Test count: for filtered nodes, it's nodes * operators; otherwise phones * operators
+	testCount := len(phones) * len(operators)
+	if len(filteredNodes) > 0 {
+		testCount = len(filteredNodes) * len(operators)
+	}
+	infinite := false // In multi-modem mode, run through all combinations once
 
 	// Get modem configurations
 	modemConfigs := cfg.GetModemConfigs()
@@ -49,6 +56,18 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	// Print header
 	log.PrintMultiModemHeader(configFile, pool.WorkerNames(), phones, testCount)
 
+	// Log operator configuration if multiple operators configured
+	if len(operators) > 1 || (len(operators) == 1 && operators[0].Name != "") {
+		log.Info("Operator rotation enabled with %d operator(s):", len(operators))
+		for _, op := range operators {
+			if op.Prefix == "" {
+				log.Info("  - %s (direct dial)", op.Name)
+			} else {
+				log.Info("  - %s (prefix: %s)", op.Name, op.Prefix)
+			}
+		}
+	}
+
 	// Initialize CSV writer if configured
 	var csvWriter *CSVWriter
 	if cfg.Test.CSVFile != "" {
@@ -71,6 +90,10 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	modemStats := make(map[string]*WorkerStats)
 	for _, name := range pool.WorkerNames() {
 		modemStats[name] = &WorkerStats{}
+	}
+	operatorStats := make(map[string]*OperatorStats)
+	for _, op := range operators {
+		operatorStats[op.Name] = &OperatorStats{Name: op.Name, Prefix: op.Prefix}
 	}
 
 	var totalSuccess, totalFailed int
@@ -102,20 +125,32 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			}
 			ms.Total++
 
+			// Update operator stats
+			os := operatorStats[result.OperatorName]
+			if os == nil {
+				os = &OperatorStats{Name: result.OperatorName, Prefix: result.OperatorPrefix}
+				operatorStats[result.OperatorName] = os
+			}
+			os.Total++
+
 			if result.Result.success {
 				totalSuccess++
 				ps.Success++
 				ms.Success++
+				os.Success++
 				totalDialTime += result.Result.dialTime
 				totalEmsiTime += result.Result.emsiTime
 				ps.TotalDialTime += result.Result.dialTime
 				ps.TotalEmsiTime += result.Result.emsiTime
 				ms.TotalDialTime += result.Result.dialTime
 				ms.TotalEmsiTime += result.Result.emsiTime
+				os.TotalDialTime += result.Result.dialTime
+				os.TotalEmsiTime += result.Result.emsiTime
 			} else {
 				totalFailed++
 				ps.Failed++
 				ms.Failed++
+				os.Failed++
 			}
 
 			results = append(results, result.Result.message)
@@ -199,13 +234,16 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		}
 	}
 
+	// Calculate total combinations for rotation
+	totalCombinations := len(phones) * len(operators)
+
 	submitted := 0
 
 	if len(filteredNodes) > 0 {
 		// Prefix mode: use ScheduleNodes for time-aware job ordering.
 		// ScheduleNodes sorts callable nodes first, waits for call windows,
-		// and emits one job per node.
-		jobs := ScheduleNodes(ctx, filteredNodes, log)
+		// and emits one job per operator per node.
+		jobs := ScheduleNodes(ctx, filteredNodes, cfg.GetOperators(), log)
 		for job := range jobs {
 			submitted++
 			job.testNum = submitted
@@ -222,7 +260,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			}
 		}
 	} else {
-		// Legacy submission loop: round-robin through phones
+		// Legacy submission loop: round-robin through all phone+operator combinations
 		for i := 0; infinite || submitted < testCount; i++ {
 			select {
 			case <-ctx.Done():
@@ -230,12 +268,20 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			default:
 			}
 
-			phone := phones[i%len(phones)]
+			// Round-robin through all combinations
+			comboIndex := i % totalCombinations
+			phoneIndex := comboIndex / len(operators)
+			operatorIndex := comboIndex % len(operators)
+			phone := phones[phoneIndex]
+			operator := operators[operatorIndex]
+
 			submitted++
 
 			job := phoneJob{
-				phone:   phone,
-				testNum: submitted,
+				phone:          phone,
+				operatorName:   operator.Name,
+				operatorPrefix: operator.Prefix,
+				testNum:        submitted,
 			}
 			if nodeLookup != nil {
 				if target, ok := nodeLookup[phone]; ok {
@@ -272,8 +318,8 @@ cleanup:
 		avgEmsiTime = totalEmsiTime / time.Duration(totalSuccess)
 	}
 
-	// Print summary
-	log.PrintMultiModemSummary(
+	// Print summary with operator stats
+	log.PrintMultiModemSummaryWithOperators(
 		submitted,
 		totalSuccess,
 		totalFailed,
@@ -283,5 +329,6 @@ cleanup:
 		results,
 		phoneStats,
 		modemStats,
+		operatorStats,
 	)
 }
