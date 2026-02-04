@@ -154,8 +154,8 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			WHERE r.is_aggregated = false
 				AND (
-					arrayExists(addr -> lower(addr) LIKE '%@' || lower(?), r.binkp_addresses)
-					OR arrayExists(addr -> lower(addr) LIKE '%@' || lower(?), r.ifcico_addresses)
+					arrayExists(addr -> lower(addr) LIKE '%@' || lower(?) || '%', r.binkp_addresses)
+					OR arrayExists(addr -> lower(addr) LIKE '%@' || lower(?) || '%', r.ifcico_addresses)
 				)
 		)
 		SELECT
@@ -183,7 +183,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 			r.tested_hostname, r.hostname_index, r.is_aggregated,
 			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
 			-- Extract addresses for this specific network
-			arrayFilter(addr -> lower(addr) LIKE '%@' || lower(?), arrayConcat(r.binkp_addresses, r.ifcico_addresses)) as network_addresses
+			arrayFilter(addr -> lower(addr) LIKE '%@' || lower(?) || '%', arrayConcat(r.binkp_addresses, r.ifcico_addresses)) as network_addresses
 		FROM node_test_results r
 		JOIN best_rows br ON r.zone = br.zone AND r.net = br.net AND r.node = br.node
 			AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
