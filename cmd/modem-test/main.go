@@ -16,6 +16,7 @@ import (
 
 	"github.com/nodelistdb/internal/modemd/modem"
 	"github.com/nodelistdb/internal/testing/protocols/emsi"
+	"github.com/nodelistdb/internal/version"
 )
 
 // CLI flags
@@ -27,7 +28,7 @@ var (
 	csvFile     = flag.String("csv", "", "Output results to CSV file")
 	logFile     = flag.String("log", "", "Output log to file (in addition to stderr)")
 	interactive = flag.Bool("interactive", false, "Interactive AT command mode")
-	batch       = flag.Bool("batch", false, "Run batch test mode")
+	batch       = flag.Bool("batch", false, "") // Hidden flag for backward compatibility
 	prefix      = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
 	cmOnly      = flag.Bool("cm-only", false, "Only test CM (24/7) nodes (prefix mode only)")
 	retryCount  = flag.Int("retry", 3, "Number of retries for BUSY/NO ANSWER (default: 3)")
@@ -35,6 +36,7 @@ var (
 	nodeAddr    = flag.String("node", "", "Single node address to test (format: zone:net/node, e.g., 2:5001/100)")
 	allNodes    = flag.Bool("all", false, "Test all PSTN nodes (use with -except to exclude prefixes)")
 	exceptPfx   = flag.String("except", "", "Comma-separated prefixes to exclude from -all mode (e.g., \"+7,+1\")")
+	showVersion = flag.Bool("version", false, "Show version information and exit")
 )
 
 func main() {
@@ -54,9 +56,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  # Test a node with phone override\n")
 		fmt.Fprintf(os.Stderr, "  %s -node 2:5001/100 -phone 79001234567\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Test multiple phones\n")
-		fmt.Fprintf(os.Stderr, "  %s -phone 917,918,919 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -phone 917,918,919\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Test phone range (901 through 910)\n")
-		fmt.Fprintf(os.Stderr, "  %s -phone 901-910 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -phone 901-910\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Test all Russian nodes (prefix +7), CM only\n")
 		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -cm-only\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Test all nodes EXCEPT Russian and US\n")
@@ -68,6 +70,12 @@ func main() {
 	}
 
 	flag.Parse()
+
+	// Handle version flag
+	if *showVersion {
+		fmt.Printf("modem-test %s\n", version.GetFullVersionInfo())
+		os.Exit(0)
+	}
 
 	// Validate mutually exclusive mode flags
 	modeCount := 0
@@ -110,12 +118,21 @@ func main() {
 	configFile := "(defaults)"
 
 	if *configPath != "" {
+		// Explicit config path specified
 		cfg, err = LoadConfig(*configPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: Failed to load config: %v\n", err)
 			os.Exit(1)
 		}
 		configFile = *configPath
+	} else if discovered := DiscoverConfigFile(); discovered != "" {
+		// Auto-discovered config file
+		cfg, err = LoadConfig(discovered)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to load config %s: %v\n", discovered, err)
+			os.Exit(1)
+		}
+		configFile = discovered
 	} else {
 		cfg = DefaultConfig()
 	}

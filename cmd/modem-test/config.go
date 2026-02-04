@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -241,6 +242,36 @@ func DefaultConfig() *Config {
 			TableName: "modem_test_results",
 		},
 	}
+}
+
+// ConfigSearchPaths returns the list of paths searched for auto-discovery
+var ConfigSearchPaths = []string{
+	"./modem-test.yaml",
+	"~/.config/modem-test/config.yaml",
+	"/etc/modem-test/config.yaml",
+	"/opt/modem/modem-test.yaml",
+}
+
+// DiscoverConfigFile searches for a config file in standard locations.
+// Returns the path to the first existing config file, or empty string if none found.
+func DiscoverConfigFile() string {
+	for _, path := range ConfigSearchPaths {
+		expanded := expandPath(path)
+		if _, err := os.Stat(expanded); err == nil {
+			return expanded
+		}
+	}
+	return ""
+}
+
+// expandPath expands ~ to user's home directory
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
 }
 
 // LoadConfig loads configuration from a YAML file

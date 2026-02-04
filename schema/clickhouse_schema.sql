@@ -163,6 +163,9 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `vmodem_ipv6_response_ms` UInt32 DEFAULT 0,
     `vmodem_ipv6_address` String DEFAULT '',
     `vmodem_ipv6_error` String DEFAULT '',
+    -- Test source identification (daemon, cli, manual)
+    `test_source` LowCardinality(String) DEFAULT 'daemon',
+
     -- Modem (PSTN) test results
     `modem_tested` Bool DEFAULT false,
     `modem_success` Bool DEFAULT false,
@@ -183,6 +186,55 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `modem_used` String DEFAULT '',
     `modem_match_reason` String DEFAULT '',
     `modem_line_stats` String DEFAULT '',
+
+    -- Modem operator/routing info (for carrier comparison)
+    `modem_operator_name` String DEFAULT '',
+    `modem_operator_prefix` String DEFAULT '',
+    `modem_dial_time_ms` UInt32 DEFAULT 0,
+    `modem_emsi_time_ms` UInt32 DEFAULT 0,
+    `modem_connect_string` String DEFAULT '',
+
+    -- Modem line statistics (parsed from AT commands)
+    `modem_tx_speed` UInt32 DEFAULT 0,
+    `modem_rx_speed` UInt32 DEFAULT 0,
+    `modem_compression` String DEFAULT '',
+    `modem_modulation` String DEFAULT '',
+    `modem_line_quality` UInt8 DEFAULT 0,
+    `modem_snr` Float32 DEFAULT 0,
+    `modem_rx_level` Int16 DEFAULT 0,
+    `modem_tx_power` Int16 DEFAULT 0,
+    `modem_round_trip_delay` UInt16 DEFAULT 0,
+    `modem_local_retrains` UInt8 DEFAULT 0,
+    `modem_remote_retrains` UInt8 DEFAULT 0,
+    `modem_termination_reason` String DEFAULT '',
+    `modem_stats_notes` String DEFAULT '',
+
+    -- Modem EMSI remote system details
+    `modem_remote_location` String DEFAULT '',
+    `modem_remote_sysop` String DEFAULT '',
+
+    -- AudioCodes VoIP CDR quality metrics
+    `modem_cdr_session_id` String DEFAULT '',
+    `modem_cdr_codec` String DEFAULT '',
+    `modem_cdr_rtp_jitter_ms` UInt16 DEFAULT 0,
+    `modem_cdr_rtp_delay_ms` UInt16 DEFAULT 0,
+    `modem_cdr_packet_loss` UInt8 DEFAULT 0,
+    `modem_cdr_remote_packet_loss` UInt8 DEFAULT 0,
+    `modem_cdr_local_mos` UInt8 DEFAULT 0,
+    `modem_cdr_remote_mos` UInt8 DEFAULT 0,
+    `modem_cdr_local_r_factor` UInt8 DEFAULT 0,
+    `modem_cdr_remote_r_factor` UInt8 DEFAULT 0,
+    `modem_cdr_term_reason` String DEFAULT '',
+    `modem_cdr_term_category` String DEFAULT '',
+
+    -- Asterisk CDR call routing info
+    `modem_ast_disposition` String DEFAULT '',
+    `modem_ast_peer` String DEFAULT '',
+    `modem_ast_duration` UInt16 DEFAULT 0,
+    `modem_ast_billsec` UInt16 DEFAULT 0,
+    `modem_ast_hangup_cause` UInt8 DEFAULT 0,
+    `modem_ast_hangup_source` String DEFAULT '',
+    `modem_ast_early_media` Bool DEFAULT false,
     INDEX idx_date test_date TYPE minmax GRANULARITY 1,
     INDEX idx_zone_net (zone, net) TYPE minmax GRANULARITY 1,
     INDEX idx_operational is_operational TYPE minmax GRANULARITY 1,

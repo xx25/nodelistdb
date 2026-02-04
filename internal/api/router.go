@@ -72,6 +72,7 @@ func (s *Server) SetupRouter() http.Handler {
 			r.Get("/nodes", s.modemHandler.GetAssignedNodes)
 			r.Post("/in-progress", s.modemHandler.MarkInProgress)
 			r.Post("/results", s.modemHandler.SubmitResults)
+			r.Post("/results/direct", s.modemHandler.SubmitResultsDirect)
 			r.Post("/heartbeat", s.modemHandler.Heartbeat)
 			r.Post("/release", s.modemHandler.ReleaseNodes)
 			r.Get("/stats", s.modemHandler.GetQueueStats) // Admin endpoint
