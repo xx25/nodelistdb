@@ -43,6 +43,8 @@ type TestResult struct {
 	IsOperational         bool
 	HasConnectivityIssues bool
 	AddressValidated      bool
+	AddressValidatedIPv4  bool
+	AddressValidatedIPv6  bool
 
 	// IP version restrictions (FTS-1038)
 	IPv4Skipped           bool   // IPv4 testing skipped due to INO4 flag

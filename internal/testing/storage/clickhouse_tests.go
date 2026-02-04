@@ -77,7 +77,9 @@ func (s *ClickHouseStorage) flushBatch(ctx context.Context) error {
 		ftp_ipv6_tested, ftp_ipv6_success, ftp_ipv6_response_ms, ftp_ipv6_address, ftp_ipv6_error,
 		vmodem_ipv4_tested, vmodem_ipv4_success, vmodem_ipv4_response_ms, vmodem_ipv4_address, vmodem_ipv4_error,
 		vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
-		tested_hostname, hostname_index, is_aggregated, total_hostnames, hostnames_tested, hostnames_operational
+		tested_hostname, hostname_index, is_aggregated, total_hostnames, hostnames_tested, hostnames_operational,
+		binkp_ipv4_addresses, binkp_ipv6_addresses, ifcico_ipv4_addresses, ifcico_ipv6_addresses,
+		address_validated_ipv4, address_validated_ipv6
 	)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
@@ -637,6 +639,27 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		vmodemIPv6Error = r.VModemResult.IPv6Error
 	}
 
+	// Extract per-IP-version announced addresses for IPv4/IPv6 AKA mismatch detection
+	var binkpIPv4Addrs, binkpIPv6Addrs []string
+	if r.BinkPResult != nil {
+		if details, ok := r.BinkPResult.Details["ipv6"].(*models.BinkPTestDetails); ok {
+			binkpIPv6Addrs = details.Addresses
+		}
+		if details, ok := r.BinkPResult.Details["ipv4"].(*models.BinkPTestDetails); ok {
+			binkpIPv4Addrs = details.Addresses
+		}
+	}
+
+	var ifcicoIPv4Addrs, ifcicoIPv6Addrs []string
+	if r.IfcicoResult != nil {
+		if details, ok := r.IfcicoResult.Details["ipv6"].(*models.IfcicoTestDetails); ok {
+			ifcicoIPv6Addrs = details.Addresses
+		}
+		if details, ok := r.IfcicoResult.Details["ipv4"].(*models.IfcicoTestDetails); ok {
+			ifcicoIPv4Addrs = details.Addresses
+		}
+	}
+
 	// Handle legacy compatibility: set defaults if hostname_index not set
 	testedHostname := r.TestedHostname
 	if testedHostname == "" {
@@ -673,5 +696,8 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		// New per-hostname testing fields (85-90)
 		testedHostname, r.HostnameIndex, r.IsAggregated,
 		r.TotalHostnames, r.HostnamesTested, r.HostnamesOperational,
+		// Per-IP-version AKA addresses and validation flags
+		binkpIPv4Addrs, binkpIPv6Addrs, ifcicoIPv4Addrs, ifcicoIPv6Addrs,
+		r.AddressValidatedIPv4, r.AddressValidatedIPv6,
 	}
 }

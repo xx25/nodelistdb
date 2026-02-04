@@ -332,6 +332,8 @@ type Operations interface {
 	GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
+	GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error)
+	GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error)
 	GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error)
 	GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error)
 	GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error)

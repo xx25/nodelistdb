@@ -245,6 +245,14 @@ func (s *Storage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool
 	return s.testOperations.GetAKAMismatchNodes(limit, days, includeZeroNodes)
 }
 
+func (s *Storage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+	return s.testOperations.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes)
+}
+
+func (s *Storage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+	return s.testOperations.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes)
+}
+
 func (s *Storage) GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error) {
 	return s.testOperations.GetOtherNetworksSummary(days)
 }

@@ -169,6 +169,16 @@ func (to *TestOperationsRefactored) GetAKAMismatchNodes(limit int, days int, inc
 	return to.akaMismatchOps.GetAKAMismatchNodes(limit, days, includeZeroNodes)
 }
 
+// GetIPv6IncorrectIPv4CorrectNodes returns nodes where IPv6 AKA is incorrect but IPv4 AKA is correct
+func (to *TestOperationsRefactored) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+	return to.akaMismatchOps.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes)
+}
+
+// GetIPv4IncorrectIPv6CorrectNodes returns nodes where IPv4 AKA is incorrect but IPv6 AKA is correct
+func (to *TestOperationsRefactored) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+	return to.akaMismatchOps.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes)
+}
+
 // ===== Other Networks Operations (delegated to OtherNetworksOperations) =====
 
 // GetOtherNetworksSummary returns a summary of non-FidoNet networks found in AKAs

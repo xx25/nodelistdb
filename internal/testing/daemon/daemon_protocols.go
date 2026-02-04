@@ -61,6 +61,7 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 					if binkpResult.AddressValid {
 						result.AddressValidated = true
 					}
+					result.AddressValidatedIPv6 = result.AddressValidatedIPv6 || binkpResult.AddressValid
 					break // First successful IPv6 is enough
 				} else if binkpResult.Error != "" {
 					logging.Debugf("[%s]     BinkP IPv6 failed: %s", node.Address(), binkpResult.Error)
@@ -101,6 +102,7 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 					if binkpResult.AddressValid {
 						result.AddressValidated = true
 					}
+					result.AddressValidatedIPv4 = result.AddressValidatedIPv4 || binkpResult.AddressValid
 					break // First successful IPv4 is enough
 				} else if binkpResult.Error != "" {
 					logging.Debugf("[%s]     BinkP IPv4 failed: %s", node.Address(), binkpResult.Error)
@@ -170,6 +172,7 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 					if ifcicoResult.AddressValid {
 						result.AddressValidated = true
 					}
+					result.AddressValidatedIPv6 = result.AddressValidatedIPv6 || ifcicoResult.AddressValid
 					break // First successful IPv6 is enough
 				} else if ifcicoResult.Error != "" {
 					logging.Debugf("[%s]     IFCICO IPv6 failed: %s", node.Address(), ifcicoResult.Error)
@@ -208,6 +211,7 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 					if ifcicoResult.AddressValid {
 						result.AddressValidated = true
 					}
+					result.AddressValidatedIPv4 = result.AddressValidatedIPv4 || ifcicoResult.AddressValid
 					break // First successful IPv4 is enough
 				} else if ifcicoResult.Error != "" {
 					logging.Debugf("[%s]     IFCICO IPv4 failed: %s", node.Address(), ifcicoResult.Error)

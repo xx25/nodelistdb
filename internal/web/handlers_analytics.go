@@ -551,16 +551,18 @@ func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 
 // akaMismatchAnalyticsData holds template data for AKA mismatch analytics pages
 type akaMismatchAnalyticsData struct {
-	Title            string
-	ActivePage       string
-	Version          string
-	MismatchNodes    []storage.NodeTestResult
-	Days             int
-	Limit            int
-	IncludeZeroNodes bool
-	Error            error
-	Config           AKAMismatchPageConfig
-	ProcessedInfo    []template.HTML
+	Title              string
+	ActivePage         string
+	Version            string
+	MismatchNodes      []storage.NodeTestResult
+	IPv6IncorrectNodes []storage.AKAIPVersionMismatchNode
+	IPv4IncorrectNodes []storage.AKAIPVersionMismatchNode
+	Days               int
+	Limit              int
+	IncludeZeroNodes   bool
+	Error              error
+	Config             AKAMismatchPageConfig
+	ProcessedInfo      []template.HTML
 }
 
 // AKAMismatchAnalyticsHandler shows nodes with AKA address mismatches
@@ -593,18 +595,36 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
 
+	// Fetch IPv4/IPv6 AKA discrepancy nodes
+	var ipv6IncorrectNodes []storage.AKAIPVersionMismatchNode
+	var ipv4IncorrectNodes []storage.AKAIPVersionMismatchNode
+
+	if ipv6Inc, err := s.storage.GetIPv6IncorrectIPv4CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes); err != nil {
+		log.Printf("[ERROR] AKA Mismatch Analytics: Error fetching IPv6 incorrect nodes: %v", err)
+	} else {
+		ipv6IncorrectNodes = ipv6Inc
+	}
+
+	if ipv4Inc, err := s.storage.GetIPv4IncorrectIPv6CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes); err != nil {
+		log.Printf("[ERROR] AKA Mismatch Analytics: Error fetching IPv4 incorrect nodes: %v", err)
+	} else {
+		ipv4IncorrectNodes = ipv4Inc
+	}
+
 	// Build template data
 	data := akaMismatchAnalyticsData{
-		Title:            config.PageTitle,
-		ActivePage:       "analytics",
-		Version:          version.GetVersionInfo(),
-		MismatchNodes:    mismatchNodes,
-		Days:             params.Days,
-		Limit:            params.Limit,
-		IncludeZeroNodes: params.IncludeZeroNodes,
-		Error:            displayError,
-		Config:           config,
-		ProcessedInfo:    config.processInfoText(params.Days),
+		Title:              config.PageTitle,
+		ActivePage:         "analytics",
+		Version:            version.GetVersionInfo(),
+		MismatchNodes:      mismatchNodes,
+		IPv6IncorrectNodes: ipv6IncorrectNodes,
+		IPv4IncorrectNodes: ipv4IncorrectNodes,
+		Days:               params.Days,
+		Limit:              params.Limit,
+		IncludeZeroNodes:   params.IncludeZeroNodes,
+		Error:              displayError,
+		Config:             config,
+		ProcessedInfo:      config.processInfoText(params.Days),
 	}
 
 	// Use AKA mismatch analytics template

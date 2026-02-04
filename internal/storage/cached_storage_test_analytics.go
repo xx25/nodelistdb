@@ -713,6 +713,68 @@ func (cs *CachedStorage) GetOtherNetworksSummary(days int) ([]OtherNetworkSummar
 }
 
 // GetNodesInNetwork returns nodes that announce AKAs in a specific network (cached)
+func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes)
+	}
+
+	key := fmt.Sprintf("ipv6_incorrect_ipv4_correct:%d:%d:%v", limit, days, includeZeroNodes)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []AKAIPVersionMismatchNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
+func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes)
+	}
+
+	key := fmt.Sprintf("ipv4_incorrect_ipv6_correct:%d:%d:%v", limit, days, includeZeroNodes)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []AKAIPVersionMismatchNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
 func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
 	if !cs.config.Enabled {
 		return cs.Storage.GetNodesInNetwork(networkName, limit, days)

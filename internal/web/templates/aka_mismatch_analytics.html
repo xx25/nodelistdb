@@ -101,4 +101,148 @@
     {{.Config.EmptyStateDesc}}
 </div>
 {{end}}
+
+{{if .IPv6IncorrectNodes}}
+<div class="stats-box" style="margin-top: 2rem;">
+    <h3>IPv6 AKA Incorrect, IPv4 Correct ({{len .IPv6IncorrectNodes}} nodes)</h3>
+    <p class="text-muted">Nodes where the IPv6 connection announces incorrect AKAs, but the IPv4 connection announces the correct address.</p>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Expected Address</th>
+                <th data-sortable data-type="string">Hostname</th>
+                <th>IPv4 AKAs (correct)</th>
+                <th>IPv6 AKAs (incorrect)</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="date">Last Tested</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .IPv6IncorrectNodes}}
+            <tr>
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                        <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
+                    </a>
+                </td>
+                {{template "hostname_cell_simple" .}}
+                <td>
+                    {{if gt (len .BinkPIPv4Addresses) 0}}
+                        <div class="aka-list">
+                            <small class="text-muted">BinkP:</small>
+                            {{range .BinkPIPv4Addresses}}
+                                <span class="badge badge-success">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                    {{if gt (len .IfcicoIPv4Addresses) 0}}
+                        <div class="aka-list">
+                            <small class="text-muted">IFCICO:</small>
+                            {{range .IfcicoIPv4Addresses}}
+                                <span class="badge badge-success">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                </td>
+                <td>
+                    {{if gt (len .BinkPIPv6Addresses) 0}}
+                        <div class="aka-list">
+                            <small class="text-muted">BinkP:</small>
+                            {{range .BinkPIPv6Addresses}}
+                                <span class="badge badge-warning">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                    {{if gt (len .IfcicoIPv6Addresses) 0}}
+                        <div class="aka-list">
+                            <small class="text-muted">IFCICO:</small>
+                            {{range .IfcicoIPv6Addresses}}
+                                <span class="badge badge-warning">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                </td>
+                {{template "location_cell" .}}
+                {{template "timestamp_cell" .}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
+
+{{if .IPv4IncorrectNodes}}
+<div class="stats-box" style="margin-top: 2rem;">
+    <h3>IPv4 AKA Incorrect, IPv6 Correct ({{len .IPv4IncorrectNodes}} nodes)</h3>
+    <p class="text-muted">Nodes where the IPv4 connection announces incorrect AKAs, but the IPv6 connection announces the correct address.</p>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Expected Address</th>
+                <th data-sortable data-type="string">Hostname</th>
+                <th>IPv4 AKAs (incorrect)</th>
+                <th>IPv6 AKAs (correct)</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="date">Last Tested</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .IPv4IncorrectNodes}}
+            <tr>
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                        <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
+                    </a>
+                </td>
+                {{template "hostname_cell_simple" .}}
+                <td>
+                    {{if gt (len .BinkPIPv4Addresses) 0}}
+                        <div class="aka-list">
+                            <small class="text-muted">BinkP:</small>
+                            {{range .BinkPIPv4Addresses}}
+                                <span class="badge badge-warning">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                    {{if gt (len .IfcicoIPv4Addresses) 0}}
+                        <div class="aka-list">
+                            <small class="text-muted">IFCICO:</small>
+                            {{range .IfcicoIPv4Addresses}}
+                                <span class="badge badge-warning">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                </td>
+                <td>
+                    {{if gt (len .BinkPIPv6Addresses) 0}}
+                        <div class="aka-list">
+                            <small class="text-muted">BinkP:</small>
+                            {{range .BinkPIPv6Addresses}}
+                                <span class="badge badge-success">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                    {{if gt (len .IfcicoIPv6Addresses) 0}}
+                        <div class="aka-list">
+                            <small class="text-muted">IFCICO:</small>
+                            {{range .IfcicoIPv6Addresses}}
+                                <span class="badge badge-success">{{.}}</span>
+                            {{end}}
+                        </div>
+                    {{end}}
+                </td>
+                {{template "location_cell" .}}
+                {{template "timestamp_cell" .}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
 {{end}}

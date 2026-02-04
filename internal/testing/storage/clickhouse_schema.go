@@ -73,6 +73,13 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 
 			ipv4_skipped Bool DEFAULT false,
 
+			binkp_ipv4_addresses Array(String),
+			binkp_ipv6_addresses Array(String),
+			ifcico_ipv4_addresses Array(String),
+			ifcico_ipv6_addresses Array(String),
+			address_validated_ipv4 Bool,
+			address_validated_ipv6 Bool,
+
 			INDEX idx_date test_date TYPE minmax GRANULARITY 1,
 			INDEX idx_zone_net (zone, net) TYPE minmax GRANULARITY 1,
 			INDEX idx_operational is_operational TYPE minmax GRANULARITY 1
