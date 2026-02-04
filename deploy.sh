@@ -21,8 +21,8 @@ echo ""
 build_binaries() {
     echo -e "${YELLOW}Building binaries...${NC}"
 
-    # Get version info
-    VERSION=$(git describe --tags --always 2>/dev/null || echo dev)
+    # Get version info (strip 'v' prefix since templates add it)
+    VERSION=$(git describe --tags --always 2>/dev/null | sed 's/^v//' || echo dev)
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
     BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
     LDFLAGS="-X 'github.com/nodelistdb/internal/version.Version=${VERSION}' -X 'github.com/nodelistdb/internal/version.GitCommit=${COMMIT}' -X 'github.com/nodelistdb/internal/version.BuildTime=${BUILD_TIME}'"
