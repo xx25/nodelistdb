@@ -247,12 +247,14 @@ func CreateM_ERR(message string) *Frame {
 // Format: "2:5001/100@fidonet 2:5001/100.1@fidonet"
 func ParseAddresses(data []byte) []string {
 	addrStr := string(data)
+	// Strip null bytes - some mailers include trailing \x00 in M_ADR frames
+	addrStr = strings.ReplaceAll(addrStr, "\x00", "")
 	addrStr = strings.TrimSpace(addrStr)
-	
+
 	if addrStr == "" {
 		return []string{}
 	}
-	
+
 	// Split by space
 	return strings.Fields(addrStr)
 }
