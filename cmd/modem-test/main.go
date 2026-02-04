@@ -332,10 +332,23 @@ func main() {
 	// Update phones after mode handling
 	phones = cfg.GetPhones()
 
+	// Initialize operator cache for failover mode (multi-operator scenarios)
+	var operatorCache *OperatorCache
+	if len(cfg.GetOperators()) > 1 && cfg.Test.OperatorCache.Enabled {
+		var err error
+		operatorCache, err = NewOperatorCache(cfg.Test.OperatorCache, log)
+		if err != nil {
+			log.Warn("Operator cache unavailable: %v", err)
+			// Continue without cache - failover will still work, just without caching
+		} else if operatorCache != nil {
+			defer operatorCache.Close()
+		}
+	}
+
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, nodelistDBWriter, nodeLookup, filteredNodes)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, operatorCache, pgWriter, mysqlWriter, sqliteWriter, nodelistDBWriter, nodeLookup, filteredNodes)
 		return
 	}
 

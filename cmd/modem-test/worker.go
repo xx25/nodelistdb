@@ -51,6 +51,7 @@ type ModemWorker struct {
 	cdrLookupDelay     time.Duration
 	cdrService         *CDRService
 	asteriskCDRService *AsteriskCDRService
+	operatorCache      *OperatorCache // Cache for operator failover
 	coordinator        *PhoneCoordinator
 	phoneQueue         <-chan phoneJob
 	results            chan<- WorkerResult
@@ -60,10 +61,13 @@ type ModemWorker struct {
 
 // phoneJob represents a phone number to dial with its test number and operator info.
 type phoneJob struct {
-	phone          string
+	phone     string
+	operators []OperatorConfig // Full list of operators for failover (empty = direct dial)
+	testNum   int
+	// Legacy single-operator fields (used when operators is empty)
 	operatorName   string
 	operatorPrefix string
-	testNum        int
+	// Node info from API
 	nodeAddress    string // FidoNet address, e.g., "2:5020/100" (empty if not from API)
 	nodeSystemName string // BBS name (empty if not from API)
 	nodeLocation   string // Location (empty if not from API)
@@ -83,6 +87,7 @@ func newModemWorker(
 	cdrLookupDelay time.Duration,
 	cdrService *CDRService,
 	asteriskCDRService *AsteriskCDRService,
+	operatorCache *OperatorCache,
 	logOutput io.Writer,
 	coordinator *PhoneCoordinator,
 	phoneQueue <-chan phoneJob,
@@ -141,6 +146,7 @@ func newModemWorker(
 		cdrLookupDelay:     cdrLookupDelay,
 		cdrService:         cdrService,
 		asteriskCDRService: asteriskCDRService,
+		operatorCache:      operatorCache,
 		coordinator:        coordinator,
 		phoneQueue:         phoneQueue,
 		results:            results,
@@ -188,57 +194,108 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				w.log.Info("Node: %s %s (sysop: %s)", job.nodeAddress, job.nodeSystemName, job.nodeSysop)
 			}
 
-			// Log operator info if configured
-			if job.operatorName != "" {
-				w.log.Info("Operator: %s (prefix: %q)", job.operatorName, job.operatorPrefix)
-			}
+			// Determine effective operators and operator info for result
+			var result testResult
+			var resultOperatorName, resultOperatorPrefix string
 
-			// Run the test with operator prefix prepended
-			dialPhone := job.operatorPrefix + job.phone
+			// Use failover mode if operators list is provided
+			if len(job.operators) > 0 {
+				// Callback for retry attempts - emits result for tracking
+				onRetryAttempt := func(attempt int, dialTime time.Duration, reason, opName, opPrefix string) {
+					retryResult := testResult{
+						success:  false,
+						message:  fmt.Sprintf("Test %d [%s] %s: DIAL FAILED - %s (%.1fs) [attempt %d]", job.testNum, w.name, job.phone, reason, dialTime.Seconds(), attempt),
+						dialTime: dialTime,
+					}
 
-			// Callback for retry attempts - emits result for tracking
-			onRetryAttempt := func(attempt int, dialTime time.Duration, reason string) {
-				retryResult := testResult{
-					success:  false,
-					message:  fmt.Sprintf("Test %d [%s] %s: DIAL FAILED - %s (%.1fs) [attempt %d]", job.testNum, w.name, dialPhone, reason, dialTime.Seconds(), attempt),
-					dialTime: dialTime,
+					// Emit retry result with operator attribution
+					select {
+					case w.results <- WorkerResult{
+						WorkerID:       w.id,
+						WorkerName:     w.name,
+						Phone:          job.phone,
+						OperatorName:   opName,
+						OperatorPrefix: opPrefix,
+						NodeAddress:    job.nodeAddress,
+						NodeSystemName: job.nodeSystemName,
+						NodeLocation:   job.nodeLocation,
+						NodeSysop:      job.nodeSysop,
+						TestNum:        job.testNum,
+						Result:         retryResult,
+						Timestamp:      time.Now(),
+					}:
+					case <-ctx.Done():
+						return
+					}
 				}
 
-				// Emit retry result
-				select {
-				case w.results <- WorkerResult{
-					WorkerID:       w.id,
-					WorkerName:     w.name,
-					Phone:          job.phone,
-					OperatorName:   job.operatorName,
-					OperatorPrefix: job.operatorPrefix,
-					NodeAddress:    job.nodeAddress,
-					NodeSystemName: job.nodeSystemName,
-					NodeLocation:   job.nodeLocation,
-					NodeSysop:      job.nodeSysop,
-					TestNum:        job.testNum,
-					Result:         retryResult,
-					Timestamp:      time.Now(),
-				}:
-				case <-ctx.Done():
-					return
-				}
-				// CDR lookups are now done in runTest() after proper delay
-			}
+				// Run with failover
+				failoverResult := w.runTestWithFailover(ctx, job, job.operators, w.operatorCache, onRetryAttempt)
+				result = failoverResult.LastResult
 
-			result := w.runTest(ctx, job.testNum, dialPhone, job.phone, onRetryAttempt)
+				// Set operator info - use SuccessOperator if succeeded, LastOperator otherwise
+				// This ensures we always know which operator was used for attribution
+				if failoverResult.SuccessOperator != nil {
+					resultOperatorName = failoverResult.SuccessOperator.Name
+					resultOperatorPrefix = failoverResult.SuccessOperator.Prefix
+				} else if failoverResult.LastOperator != nil {
+					resultOperatorName = failoverResult.LastOperator.Name
+					resultOperatorPrefix = failoverResult.LastOperator.Prefix
+				}
+			} else {
+				// Legacy single-operator mode
+				if job.operatorName != "" {
+					w.log.Info("Operator: %s (prefix: %q)", job.operatorName, job.operatorPrefix)
+				}
+
+				dialPhone := job.operatorPrefix + job.phone
+
+				// Callback for retry attempts - emits result for tracking
+				// Note: opName/opPrefix params unused here since we know the operator from job
+				onRetryAttempt := func(attempt int, dialTime time.Duration, reason, _, _ string) {
+					retryResult := testResult{
+						success:  false,
+						message:  fmt.Sprintf("Test %d [%s] %s: DIAL FAILED - %s (%.1fs) [attempt %d]", job.testNum, w.name, dialPhone, reason, dialTime.Seconds(), attempt),
+						dialTime: dialTime,
+					}
+
+					// Emit retry result
+					select {
+					case w.results <- WorkerResult{
+						WorkerID:       w.id,
+						WorkerName:     w.name,
+						Phone:          job.phone,
+						OperatorName:   job.operatorName,
+						OperatorPrefix: job.operatorPrefix,
+						NodeAddress:    job.nodeAddress,
+						NodeSystemName: job.nodeSystemName,
+						NodeLocation:   job.nodeLocation,
+						NodeSysop:      job.nodeSysop,
+						TestNum:        job.testNum,
+						Result:         retryResult,
+						Timestamp:      time.Now(),
+					}:
+					case <-ctx.Done():
+						return
+					}
+				}
+
+				result = w.runTest(ctx, job.testNum, dialPhone, job.phone, onRetryAttempt)
+				resultOperatorName = job.operatorName
+				resultOperatorPrefix = job.operatorPrefix
+			}
 
 			// Release phone lock
 			w.coordinator.ReleasePhone(job.phone)
 
-			// Send final result (non-BUSY or after retries exhausted)
+			// Send final result
 			select {
 			case w.results <- WorkerResult{
 				WorkerID:       w.id,
 				WorkerName:     w.name,
-				Phone:          job.phone, // Original phone without prefix
-				OperatorName:   job.operatorName,
-				OperatorPrefix: job.operatorPrefix,
+				Phone:          job.phone,
+				OperatorName:   resultOperatorName,
+				OperatorPrefix: resultOperatorPrefix,
 				NodeAddress:    job.nodeAddress,
 				NodeSystemName: job.nodeSystemName,
 				NodeLocation:   job.nodeLocation,
@@ -265,8 +322,9 @@ func (w *ModemWorker) Run(ctx context.Context) {
 }
 
 
-// RetryAttemptCallback is called for each retry attempt before waiting
-type RetryAttemptCallback func(attempt int, dialTime time.Duration, reason string)
+// RetryAttemptCallback is called for each retry attempt before waiting.
+// operatorName and operatorPrefix identify which operator was being tried.
+type RetryAttemptCallback func(attempt int, dialTime time.Duration, reason, operatorName, operatorPrefix string)
 
 // runTest executes a single test call.
 func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber string, originalPhone string, onRetryAttempt RetryAttemptCallback) testResult {
@@ -409,8 +467,10 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 			}
 
 			// Call callback to emit result for this retry attempt
+			// Note: runTest doesn't know about operators - the wrapper callback
+			// (opRetryCallback in runTestWithFailover) fills in operator info
 			if onRetryAttempt != nil {
-				onRetryAttempt(retryAttempts, result.DialTime, retryReason)
+				onRetryAttempt(retryAttempts, result.DialTime, retryReason, "", "")
 			}
 
 			// Wait for CDR to be written before diagnostic lookups
@@ -711,6 +771,7 @@ func NewModemPool(
 	cdrLookupDelay time.Duration,
 	cdrService *CDRService,
 	asteriskCDRService *AsteriskCDRService,
+	operatorCache *OperatorCache,
 	logOutput io.Writer,
 ) (*ModemPool, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -743,6 +804,7 @@ func NewModemPool(
 			cdrLookupDelay,
 			cdrService,
 			asteriskCDRService,
+			operatorCache,
 			logOutput,
 			p.coordinator,
 			p.phoneQueue,

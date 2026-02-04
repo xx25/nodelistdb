@@ -90,12 +90,13 @@ type TestConfig struct {
 	RetryCount int `yaml:"-"` // Number of retries (set via -retry)
 
 	// Config file fields
-	Pause     Duration         `yaml:"pause"`     // Single pause for all inter-call delays (default: 60s)
-	Phone     string           `yaml:"phone"`     // Single phone (for backward compatibility)
-	Phones    []string         `yaml:"phones"`    // Multiple phones (called in circular order)
-	Operators []OperatorConfig `yaml:"operators"` // Operator prefixes for routing comparison (optional)
-	CSVFile   string           `yaml:"csv_file"`  // Path to CSV output file (optional)
-	Prefix    string           `yaml:"prefix"`    // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
+	Pause         Duration            `yaml:"pause"`          // Single pause for all inter-call delays (default: 60s)
+	Phone         string              `yaml:"phone"`          // Single phone (for backward compatibility)
+	Phones        []string            `yaml:"phones"`         // Multiple phones (called in circular order)
+	Operators     []OperatorConfig    `yaml:"operators"`      // Operator prefixes for routing comparison (optional)
+	OperatorCache OperatorCacheConfig `yaml:"operator_cache"` // Operator failover cache settings
+	CSVFile       string              `yaml:"csv_file"`       // Path to CSV output file (optional)
+	Prefix        string              `yaml:"prefix"`         // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
 }
 
 // OperatorConfig contains operator/carrier routing configuration
@@ -195,6 +196,11 @@ func DefaultConfig() *Config {
 		},
 		Test: TestConfig{
 			Pause: Duration(60 * time.Second),
+			OperatorCache: OperatorCacheConfig{
+				Enabled: true, // Enabled by default when multiple operators configured
+				Path:    "",   // Default: ~/.modem-test/operator_cache
+				TTL:     Duration(30 * 24 * time.Hour), // 30 days
+			},
 		},
 		EMSI: EMSIConfig{
 			OurAddress: "2:5001/5001",
@@ -261,6 +267,21 @@ func (c *Config) Validate() error {
 	// Prefix mode validation
 	if c.Test.Prefix != "" && c.NodelistDB.URL == "" {
 		return fmt.Errorf("nodelistdb.url is required when test.prefix is set")
+	}
+
+	// Operator name validation
+	if len(c.Test.Operators) > 1 {
+		opNames := make(map[string]bool)
+		for i, op := range c.Test.Operators {
+			// Require names when multiple operators are configured (for cache key matching)
+			if op.Name == "" {
+				return fmt.Errorf("test.operators[%d].name is required when multiple operators are configured", i)
+			}
+			if opNames[op.Name] {
+				return fmt.Errorf("duplicate operator name: %s", op.Name)
+			}
+			opNames[op.Name] = true
+		}
 	}
 
 	// Multi-modem mode validation

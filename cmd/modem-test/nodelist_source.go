@@ -304,18 +304,14 @@ type nodeCallSchedule struct {
 
 // ScheduleNodes returns a channel that emits phoneJobs in time-aware order.
 // CM and currently-callable nodes are emitted first, then deferred nodes are
-// emitted when their call window opens. Each node is tested with each operator.
+// emitted when their call window opens. When operators are configured, each job
+// includes the full operator list for failover (rather than emitting separate jobs).
 // The goroutine exits when all nodes have been emitted or ctx is cancelled.
 func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []OperatorConfig, log *TestLogger) <-chan phoneJob {
 	jobs := make(chan phoneJob, 100)
 
 	go func() {
 		defer close(jobs)
-
-		// Default to single empty operator if none configured
-		if len(operators) == 0 {
-			operators = []OperatorConfig{{Name: "", Prefix: ""}}
-		}
 
 		now := time.Now().UTC()
 		sched := timeavail.NewScheduler(now)
@@ -372,25 +368,22 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []Operator
 				}
 			}
 
-			// Emit one job per operator for this node
-			for _, op := range operators {
-				testNum++
-				job := phoneJob{
-					phone:          n.Phone,
-					operatorName:   op.Name,
-					operatorPrefix: op.Prefix,
-					testNum:        testNum,
-					nodeAddress:    n.Address(),
-					nodeSystemName: strings.ReplaceAll(n.SystemName, "_", " "),
-					nodeLocation:   strings.ReplaceAll(n.Location, "_", " "),
-					nodeSysop:      strings.ReplaceAll(n.SysopName, "_", " "),
-				}
+			// Emit ONE job per node with full operator list for failover
+			testNum++
+			job := phoneJob{
+				phone:          n.Phone,
+				operators:      operators, // Full list for failover (may be empty)
+				testNum:        testNum,
+				nodeAddress:    n.Address(),
+				nodeSystemName: strings.ReplaceAll(n.SystemName, "_", " "),
+				nodeLocation:   strings.ReplaceAll(n.Location, "_", " "),
+				nodeSysop:      strings.ReplaceAll(n.SysopName, "_", " "),
+			}
 
-				select {
-				case jobs <- job:
-				case <-ctx.Done():
-					return
-				}
+			select {
+			case jobs <- job:
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
