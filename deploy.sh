@@ -21,16 +21,22 @@ echo ""
 build_binaries() {
     echo -e "${YELLOW}Building binaries...${NC}"
 
+    # Get version info
+    VERSION=$(git describe --tags --always 2>/dev/null || echo dev)
+    COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+    BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+    LDFLAGS="-X 'github.com/nodelistdb/internal/version.Version=${VERSION}' -X 'github.com/nodelistdb/internal/version.GitCommit=${COMMIT}' -X 'github.com/nodelistdb/internal/version.BuildTime=${BUILD_TIME}'"
+
     # Build for x86_64 (nodelist.5001.ru)
     echo "  Building for x86_64..."
-    GOOS=linux GOARCH=amd64 go build -ldflags "-X 'main.version=$(git describe --tags --always 2>/dev/null || echo dev)'" -o "$BIN_DIR/server-amd64" ./cmd/server
-    GOOS=linux GOARCH=amd64 go build -ldflags "-X 'main.version=$(git describe --tags --always 2>/dev/null || echo dev)'" -o "$BIN_DIR/testdaemon-amd64" ./cmd/testdaemon
+    GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/server-amd64" ./cmd/server
+    GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/testdaemon-amd64" ./cmd/testdaemon
 
     # Build for ARM64 (oracle-main.thodin.net)
     echo "  Building for ARM64..."
-    GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.version=$(git describe --tags --always 2>/dev/null || echo dev)'" -o "$BIN_DIR/parser-arm64" ./cmd/parser
-    GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.version=$(git describe --tags --always 2>/dev/null || echo dev)'" -o "$BIN_DIR/server-arm64" ./cmd/server
-    GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.version=$(git describe --tags --always 2>/dev/null || echo dev)'" -o "$BIN_DIR/testdaemon-arm64" ./cmd/testdaemon
+    GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/parser-arm64" ./cmd/parser
+    GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/server-arm64" ./cmd/server
+    GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/testdaemon-arm64" ./cmd/testdaemon
 
     echo -e "  ${GREEN}✓ Build complete${NC}"
     echo ""
