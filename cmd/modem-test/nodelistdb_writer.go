@@ -205,7 +205,7 @@ func (w *NodelistDBWriter) convertRecord(rec *TestRecord) nodelistDBResultReques
 	// Parse node address (e.g., "2:5020/100") into zone/net/node
 	var zone, net, node uint16
 	if rec.NodeAddress != "" {
-		fmt.Sscanf(rec.NodeAddress, "%d:%d/%d", &zone, &net, &node)
+		_, _ = fmt.Sscanf(rec.NodeAddress, "%d:%d/%d", &zone, &net, &node)
 	}
 
 	req := nodelistDBResultRequest{

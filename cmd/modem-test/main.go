@@ -225,9 +225,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "WARNING: -cm-only has no effect without -prefix or -all\n")
 	}
 
-	// Get phone list from config (may be overridden by modes below)
-	phones := cfg.GetPhones()
-
 	// Handle different test modes
 	if *nodeAddr != "" {
 		// Mode 1: Single node test
@@ -330,7 +327,7 @@ func main() {
 	// Mode 2: Phone list mode - phones already set from config/CLI
 
 	// Update phones after mode handling
-	phones = cfg.GetPhones()
+	phones := cfg.GetPhones()
 
 	// Initialize operator cache for failover mode (multi-operator scenarios)
 	var operatorCache *OperatorCache
