@@ -21,59 +21,86 @@ import (
 // CLI flags
 var (
 	configPath  = flag.String("config", "", "Path to YAML config file")
-	phone       = flag.String("phone", "", "Phone number to dial (required for batch mode)")
-	count       = flag.Int("count", -1, "Number of test calls (0=infinite, overrides config)")
+	phone       = flag.String("phone", "", "Phone number(s) to dial (comma-separated or ranges like 901-910)")
 	device      = flag.String("device", "", "Serial device (overrides config)")
 	debug       = flag.Bool("debug", false, "Enable debug output (overrides config)")
 	csvFile     = flag.String("csv", "", "Output results to CSV file")
 	logFile     = flag.String("log", "", "Output log to file (in addition to stderr)")
 	interactive = flag.Bool("interactive", false, "Interactive AT command mode")
 	batch       = flag.Bool("batch", false, "Run batch test mode")
-	prefix       = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
-	cmOnly       = flag.Bool("cm-only", false, "Only test CM (24/7) nodes (prefix mode only)")
-	perOperator  = flag.Int("per-operator", -1, "Calls per operator per phone (mutually exclusive with -count)")
-	retryCount    = flag.Int("retry", 20, "Number of retries for failed calls (0=disabled)")
-	retryDelayStr = flag.String("retry-delay", "5s", "Delay between retry attempts")
-	interDelayStr = flag.String("delay", "", "Delay between consecutive tests (default: config inter_delay or 5s)")
+	prefix      = flag.String("prefix", "", "Phone prefix to fetch PSTN nodes from API (e.g., \"+7\")")
+	cmOnly      = flag.Bool("cm-only", false, "Only test CM (24/7) nodes (prefix mode only)")
+	retryCount  = flag.Int("retry", 3, "Number of retries for BUSY/NO ANSWER (default: 3)")
+	pauseStr    = flag.String("pause", "", "Pause between calls, retries, and CDR lookups (default: 60s)")
+	nodeAddr    = flag.String("node", "", "Single node address to test (format: zone:net/node, e.g., 2:5001/100)")
+	allNodes    = flag.Bool("all", false, "Test all PSTN nodes (use with -except to exclude prefixes)")
+	exceptPfx   = flag.String("except", "", "Comma-separated prefixes to exclude from -all mode (e.g., \"+7,+1\")")
 )
 
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Modem test tool for FidoNet node connectivity testing.\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
+		fmt.Fprintf(os.Stderr, "Test Modes (mutually exclusive):\n")
+		fmt.Fprintf(os.Stderr, "  -node      Test a specific FidoNet node by address\n")
+		fmt.Fprintf(os.Stderr, "  -phone     Test arbitrary phone number(s)\n")
+		fmt.Fprintf(os.Stderr, "  -prefix    Test all nodes matching a phone prefix\n")
+		fmt.Fprintf(os.Stderr, "  -all       Test ALL PSTN nodes (with optional exceptions)\n")
+		fmt.Fprintf(os.Stderr, "\nOptions:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  # Run batch test with config file\n")
-		fmt.Fprintf(os.Stderr, "  %s -config modem-test.yaml -phone 917 -batch\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # Test multiple phones in circular order\n")
-		fmt.Fprintf(os.Stderr, "  %s -phone 917,918,919 -count 9 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Test a specific node by address\n")
+		fmt.Fprintf(os.Stderr, "  %s -node 2:5001/100\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Test a node with phone override\n")
+		fmt.Fprintf(os.Stderr, "  %s -node 2:5001/100 -phone 79001234567\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Test multiple phones\n")
+		fmt.Fprintf(os.Stderr, "  %s -phone 917,918,919 -batch\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Test phone range (901 through 910)\n")
-		fmt.Fprintf(os.Stderr, "  %s -phone 901-910 -count 20 -batch\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # Mix ranges and individual numbers\n")
-		fmt.Fprintf(os.Stderr, "  %s -phone 901-903,917,920-922 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -phone 901-910 -batch\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Test all Russian nodes (prefix +7), CM only\n")
+		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -cm-only\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Test all nodes EXCEPT Russian and US\n")
+		fmt.Fprintf(os.Stderr, "  %s -all -except +7,+1\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Interactive AT command mode\n")
 		fmt.Fprintf(os.Stderr, "  %s -interactive\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # Override device\n")
-		fmt.Fprintf(os.Stderr, "  %s -config modem.yaml -phone 917 -device /dev/ttyUSB0 -batch\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # Output results to CSV file\n")
-		fmt.Fprintf(os.Stderr, "  %s -phone 917 -count 10 -csv results.csv -batch\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # 2 calls per operator per phone (with operators in config)\n")
-		fmt.Fprintf(os.Stderr, "  %s -config modem-test.yaml -per-operator 2 -phone 917 -batch\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # Save log to file (also outputs to stderr)\n")
-		fmt.Fprintf(os.Stderr, "  %s -phone 917 -log session.log -batch\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Custom pause between calls (default: 60s)\n")
+		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -pause 30s\n", os.Args[0])
 	}
 
 	flag.Parse()
 
-	// Validate mutually exclusive flags
-	if *count >= 0 && *perOperator >= 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: -count and -per-operator are mutually exclusive\n")
+	// Validate mutually exclusive mode flags
+	modeCount := 0
+	if *interactive {
+		modeCount++
+	}
+	if *nodeAddr != "" {
+		modeCount++
+	}
+	if *phone != "" && *nodeAddr == "" { // phone alone = phone mode; phone with node = override
+		modeCount++
+	}
+	if *prefix != "" {
+		modeCount++
+	}
+	if *allNodes {
+		modeCount++
+	}
+	if modeCount > 1 {
+		fmt.Fprintf(os.Stderr, "ERROR: only one of -interactive, -node, -phone, -prefix, -all can be specified\n")
 		flag.Usage()
 		os.Exit(1)
 	}
-	if *perOperator == 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: -per-operator must be positive\n")
+
+	// Validate -node with -phone (single phone only for override)
+	if *nodeAddr != "" && *phone != "" && strings.Contains(*phone, ",") {
+		fmt.Fprintf(os.Stderr, "ERROR: -phone override with -node must be a single number, not a list\n")
+		os.Exit(1)
+	}
+
+	// Validate -except only with -all
+	if *exceptPfx != "" && !*allNodes {
+		fmt.Fprintf(os.Stderr, "ERROR: -except can only be used with -all\n")
 		os.Exit(1)
 	}
 
@@ -97,26 +124,14 @@ func main() {
 	cfg.ApplyCLIOverrides(*device, *phone, *debug, *csvFile)
 
 	// Set CLI-only test parameters
-	if *count >= 0 {
-		cfg.Test.Count = *count
-	}
-	if *perOperator > 0 {
-		cfg.Test.CallsPerOperator = *perOperator
-	}
 	cfg.Test.RetryCount = *retryCount
-	retryDelay, err := time.ParseDuration(*retryDelayStr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: invalid -retry-delay value %q: %v\n", *retryDelayStr, err)
-		os.Exit(1)
-	}
-	cfg.Test.RetryDelay = Duration(retryDelay)
-	if *interDelayStr != "" {
-		interDelay, err := time.ParseDuration(*interDelayStr)
+	if *pauseStr != "" {
+		pauseDur, err := time.ParseDuration(*pauseStr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: invalid -delay value %q: %v\n", *interDelayStr, err)
+			fmt.Fprintf(os.Stderr, "ERROR: invalid -pause value %q: %v\n", *pauseStr, err)
 			os.Exit(1)
 		}
-		cfg.Test.InterDelay = Duration(interDelay)
+		cfg.Test.Pause = Duration(pauseDur)
 	}
 
 	// Create logger
@@ -185,103 +200,146 @@ func main() {
 		defer sqliteWriter.Close()
 	}
 
-	// Prefix mode: fetch PSTN nodes from API and replace phone list
+	// Initialize NodelistDB results writer (optional)
+	nodelistDBWriter, err := NewNodelistDBWriter(cfg.NodelistDB)
+	if err != nil {
+		log.Warn("NodelistDB results writer unavailable: %v", err)
+		nodelistDBWriter = &NodelistDBWriter{} // Use disabled writer
+	} else if nodelistDBWriter.IsEnabled() {
+		log.Info("NodelistDB results writer enabled: %s", cfg.NodelistDB.URL)
+		defer nodelistDBWriter.Close()
+	}
+
+	// Variables for node testing modes
 	var nodeLookup map[string]*NodeTarget
 	var filteredNodes []NodeTarget
 
+	// Determine effective prefix (CLI or config)
 	pfx := *prefix
 	if pfx == "" {
 		pfx = cfg.Test.Prefix
 	}
-	if *cmOnly && pfx == "" {
-		fmt.Fprintf(os.Stderr, "WARNING: -cm-only has no effect without -prefix\n")
+
+	// Validate -cm-only usage
+	if *cmOnly && pfx == "" && !*allNodes {
+		fmt.Fprintf(os.Stderr, "WARNING: -cm-only has no effect without -prefix or -all\n")
 	}
-	if pfx != "" {
+
+	// Get phone list from config (may be overridden by modes below)
+	phones := cfg.GetPhones()
+
+	// Handle different test modes
+	if *nodeAddr != "" {
+		// Mode 1: Single node test
+		if cfg.NodelistDB.URL == "" {
+			fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.url is required for -node mode\n")
+			os.Exit(1)
+		}
+		zone, net, node, err := ParseNodeAddress(*nodeAddr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Invalid node address %q: %v\n", *nodeAddr, err)
+			os.Exit(1)
+		}
+		log.Info("Fetching node %d:%d/%d from %s...", zone, net, node, cfg.NodelistDB.URL)
+		target, err := FetchNodeByAddress(cfg.NodelistDB.URL, zone, net, node, 30*time.Second)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch node: %v\n", err)
+			os.Exit(1)
+		}
+		// Phone override takes precedence
+		if *phone != "" {
+			target.Phone = *phone
+		}
+		if target.Phone == "" || target.Phone == "-Unpublished-" {
+			fmt.Fprintf(os.Stderr, "ERROR: Node %s has no phone number. Use -phone to specify one.\n", *nodeAddr)
+			os.Exit(1)
+		}
+		// Strip leading + from phone for modem dialing
+		target.Phone = strings.TrimPrefix(target.Phone, "+")
+		filteredNodes = []NodeTarget{*target}
+		nodeLookup = BuildNodeLookupByPhone(filteredNodes)
+		cfg.Test.Phones = []string{target.Phone}
+		*batch = true
+
+	} else if pfx != "" {
+		// Mode 3: Prefix test
 		if cfg.NodelistDB.URL == "" {
 			fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.url is required when using -prefix\n")
 			os.Exit(1)
 		}
-		if *phone != "" {
-			fmt.Fprintf(os.Stderr, "WARNING: -phone is ignored when -prefix is set\n")
-		}
-
 		log.Info("Fetching PSTN nodes from %s...", cfg.NodelistDB.URL)
-		allNodes, err := FetchPSTNNodes(cfg.NodelistDB.URL, 30*time.Second)
+		allNodesList, totalCount, err := FetchPSTNNodesWithCount(cfg.NodelistDB.URL, 30*time.Second)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch PSTN nodes: %v\n", err)
 			os.Exit(1)
 		}
-		log.Info("Fetched %d PSTN nodes total", len(allNodes))
-
-		if len(allNodes) >= 10000 {
-			log.Warn("Fetched exactly %d nodes — results may be truncated by API limit", len(allNodes))
+		log.Info("Fetched %d PSTN nodes total", len(allNodesList))
+		if len(allNodesList) < totalCount {
+			log.Warn("Result truncated: fetched %d of %d nodes", len(allNodesList), totalCount)
 		}
-
-		filtered := FilterByPrefix(allNodes, pfx)
+		filtered := FilterByPrefix(allNodesList, pfx)
 		log.Info("Filtered to %d nodes matching prefix %q", len(filtered), pfx)
-
 		if *cmOnly {
-			var cmNodes []NodeTarget
-			for _, n := range filtered {
-				if n.IsCM {
-					cmNodes = append(cmNodes, n)
-				}
-			}
-			log.Info("CM-only filter: %d of %d nodes are CM (24/7)", len(cmNodes), len(filtered))
-			filtered = cmNodes
+			filtered = filterCMOnly(filtered, log)
 		}
-
 		if len(filtered) == 0 {
 			fmt.Fprintf(os.Stderr, "ERROR: No PSTN nodes found matching prefix %q\n", pfx)
 			os.Exit(1)
 		}
-
-		// Strip leading + from phone numbers for modem dialing.
-		// Prefix matching is already done, and ATDT doesn't understand +.
-		for i := range filtered {
-			filtered[i].Phone = strings.TrimPrefix(filtered[i].Phone, "+")
-		}
-
-		// Replace phone list with API-sourced phones
+		stripPhonePlus(filtered)
 		cfg.Test.Phones = UniquePhones(filtered)
-		cfg.Test.Phone = ""
-
-		// Default to 1 call per operator if nothing explicitly set
-		if cfg.Test.CallsPerOperator <= 0 && cfg.Test.Count <= 0 {
-			cfg.Test.CallsPerOperator = 1
-		}
-
 		nodeLookup = BuildNodeLookupByPhone(filtered)
 		filteredNodes = filtered
+		*batch = true
 
-		// Auto-enable batch mode
+	} else if *allNodes {
+		// Mode 4: All nodes with exceptions
+		if cfg.NodelistDB.URL == "" {
+			fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.url is required for -all mode\n")
+			os.Exit(1)
+		}
+		log.Info("Fetching all PSTN nodes from %s...", cfg.NodelistDB.URL)
+		allNodesList, totalCount, err := FetchPSTNNodesWithCount(cfg.NodelistDB.URL, 30*time.Second)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch PSTN nodes: %v\n", err)
+			os.Exit(1)
+		}
+		log.Info("Fetched %d PSTN nodes total", len(allNodesList))
+		if len(allNodesList) < totalCount {
+			log.Warn("Result truncated: fetched %d of %d nodes", len(allNodesList), totalCount)
+		}
+		filtered := allNodesList
+		if *exceptPfx != "" {
+			exceptPrefixes := strings.Split(*exceptPfx, ",")
+			filtered = FilterExceptPrefixes(filtered, exceptPrefixes)
+			log.Info("After excluding prefixes %v: %d nodes", exceptPrefixes, len(filtered))
+		}
+		if *cmOnly {
+			filtered = filterCMOnly(filtered, log)
+		}
+		if len(filtered) == 0 {
+			fmt.Fprintf(os.Stderr, "ERROR: No PSTN nodes found after applying filters\n")
+			os.Exit(1)
+		}
+		stripPhonePlus(filtered)
+		cfg.Test.Phones = UniquePhones(filtered)
+		nodeLookup = BuildNodeLookupByPhone(filtered)
+		filteredNodes = filtered
 		*batch = true
 	}
+	// Mode 2: Phone list mode - phones already set from config/CLI
 
-	// Validate: need count or per-operator (unless prefix mode set defaults)
-	if *batch && cfg.Test.Count <= 0 && cfg.Test.CallsPerOperator <= 0 && pfx == "" {
-		fmt.Fprintf(os.Stderr, "ERROR: specify -count N (total calls) or -per-operator N (calls per operator per phone)\n")
-		os.Exit(1)
-	}
-
-	// Validate required parameters for batch mode
-	phones := cfg.GetPhones()
-	if *batch && len(phones) == 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: Phone number is required for batch mode. Use -phone flag or set in config.\n")
-		fmt.Fprintf(os.Stderr, "       Multiple phones: -phone 917,918,919\n")
-		flag.Usage()
-		os.Exit(1)
-	}
+	// Update phones after mode handling
+	phones = cfg.GetPhones()
 
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, nodeLookup, filteredNodes)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, nodelistDBWriter, nodeLookup, filteredNodes)
 		return
 	}
 
-	// Single modem mode - original flow
-	// Create modem configuration
+	// Single modem mode - create modem configuration
 	modemCfg := modem.Config{
 		Device:           cfg.Modem.Device,
 		BaudRate:         cfg.Modem.BaudRate,
@@ -344,7 +402,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, nodeLookup, filteredNodes)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, nodelistDBWriter, nodeLookup, filteredNodes)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -356,6 +414,25 @@ func getFirstInitCommand(cmds []string) string {
 		return cmds[0]
 	}
 	return "ATZ"
+}
+
+// filterCMOnly filters nodes to only include CM (24/7) nodes
+func filterCMOnly(nodes []NodeTarget, log *TestLogger) []NodeTarget {
+	var cmNodes []NodeTarget
+	for _, n := range nodes {
+		if n.IsCM {
+			cmNodes = append(cmNodes, n)
+		}
+	}
+	log.Info("CM-only filter: %d of %d nodes are CM (24/7)", len(cmNodes), len(nodes))
+	return cmNodes
+}
+
+// stripPhonePlus removes leading + from all phone numbers for modem dialing
+func stripPhonePlus(nodes []NodeTarget) {
+	for i := range nodes {
+		nodes[i].Phone = strings.TrimPrefix(nodes[i].Phone, "+")
+	}
 }
 
 func runInfoMode(m *modem.Modem, log *TestLogger) {
@@ -422,16 +499,12 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodelistDBWriter *NodelistDBWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
-	operators := cfg.GetOperators()
-	testCount := cfg.GetTotalTestCount()
-	infinite := testCount <= 0 && !cfg.IsPerOperatorMode() // Per-operator mode is never infinite
-	interDelay := cfg.Test.InterDelay.Duration()
-	perOperatorMode := cfg.IsPerOperatorMode()
-	callsPerOperator := cfg.Test.CallsPerOperator
+	testCount := len(phones)
+	pause := cfg.GetPause()
 
-	// Setup context for cancellation (e.g., Ctrl-C during BUSY retry)
+	// Setup context for cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigChan := make(chan os.Signal, 1)
@@ -444,29 +517,8 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		cancel()
 	}()
 
-	// If no operators configured, use a single "no operator" entry for simpler loop logic
-	if len(operators) == 0 {
-		operators = []OperatorConfig{{Name: "", Prefix: ""}}
-	}
-
 	// Print session header
-	if infinite {
-		log.PrintHeader(configFile, cfg.Modem.Device, phones, -1) // -1 signals infinite
-	} else {
-		log.PrintHeader(configFile, cfg.Modem.Device, phones, testCount)
-	}
-
-	// Log operator configuration if multiple operators configured
-	if len(operators) > 1 || (len(operators) == 1 && operators[0].Name != "") {
-		log.Info("Operator rotation enabled with %d operator(s):", len(operators))
-		for _, op := range operators {
-			if op.Prefix == "" {
-				log.Info("  - %s (direct dial)", op.Name)
-			} else {
-				log.Info("  - %s (prefix: %s)", op.Name, op.Prefix)
-			}
-		}
-	}
+	log.PrintHeader(configFile, cfg.Modem.Device, phones, testCount)
 
 	// Initialize CSV writer if configured
 	var csvWriter *CSVWriter
@@ -493,32 +545,10 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		phoneStats[phone] = &PhoneStats{Phone: phone}
 	}
 
-	// Per-operator statistics
-	operatorStats := make(map[string]*OperatorStats)
-	for _, op := range operators {
-		operatorStats[op.Name] = &OperatorStats{Name: op.Name, Prefix: op.Prefix}
-	}
-
-	// Track calls per phone+operator combination (for per-operator mode)
-	type comboKey struct {
-		phone    string
-		operator string
-	}
-	callCounts := make(map[comboKey]int)
-
-	// Calculate total combinations for rotation
-	totalCombinations := len(phones) * len(operators)
-
-	// Log per-operator mode info
-	if perOperatorMode {
-		log.Info("Per-operator mode: %d calls per operator per phone (total: %d calls)",
-			callsPerOperator, testCount)
-	}
-
-	// Prefix mode: use ScheduleNodes for time-aware job ordering
+	// Use ScheduleNodes for time-aware job ordering (handles CM, availability windows)
 	var schedChan <-chan phoneJob
 	if len(filteredNodes) > 0 {
-		schedChan = ScheduleNodes(ctx, filteredNodes, operators, cfg.Test.CallsPerOperator, log)
+		schedChan = ScheduleNodes(ctx, filteredNodes, log)
 	}
 
 	for i := 1; ; i++ {
@@ -529,18 +559,16 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		}
 
 		var currentPhone string
-		var currentOperator OperatorConfig
 		var currentNodeAddress, currentNodeSystemName, currentNodeLocation, currentNodeSysop string
 
 		if schedChan != nil {
-			// Prefix/schedule mode: consume pre-scheduled, time-aware jobs
+			// Schedule mode: consume pre-scheduled, time-aware jobs
 			job, ok := <-schedChan
 			if !ok {
 				// All scheduled nodes processed
 				break
 			}
 			currentPhone = job.phone
-			currentOperator = OperatorConfig{Name: job.operatorName, Prefix: job.operatorPrefix}
 			currentNodeAddress = job.nodeAddress
 			currentNodeSystemName = job.nodeSystemName
 			currentNodeLocation = job.nodeLocation
@@ -552,79 +580,35 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			if job.nodeAddress != "" {
 				log.Info("Node: %s %s (sysop: %s)", job.nodeAddress, job.nodeSystemName, job.nodeSysop)
 			}
-		} else if perOperatorMode {
-			// Per-operator mode: find next combo that hasn't reached its limit
-			found := false
-			for _, phone := range phones {
-				for _, op := range operators {
-					key := comboKey{phone: phone, operator: op.Name}
-					if callCounts[key] < callsPerOperator {
-						currentPhone = phone
-						currentOperator = op
-						found = true
-						break
-					}
-				}
-				if found {
-					break
-				}
-			}
-			if !found {
-				// All combinations have reached their limit
-				log.Info("All phone+operator combinations completed")
-				break
-			}
-			callCounts[comboKey{phone: currentPhone, operator: currentOperator.Name}]++
-
-			if infinite {
-				log.PrintTestHeader(i, 0)
-			} else {
-				log.PrintTestHeader(i, testCount)
-			}
 		} else {
-			// Legacy mode: round-robin through all combinations
-			if !infinite && i > testCount {
+			// Simple phone list mode
+			if i > len(phones) {
 				break
 			}
-			comboIndex := (i - 1) % totalCombinations
-			phoneIndex := comboIndex / len(operators)
-			operatorIndex := comboIndex % len(operators)
-			currentPhone = phones[phoneIndex]
-			currentOperator = operators[operatorIndex]
+			currentPhone = phones[i-1]
+			log.PrintTestHeader(i, testCount)
 
-			if infinite {
-				log.PrintTestHeader(i, 0)
-			} else {
-				log.PrintTestHeader(i, testCount)
+			// Look up node info from nodeLookup if available
+			if nodeLookup != nil {
+				if target, ok := nodeLookup[currentPhone]; ok {
+					currentNodeAddress = target.Address()
+					currentNodeSystemName = strings.ReplaceAll(target.SystemName, "_", " ")
+					currentNodeLocation = strings.ReplaceAll(target.Location, "_", " ")
+					currentNodeSysop = strings.ReplaceAll(target.SysopName, "_", " ")
+					log.Info("Node: %s %s (sysop: %s)", currentNodeAddress, currentNodeSystemName, currentNodeSysop)
+				}
 			}
 		}
 
-		// Look up node info from nodeLookup if available (non-schedule modes)
-		if currentNodeAddress == "" && nodeLookup != nil {
-			if target, ok := nodeLookup[currentPhone]; ok {
-				currentNodeAddress = target.Address()
-				currentNodeSystemName = strings.ReplaceAll(target.SystemName, "_", " ")
-				currentNodeLocation = strings.ReplaceAll(target.Location, "_", " ")
-				currentNodeSysop = strings.ReplaceAll(target.SysopName, "_", " ")
-			}
-		}
-
-		// Log operator info if configured
-		if currentOperator.Name != "" {
-			log.Info("Operator: %s (prefix: %q)", currentOperator.Name, currentOperator.Prefix)
-		}
-
-		// Dial with operator prefix prepended
-		dialPhone := currentOperator.Prefix + currentPhone
-		result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, dialPhone, currentPhone)
+		// Dial phone directly (no operator prefix)
+		result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, currentPhone, currentPhone)
 		results = append(results, result.message)
 
 		// Lookup CDR data for VoIP quality metrics (AudioCodes)
-		// Note: Use original phone (without operator prefix) for CDR lookup
 		if cdrService != nil && cdrService.IsEnabled() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			cdrData, err := cdrService.LookupByPhone(ctx, currentPhone, time.Now())
-			cancel()
+			cdrCtx, cdrCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			cdrData, err := cdrService.LookupByPhone(cdrCtx, currentPhone, time.Now())
+			cdrCancel()
 			if err != nil {
 				log.Warn("AudioCodes CDR lookup failed for %s: %v", currentPhone, err)
 			} else if cdrData != nil {
@@ -639,9 +623,9 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 
 		// Lookup Asterisk CDR for call routing info
 		if asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			asteriskCDR, err := asteriskCDRService.LookupByPhone(ctx, currentPhone, time.Now())
-			cancel()
+			astCtx, astCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			asteriskCDR, err := asteriskCDRService.LookupByPhone(astCtx, currentPhone, time.Now())
+			astCancel()
 			if err != nil {
 				log.Warn("Asterisk CDR lookup failed for %s: %v", currentPhone, err)
 			} else if asteriskCDR != nil {
@@ -656,12 +640,12 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 
 		// Write to CSV and databases if enabled
 		var rec *TestRecord
-		if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) || (sqliteWriter != nil && sqliteWriter.IsEnabled()) {
+		if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) || (sqliteWriter != nil && sqliteWriter.IsEnabled()) || (nodelistDBWriter != nil && nodelistDBWriter.IsEnabled()) {
 			rec = RecordFromTestResult(
 				i,
-				currentPhone, // Store original phone without operator prefix
-				currentOperator.Name,
-				currentOperator.Prefix,
+				currentPhone,
+				"", // No operator name
+				"", // No operator prefix
 				currentNodeAddress,
 				currentNodeSystemName,
 				currentNodeLocation,
@@ -705,36 +689,36 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			}
 		}
 
+		// Write to NodelistDB if enabled
+		if nodelistDBWriter != nil && nodelistDBWriter.IsEnabled() && rec != nil {
+			if err := nodelistDBWriter.WriteRecord(rec); err != nil {
+				log.Error("Failed to write NodelistDB record: %v", err)
+			}
+		}
+
 		// Update per-phone stats
 		stats := phoneStats[currentPhone]
 		stats.Total++
 
-		// Update per-operator stats
-		opStats := operatorStats[currentOperator.Name]
-		opStats.Total++
-
 		if result.success {
 			success++
 			stats.Success++
-			opStats.Success++
 			totalDialTime += result.dialTime
 			totalEmsiTime += result.emsiTime
 			stats.TotalDialTime += result.dialTime
 			stats.TotalEmsiTime += result.emsiTime
-			opStats.TotalDialTime += result.dialTime
-			opStats.TotalEmsiTime += result.emsiTime
 		} else {
 			failed++
 			stats.Failed++
-			opStats.Failed++
 		}
 
-		if infinite || i < testCount {
-			log.Info("Waiting %v before next test...", interDelay)
+		// Wait pause between tests (except after last one)
+		if i < testCount {
+			log.Info("Waiting %v before next test...", pause)
 			select {
-			case <-time.After(interDelay):
+			case <-time.After(pause):
 			case <-ctx.Done():
-				log.Info("Inter-test delay cancelled")
+				log.Info("Pause cancelled")
 			}
 		}
 	}
@@ -746,8 +730,8 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		avgEmsiTime = totalEmsiTime / time.Duration(success)
 	}
 
-	// Print summary with per-phone and per-operator stats
-	log.PrintSummaryWithStats(testCount, success, failed, time.Since(sessionStart), avgDialTime, avgEmsiTime, results, phoneStats, operatorStats)
+	// Print summary with per-phone stats
+	log.PrintSummaryWithPhoneStats(testCount, success, failed, time.Since(sessionStart), avgDialTime, avgEmsiTime, results, phoneStats)
 }
 
 type testResult struct {
@@ -765,10 +749,11 @@ type testResult struct {
 }
 
 func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, testNum int, phoneNumber string, originalPhone string) testResult {
-	// Determine retry settings
+	// Determine retry settings - use pause for all delays
 	retryCount := cfg.GetRetryCount()
-	retryDelay := cfg.GetRetryDelay()
-	cdrLookupDelay := cfg.GetCDRLookupDelay()
+	pause := cfg.GetPause()
+	retryDelay := pause
+	cdrLookupDelay := pause
 
 	var result *modem.DialResult
 	var err error

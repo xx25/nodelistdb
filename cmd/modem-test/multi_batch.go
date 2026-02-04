@@ -13,28 +13,22 @@ import (
 )
 
 // runBatchModeMulti orchestrates batch testing with multiple modems.
-func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
+func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodelistDBWriter *NodelistDBWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
-	operators := cfg.GetOperators()
-	testCount := cfg.GetTotalTestCount()
-	infinite := testCount <= 0 && !cfg.IsPerOperatorMode() // Per-operator mode is never infinite
-	interDelay := cfg.Test.InterDelay.Duration()
-	perOperatorMode := cfg.IsPerOperatorMode()
-	callsPerOperator := cfg.Test.CallsPerOperator
-	retryCount := cfg.GetRetryCount()
-	retryDelay := cfg.GetRetryDelay()
-	cdrLookupDelay := cfg.GetCDRLookupDelay()
-
-	// If no operators configured, use a single "no operator" entry for simpler loop logic
-	if len(operators) == 0 {
-		operators = []OperatorConfig{{Name: "", Prefix: ""}}
+	// Test count is the number of phones (or filtered nodes if in prefix mode)
+	testCount := len(phones)
+	if len(filteredNodes) > 0 {
+		testCount = len(filteredNodes)
 	}
+	infinite := false // In multi-modem mode, run through all phones once
+	pause := cfg.GetPause()
+	retryCount := cfg.GetRetryCount()
 
 	// Get modem configurations
 	modemConfigs := cfg.GetModemConfigs()
 
-	// Create modem pool
-	pool, err := NewModemPool(modemConfigs, cfg.EMSI, cfg.Logging, interDelay, retryCount, retryDelay, cdrLookupDelay, cdrService, asteriskCDRService, log.GetOutput())
+	// Create modem pool - use pause for all delay parameters
+	pool, err := NewModemPool(modemConfigs, cfg.EMSI, cfg.Logging, pause, retryCount, pause, pause, cdrService, asteriskCDRService, log.GetOutput())
 	if err != nil {
 		log.Error("Failed to create modem pool: %v", err)
 		os.Exit(1)
@@ -54,18 +48,6 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 
 	// Print header
 	log.PrintMultiModemHeader(configFile, pool.WorkerNames(), phones, testCount)
-
-	// Log operator configuration if multiple operators configured
-	if len(operators) > 1 || (len(operators) == 1 && operators[0].Name != "") {
-		log.Info("Operator rotation enabled with %d operator(s):", len(operators))
-		for _, op := range operators {
-			if op.Prefix == "" {
-				log.Info("  - %s (direct dial)", op.Name)
-			} else {
-				log.Info("  - %s (prefix: %s)", op.Name, op.Prefix)
-			}
-		}
-	}
 
 	// Initialize CSV writer if configured
 	var csvWriter *CSVWriter
@@ -89,10 +71,6 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	modemStats := make(map[string]*WorkerStats)
 	for _, name := range pool.WorkerNames() {
 		modemStats[name] = &WorkerStats{}
-	}
-	operatorStats := make(map[string]*OperatorStats)
-	for _, op := range operators {
-		operatorStats[op.Name] = &OperatorStats{Name: op.Name, Prefix: op.Prefix}
 	}
 
 	var totalSuccess, totalFailed int
@@ -124,32 +102,20 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			}
 			ms.Total++
 
-			// Update operator stats
-			os := operatorStats[result.OperatorName]
-			if os == nil {
-				os = &OperatorStats{Name: result.OperatorName, Prefix: result.OperatorPrefix}
-				operatorStats[result.OperatorName] = os
-			}
-			os.Total++
-
 			if result.Result.success {
 				totalSuccess++
 				ps.Success++
 				ms.Success++
-				os.Success++
 				totalDialTime += result.Result.dialTime
 				totalEmsiTime += result.Result.emsiTime
 				ps.TotalDialTime += result.Result.dialTime
 				ps.TotalEmsiTime += result.Result.emsiTime
 				ms.TotalDialTime += result.Result.dialTime
 				ms.TotalEmsiTime += result.Result.emsiTime
-				os.TotalDialTime += result.Result.dialTime
-				os.TotalEmsiTime += result.Result.emsiTime
 			} else {
 				totalFailed++
 				ps.Failed++
 				ms.Failed++
-				os.Failed++
 			}
 
 			results = append(results, result.Result.message)
@@ -160,7 +126,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			asteriskCDR := result.Result.asteriskCDR
 
 			// Write CSV and databases
-			if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) || (sqliteWriter != nil && sqliteWriter.IsEnabled()) {
+			if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) || (sqliteWriter != nil && sqliteWriter.IsEnabled()) || (nodelistDBWriter != nil && nodelistDBWriter.IsEnabled()) {
 				rec := RecordFromTestResult(
 					result.TestNum,
 					result.Phone,
@@ -206,6 +172,12 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 						log.Error("Failed to write SQLite record: %v", err)
 					}
 				}
+
+				if nodelistDBWriter != nil && nodelistDBWriter.IsEnabled() {
+					if err := nodelistDBWriter.WriteRecord(rec); err != nil {
+						log.Error("Failed to write NodelistDB record: %v", err)
+					}
+				}
 			}
 
 			statsMu.Unlock()
@@ -215,34 +187,16 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	// Start workers
 	pool.Start()
 
-	// Submit phones to pool
-	// In multi-modem mode, we pace submissions to maintain similar overall test rate
-	// as single-modem mode. With N modems, each submission happens N times faster.
+	// Calculate submission pacing
 	numWorkers := pool.WorkerCount()
 	submissionDelay := time.Duration(0)
-	if numWorkers > 0 && interDelay > 0 {
-		// Divide inter_delay by number of workers for pacing
-		submissionDelay = interDelay / time.Duration(numWorkers)
+	if numWorkers > 0 && pause > 0 {
+		// Divide pause by number of workers for pacing
+		submissionDelay = pause / time.Duration(numWorkers)
 		// Minimum 50ms to prevent overwhelming the queue
 		if submissionDelay < 50*time.Millisecond {
 			submissionDelay = 50 * time.Millisecond
 		}
-	}
-
-	// Track calls per phone+operator combination (for per-operator mode)
-	type comboKey struct {
-		phone    string
-		operator string
-	}
-	callCounts := make(map[comboKey]int)
-
-	// Calculate total combinations for rotation
-	totalCombinations := len(phones) * len(operators)
-
-	// Log per-operator mode info
-	if perOperatorMode {
-		log.Info("Per-operator mode: %d calls per operator per phone (total: %d calls)",
-			callsPerOperator, testCount)
 	}
 
 	submitted := 0
@@ -250,8 +204,8 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	if len(filteredNodes) > 0 {
 		// Prefix mode: use ScheduleNodes for time-aware job ordering.
 		// ScheduleNodes sorts callable nodes first, waits for call windows,
-		// and emits one job per operator per node.
-		jobs := ScheduleNodes(ctx, filteredNodes, operators, cfg.Test.CallsPerOperator, log)
+		// and emits one job per node.
+		jobs := ScheduleNodes(ctx, filteredNodes, log)
 		for job := range jobs {
 			submitted++
 			job.testNum = submitted
@@ -268,7 +222,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			}
 		}
 	} else {
-		// Legacy submission loop: round-robin or per-operator mode
+		// Legacy submission loop: round-robin through phones
 		for i := 0; infinite || submitted < testCount; i++ {
 			select {
 			case <-ctx.Done():
@@ -276,48 +230,12 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			default:
 			}
 
-			var phone string
-			var operator OperatorConfig
-
-			if perOperatorMode {
-				// Per-operator mode: find next combo that hasn't reached its limit
-				found := false
-				for _, p := range phones {
-					for _, op := range operators {
-						key := comboKey{phone: p, operator: op.Name}
-						if callCounts[key] < callsPerOperator {
-							phone = p
-							operator = op
-							found = true
-							break
-						}
-					}
-					if found {
-						break
-					}
-				}
-				if !found {
-					// All combinations have reached their limit
-					log.Info("All phone+operator combinations completed")
-					goto cleanup
-				}
-				callCounts[comboKey{phone: phone, operator: operator.Name}]++
-			} else {
-				// Legacy mode: round-robin through all combinations
-				comboIndex := i % totalCombinations
-				phoneIndex := comboIndex / len(operators)
-				operatorIndex := comboIndex % len(operators)
-				phone = phones[phoneIndex]
-				operator = operators[operatorIndex]
-			}
-
+			phone := phones[i%len(phones)]
 			submitted++
 
 			job := phoneJob{
-				phone:          phone,
-				operatorName:   operator.Name,
-				operatorPrefix: operator.Prefix,
-				testNum:        submitted,
+				phone:   phone,
+				testNum: submitted,
 			}
 			if nodeLookup != nil {
 				if target, ok := nodeLookup[phone]; ok {
@@ -354,8 +272,8 @@ cleanup:
 		avgEmsiTime = totalEmsiTime / time.Duration(totalSuccess)
 	}
 
-	// Print summary with operator stats
-	log.PrintMultiModemSummaryWithOperators(
+	// Print summary
+	log.PrintMultiModemSummary(
 		submitted,
 		totalSuccess,
 		totalFailed,
@@ -365,6 +283,5 @@ cleanup:
 		results,
 		phoneStats,
 		modemStats,
-		operatorStats,
 	)
 }
