@@ -245,6 +245,14 @@ func (s *Storage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool
 	return s.testOperations.GetAKAMismatchNodes(limit, days, includeZeroNodes)
 }
 
+func (s *Storage) GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error) {
+	return s.testOperations.GetOtherNetworksSummary(days)
+}
+
+func (s *Storage) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
+	return s.testOperations.GetNodesInNetwork(networkName, limit, days)
+}
+
 func (s *Storage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
 	return s.testOperations.GetBinkPSoftwareDistribution(days)
 }

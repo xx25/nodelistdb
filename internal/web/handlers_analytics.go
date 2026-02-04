@@ -621,6 +621,157 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// otherNetworksAnalyticsData holds template data for the other networks analytics page
+type otherNetworksAnalyticsData struct {
+	Title            string
+	ActivePage       string
+	Version          string
+	Networks         []storage.OtherNetworkSummary
+	Days             int
+	Limit            int
+	IncludeZeroNodes bool
+	Error            error
+	Config           OtherNetworksPageConfig
+	ProcessedInfo    []template.HTML
+}
+
+// OtherNetworksAnalyticsHandler shows networks found in AKA addresses
+func (s *Server) OtherNetworksAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	config := OtherNetworksPageConfig{
+		PageTitle:    "Other Networks",
+		PageSubtitle: template.HTML(`<p class="subtitle">FidoNet nodes that also participate in other FTN-style networks</p>`),
+		StatsHeading: "Networks",
+		InfoText: []string{
+			`<strong>What are other networks?</strong> Many FidoNet sysops also run nodes on other FTN-style networks like FSXNet, TQWNet, WhisperNet, and others. During BinkP or IFCICO handshakes, nodes announce all their addresses (AKAs), including addresses on these other networks.`,
+			`<strong>Format:</strong> Other network addresses are announced as <code>zone:net/node@network</code>, for example <code>21:1/100@fsxnet</code> or <code>1337:2/106@tqwnet</code>.`,
+			`<strong>Note:</strong> This report shows networks detected from operational nodes over the last %d days. Click on a network name to see all FidoNet nodes that participate in that network.`,
+		},
+		EmptyStateTitle: "No other networks found for the selected period.",
+		EmptyStateDesc:  "This means no operational nodes announced addresses in other networks, or no nodes met the criteria during this period.",
+	}
+
+	// Parse common parameters
+	params := parseAnalyticsParams(r)
+
+	// Fetch networks summary
+	networks, err := s.storage.GetOtherNetworksSummary(params.Days)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] Other Networks Analytics: Error fetching networks: %v", err)
+		networks = []storage.OtherNetworkSummary{}
+		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
+	} else if params.ValidationError != "" {
+		displayError = fmt.Errorf("%s", params.ValidationError)
+	}
+
+	// Build template data
+	data := otherNetworksAnalyticsData{
+		Title:            config.PageTitle,
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		Networks:         networks,
+		Days:             params.Days,
+		Limit:            params.Limit,
+		IncludeZeroNodes: params.IncludeZeroNodes,
+		Error:            displayError,
+		Config:           config,
+		ProcessedInfo:    config.processInfoText(params.Days),
+	}
+
+	// Use other networks analytics template
+	tmpl, exists := s.templates["other_networks_analytics"]
+	if !exists {
+		log.Printf("[ERROR] Other Networks Analytics: Template 'other_networks_analytics' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Other Networks Analytics: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+// otherNetworkNodesData holds template data for the network nodes detail page
+type otherNetworkNodesData struct {
+	Title            string
+	ActivePage       string
+	Version          string
+	NetworkName      string
+	Nodes            []storage.OtherNetworkNode
+	Days             int
+	Limit            int
+	IncludeZeroNodes bool
+	Error            error
+	Config           OtherNetworksPageConfig
+	ProcessedInfo    []template.HTML
+}
+
+// OtherNetworkNodesHandler shows nodes in a specific network
+func (s *Server) OtherNetworkNodesHandler(w http.ResponseWriter, r *http.Request) {
+	networkName := r.URL.Query().Get("network")
+	if networkName == "" {
+		http.Redirect(w, r, "/analytics/other-networks", http.StatusFound)
+		return
+	}
+
+	config := OtherNetworksPageConfig{
+		PageTitle:    fmt.Sprintf("Nodes in %s", networkName),
+		PageSubtitle: template.HTML(fmt.Sprintf(`<p class="subtitle">FidoNet nodes that also participate in the <strong>%s</strong> network</p>`, template.HTMLEscapeString(networkName))),
+		StatsHeading: "Nodes",
+		InfoText: []string{
+			fmt.Sprintf(`These FidoNet nodes announced AKA addresses in the <strong>%s</strong> network during BinkP or IFCICO handshakes over the last %%d days.`, template.HTMLEscapeString(networkName)),
+			`The "Network Address" column shows the address(es) announced for this specific network.`,
+		},
+		EmptyStateTitle: fmt.Sprintf("No nodes found in %s for the selected period.", networkName),
+		EmptyStateDesc:  "This means no operational nodes announced addresses in this network during this period.",
+	}
+
+	// Parse common parameters
+	params := parseAnalyticsParams(r)
+
+	// Fetch nodes in network
+	nodes, err := s.storage.GetNodesInNetwork(networkName, params.Limit, params.Days)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] Other Network Nodes: Error fetching nodes for %s: %v", networkName, err)
+		nodes = []storage.OtherNetworkNode{}
+		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
+	} else if params.ValidationError != "" {
+		displayError = fmt.Errorf("%s", params.ValidationError)
+	}
+
+	// Build template data
+	data := otherNetworkNodesData{
+		Title:            config.PageTitle,
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		NetworkName:      networkName,
+		Nodes:            nodes,
+		Days:             params.Days,
+		Limit:            params.Limit,
+		IncludeZeroNodes: params.IncludeZeroNodes,
+		Error:            displayError,
+		Config:           config,
+		ProcessedInfo:    config.processInfoText(params.Days),
+	}
+
+	// Use other network nodes template
+	tmpl, exists := s.templates["other_network_nodes"]
+	if !exists {
+		log.Printf("[ERROR] Other Network Nodes: Template 'other_network_nodes' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Other Network Nodes: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // PSTNSummaryStats holds summary statistics for PSTN nodes
 type PSTNSummaryStats struct {
 	TotalCount      int

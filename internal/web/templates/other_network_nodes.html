@@ -1,0 +1,97 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+<script src="/static/tooltip.js"></script>
+{{end}}
+
+{{define "content"}}
+<div class="breadcrumb" style="margin-bottom: 1rem;">
+    <a href="/analytics/other-networks?days={{.Days}}&limit={{.Limit}}">Other Networks</a> &raquo; {{.NetworkName}}
+</div>
+
+{{template "analytics_filters" .}}
+<script>
+// Preserve the network parameter when the filter form is submitted
+(function() {
+    var form = document.querySelector('.search-container form');
+    if (form) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'network';
+        input.value = '{{.NetworkName}}';
+        form.appendChild(input);
+    }
+})();
+</script>
+{{template "error_display" .}}
+
+{{if .Nodes}}
+<div class="stats-box">
+    <h3>Found {{len .Nodes}} {{.Config.StatsHeading}} in {{.NetworkName}}</h3>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">FidoNet Address</th>
+                <th data-sortable data-type="string">Hostname</th>
+                <th>Network Address</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Nodes}}
+            <tr>
+                {{/* FidoNet Address */}}
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                        <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
+                    </a>
+                </td>
+
+                {{/* Hostname */}}
+                {{template "hostname_cell_simple" .}}
+
+                {{/* Network Address(es) */}}
+                <td>
+                    {{range .NetworkAddresses}}
+                        <span class="badge badge-info">{{.}}</span>
+                    {{end}}
+                    {{if not .NetworkAddresses}}
+                        <span class="text-muted">-</span>
+                    {{end}}
+                </td>
+
+                {{template "location_cell" .}}
+                {{template "timestamp_cell" .}}
+                {{template "action_buttons_cell" .}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    {{range .ProcessedInfo}}
+    <p>{{.}}</p>
+    {{end}}
+    <p><strong>Tip:</strong> Click on a FidoNet address to view the node's full test history and all announced AKAs.</p>
+</div>
+
+{{else}}
+<div class="alert alert-success">
+    <strong>{{.Config.EmptyStateTitle}}</strong><br>
+    {{.Config.EmptyStateDesc}}
+</div>
+{{end}}
+{{end}}

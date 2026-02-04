@@ -1,0 +1,61 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+{{template "analytics_filters" .}}
+{{template "error_display" .}}
+
+{{if .Networks}}
+<div class="stats-box">
+    <h3>Found {{len .Networks}} {{.Config.StatsHeading}}</h3>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="string">Network Name</th>
+                <th data-sortable data-type="number">Node Count</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Networks}}
+            <tr>
+                <td>
+                    <a href="/analytics/other-networks/nodes?network={{.NetworkName}}&days={{$.Days}}&limit={{$.Limit}}" class="node-link">
+                        <strong>{{.NetworkName}}</strong>
+                    </a>
+                </td>
+                <td>{{.NodeCount}}</td>
+                <td>
+                    <a href="/analytics/other-networks/nodes?network={{.NetworkName}}&days={{$.Days}}&limit={{$.Limit}}" class="btn btn-sm btn-outline">View Nodes</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    {{range .ProcessedInfo}}
+    <p>{{.}}</p>
+    {{end}}
+</div>
+
+{{else}}
+<div class="alert alert-success">
+    <strong>{{.Config.EmptyStateTitle}}</strong><br>
+    {{.Config.EmptyStateDesc}}
+</div>
+{{end}}
+{{end}}

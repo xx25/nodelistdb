@@ -17,6 +17,7 @@ type TestOperationsRefactored struct {
 	softwareOps        *SoftwareAnalyticsOperations
 	geoOps             *GeoAnalyticsOperations
 	akaMismatchOps     *AKAMismatchOperations
+	otherNetworksOps   *OtherNetworksOperations
 }
 
 // NewTestOperationsRefactored creates a new refactored TestOperations instance
@@ -35,6 +36,7 @@ func NewTestOperationsRefactored(db database.DatabaseInterface, queryBuilder Que
 		softwareOps:        NewSoftwareAnalyticsOperations(db),
 		geoOps:             NewGeoAnalyticsOperations(db),
 		akaMismatchOps:     NewAKAMismatchOperations(db, testQueryBuilder, resultParser),
+		otherNetworksOps:   NewOtherNetworksOperations(db),
 	}
 }
 
@@ -165,4 +167,16 @@ func (to *TestOperationsRefactored) GetIPv6WeeklyNews(limit int, includeZeroNode
 // GetAKAMismatchNodes returns nodes where announced AKA doesn't match expected nodelist address
 func (to *TestOperationsRefactored) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
 	return to.akaMismatchOps.GetAKAMismatchNodes(limit, days, includeZeroNodes)
+}
+
+// ===== Other Networks Operations (delegated to OtherNetworksOperations) =====
+
+// GetOtherNetworksSummary returns a summary of non-FidoNet networks found in AKAs
+func (to *TestOperationsRefactored) GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error) {
+	return to.otherNetworksOps.GetOtherNetworksSummary(days)
+}
+
+// GetNodesInNetwork returns nodes that announce AKAs in a specific network
+func (to *TestOperationsRefactored) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
+	return to.otherNetworksOps.GetNodesInNetwork(networkName, limit, days)
 }

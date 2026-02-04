@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -667,6 +668,76 @@ func (cs *CachedStorage) GetPioneersByRegion(zone, region, limit int) ([]Pioneer
 	}
 
 	// Cache result with 1 hour TTL (historical data doesn't change often)
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
+// GetOtherNetworksSummary returns a summary of non-FidoNet networks found in AKAs (cached)
+func (cs *CachedStorage) GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetOtherNetworksSummary(days)
+	}
+
+	key := fmt.Sprintf("other_networks_summary:%d", days)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []OtherNetworkSummary
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetOtherNetworksSummary(days)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 1 hour TTL
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
+// GetNodesInNetwork returns nodes that announce AKAs in a specific network (cached)
+func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetNodesInNetwork(networkName, limit, days)
+	}
+
+	key := fmt.Sprintf("nodes_in_network:%s:%d:%d", networkName, limit, days)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []OtherNetworkNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetNodesInNetwork(networkName, limit, days)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 1 hour TTL
 	if len(results) > 0 {
 		if data, err := json.Marshal(results); err == nil {
 			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
