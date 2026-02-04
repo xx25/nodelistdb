@@ -124,6 +124,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string
 		FROM node_test_results r
 		JOIN best_results br ON r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
 		WHERE r.address_validated = false
+			AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
 		ORDER BY r.test_time DESC
 		LIMIT ?`, nodeFilter)
 }
