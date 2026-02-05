@@ -356,8 +356,8 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				return
 			}
 
-			// Apply inter-test delay before picking up next job
-			if w.interDelay > 0 {
+			// Apply inter-test delay before picking up next job (skip if queue is empty)
+			if w.interDelay > 0 && len(w.phoneQueue) > 0 {
 				w.log.Info("Waiting %v before next test...", w.interDelay)
 				select {
 				case <-time.After(w.interDelay):
@@ -645,6 +645,7 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 		emsiCfg,
 	)
 	session.SetTimeout(w.emsiConfig.Timeout.Duration())
+	session.SetDebug(w.logConfig.Debug)
 
 	emsiStart := time.Now()
 	emsiErr := session.Handshake()
