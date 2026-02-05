@@ -465,8 +465,9 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 			retryReason = "BUSY (modem)"
 		}
 
-		// Check 2: CDR-based retry (only if not already retrying for modem BUSY)
-		if !shouldRetry && w.asteriskCDRService != nil && w.asteriskCDRService.IsEnabled() {
+		// Check 2: CDR-based retry for failed dials only (not connected calls).
+		// For successful connections, CDR is looked up after the call ends (post-EMSI).
+		if !shouldRetry && !result.Success && w.asteriskCDRService != nil && w.asteriskCDRService.IsEnabled() {
 			// Wait for CDR to be written
 			w.log.Info("Waiting %v for CDR to be written...", cdrLookupDelay)
 			select {
