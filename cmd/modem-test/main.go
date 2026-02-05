@@ -1009,6 +1009,11 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 	)
 	session.SetTimeout(cfg.EMSI.Timeout.Duration())
 	session.SetDebug(cfg.Logging.Debug)
+	if cfg.Logging.Debug {
+		session.SetDebugFunc(func(format string, args ...interface{}) {
+			log.EMSI(format, args...)
+		})
+	}
 
 	emsiStart := time.Now()
 	emsiErr := session.Handshake()

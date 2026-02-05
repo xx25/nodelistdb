@@ -646,6 +646,11 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 	)
 	session.SetTimeout(w.emsiConfig.Timeout.Duration())
 	session.SetDebug(w.logConfig.Debug)
+	if w.logConfig.Debug {
+		session.SetDebugFunc(func(format string, args ...interface{}) {
+			w.log.EMSI(format, args...)
+		})
+	}
 
 	emsiStart := time.Now()
 	emsiErr := session.Handshake()

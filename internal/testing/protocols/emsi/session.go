@@ -6,8 +6,6 @@ import (
 	"net"
 	"strings"
 	"time"
-
-	"github.com/nodelistdb/internal/testing/logging"
 )
 
 // CompletionReason indicates how the EMSI handshake finished
@@ -21,6 +19,9 @@ const (
 	ReasonError     CompletionReason = "ERROR"      // Error during handshake
 )
 
+// DebugFunc is a callback for routing debug output to an external logger.
+type DebugFunc func(format string, args ...interface{})
+
 // Session represents an EMSI session
 type Session struct {
 	conn         net.Conn
@@ -33,7 +34,8 @@ type Session struct {
 	remoteInfo   *EMSIData
 	config       *Config // EMSI configuration (FSC-0056.001 compliant defaults)
 	debug        bool
-	bannerText   string // Capture full banner text during handshake
+	debugFunc    DebugFunc // Optional external debug logger
+	bannerText   string    // Capture full banner text during handshake
 
 	// Completion info
 	completionReason CompletionReason
@@ -93,6 +95,27 @@ func (s *Session) SetDebug(debug bool) {
 	s.debug = debug
 }
 
+// SetDebugFunc sets an external debug logging function.
+// When set, debug output is routed through this function instead of
+// the internal testing/logging package. This allows callers (e.g. modem-test)
+// to route EMSI debug output through their own logger.
+func (s *Session) SetDebugFunc(fn DebugFunc) {
+	s.debugFunc = fn
+}
+
+// dbg emits a debug message if debug mode is enabled.
+// Routes to debugFunc if set, otherwise falls back to internal logger.
+func (s *Session) dbg(format string, args ...interface{}) {
+	if !s.debug {
+		return
+	}
+	if s.debugFunc != nil {
+		s.debugFunc(format, args...)
+		return
+	}
+	s.dbg(format, args...)
+}
+
 // GetCompletionReason returns how the handshake finished
 func (s *Session) GetCompletionReason() CompletionReason {
 	return s.completionReason
@@ -119,17 +142,17 @@ func (s *Session) negotiateEMSI2() {
 	if s.config.EnableEMSI2 && s.remoteInfo != nil && s.remoteInfo.HasEII {
 		s.emsi2Negotiated = true
 		if s.debug {
-			logging.Debugf("EMSI: EMSI-II mode negotiated (both sides presented EII)")
+			s.dbg("EMSI: EMSI-II mode negotiated (both sides presented EII)")
 		}
 	} else {
 		s.emsi2Negotiated = false
 		if s.debug {
 			if !s.config.EnableEMSI2 {
-				logging.Debugf("EMSI: EMSI-I mode (local EII disabled)")
+				s.dbg("EMSI: EMSI-I mode (local EII disabled)")
 			} else if s.remoteInfo == nil {
-				logging.Debugf("EMSI: EMSI-I mode (no remote info)")
+				s.dbg("EMSI: EMSI-I mode (no remote info)")
 			} else {
-				logging.Debugf("EMSI: EMSI-I mode (remote did not present EII)")
+				s.dbg("EMSI: EMSI-I mode (remote did not present EII)")
 			}
 		}
 	}
@@ -152,7 +175,7 @@ func (s *Session) selectProtocol() string {
 				if strings.EqualFold(ourProto, theirProto) {
 					s.selectedProtocol = ourProto
 					if s.debug {
-						logging.Debugf("EMSI: Selected protocol %s (caller-prefs)", ourProto)
+						s.dbg("EMSI: Selected protocol %s (caller-prefs)", ourProto)
 					}
 					return ourProto
 				}
@@ -165,7 +188,7 @@ func (s *Session) selectProtocol() string {
 				if strings.EqualFold(ourProto, theirProto) {
 					s.selectedProtocol = ourProto
 					if s.debug {
-						logging.Debugf("EMSI: Selected protocol %s (answerer-prefs)", ourProto)
+						s.dbg("EMSI: Selected protocol %s (answerer-prefs)", ourProto)
 					}
 					return ourProto
 				}
@@ -174,7 +197,7 @@ func (s *Session) selectProtocol() string {
 	}
 
 	if s.debug {
-		logging.Debugf("EMSI: No compatible protocol found (NCP)")
+		s.dbg("EMSI: No compatible protocol found (NCP)")
 	}
 	return "" // NCP - No Compatible Protocol
 }
@@ -230,10 +253,10 @@ func (s *Session) Handshake() error {
 	s.completionReason = ReasonNone
 
 	if s.debug {
-		logging.Debugf("EMSI: === Starting EMSI Handshake ===")
-		logging.Debugf("EMSI: Strategy: %s, PreventiveINQ: %v", s.config.InitialStrategy, s.config.PreventiveINQ)
-		logging.Debugf("EMSI: Master timeout: %v, Step timeout: %v", s.config.MasterTimeout, s.config.StepTimeout)
-		logging.Debugf("EMSI: Our address: %s", s.localAddress)
+		s.dbg("EMSI: === Starting EMSI Handshake ===")
+		s.dbg("EMSI: Strategy: %s, PreventiveINQ: %v", s.config.InitialStrategy, s.config.PreventiveINQ)
+		s.dbg("EMSI: Master timeout: %v, Step timeout: %v", s.config.MasterTimeout, s.config.StepTimeout)
+		s.dbg("EMSI: Our address: %s", s.localAddress)
 	}
 
 	var response string
@@ -273,12 +296,12 @@ func (s *Session) Handshake() error {
 	datExchangeStart := time.Now()
 
 	if s.debug {
-		logging.Debugf("EMSI: Initial phase completed in %v", s.handshakeTiming.InitialPhase)
-		logging.Debugf("EMSI: Received response type: %s", responseType)
+		s.dbg("EMSI: Initial phase completed in %v", s.handshakeTiming.InitialPhase)
+		s.dbg("EMSI: Received response type: %s", responseType)
 		if len(response) > 0 && len(response) < 500 {
-			logging.Debugf("EMSI: Response data (first 500 chars): %q", response)
+			s.dbg("EMSI: Response data (first 500 chars): %q", response)
 		} else if len(response) > 0 {
-			logging.Debugf("EMSI: Response data (first 500 chars): %q...", response[:500])
+			s.dbg("EMSI: Response data (first 500 chars): %q...", response[:500])
 		}
 	}
 
@@ -286,11 +309,11 @@ func (s *Session) Handshake() error {
 	case "REQ":
 		// Remote wants our EMSI_DAT
 		if s.debug {
-			logging.Debugf("EMSI: Remote requested our data (EMSI_REQ), sending EMSI_DAT...")
+			s.dbg("EMSI: Remote requested our data (EMSI_REQ), sending EMSI_DAT...")
 		}
 		if err := s.sendEMSI_DAT(); err != nil {
 			if s.debug {
-				logging.Debugf("EMSI: ERROR sending EMSI_DAT: %v", err)
+				s.dbg("EMSI: ERROR sending EMSI_DAT: %v", err)
 			}
 			return fmt.Errorf("failed to send EMSI_DAT: %w", err)
 		}
@@ -302,56 +325,56 @@ func (s *Session) Handshake() error {
 			maxAttempts = 6 // FSC-0056.001 default
 		}
 		if s.debug {
-			logging.Debugf("EMSI: Waiting for remote's EMSI_DAT (max %d attempts)...", maxAttempts)
+			s.dbg("EMSI: Waiting for remote's EMSI_DAT (max %d attempts)...", maxAttempts)
 		}
 		for i := 0; i < maxAttempts; i++ {
 			if s.debug {
-				logging.Debugf("EMSI: Reading response attempt %d/%d...", i+1, maxAttempts)
+				s.dbg("EMSI: Reading response attempt %d/%d...", i+1, maxAttempts)
 			}
 			response, responseType, err = s.readEMSIResponseWithTimeout(s.config.StepTimeout)
 			if err != nil {
 				if s.debug {
-					logging.Debugf("EMSI: ERROR reading response (attempt %d): %v", i+1, err)
+					s.dbg("EMSI: ERROR reading response (attempt %d): %v", i+1, err)
 				}
 				return fmt.Errorf("failed to read EMSI_DAT response (attempt %d): %w", i+1, err)
 			}
 			
 			if s.debug {
-				logging.Debugf("EMSI: After sending DAT, received response type: %s (attempt %d)", responseType, i+1)
+				s.dbg("EMSI: After sending DAT, received response type: %s (attempt %d)", responseType, i+1)
 			}
 			
 			if responseType == "DAT" {
 				// Parse remote's EMSI_DAT
 				if s.debug {
-					logging.Debugf("EMSI: Received remote's EMSI_DAT, parsing...")
+					s.dbg("EMSI: Received remote's EMSI_DAT, parsing...")
 				}
 				var parseErr error
 				s.remoteInfo, parseErr = ParseEMSI_DAT(response)
 				if s.debug {
 					if parseErr != nil {
-						logging.Debugf("EMSI: ERROR parsing remote data: %v", parseErr)
+						s.dbg("EMSI: ERROR parsing remote data: %v", parseErr)
 					} else {
-						logging.Debugf("EMSI: Successfully parsed remote data:")
-						logging.Debugf("EMSI:   System: %s", s.remoteInfo.SystemName)
-						logging.Debugf("EMSI:   Location: %s", s.remoteInfo.Location)
-						logging.Debugf("EMSI:   Sysop: %s", s.remoteInfo.Sysop)
-						logging.Debugf("EMSI:   Mailer: %s %s", s.remoteInfo.MailerName, s.remoteInfo.MailerVersion)
-						logging.Debugf("EMSI:   Addresses: %v", s.remoteInfo.Addresses)
+						s.dbg("EMSI: Successfully parsed remote data:")
+						s.dbg("EMSI:   System: %s", s.remoteInfo.SystemName)
+						s.dbg("EMSI:   Location: %s", s.remoteInfo.Location)
+						s.dbg("EMSI:   Sysop: %s", s.remoteInfo.Sysop)
+						s.dbg("EMSI:   Mailer: %s %s", s.remoteInfo.MailerName, s.remoteInfo.MailerVersion)
+						s.dbg("EMSI:   Addresses: %v", s.remoteInfo.Addresses)
 					}
 				}
 				// Send ACK
 				if err := s.sendEMSI_ACK(); err != nil {
 					if s.debug {
-						logging.Debugf("EMSI: WARNING: Failed to send ACK: %v", err)
+						s.dbg("EMSI: WARNING: Failed to send ACK: %v", err)
 					}
 				} else if s.debug {
-					logging.Debugf("EMSI: Sent ACK for remote's DAT")
+					s.dbg("EMSI: Sent ACK for remote's DAT")
 				}
 				break
 			} else if responseType == "REQ" {
 				// They're still requesting, send our DAT again
 				if s.debug {
-					logging.Debugf("EMSI: Remote sent another REQ, resending our DAT")
+					s.dbg("EMSI: Remote sent another REQ, resending our DAT")
 				}
 				if err := s.sendEMSI_DAT(); err != nil {
 					return fmt.Errorf("failed to resend EMSI_DAT: %w", err)
@@ -359,13 +382,13 @@ func (s *Session) Handshake() error {
 			} else if responseType == "ACK" {
 				// They acknowledged but didn't send their DAT yet
 				if s.debug {
-					logging.Debugf("EMSI: Remote sent ACK, waiting for DAT")
+					s.dbg("EMSI: Remote sent ACK, waiting for DAT")
 				}
 				continue
 			} else if responseType == "NAK" {
 				// Remote is rejecting our DAT - there might be a CRC or format issue
 				if s.debug {
-					logging.Debugf("EMSI: Remote sent NAK, our EMSI_DAT might be invalid")
+					s.dbg("EMSI: Remote sent NAK, our EMSI_DAT might be invalid")
 				}
 				// Some implementations might still work after NAK, keep trying
 				continue
@@ -374,8 +397,8 @@ func (s *Session) Handshake() error {
 
 		if s.remoteInfo == nil {
 			if s.debug {
-				logging.Debugf("EMSI: WARNING: Failed to receive remote DAT after %d attempts", maxAttempts)
-				logging.Debugf("EMSI: Attempting banner text extraction as fallback...")
+				s.dbg("EMSI: WARNING: Failed to receive remote DAT after %d attempts", maxAttempts)
+				s.dbg("EMSI: Attempting banner text extraction as fallback...")
 			}
 
 			// Try to extract software from banner text
@@ -389,42 +412,42 @@ func (s *Session) Handshake() error {
 					s.remoteInfo.MailerSerial = software.Platform
 				}
 				if s.debug {
-					logging.Debugf("EMSI: Successfully extracted software from banner: %s %s", software.Name, software.Version)
+					s.dbg("EMSI: Successfully extracted software from banner: %s %s", software.Name, software.Version)
 				}
 			} else if s.debug {
-				logging.Debugf("EMSI: Handshake incomplete - no remote data received and banner extraction failed")
+				s.dbg("EMSI: Handshake incomplete - no remote data received and banner extraction failed")
 			}
 		} else if s.debug {
-			logging.Debugf("EMSI: Handshake completed successfully after REQ exchange")
+			s.dbg("EMSI: Handshake completed successfully after REQ exchange")
 		}
 		
 	case "DAT":
 		// Remote sent their EMSI_DAT directly
 		if s.debug {
-			logging.Debugf("EMSI: Remote sent EMSI_DAT directly, parsing...")
+			s.dbg("EMSI: Remote sent EMSI_DAT directly, parsing...")
 		}
 		var parseErr error
 		s.remoteInfo, parseErr = ParseEMSI_DAT(response)
 		if s.debug {
 			if parseErr != nil {
-				logging.Debugf("EMSI: ERROR parsing remote data: %v", parseErr)
+				s.dbg("EMSI: ERROR parsing remote data: %v", parseErr)
 			} else {
-				logging.Debugf("EMSI: Successfully parsed remote data:")
-				logging.Debugf("EMSI:   System: %s", s.remoteInfo.SystemName)
-				logging.Debugf("EMSI:   Location: %s", s.remoteInfo.Location)
-				logging.Debugf("EMSI:   Sysop: %s", s.remoteInfo.Sysop)
-				logging.Debugf("EMSI:   Mailer: %s %s", s.remoteInfo.MailerName, s.remoteInfo.MailerVersion)
-				logging.Debugf("EMSI:   Addresses: %v", s.remoteInfo.Addresses)
+				s.dbg("EMSI: Successfully parsed remote data:")
+				s.dbg("EMSI:   System: %s", s.remoteInfo.SystemName)
+				s.dbg("EMSI:   Location: %s", s.remoteInfo.Location)
+				s.dbg("EMSI:   Sysop: %s", s.remoteInfo.Sysop)
+				s.dbg("EMSI:   Mailer: %s %s", s.remoteInfo.MailerName, s.remoteInfo.MailerVersion)
+				s.dbg("EMSI:   Addresses: %v", s.remoteInfo.Addresses)
 			}
 		}
 		
 		// Send our EMSI_DAT in response
 		if s.debug {
-			logging.Debugf("EMSI: Sending our EMSI_DAT in response...")
+			s.dbg("EMSI: Sending our EMSI_DAT in response...")
 		}
 		if err := s.sendEMSI_DAT(); err != nil {
 			if s.debug {
-				logging.Debugf("EMSI: ERROR sending EMSI_DAT: %v", err)
+				s.dbg("EMSI: ERROR sending EMSI_DAT: %v", err)
 			}
 			return fmt.Errorf("failed to send EMSI_DAT: %w", err)
 		}
@@ -432,11 +455,11 @@ func (s *Session) Handshake() error {
 		// Send ACK
 		if err := s.sendEMSI_ACK(); err != nil {
 			if s.debug {
-				logging.Debugf("EMSI: WARNING: Failed to send ACK: %v", err)
+				s.dbg("EMSI: WARNING: Failed to send ACK: %v", err)
 			}
 		} else if s.debug {
-			logging.Debugf("EMSI: Sent ACK for remote's DAT")
-			logging.Debugf("EMSI: Handshake completed successfully after DAT exchange")
+			s.dbg("EMSI: Sent ACK for remote's DAT")
+			s.dbg("EMSI: Handshake completed successfully after DAT exchange")
 		}
 		
 	case "NAK":
@@ -456,7 +479,7 @@ func (s *Session) Handshake() error {
 
 	default:
 		if s.debug {
-			logging.Debugf("EMSI: ERROR: Unexpected response type: %s", responseType)
+			s.dbg("EMSI: ERROR: Unexpected response type: %s", responseType)
 		}
 		s.completionReason = ReasonTimeout
 		s.handshakeTiming.Total = time.Since(handshakeStart)
@@ -487,8 +510,8 @@ func (s *Session) Handshake() error {
 	}
 
 	if s.debug {
-		logging.Debugf("EMSI: === Handshake Complete (%s) ===", s.completionReason)
-		logging.Debugf("EMSI: Timing: Initial=%v, DATExchange=%v, Total=%v",
+		s.dbg("EMSI: === Handshake Complete (%s) ===", s.completionReason)
+		s.dbg("EMSI: Timing: Initial=%v, DATExchange=%v, Total=%v",
 			s.handshakeTiming.InitialPhase, s.handshakeTiming.DATExchange, s.handshakeTiming.Total)
 	}
 
@@ -499,13 +522,13 @@ func (s *Session) Handshake() error {
 // Wait for remote to send EMSI_INQ or EMSI_REQ first
 func (s *Session) handshakeInitialWait() (string, string, error) {
 	if s.debug {
-		logging.Debugf("EMSI: Strategy=wait: Waiting for remote EMSI (timeout=%v)...", s.config.StepTimeout)
+		s.dbg("EMSI: Strategy=wait: Waiting for remote EMSI (timeout=%v)...", s.config.StepTimeout)
 	}
 
 	response, responseType, err := s.readEMSIResponseWithTimeout(s.config.StepTimeout)
 	if err != nil {
 		if s.debug {
-			logging.Debugf("EMSI: Strategy=wait: No response, error: %v", err)
+			s.dbg("EMSI: Strategy=wait: No response, error: %v", err)
 		}
 		return "", "", fmt.Errorf("wait strategy: %w", err)
 	}
@@ -517,7 +540,7 @@ func (s *Session) handshakeInitialWait() (string, string, error) {
 // Send CRs to wake remote BBS, then wait for EMSI
 func (s *Session) handshakeInitialSendCR() (string, string, error) {
 	if s.debug {
-		logging.Debugf("EMSI: Strategy=send_cr: Sending CRs to trigger remote EMSI...")
+		s.dbg("EMSI: Strategy=send_cr: Sending CRs to trigger remote EMSI...")
 	}
 
 	initialWait := s.config.InitialCRTimeout
@@ -528,13 +551,13 @@ func (s *Session) handshakeInitialSendCR() (string, string, error) {
 		_ = s.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 		if _, err := s.writer.WriteString("\r"); err != nil {
 			if s.debug {
-				logging.Debugf("EMSI: Strategy=send_cr: ERROR sending CR: %v", err)
+				s.dbg("EMSI: Strategy=send_cr: ERROR sending CR: %v", err)
 			}
 			return "", "", fmt.Errorf("failed to send CR: %w", err)
 		}
 		if err := s.writer.Flush(); err != nil {
 			if s.debug {
-				logging.Debugf("EMSI: Strategy=send_cr: ERROR flushing CR: %v", err)
+				s.dbg("EMSI: Strategy=send_cr: ERROR flushing CR: %v", err)
 			}
 			return "", "", fmt.Errorf("failed to flush CR: %w", err)
 		}
@@ -547,7 +570,7 @@ func (s *Session) handshakeInitialSendCR() (string, string, error) {
 		if _, err := s.reader.Peek(1); err == nil {
 			gotData = true
 			if s.debug {
-				logging.Debugf("EMSI: Strategy=send_cr: Got initial data from remote")
+				s.dbg("EMSI: Strategy=send_cr: Got initial data from remote")
 			}
 			break
 		}
@@ -555,7 +578,7 @@ func (s *Session) handshakeInitialSendCR() (string, string, error) {
 
 	if !gotData {
 		if s.debug {
-			logging.Debugf("EMSI: Strategy=send_cr: No data received after %v", initialWait)
+			s.dbg("EMSI: Strategy=send_cr: No data received after %v", initialWait)
 		}
 	}
 
@@ -573,7 +596,7 @@ func (s *Session) handshakeInitialSendCR() (string, string, error) {
 // Immediately send EMSI_INQ and wait for response
 func (s *Session) handshakeInitialSendINQ() (string, string, error) {
 	if s.debug {
-		logging.Debugf("EMSI: Strategy=send_inq: Sending immediate EMSI_INQ...")
+		s.dbg("EMSI: Strategy=send_inq: Sending immediate EMSI_INQ...")
 	}
 
 	if err := s.sendEMSI_INQ(); err != nil {
@@ -586,7 +609,7 @@ func (s *Session) handshakeInitialSendINQ() (string, string, error) {
 	// If SendINQTwice is enabled and no EMSI, send second INQ
 	if (err != nil || responseType == "BANNER" || responseType == "UNKNOWN") && s.config.SendINQTwice {
 		if s.debug {
-			logging.Debugf("EMSI: Strategy=send_inq: Sending second EMSI_INQ...")
+			s.dbg("EMSI: Strategy=send_inq: Sending second EMSI_INQ...")
 		}
 		time.Sleep(s.config.INQInterval)
 		if err := s.sendEMSI_INQ(); err != nil {
@@ -606,12 +629,12 @@ func (s *Session) handshakeInitialSendINQ() (string, string, error) {
 // This is a Qico-style optimization to speed up handshake with slow remotes
 func (s *Session) sendPreventiveINQ() (string, string, error) {
 	if s.debug {
-		logging.Debugf("EMSI: Sending preventive EMSI_INQ (PreventiveINQ enabled)...")
+		s.dbg("EMSI: Sending preventive EMSI_INQ (PreventiveINQ enabled)...")
 	}
 
 	if err := s.sendEMSI_INQ(); err != nil {
 		if s.debug {
-			logging.Debugf("EMSI: ERROR sending preventive EMSI_INQ: %v", err)
+			s.dbg("EMSI: ERROR sending preventive EMSI_INQ: %v", err)
 		}
 		return "", "", fmt.Errorf("failed to send preventive EMSI_INQ: %w", err)
 	}
@@ -623,7 +646,7 @@ func (s *Session) sendPreventiveINQ() (string, string, error) {
 	}
 
 	if s.debug {
-		logging.Debugf("EMSI: Preventive EMSI_INQ sent, waiting for response (timeout=%v)...", timeout)
+		s.dbg("EMSI: Preventive EMSI_INQ sent, waiting for response (timeout=%v)...", timeout)
 	}
 
 	response, responseType, err := s.readEMSIResponseWithTimeout(timeout)
@@ -631,7 +654,7 @@ func (s *Session) sendPreventiveINQ() (string, string, error) {
 	// If SendINQTwice is enabled and still no EMSI, send second INQ
 	if (err != nil || responseType == "BANNER" || responseType == "UNKNOWN") && s.config.SendINQTwice {
 		if s.debug {
-			logging.Debugf("EMSI: Still no EMSI after preventive INQ, sending second EMSI_INQ...")
+			s.dbg("EMSI: Still no EMSI after preventive INQ, sending second EMSI_INQ...")
 		}
 		time.Sleep(s.config.INQInterval)
 		if err := s.sendEMSI_INQ(); err != nil {
@@ -642,7 +665,7 @@ func (s *Session) sendPreventiveINQ() (string, string, error) {
 
 	if err != nil {
 		if s.debug {
-			logging.Debugf("EMSI: ERROR reading response after preventive INQ: %v", err)
+			s.dbg("EMSI: ERROR reading response after preventive INQ: %v", err)
 		}
 		return "", "", fmt.Errorf("failed to read EMSI response: %w", err)
 	}
@@ -653,7 +676,7 @@ func (s *Session) sendPreventiveINQ() (string, string, error) {
 // sendEMSI_INQ sends EMSI inquiry
 func (s *Session) sendEMSI_INQ() error {
 	if s.debug {
-		logging.Debugf("EMSI: sendEMSI_INQ: Sending EMSI_INQ")
+		s.dbg("EMSI: sendEMSI_INQ: Sending EMSI_INQ")
 	}
 
 	deadline := time.Now().Add(s.config.MasterTimeout)
@@ -661,20 +684,20 @@ func (s *Session) sendEMSI_INQ() error {
 
 	if _, err := s.writer.WriteString(EMSI_INQ + "\r"); err != nil {
 		if s.debug {
-			logging.Debugf("EMSI: sendEMSI_INQ: ERROR writing: %v", err)
+			s.dbg("EMSI: sendEMSI_INQ: ERROR writing: %v", err)
 		}
 		return err
 	}
 	
 	if err := s.writer.Flush(); err != nil {
 		if s.debug {
-			logging.Debugf("EMSI: sendEMSI_INQ: ERROR flushing: %v", err)
+			s.dbg("EMSI: sendEMSI_INQ: ERROR flushing: %v", err)
 		}
 		return err
 	}
 	
 	if s.debug {
-		logging.Debugf("EMSI: sendEMSI_INQ: Successfully sent EMSI_INQ")
+		s.dbg("EMSI: sendEMSI_INQ: Successfully sent EMSI_INQ")
 	}
 	return nil
 }
@@ -682,7 +705,7 @@ func (s *Session) sendEMSI_INQ() error {
 // sendEMSI_ACK sends EMSI acknowledgment
 func (s *Session) sendEMSI_ACK() error {
 	if s.debug {
-		logging.Debugf("EMSI: Sending EMSI_ACK")
+		s.dbg("EMSI: Sending EMSI_ACK")
 	}
 
 	_ = s.conn.SetWriteDeadline(time.Now().Add(s.config.MasterTimeout))
@@ -696,7 +719,7 @@ func (s *Session) sendEMSI_ACK() error {
 // sendEMSI_DAT sends our EMSI data packet
 func (s *Session) sendEMSI_DAT() error {
 	if s.debug {
-		logging.Debugf("EMSI: sendEMSI_DAT: Preparing EMSI_DAT packet...")
+		s.dbg("EMSI: sendEMSI_DAT: Preparing EMSI_DAT packet...")
 	}
 	
 	// Create our EMSI data using configured protocols
@@ -724,29 +747,29 @@ func (s *Session) sendEMSI_DAT() error {
 	packet := CreateEMSI_DATWithConfig(data, s.config)
 	
 	if s.debug {
-		logging.Debugf("EMSI: sendEMSI_DAT: Created EMSI_DAT packet (%d bytes)", len(packet))
+		s.dbg("EMSI: sendEMSI_DAT: Created EMSI_DAT packet (%d bytes)", len(packet))
 		// Log first 200 chars of packet for debugging
 		if len(packet) > 200 {
-			logging.Debugf("EMSI: sendEMSI_DAT: DAT packet (first 200): %q", packet[:200])
+			s.dbg("EMSI: sendEMSI_DAT: DAT packet (first 200): %q", packet[:200])
 		} else {
-			logging.Debugf("EMSI: sendEMSI_DAT: DAT packet: %q", packet)
+			s.dbg("EMSI: sendEMSI_DAT: DAT packet: %q", packet)
 		}
 		// Also log what we're actually writing including CRs
 		fullPacket := packet + "\r\r"
-		logging.Debugf("EMSI: sendEMSI_DAT: Full packet with terminators (%d bytes)", len(fullPacket))
+		s.dbg("EMSI: sendEMSI_DAT: Full packet with terminators (%d bytes)", len(fullPacket))
 	}
 	
 	deadline := time.Now().Add(s.config.MasterTimeout)
 	_ = s.conn.SetWriteDeadline(deadline)
 
 	if s.debug {
-		logging.Debugf("EMSI: sendEMSI_DAT: Sending packet with deadline %v...", deadline.Format("15:04:05.000"))
+		s.dbg("EMSI: sendEMSI_DAT: Sending packet with deadline %v...", deadline.Format("15:04:05.000"))
 	}
 	
 	// Send the packet with CR (binkleyforce-compatible, ifcico drops XON anyway)
 	if _, err := s.writer.WriteString(packet + "\r"); err != nil {
 		if s.debug {
-			logging.Debugf("EMSI: sendEMSI_DAT: ERROR writing packet: %v", err)
+			s.dbg("EMSI: sendEMSI_DAT: ERROR writing packet: %v", err)
 		}
 		return fmt.Errorf("failed to write EMSI_DAT: %w", err)
 	}
@@ -754,20 +777,20 @@ func (s *Session) sendEMSI_DAT() error {
 	// Send additional CR (some mailers expect double CR)
 	if _, err := s.writer.WriteString("\r"); err != nil {
 		if s.debug {
-			logging.Debugf("EMSI: sendEMSI_DAT: ERROR writing additional CR: %v", err)
+			s.dbg("EMSI: sendEMSI_DAT: ERROR writing additional CR: %v", err)
 		}
 		return fmt.Errorf("failed to write additional CR: %w", err)
 	}
 	
 	if err := s.writer.Flush(); err != nil {
 		if s.debug {
-			logging.Debugf("EMSI: sendEMSI_DAT: ERROR flushing buffer: %v", err)
+			s.dbg("EMSI: sendEMSI_DAT: ERROR flushing buffer: %v", err)
 		}
 		return fmt.Errorf("failed to flush EMSI_DAT: %w", err)
 	}
 	
 	if s.debug {
-		logging.Debugf("EMSI: sendEMSI_DAT: Successfully sent EMSI_DAT packet")
+		s.dbg("EMSI: sendEMSI_DAT: Successfully sent EMSI_DAT packet")
 	}
 
 	return nil
@@ -780,7 +803,7 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 	_ = s.conn.SetReadDeadline(deadline)
 
 	if s.debug {
-		logging.Debugf("EMSI: readEMSIResponse: Starting read with timeout %v (deadline: %v)", timeout, deadline.Format("15:04:05.000"))
+		s.dbg("EMSI: readEMSIResponse: Starting read with timeout %v (deadline: %v)", timeout, deadline.Format("15:04:05.000"))
 	}
 
 	// Accumulate response data, some systems send banner first
@@ -794,7 +817,7 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 	for time.Now().Before(deadline) {
 		elapsed := time.Since(startTime)
 		if s.debug && totalBytesRead == 0 && elapsed > 5*time.Second && int(elapsed.Seconds())%10 == 0 {
-			logging.Debugf("EMSI: readEMSIResponse: Still waiting for data after %v...", elapsed)
+			s.dbg("EMSI: readEMSIResponse: Still waiting for data after %v...", elapsed)
 		}
 
 		n, err := s.reader.Read(buffer)
@@ -802,7 +825,7 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 		if err != nil {
 			elapsed := time.Since(startTime)
 			if s.debug {
-				logging.Debugf("EMSI: readEMSIResponse: Read error after %v: %v (bytes so far: %d)", elapsed, err, totalBytesRead)
+				s.dbg("EMSI: readEMSIResponse: Read error after %v: %v (bytes so far: %d)", elapsed, err, totalBytesRead)
 			}
 			// If we have accumulated data, check it before giving up
 			if response.Len() > 0 {
@@ -823,12 +846,12 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 			elapsed := time.Since(startTime)
 
 			if s.debug {
-				logging.Debugf("EMSI: readEMSIResponse: Received %d bytes (total: %d, elapsed: %v)",
+				s.dbg("EMSI: readEMSIResponse: Received %d bytes (total: %d, elapsed: %v)",
 					n, totalBytesRead, elapsed)
 				if n < 200 {
-					logging.Debugf("EMSI: readEMSIResponse: Data: %q", chunk)
+					s.dbg("EMSI: readEMSIResponse: Data: %q", chunk)
 				} else {
-					logging.Debugf("EMSI: readEMSIResponse: Data (first 200): %q...", chunk[:200])
+					s.dbg("EMSI: readEMSIResponse: Data (first 200): %q...", chunk[:200])
 				}
 			}
 
@@ -842,13 +865,13 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 			// Check if we have EMSI sequences
 			if emsiType := s.detectEMSIType(responseStr); emsiType != "" {
 				if s.debug {
-					logging.Debugf("EMSI: readEMSIResponse: Found EMSI_%s in response after %v", emsiType, elapsed)
+					s.dbg("EMSI: readEMSIResponse: Found EMSI_%s in response after %v", emsiType, elapsed)
 				}
 				return responseStr, emsiType, nil
 			}
 
 			if s.debug {
-				logging.Debugf("EMSI: readEMSIResponse: No EMSI sequence found yet, continuing...")
+				s.dbg("EMSI: readEMSIResponse: No EMSI sequence found yet, continuing...")
 			}
 		}
 	}
@@ -860,18 +883,18 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 	if len(responseStr) > 0 {
 		// Got some data but no EMSI, treat as banner
 		if s.debug {
-			logging.Debugf("EMSI: readEMSIResponse: Timeout after %v, treating %d bytes as BANNER", finalElapsed, len(responseStr))
+			s.dbg("EMSI: readEMSIResponse: Timeout after %v, treating %d bytes as BANNER", finalElapsed, len(responseStr))
 			if len(responseStr) < 500 {
-				logging.Debugf("EMSI: readEMSIResponse: Banner content: %q", responseStr)
+				s.dbg("EMSI: readEMSIResponse: Banner content: %q", responseStr)
 			} else {
-				logging.Debugf("EMSI: readEMSIResponse: Banner content (first 500): %q...", responseStr[:500])
+				s.dbg("EMSI: readEMSIResponse: Banner content (first 500): %q...", responseStr[:500])
 			}
 		}
 		return responseStr, "BANNER", nil
 	}
 
 	if s.debug {
-		logging.Debugf("EMSI: readEMSIResponse: No data received after %v, returning timeout error", finalElapsed)
+		s.dbg("EMSI: readEMSIResponse: No data received after %v, returning timeout error", finalElapsed)
 	}
 	return "", "", fmt.Errorf("timeout waiting for EMSI response after %v", finalElapsed)
 }

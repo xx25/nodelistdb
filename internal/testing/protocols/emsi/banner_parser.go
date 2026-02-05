@@ -3,8 +3,6 @@ package emsi
 import (
 	"regexp"
 	"strings"
-
-	"github.com/nodelistdb/internal/testing/logging"
 )
 
 // BannerSoftware represents software info extracted from banner text
@@ -117,7 +115,7 @@ func (s *Session) extractSoftwareFromBanner() *BannerSoftware {
 	}
 
 	if s.debug {
-		logging.Debugf("EMSI: Attempting to extract software from banner: %q", banner)
+		s.dbg("EMSI: Attempting to extract software from banner: %q", banner)
 	}
 
 	// Try each pattern in order
@@ -125,7 +123,7 @@ func (s *Session) extractSoftwareFromBanner() *BannerSoftware {
 		if matches := bp.pattern.FindStringSubmatch(banner); matches != nil {
 			software := bp.extract(matches)
 			if s.debug {
-				logging.Debugf("EMSI: Extracted software from banner (pattern=%s): %s %s %s",
+				s.dbg("EMSI: Extracted software from banner (pattern=%s): %s %s %s",
 					bp.name, software.Name, software.Version, software.Platform)
 			}
 			return software
@@ -133,7 +131,7 @@ func (s *Session) extractSoftwareFromBanner() *BannerSoftware {
 	}
 
 	if s.debug {
-		logging.Debugf("EMSI: Could not extract software from banner using known patterns")
+		s.dbg("EMSI: Could not extract software from banner using known patterns")
 	}
 	return nil
 }
