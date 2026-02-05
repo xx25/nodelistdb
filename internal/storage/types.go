@@ -531,7 +531,8 @@ type IPv6NodeListEntry struct {
 	// Computed fields (populated in Go after query)
 	IPv6Type    string `json:"ipv6_type"`    // "Native", "T-6in4", "T-6to4", "T-Teredo"
 	Provider    string `json:"provider"`     // Cleaned ISP/Org name
-	HasFidoAddr bool   `json:"has_fido_addr"` // f flag: has ::f1d0:z:n:nn style address
+	HasFidoAddr bool   `json:"has_fido_addr"`  // f flag: has ::f1d0:z:n:nn style address
+	FidoIPv6Addr string `json:"fido_ipv6_addr"` // The actual f1d0 IPv6 address found
 	HasNoIPv4   bool   `json:"has_no_ipv4"`   // INO4: no working IPv4
 	IsUnstable  bool   `json:"is_unstable"`   // 6UNS: failed >2 times in 30 days
 	Remarks     string `json:"remarks"`       // Combined remarks string

@@ -82,7 +82,7 @@
                 </td>
                 <td>{{$node.Provider}}</td>
                 <td>
-                    {{if $node.HasFidoAddr}}<span class="badge badge-info" title="Has ::f1d0: style IPv6 address">f</span> {{end}}
+                    {{if $node.HasFidoAddr}}<span class="badge badge-info" title="{{$node.FidoIPv6Addr}}">f</span> {{end}}
                     {{if $node.HasNoIPv4}}<span class="badge badge-warning" title="No working IPv4 connectivity">INO4</span> {{end}}
                     {{if $node.IsUnstable}}<span class="badge badge-danger" title="IPv6 unstable: failed more than twice in 30 days">6UNS</span> {{end}}
                 </td>

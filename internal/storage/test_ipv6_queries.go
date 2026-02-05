@@ -1173,7 +1173,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 		// Compute derived fields
 		entry.IPv6Type = detectIPv6Type(entry.ResolvedIPv6)
 		entry.Provider = detectProvider(entry.ISP, entry.Org)
-		entry.HasFidoAddr = hasFidoStyleAddress(entry.ResolvedIPv6)
+		entry.FidoIPv6Addr = findFidoStyleAddress(entry.ResolvedIPv6)
+		entry.HasFidoAddr = entry.FidoIPv6Addr != ""
 		entry.HasNoIPv4 = !entry.BinkPIPv4Success && !entry.IfcicoIPv4Success && !entry.TelnetIPv4Success
 		entry.IsUnstable = ipv6FailureCount > 2
 		entry.Remarks = buildRemarks(entry)
@@ -1241,16 +1242,16 @@ func detectProvider(isp, org string) string {
 	return provider
 }
 
-// hasFidoStyleAddress checks if any resolved IPv6 address contains an f1d0 segment,
-// indicating a FidoNet-style IPv6 address convention.
-func hasFidoStyleAddress(addresses []string) bool {
+// findFidoStyleAddress returns the first resolved IPv6 address containing an f1d0 segment,
+// indicating a FidoNet-style IPv6 address convention. Returns empty string if none found.
+func findFidoStyleAddress(addresses []string) string {
 	for _, addr := range addresses {
 		lower := strings.ToLower(addr)
 		if strings.Contains(lower, ":f1d0:") || strings.HasPrefix(lower, "f1d0:") {
-			return true
+			return addr
 		}
 	}
-	return false
+	return ""
 }
 
 // buildRemarks constructs the remarks string for a node list entry.
