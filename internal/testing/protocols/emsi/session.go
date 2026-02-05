@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -879,6 +880,13 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 
 			// Check if we have EMSI sequences
 			if emsiType := s.detectEMSIType(responseStr); emsiType != "" {
+				// For EMSI_DAT, wait until the full packet arrives (length field tells us how much)
+				if emsiType == "DAT" && !isEMSI_DATComplete(responseStr) {
+					if s.debug {
+						s.dbg("EMSI: readEMSIResponse: EMSI_DAT detected but incomplete, continuing read...")
+					}
+					continue
+				}
 				if s.debug {
 					s.dbg("EMSI: readEMSIResponse: Found EMSI_%s in response after %v", emsiType, elapsed)
 				}
@@ -923,6 +931,29 @@ func detectModemDisconnect(responseStr string) string {
 		}
 	}
 	return ""
+}
+
+// isEMSI_DATComplete checks if the buffer contains a complete EMSI_DAT packet.
+// EMSI_DAT format: **EMSI_DATxxxx<data><CRC4>\r  where xxxx is hex length of <data>.
+// Total expected: len up to "**EMSI_DAT" + 4 (len field) + dataLen + 4 (CRC) + 1 (\r)
+func isEMSI_DATComplete(responseStr string) bool {
+	idx := strings.Index(responseStr, "EMSI_DAT")
+	if idx < 0 {
+		return false
+	}
+	// Need at least EMSI_DAT + 4 hex digits for the length field
+	hdrEnd := idx + len("EMSI_DAT") + 4 // position after length field
+	if len(responseStr) < hdrEnd {
+		return false
+	}
+	lenHex := responseStr[idx+len("EMSI_DAT") : hdrEnd]
+	dataLen, err := strconv.ParseInt(lenHex, 16, 32)
+	if err != nil {
+		return true // can't parse length, return what we have
+	}
+	// Full packet: up to hdrEnd + dataLen + 4 (CRC hex)
+	needed := hdrEnd + int(dataLen) + 4
+	return len(responseStr) >= needed
 }
 
 // detectEMSIType checks if the response contains an EMSI sequence and returns its type

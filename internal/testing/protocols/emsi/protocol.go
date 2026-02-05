@@ -494,9 +494,11 @@ func parseCompatibilityCodes(field string, data *EMSIData) {
 
 // ParseEMSI_DAT parses an EMSI_DAT packet
 func ParseEMSI_DAT(packet string) (*EMSIData, error) {
-	// Remove the header if present
-	if strings.HasPrefix(packet, "**EMSI_DAT") {
-		packet = packet[14:] // Skip **EMSI_DATxxxx
+	// Find and skip the EMSI_DAT header (may not be at the start if ACKs precede it)
+	if idx := strings.Index(packet, "**EMSI_DAT"); idx >= 0 {
+		packet = packet[idx+14:] // Skip **EMSI_DATxxxx (10 + 4 hex length)
+	} else if strings.HasPrefix(packet, "EMSI_DAT") {
+		packet = packet[12:] // Skip EMSI_DATxxxx (8 + 4 hex length)
 	}
 	
 	// Find the data between braces
