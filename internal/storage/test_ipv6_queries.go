@@ -1076,7 +1076,10 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 }
 
 // GetIPv6NodeList returns verified working IPv6 nodes for the IPv6 node list report (Michiel's format).
-// Only includes nodes where BinkP or IFCICO succeeded over IPv6 AND address_validated_ipv6 = true.
+// Only includes nodes where BinkP or IFCICO succeeded over IPv6 AND address_validated = true.
+// Uses the general address_validated field (populated for all tests) rather than address_validated_ipv6
+// (only populated after the per-IPv4/IPv6 AKA split was deployed). As the daemon re-tests nodes,
+// address_validated_ipv6 will gradually be populated; this can be switched later if needed.
 func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
@@ -1095,7 +1098,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND is_aggregated = false
 				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true)
-				AND address_validated_ipv6 = true
+				AND address_validated = true
 				%s
 			GROUP BY zone, net, node
 		),
@@ -1129,7 +1132,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 				AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			WHERE r.is_aggregated = false
 				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true)
-				AND r.address_validated_ipv6 = true
+				AND r.address_validated = true
 		)
 		SELECT br.test_time, br.zone, br.net, br.node,
 			COALESCE(n.sysop_name, '') as sysop_name,
