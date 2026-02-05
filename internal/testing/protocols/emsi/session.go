@@ -837,6 +837,10 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 					return responseStr, "", fmt.Errorf("modem disconnect: %s", signal)
 				}
 				if emsiType := s.detectEMSIType(responseStr); emsiType != "" {
+					// Return incomplete EMSI_DAT as error rather than pretending it's valid
+					if emsiType == "DAT" && !isEMSI_DATComplete(responseStr) {
+						return responseStr, "", fmt.Errorf("incomplete EMSI_DAT on read error: %w", err)
+					}
 					return responseStr, emsiType, nil
 				}
 				// Have data but no EMSI, return as banner
@@ -922,12 +926,27 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 	return "", "", fmt.Errorf("timeout waiting for EMSI response after %v", finalElapsed)
 }
 
-// detectModemDisconnect checks if the response contains a modem disconnect signal.
-// Returns the signal string (e.g. "NO CARRIER") or empty string if none found.
+// detectModemDisconnect checks if the response contains a modem disconnect signal
+// on its own line (e.g. "\r\nNO CARRIER\r\n"). Matching full lines avoids false
+// positives from banner text or EMSI fields that happen to contain these words.
 func detectModemDisconnect(responseStr string) string {
 	for _, signal := range []string{"NO CARRIER", "NO DIALTONE", "NO DIAL TONE", "BUSY", "NO ANSWER"} {
-		if strings.Contains(responseStr, signal) {
-			return signal
+		// Match as a standalone line: preceded by \r\n or start of string,
+		// followed by \r\n or end of string
+		idx := strings.Index(responseStr, signal)
+		for idx >= 0 {
+			before := idx == 0 || responseStr[idx-1] == '\n' || responseStr[idx-1] == '\r'
+			end := idx + len(signal)
+			after := end == len(responseStr) || responseStr[end] == '\r' || responseStr[end] == '\n'
+			if before && after {
+				return signal
+			}
+			// Search for next occurrence
+			next := strings.Index(responseStr[end:], signal)
+			if next < 0 {
+				break
+			}
+			idx = end + next
 		}
 	}
 	return ""
@@ -948,8 +967,8 @@ func isEMSI_DATComplete(responseStr string) bool {
 	}
 	lenHex := responseStr[idx+len("EMSI_DAT") : hdrEnd]
 	dataLen, err := strconv.ParseInt(lenHex, 16, 32)
-	if err != nil {
-		return true // can't parse length, return what we have
+	if err != nil || dataLen < 0 || dataLen > 8192 {
+		return true // can't parse length or absurd size, return what we have
 	}
 	// Full packet: up to hdrEnd + dataLen + 4 (CRC hex)
 	needed := hdrEnd + int(dataLen) + 4
