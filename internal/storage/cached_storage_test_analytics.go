@@ -502,6 +502,41 @@ func (cs *CachedStorage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNo
 	return results, nil
 }
 
+// GetIPv6NodeList returns verified working IPv6 nodes for the node list report (cached)
+func (cs *CachedStorage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes)
+	}
+
+	key := cs.keyGen.IPv6NodeListKey(limit, days, includeZeroNodes)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []IPv6NodeListEntry
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 15 minute TTL
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
 // GetGeoHostingDistribution returns geographic hosting distribution (cached)
 func (cs *CachedStorage) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error) {
 	if !cs.config.Enabled {

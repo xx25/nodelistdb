@@ -1,0 +1,96 @@
+{{template "base" .}}
+
+{{define "title"}}IPv6 Node List{{end}}
+
+{{define "page_title"}}IPv6 Node List{{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">Verified working IPv6 nodes with correct AKA validation (Michiel van der Vlist's format)</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+{{template "analytics_filters" .}}
+{{template "error_display" .}}
+
+{{if .Nodes}}
+<div class="stats-box">
+    <h3>Found {{len .Nodes}} Verified IPv6 Nodes</h3>
+    <a href="/analytics/ipv6-node-list?format=text&days={{.Days}}&limit={{.Limit}}{{if .IncludeZeroNodes}}&includeZero=true{{end}}" class="btn btn-primary" style="margin-left: 1rem; text-decoration: none;">Download as Text</a>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="number">#</th>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">Sysop</th>
+                <th data-sortable data-type="string">Type</th>
+                <th data-sortable data-type="string">Provider</th>
+                <th data-sortable data-type="string">Remarks</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range $i, $node := .Nodes}}
+            <tr>
+                <td>{{add $i 1}}</td>
+                <td>
+                    <a href="/node/{{$node.Zone}}/{{$node.Net}}/{{$node.Node}}">{{$node.Zone}}:{{$node.Net}}/{{$node.Node}}</a>
+                </td>
+                <td>{{$node.SysopName}}</td>
+                <td>
+                    {{if eq $node.IPv6Type "Native"}}
+                        <span style="color: #28a745;">{{$node.IPv6Type}}</span>
+                    {{else}}
+                        <span style="color: #fd7e14;">{{$node.IPv6Type}}</span>
+                    {{end}}
+                </td>
+                <td>{{$node.Provider}}</td>
+                <td>
+                    {{if $node.HasFidoAddr}}<span class="badge badge-info" title="Has ::f1d0: style IPv6 address">f</span> {{end}}
+                    {{if $node.HasNoIPv4}}<span class="badge badge-warning" title="No working IPv4 connectivity">INO4</span> {{end}}
+                    {{if $node.IsUnstable}}<span class="badge badge-danger" title="IPv6 unstable: failed more than twice in 30 days">6UNS</span> {{end}}
+                </td>
+                <td data-value="{{$node.TestTime.Unix}}">
+                    <span class="text-muted">{{$node.TestTime.Format "2006-01-02 15:04"}}</span>
+                </td>
+                <td>
+                    <a href="/node/{{$node.Zone}}/{{$node.Net}}/{{$node.Node}}" class="btn btn-sm" title="View node history">History</a>
+                    <a href="/reachability/node?zone={{$node.Zone}}&net={{$node.Net}}&node={{$node.Node}}" class="btn btn-sm" title="View reachability">Reach.</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>About this report:</strong> This list shows FidoNet nodes with <strong>verified working IPv6 connectivity</strong>. Only nodes where BinkP or IFCICO protocol succeeded over IPv6 <strong>and</strong> the announced AKA (address) was validated as correct are included.</p>
+    <p><strong>Type Detection:</strong></p>
+    <ul>
+        <li><strong>Native</strong> &mdash; Direct IPv6 connectivity (not tunneled)</li>
+        <li><strong>T-6in4</strong> &mdash; Static 6in4 tunnel (detected from 2001:470::/32 address range, typically Hurricane Electric)</li>
+        <li><strong>T-6to4</strong> &mdash; 6to4 tunnel (detected from 2002::/16 prefix)</li>
+        <li><strong>T-Teredo</strong> &mdash; Teredo tunnel (detected from 2001:0000::/32 prefix)</li>
+    </ul>
+    <p><strong>Remarks:</strong></p>
+    <ul>
+        <li><strong>f</strong> &mdash; Has a <code>::f1d0:&lt;zone&gt;:&lt;net&gt;:&lt;node&gt;</code> style host address</li>
+        <li><strong>INO4</strong> &mdash; No IPv4: Node has no working IPv4 connectivity</li>
+        <li><strong>6UNS</strong> &mdash; IPv6 unstable: Failed more than twice during the last 30 days</li>
+    </ul>
+    <p><strong>Note:</strong> Provider information is determined from GeoIP lookup of the node's IP address.</p>
+    <p>This report is inspired by Michiel van der Vlist's (2:280/5555) manually maintained "List of IPv6 nodes". Use the "Download as Text" button above to get a plain text version.</p>
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>No verified IPv6 nodes found for the selected period.</strong><br>
+    This could mean that no nodes with IPv6 AKA validation were tested during this period, or the test daemon has not yet populated the address_validated_ipv6 field.
+</div>
+{{end}}
+{{end}}

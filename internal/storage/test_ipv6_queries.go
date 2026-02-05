@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/nodelistdb/internal/database"
@@ -1072,4 +1073,185 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 	}
 
 	return results, nil
+}
+
+// GetIPv6NodeList returns verified working IPv6 nodes for the IPv6 node list report (Michiel's format).
+// Only includes nodes where BinkP or IFCICO succeeded over IPv6 AND address_validated_ipv6 = true.
+func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error) {
+	ipv6.mu.RLock()
+	defer ipv6.mu.RUnlock()
+
+	conn := ipv6.db.Conn()
+
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	query := fmt.Sprintf(`
+		WITH latest_tests AS (
+			SELECT zone, net, node, max(test_time) as latest_test_time
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL ? DAY
+				AND is_aggregated = false
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true)
+				AND address_validated_ipv6 = true
+				%s
+			GROUP BY zone, net, node
+		),
+		latest_nodes AS (
+			SELECT zone, net, node,
+				argMax(sysop_name, nodelist_date) as sysop_name
+			FROM nodes
+			GROUP BY zone, net, node
+		),
+		stability AS (
+			SELECT zone, net, node,
+				uniqExact(test_time) as ipv6_failure_count
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 30 DAY
+				AND is_aggregated = false
+				AND (
+					(binkp_ipv6_tested = true AND binkp_ipv6_success = false) OR
+					(ifcico_ipv6_tested = true AND ifcico_ipv6_success = false)
+				)
+				%s
+			GROUP BY zone, net, node
+		),
+		best_results AS (
+			SELECT r.test_time, r.zone, r.net, r.node,
+				r.resolved_ipv6, r.isp, r.org,
+				r.binkp_ipv4_success, r.ifcico_ipv4_success, r.telnet_ipv4_success,
+				row_number() OVER (PARTITION BY r.zone, r.net, r.node
+					ORDER BY r.hostname_index ASC) as rn
+			FROM node_test_results r
+			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net
+				AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			WHERE r.is_aggregated = false
+				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true)
+				AND r.address_validated_ipv6 = true
+		)
+		SELECT br.test_time, br.zone, br.net, br.node,
+			COALESCE(n.sysop_name, '') as sysop_name,
+			br.resolved_ipv6, br.isp, br.org,
+			br.binkp_ipv4_success, br.ifcico_ipv4_success, br.telnet_ipv4_success,
+			COALESCE(s.ipv6_failure_count, 0) as ipv6_failure_count
+		FROM best_results br
+		LEFT JOIN latest_nodes n ON br.zone = n.zone AND br.net = n.net AND br.node = n.node
+		LEFT JOIN stability s ON br.zone = s.zone AND br.net = s.net AND br.node = s.node
+		WHERE br.rn = 1
+		ORDER BY br.zone, br.net, br.node
+		LIMIT ?`, nodeFilter, nodeFilter)
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		logging.Error("GetIPv6NodeList: Query failed", slog.Any("error", err))
+		return nil, fmt.Errorf("failed to query IPv6 node list: %w", err)
+	}
+	defer rows.Close()
+
+	var results []IPv6NodeListEntry
+	for rows.Next() {
+		var entry IPv6NodeListEntry
+		var ipv6FailureCount uint64
+		err := rows.Scan(
+			&entry.TestTime, &entry.Zone, &entry.Net, &entry.Node,
+			&entry.SysopName,
+			&entry.ResolvedIPv6, &entry.ISP, &entry.Org,
+			&entry.BinkPIPv4Success, &entry.IfcicoIPv4Success, &entry.TelnetIPv4Success,
+			&ipv6FailureCount,
+		)
+		if err != nil {
+			logging.Error("GetIPv6NodeList: Failed to scan row", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to scan IPv6 node list row: %w", err)
+		}
+
+		// Compute derived fields
+		entry.IPv6Type = detectIPv6Type(entry.ResolvedIPv6)
+		entry.Provider = detectProvider(entry.ISP, entry.Org)
+		entry.HasFidoAddr = hasFidoStyleAddress(entry.ResolvedIPv6, entry.Zone, entry.Net, entry.Node)
+		entry.HasNoIPv4 = !entry.BinkPIPv4Success && !entry.IfcicoIPv4Success && !entry.TelnetIPv4Success
+		entry.IsUnstable = ipv6FailureCount > 2
+		entry.Remarks = buildRemarks(entry)
+
+		results = append(results, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating IPv6 node list rows: %w", err)
+	}
+
+	return results, nil
+}
+
+// detectIPv6Type determines IPv6 connectivity type from resolved addresses.
+// If a node has both tunneled and native addresses, prefers "Native".
+func detectIPv6Type(addresses []string) string {
+	tunnelType := ""
+	for _, addr := range addresses {
+		if strings.HasPrefix(addr, "2002:") {
+			if tunnelType == "" {
+				tunnelType = "T-6to4"
+			}
+		} else if strings.HasPrefix(addr, "2001:0000:") || strings.HasPrefix(addr, "2001:0:") {
+			if tunnelType == "" {
+				tunnelType = "T-Teredo"
+			}
+		} else if strings.HasPrefix(addr, "2001:470:") || strings.HasPrefix(addr, "2001:0470:") {
+			// Hurricane Electric tunnel broker: 2001:470::/32
+			if tunnelType == "" {
+				tunnelType = "T-6in4"
+			}
+		} else {
+			// Non-tunnel address found, this is native
+			return "Native"
+		}
+	}
+	if tunnelType != "" {
+		return tunnelType
+	}
+	return "Native"
+}
+
+// detectProvider returns a cleaned provider name from ISP/Org fields.
+func detectProvider(isp, org string) string {
+	provider := isp
+	if provider == "" {
+		provider = org
+	}
+	if provider == "" {
+		return "Unknown"
+	}
+	return provider
+}
+
+// hasFidoStyleAddress checks if any resolved IPv6 address ends with the ::f1d0:zone:net:node pattern.
+// The FidoNet IPv6 address convention uses hex-encoded values: ::f1d0:ZONE:NET:NODE
+// Uses suffix matching with proper segment boundaries to avoid false positives.
+func hasFidoStyleAddress(addresses []string, zone, net, node int) bool {
+	// Build expected suffix patterns - address should end with this
+	fidoSuffix := fmt.Sprintf("f1d0:%x:%x:%x", zone, net, node)
+	for _, addr := range addresses {
+		lower := strings.ToLower(addr)
+		// Must end with the pattern (not just contain it) to avoid node=64 matching node=6400
+		if strings.HasSuffix(lower, fidoSuffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildRemarks constructs the remarks string for a node list entry.
+func buildRemarks(entry IPv6NodeListEntry) string {
+	var parts []string
+	if entry.HasFidoAddr {
+		parts = append(parts, "f")
+	}
+	if entry.HasNoIPv4 {
+		parts = append(parts, "INO4")
+	}
+	if entry.IsUnstable {
+		parts = append(parts, "6UNS")
+	}
+	return strings.Join(parts, " ")
 }

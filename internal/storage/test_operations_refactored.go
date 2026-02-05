@@ -157,6 +157,11 @@ func (to *TestOperationsRefactored) GetPureIPv6OnlyNodes(limit int, days int, in
 	return to.ipv6Ops.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes)
 }
 
+// GetIPv6NodeList returns verified working IPv6 nodes for the node list report (Michiel's format)
+func (to *TestOperationsRefactored) GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error) {
+	return to.ipv6Ops.GetIPv6NodeList(limit, days, includeZeroNodes)
+}
+
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes
 func (to *TestOperationsRefactored) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
 	return to.ipv6Ops.GetIPv6WeeklyNews(limit, includeZeroNodes)

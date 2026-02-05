@@ -347,6 +347,7 @@ type Operations interface {
 	GetPSTNCMNodes(limit int) ([]PSTNNode, error)
 	GetPSTNNodes(limit int, zone int) ([]PSTNNode, error)
 	GetFileRequestNodes(limit int) ([]FileRequestNode, error)
+	GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error)
 
 	// Utility operations (delegated to NodeOps())
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
@@ -509,6 +510,31 @@ type FileRequestNode struct {
 	NodelistDate    time.Time `json:"nodelist_date"`
 	NodeType        string    `json:"node_type"`
 	Flags           []string  `json:"flags"`
+}
+
+// IPv6NodeListEntry represents a node for the IPv6 node list report (Michiel's format)
+type IPv6NodeListEntry struct {
+	Zone         int       `json:"zone"`
+	Net          int       `json:"net"`
+	Node         int       `json:"node"`
+	SysopName    string    `json:"sysop_name"`
+	ResolvedIPv6 []string  `json:"resolved_ipv6"`
+	ISP          string    `json:"isp"`
+	Org          string    `json:"org"`
+	TestTime     time.Time `json:"test_time"`
+
+	// Raw IPv4 status for INO4 detection
+	BinkPIPv4Success  bool `json:"binkp_ipv4_success"`
+	IfcicoIPv4Success bool `json:"ifcico_ipv4_success"`
+	TelnetIPv4Success bool `json:"telnet_ipv4_success"`
+
+	// Computed fields (populated in Go after query)
+	IPv6Type    string `json:"ipv6_type"`    // "Native", "T-6in4", "T-6to4", "T-Teredo"
+	Provider    string `json:"provider"`     // Cleaned ISP/Org name
+	HasFidoAddr bool   `json:"has_fido_addr"` // f flag: has ::f1d0:z:n:nn style address
+	HasNoIPv4   bool   `json:"has_no_ipv4"`   // INO4: no working IPv4
+	IsUnstable  bool   `json:"is_unstable"`   // 6UNS: failed >2 times in 30 days
+	Remarks     string `json:"remarks"`       // Combined remarks string
 }
 
 // Error messages for consistent error handling

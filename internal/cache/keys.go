@@ -177,6 +177,10 @@ func (kg *KeyGenerator) PureIPv6OnlyNodesKey(limit, days int, includeZeroNodes b
 	return fmt.Sprintf("%s:analytics:ipv6:pureonly:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
 }
 
+func (kg *KeyGenerator) IPv6NodeListKey(limit, days int, includeZeroNodes bool) string {
+	return fmt.Sprintf("%s:analytics:ipv6:nodelist:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+}
+
 func (kg *KeyGenerator) GeoHostingDistributionKey(days int) string {
 	return fmt.Sprintf("%s:analytics:geo:hosting:%d", kg.Prefix, days)
 }
