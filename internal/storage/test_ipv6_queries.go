@@ -1173,7 +1173,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 		// Compute derived fields
 		entry.IPv6Type = detectIPv6Type(entry.ResolvedIPv6)
 		entry.Provider = detectProvider(entry.ISP, entry.Org)
-		entry.HasFidoAddr = hasFidoStyleAddress(entry.ResolvedIPv6, entry.Zone, entry.Net, entry.Node)
+		entry.HasFidoAddr = hasFidoStyleAddress(entry.ResolvedIPv6)
 		entry.HasNoIPv4 = !entry.BinkPIPv4Success && !entry.IfcicoIPv4Success && !entry.TelnetIPv4Success
 		entry.IsUnstable = ipv6FailureCount > 2
 		entry.Remarks = buildRemarks(entry)
@@ -1241,15 +1241,12 @@ func detectProvider(isp, org string) string {
 	return provider
 }
 
-// hasFidoStyleAddress checks if any resolved IPv6 address ends with the ::f1d0:zone:net:node pattern.
-// The FidoNet IPv6 address convention uses hex-encoded values: ::f1d0:ZONE:NET:NODE
-// Uses suffix matching with a colon prefix to ensure segment boundary alignment.
-func hasFidoStyleAddress(addresses []string, zone, net, node int) bool {
-	// Build expected suffix with leading colon for segment boundary
-	fidoSuffix := fmt.Sprintf(":f1d0:%x:%x:%x", zone, net, node)
+// hasFidoStyleAddress checks if any resolved IPv6 address contains an f1d0 segment,
+// indicating a FidoNet-style IPv6 address convention.
+func hasFidoStyleAddress(addresses []string) bool {
 	for _, addr := range addresses {
 		lower := strings.ToLower(addr)
-		if strings.HasSuffix(lower, fidoSuffix) {
+		if strings.Contains(lower, ":f1d0:") || strings.HasPrefix(lower, "f1d0:") {
 			return true
 		}
 	}
