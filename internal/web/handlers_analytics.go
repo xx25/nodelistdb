@@ -1528,7 +1528,7 @@ func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 		IncludeZeroNodes bool
 		Error            error
 	}{
-		Title:            "IPv6 Node List",
+		Title:            "Michiel van der Vlist's IPv6 Node List",
 		ActivePage:       "analytics",
 		Version:          version.GetVersionInfo(),
 		Nodes:            nodes,
