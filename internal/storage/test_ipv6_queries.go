@@ -1118,6 +1118,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 					(binkp_ipv6_tested = true AND binkp_ipv6_success = false) OR
 					(ifcico_ipv6_tested = true AND ifcico_ipv6_success = false)
 				)
+				AND NOT (binkp_ipv6_success = true OR ifcico_ipv6_success = true)
 				%s
 			GROUP BY zone, net, node
 		),
