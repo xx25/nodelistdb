@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/nodelistdb/internal/testing/logging"
 )
 
 // CompletionReason indicates how the EMSI handshake finished
@@ -113,7 +115,7 @@ func (s *Session) dbg(format string, args ...interface{}) {
 		s.debugFunc(format, args...)
 		return
 	}
-	s.dbg(format, args...)
+	logging.Debugf(format, args...)
 }
 
 // GetCompletionReason returns how the handshake finished
