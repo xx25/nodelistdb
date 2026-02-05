@@ -11,13 +11,44 @@
 {{end}}
 
 {{define "content"}}
-{{template "analytics_filters" .}}
+<div class="search-container">
+    <form method="get" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem; flex-wrap: wrap;">
+        <div class="form-group">
+            <label for="days">Period:</label>
+            <select name="days" id="days" class="form-control">
+                <option value="7" {{if eq .Days 7}}selected{{end}}>Last 7 days</option>
+                <option value="30" {{if eq .Days 30}}selected{{end}}>Last 30 days</option>
+                <option value="90" {{if eq .Days 90}}selected{{end}}>Last 90 days</option>
+                <option value="180" {{if eq .Days 180}}selected{{end}}>Last 180 days</option>
+                <option value="365" {{if eq .Days 365}}selected{{end}}>Last year</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="limit">Limit:</label>
+            <select name="limit" id="limit" class="form-control">
+                <option value="50" {{if eq .Limit 50}}selected{{end}}>50</option>
+                <option value="100" {{if eq .Limit 100}}selected{{end}}>100</option>
+                <option value="200" {{if eq .Limit 200}}selected{{end}}>200</option>
+                <option value="500" {{if eq .Limit 500}}selected{{end}}>500</option>
+                <option value="1000" {{if eq .Limit 1000}}selected{{end}}>1000</option>
+            </select>
+        </div>
+
+        <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" name="includeZero" id="includeZero" value="true" {{if .IncludeZeroNodes}}checked{{end}}>
+            <label for="includeZero" style="margin: 0;">Include /0 nodes</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Apply Filters</button>
+        <a href="/analytics/ipv6-node-list?format=text&days={{.Days}}&limit={{.Limit}}{{if .IncludeZeroNodes}}&includeZero=true{{end}}" class="btn btn-primary" style="text-decoration: none;">Download as Text</a>
+    </form>
+</div>
 {{template "error_display" .}}
 
 {{if .Nodes}}
 <div class="stats-box">
     <h3>Found {{len .Nodes}} Verified IPv6 Nodes</h3>
-    <a href="/analytics/ipv6-node-list?format=text&days={{.Days}}&limit={{.Limit}}{{if .IncludeZeroNodes}}&includeZero=true{{end}}" class="btn btn-primary" style="margin-left: 1rem; text-decoration: none;">Download as Text</a>
 </div>
 
 <div class="table-responsive">
