@@ -832,6 +832,9 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 			// If we have accumulated data, check it before giving up
 			if response.Len() > 0 {
 				responseStr := response.String()
+				if signal := detectModemDisconnect(responseStr); signal != "" {
+					return responseStr, "", fmt.Errorf("modem disconnect: %s", signal)
+				}
 				if emsiType := s.detectEMSIType(responseStr); emsiType != "" {
 					return responseStr, emsiType, nil
 				}
@@ -862,6 +865,16 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 			// Always update banner text with accumulated response to capture initial banner
 			if len(responseStr) > len(s.bannerText) {
 				s.bannerText = responseStr
+			}
+
+			// Check for modem disconnect signals before EMSI detection.
+			// NO CARRIER can arrive in the same read as EMSI data when the
+			// remote drops carrier immediately after sending EMSI_REQ.
+			if signal := detectModemDisconnect(responseStr); signal != "" {
+				if s.debug {
+					s.dbg("EMSI: readEMSIResponse: Modem disconnect (%s) detected after %v", signal, elapsed)
+				}
+				return responseStr, "", fmt.Errorf("modem disconnect: %s", signal)
 			}
 
 			// Check if we have EMSI sequences
@@ -899,6 +912,17 @@ func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, st
 		s.dbg("EMSI: readEMSIResponse: No data received after %v, returning timeout error", finalElapsed)
 	}
 	return "", "", fmt.Errorf("timeout waiting for EMSI response after %v", finalElapsed)
+}
+
+// detectModemDisconnect checks if the response contains a modem disconnect signal.
+// Returns the signal string (e.g. "NO CARRIER") or empty string if none found.
+func detectModemDisconnect(responseStr string) string {
+	for _, signal := range []string{"NO CARRIER", "NO DIALTONE", "NO DIAL TONE", "BUSY", "NO ANSWER"} {
+		if strings.Contains(responseStr, signal) {
+			return signal
+		}
+	}
+	return ""
 }
 
 // detectEMSIType checks if the response contains an EMSI sequence and returns its type
