@@ -938,15 +938,19 @@ func computeModemAccessibleStats(nodes []storage.ModemAccessibleNode) ModemAcces
 	for _, n := range nodes {
 		zoneMap[n.Zone]++
 
-		// Speed tier classification
+		// Speed tier classification (prefer real TX speed from line stats, fall back to connect speed)
+		speed := n.ModemTxSpeed
+		if speed == 0 {
+			speed = n.ModemConnectSpeed
+		}
 		switch {
-		case n.ModemConnectSpeed >= 28800:
+		case speed >= 28800:
 			speedMap["28800+"]++
-		case n.ModemConnectSpeed >= 14400:
+		case speed >= 14400:
 			speedMap["14400"]++
-		case n.ModemConnectSpeed >= 9600:
+		case speed >= 9600:
 			speedMap["9600"]++
-		case n.ModemConnectSpeed > 0:
+		case speed > 0:
 			speedMap["300-2400"]++
 		default:
 			speedMap["Unknown"]++

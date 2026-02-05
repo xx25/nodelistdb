@@ -14,6 +14,7 @@ import (
 
 // Config represents the complete configuration for modem testing
 type Config struct {
+	PidFile         string                `yaml:"pid_file"`         // PID file path (default: ~/.modem-test/modem-test.pid)
 	Modem           ModemConfig           `yaml:"modem"`            // Single modem (backward compat)
 	Modems          []ModemInstanceConfig `yaml:"modems"`           // Multi-modem array
 	ModemDefaults   ModemConfig           `yaml:"modem_defaults"`   // Shared defaults for multi-modem
@@ -92,6 +93,7 @@ type TestConfig struct {
 
 	// Config file fields
 	Pause         Duration            `yaml:"pause"`          // Single pause for all inter-call delays (default: 60s)
+	CDRDelay      Duration            `yaml:"cdr_delay"`      // CDR lookup delay after call (default: pause value)
 	Phone         string              `yaml:"phone"`          // Single phone (for backward compatibility)
 	Phones        []string            `yaml:"phones"`         // Multiple phones (called in circular order)
 	Operators     []OperatorConfig    `yaml:"operators"`      // Operator prefixes for routing comparison (optional)
@@ -555,6 +557,14 @@ func (c *Config) GetPause() time.Duration {
 		return c.Test.Pause.Duration()
 	}
 	return 60 * time.Second
+}
+
+// GetCDRDelay returns the CDR lookup delay. Falls back to pause if not set.
+func (c *Config) GetCDRDelay() time.Duration {
+	if c.Test.CDRDelay.Duration() > 0 {
+		return c.Test.CDRDelay.Duration()
+	}
+	return c.GetPause()
 }
 
 // GetRetryCount returns the number of retries for failed calls.

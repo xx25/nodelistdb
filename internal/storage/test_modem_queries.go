@@ -49,7 +49,7 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 				modem_tx_speed, modem_rx_speed, modem_modulation, test_source,
 				row_number() OVER (
 					PARTITION BY zone, net, node
-					ORDER BY test_time DESC, modem_connect_speed DESC, modem_response_ms ASC
+					ORDER BY test_time DESC, modem_tx_speed DESC, modem_connect_speed DESC, modem_response_ms ASC
 				) as rn
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY

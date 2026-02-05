@@ -30,8 +30,9 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	// Get modem configurations
 	modemConfigs := cfg.GetModemConfigs()
 
-	// Create modem pool - use pause for all delay parameters
-	pool, err := NewModemPool(modemConfigs, cfg.EMSI, cfg.Logging, pause, retryCount, pause, pause, cdrService, asteriskCDRService, operatorCache, log.GetOutput())
+	// Create modem pool
+	cdrDelay := cfg.GetCDRDelay()
+	pool, err := NewModemPool(modemConfigs, cfg.EMSI, cfg.Logging, pause, retryCount, pause, cdrDelay, cdrService, asteriskCDRService, operatorCache, log.GetOutput())
 	if err != nil {
 		log.Error("Failed to create modem pool: %v", err)
 		os.Exit(1)

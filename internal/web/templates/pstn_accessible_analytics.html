@@ -31,7 +31,7 @@
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
     {{if .Stats.SpeedTiers}}
     <div class="stats-box">
-        <h4>By Connect Speed</h4>
+        <h4>By Speed</h4>
         <table class="data-table" style="margin: 0;">
             <thead><tr><th>Speed</th><th>Nodes</th></tr></thead>
             <tbody>
@@ -94,7 +94,7 @@
             <tr>
                 <th data-sortable data-type="address">Node Address</th>
                 <th data-sortable data-type="string">Phone Dialed</th>
-                <th data-sortable data-type="number">Connect Speed</th>
+                <th data-sortable data-type="number">Speed</th>
                 <th data-sortable data-type="string">Protocol</th>
                 <th data-sortable data-type="string">Operator</th>
                 <th data-sortable data-type="string">EMSI System Name</th>
@@ -112,7 +112,7 @@
                     </a>
                 </td>
                 <td>{{if .ModemPhoneDialed}}<span class="badge badge-success">{{.ModemPhoneDialed}}</span>{{else}}<span class="text-muted">N/A</span>{{end}}</td>
-                <td data-value="{{.ModemConnectSpeed}}">{{if .ModemConnectSpeed}}{{.ModemConnectSpeed}} bps{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td data-value="{{if .ModemTxSpeed}}{{.ModemTxSpeed}}{{else}}{{.ModemConnectSpeed}}{{end}}">{{if .ModemTxSpeed}}{{.ModemTxSpeed}} bps{{else if .ModemConnectSpeed}}{{.ModemConnectSpeed}} bps{{else}}<span class="text-muted">N/A</span>{{end}}</td>
                 <td>{{if .ModemProtocol}}<span class="badge badge-info">{{.ModemProtocol}}</span>{{else}}<span class="text-muted">N/A</span>{{end}}</td>
                 <td>{{if .ModemOperatorName}}{{.ModemOperatorName}}{{else}}<span class="text-muted">N/A</span>{{end}}</td>
                 <td>{{if .ModemSystemName}}{{replaceUnderscores .ModemSystemName}}{{else}}<span class="text-muted">N/A</span>{{end}}</td>
@@ -131,7 +131,7 @@
 
 <div class="info-box" style="margin-top: 2rem;">
     <p><strong>About this report:</strong> This page shows FidoNet nodes that have been successfully reached via actual modem (PSTN) calls within the last {{.Days}} days. Unlike the <a href="/analytics/pstn">PSTN Nodes</a> page (which shows nodes from the nodelist with phone numbers), this report only includes nodes where a modem connection was successfully established.</p>
-    <p><strong>Connect Speed:</strong> The modem connection speed negotiated during the call (e.g., 28800 for V.34, 33600 for V.34+).</p>
+    <p><strong>Speed:</strong> The actual data transfer speed reported by the modem after the call (TX speed from line statistics). Falls back to initial connect speed if line stats are unavailable.</p>
     <p><strong>Protocol:</strong> The modem modulation protocol used (V.34, V.92, V.32bis, etc.).</p>
     <p><strong>Operator:</strong> The VoIP/carrier operator used for the call routing.</p>
     <p><strong>EMSI System Name:</strong> The system name announced by the remote node during the EMSI handshake. This confirms the node identity.</p>

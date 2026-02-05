@@ -182,16 +182,6 @@ func runTestWithFailoverMock(
 			}
 		}
 
-		// Check if user is busy
-		if isUserBusy(lastResult.asteriskCDR) {
-			return FailoverResult{
-				Success:        false,
-				LastOperator:   lastOperator,
-				LastResult:     lastResult,
-				TriedOperators: i + 1,
-				UserBusy:       true,
-			}
-		}
 	}
 
 	// All operators failed - clear cache
@@ -405,9 +395,11 @@ func TestRunTestWithFailover_AllOperatorsFail(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_UserBusyStopsFailover(t *testing.T) {
+func TestRunTestWithFailover_UserBusyContinuesFailover(t *testing.T) {
 	runner := newMockTestRunner(
-		userBusyResult(), // First operator returns user busy
+		userBusyResult(),                  // First operator returns user busy
+		userBusyResult(),                  // Second operator also busy
+		failResult("third also failed"),   // Third operator fails
 	)
 	cache := newMockOperatorCache()
 
@@ -420,27 +412,19 @@ func TestRunTestWithFailover_UserBusyStopsFailover(t *testing.T) {
 	)
 
 	if result.Success {
-		t.Error("expected failure for user busy")
+		t.Error("expected failure")
 	}
-	if !result.UserBusy {
-		t.Error("expected UserBusy=true")
+	if !result.AllOperatorsFail {
+		t.Error("expected AllOperatorsFail when all operators tried")
 	}
-	if result.AllOperatorsFail {
-		t.Error("should not be AllOperatorsFail when UserBusy")
-	}
-	if result.TriedOperators != 1 {
-		t.Errorf("expected only 1 operator tried for user busy, got %d", result.TriedOperators)
+	if result.TriedOperators != 3 {
+		t.Errorf("expected all 3 operators tried even with busy, got %d", result.TriedOperators)
 	}
 
-	// Should NOT have tried other operators
+	// Should have tried all operators
 	calls := runner.getCalls()
-	if len(calls) != 1 {
-		t.Errorf("expected only 1 call for user busy, got %d", len(calls))
-	}
-
-	// Cache should NOT be cleared for user busy
-	if len(cache.deleteCalls) != 0 {
-		t.Error("cache should not be cleared for user busy")
+	if len(calls) != 3 {
+		t.Errorf("expected 3 calls (all operators), got %d", len(calls))
 	}
 }
 
@@ -690,10 +674,11 @@ func TestRunTestWithFailover_OperatorSequencePreserved(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_UserBusyOnSecondOperator(t *testing.T) {
+func TestRunTestWithFailover_UserBusyOnSecondOperatorContinues(t *testing.T) {
 	runner := newMockTestRunner(
 		failResult("first failed - routing"),
-		userBusyResult(), // Second operator gets user busy
+		userBusyResult(),                // Second operator gets user busy
+		failResult("third also failed"), // Third operator also fails
 	)
 	cache := newMockOperatorCache()
 
@@ -708,19 +693,19 @@ func TestRunTestWithFailover_UserBusyOnSecondOperator(t *testing.T) {
 	if result.Success {
 		t.Error("expected failure")
 	}
-	if !result.UserBusy {
-		t.Error("expected UserBusy=true")
+	if !result.AllOperatorsFail {
+		t.Error("expected AllOperatorsFail when all operators tried")
 	}
-	if result.TriedOperators != 2 {
-		t.Errorf("expected 2 operators tried, got %d", result.TriedOperators)
+	if result.TriedOperators != 3 {
+		t.Errorf("expected all 3 operators tried, got %d", result.TriedOperators)
 	}
-	if result.LastOperator.Name != "Secondary" {
-		t.Errorf("expected last operator Secondary, got %q", result.LastOperator.Name)
+	if result.LastOperator.Name != "Tertiary" {
+		t.Errorf("expected last operator Tertiary, got %q", result.LastOperator.Name)
 	}
 
-	// Should NOT try third operator
+	// Should have tried all operators
 	calls := runner.getCalls()
-	if len(calls) != 2 {
-		t.Errorf("expected 2 calls, got %d", len(calls))
+	if len(calls) != 3 {
+		t.Errorf("expected 3 calls, got %d", len(calls))
 	}
 }

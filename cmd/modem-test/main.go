@@ -151,6 +151,18 @@ func main() {
 		cfg.Test.Pause = Duration(pauseDur)
 	}
 
+	// Acquire PID file to prevent multiple instances
+	pidPath := cfg.PidFile
+	if pidPath == "" {
+		pidPath = defaultPidFile
+	}
+	pidCleanup, err := AcquirePidFile(pidPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(1)
+	}
+	defer pidCleanup()
+
 	// Create logger
 	log := NewTestLogger(cfg.Logging)
 
@@ -776,11 +788,11 @@ type testResult struct {
 }
 
 func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, testNum int, phoneNumber string, originalPhone string) testResult {
-	// Determine retry settings - use pause for all delays
+	// Determine retry settings
 	retryCount := cfg.GetRetryCount()
 	pause := cfg.GetPause()
 	retryDelay := pause
-	cdrLookupDelay := pause
+	cdrLookupDelay := cfg.GetCDRDelay()
 
 	var result *modem.DialResult
 	var err error

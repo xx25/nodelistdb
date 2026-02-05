@@ -126,12 +126,12 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 	var row *sql.Row
 
 	if s.driver == "mysql" {
-		// Format times as strings to avoid Go MySQL driver's UTC conversion
-		// (database stores local time, driver converts time.Time to UTC)
+		// AudioCodes stores setup_time/connect_time as DATETIME in UTC,
+		// so convert our local times to UTC before formatting
 		const timeFmt = "2006-01-02 15:04:05"
-		startStr := startTime.Format(timeFmt)
-		endStr := endTime.Format(timeFmt)
-		callTimeStr := callTime.Format(timeFmt)
+		startStr := startTime.UTC().Format(timeFmt)
+		endStr := endTime.UTC().Format(timeFmt)
+		callTimeStr := callTime.UTC().Format(timeFmt)
 
 		// MySQL query with ? placeholders and TIMESTAMPDIFF
 		query = fmt.Sprintf(`

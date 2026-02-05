@@ -163,7 +163,33 @@ func (w *ModemWorker) Run(ctx context.Context) {
 	w.log.Init("Opening %s...", w.config.Device)
 	if err := w.modem.Open(); err != nil {
 		w.log.Fail("Failed to open modem: %v", err)
-		return
+
+		// Try USB reset as recovery
+		vendor, product, usbErr := modem.GetUSBDeviceID(w.config.Device)
+		if usbErr != nil {
+			w.log.Error("Cannot attempt USB reset: %v", usbErr)
+			return
+		}
+
+		w.log.Info("Attempting USB reset for %s:%s...", vendor, product)
+		if resetErr := modem.ResetUSBDevice(vendor, product); resetErr != nil {
+			w.log.Error("USB reset failed: %v", resetErr)
+			return
+		}
+
+		w.log.Info("Waiting for %s to reappear...", w.config.Device)
+		if waitErr := modem.WaitForDevice(w.config.Device, 10*time.Second); waitErr != nil {
+			w.log.Error("Device did not reappear after USB reset: %v", waitErr)
+			return
+		}
+
+		w.log.Info("Retrying modem open...")
+		if retryErr := w.modem.Open(); retryErr != nil {
+			w.log.Fail("Failed to open modem after USB reset: %v", retryErr)
+			return
+		}
+
+		w.log.OK("Modem opened after USB reset")
 	}
 	defer w.modem.Close()
 

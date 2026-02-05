@@ -355,7 +355,6 @@ func (w *ModemWorker) runTestWithFailover(
 
 	// Try operators in order
 	var lastResult testResult
-	var lastAsteriskCDR *AsteriskCDRData
 	var lastOperator *OperatorConfig
 
 	for i, op := range orderedOperators {
@@ -401,7 +400,6 @@ func (w *ModemWorker) runTestWithFailover(
 
 		// Run test with this operator
 		lastResult = w.runTest(ctx, job.testNum, dialPhone, job.phone, opRetryCallback)
-		lastAsteriskCDR = lastResult.asteriskCDR
 
 		if lastResult.success {
 			// Success! Cache this operator
@@ -419,19 +417,6 @@ func (w *ModemWorker) runTestWithFailover(
 			}
 		}
 
-		// Failure - check if user is busy (don't switch operators)
-		if isUserBusy(lastAsteriskCDR) {
-			w.log.Info("Destination busy (Q.931 cause 17) - not switching operators")
-			return FailoverResult{
-				Success:        false,
-				LastOperator:   lastOperator,
-				LastResult:     lastResult,
-				TriedOperators: i + 1,
-				UserBusy:       true,
-			}
-		}
-
-		// Not user busy - this might be an operator/routing issue
 		// Continue to next operator if available
 		if i < len(orderedOperators)-1 {
 			// Emit this operator's result before trying the next one
