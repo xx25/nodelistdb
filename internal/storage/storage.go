@@ -309,6 +309,10 @@ func (s *Storage) GetFileRequestNodes(limit int) ([]FileRequestNode, error) {
 	return s.analyticsOperations.GetFileRequestNodes(limit)
 }
 
+func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
+	return s.testOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes)
+}
+
 // --- Utility Methods ---
 
 // GetQueryBuilder returns the query builder for direct access

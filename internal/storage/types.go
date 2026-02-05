@@ -348,6 +348,7 @@ type Operations interface {
 	GetPSTNCMNodes(limit int) ([]PSTNNode, error)
 	GetPSTNNodes(limit int, zone int) ([]PSTNNode, error)
 	GetFileRequestNodes(limit int) ([]FileRequestNode, error)
+	GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error)
 	GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error)
 
 	// Utility operations (delegated to NodeOps())
@@ -511,6 +512,31 @@ type FileRequestNode struct {
 	NodelistDate    time.Time `json:"nodelist_date"`
 	NodeType        string    `json:"node_type"`
 	Flags           []string  `json:"flags"`
+}
+
+// ModemAccessibleNode represents a node successfully reached via modem (PSTN) test
+// Used for the PSTN Accessible Nodes analytics report showing verified modem connectivity
+type ModemAccessibleNode struct {
+	Zone                int       `json:"zone"`
+	Net                 int       `json:"net"`
+	Node                int       `json:"node"`
+	Address             string    `json:"address"`
+	TestTime            time.Time `json:"test_time"`
+	ModemPhoneDialed    string    `json:"modem_phone_dialed"`
+	ModemConnectSpeed   uint32    `json:"modem_connect_speed"`
+	ModemProtocol       string    `json:"modem_protocol"`
+	ModemSystemName     string    `json:"modem_system_name"`
+	ModemMailerInfo     string    `json:"modem_mailer_info"`
+	ModemOperatorName   string    `json:"modem_operator_name"`
+	ModemConnectString  string    `json:"modem_connect_string"`
+	ModemResponseMs     uint32    `json:"modem_response_ms"`
+	ModemAddressValid   bool      `json:"modem_address_valid"`
+	ModemRemoteLocation string    `json:"modem_remote_location"`
+	ModemRemoteSysop    string    `json:"modem_remote_sysop"`
+	ModemTxSpeed        uint32    `json:"modem_tx_speed"`
+	ModemRxSpeed        uint32    `json:"modem_rx_speed"`
+	ModemModulation     string    `json:"modem_modulation"`
+	TestSource          string    `json:"test_source"`
 }
 
 // IPv6NodeListEntry represents a node for the IPv6 node list report (Michiel's format)

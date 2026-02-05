@@ -18,6 +18,7 @@ type TestOperationsRefactored struct {
 	geoOps             *GeoAnalyticsOperations
 	akaMismatchOps     *AKAMismatchOperations
 	otherNetworksOps   *OtherNetworksOperations
+	modemOps           *ModemQueryOperations
 }
 
 // NewTestOperationsRefactored creates a new refactored TestOperations instance
@@ -37,6 +38,7 @@ func NewTestOperationsRefactored(db database.DatabaseInterface, queryBuilder Que
 		geoOps:             NewGeoAnalyticsOperations(db),
 		akaMismatchOps:     NewAKAMismatchOperations(db, testQueryBuilder, resultParser),
 		otherNetworksOps:   NewOtherNetworksOperations(db),
+		modemOps:           NewModemQueryOperations(db),
 	}
 }
 
@@ -194,4 +196,11 @@ func (to *TestOperationsRefactored) GetOtherNetworksSummary(days int) ([]OtherNe
 // GetNodesInNetwork returns nodes that announce AKAs in a specific network
 func (to *TestOperationsRefactored) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
 	return to.otherNetworksOps.GetNodesInNetwork(networkName, limit, days)
+}
+
+// ===== Modem Operations (delegated to ModemQueryOperations) =====
+
+// GetModemAccessibleNodes returns nodes successfully reached via modem tests
+func (to *TestOperationsRefactored) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
+	return to.modemOps.GetModemAccessibleNodes(limit, days, includeZeroNodes)
 }

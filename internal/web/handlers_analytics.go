@@ -891,6 +891,200 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// ModemAccessibleSpeedTier holds count for a single speed tier (for ordered display)
+type ModemAccessibleSpeedTier struct {
+	Tier  string
+	Count int
+}
+
+// ModemAccessibleProtocolCount holds count for a single modem protocol (for ordered display)
+type ModemAccessibleProtocolCount struct {
+	Protocol string
+	Count    int
+}
+
+// ModemAccessibleOperatorCount holds count for a single operator (for ordered display)
+type ModemAccessibleOperatorCount struct {
+	Operator string
+	Count    int
+}
+
+// ModemAccessibleZoneCount holds count for a single zone (for ordered display)
+type ModemAccessibleZoneCount struct {
+	Zone  int
+	Count int
+}
+
+// ModemAccessibleSummaryStats holds summary statistics for modem-accessible nodes
+type ModemAccessibleSummaryStats struct {
+	TotalCount     int
+	SpeedTiers     []ModemAccessibleSpeedTier
+	ProtocolCounts []ModemAccessibleProtocolCount
+	OperatorCounts []ModemAccessibleOperatorCount
+	ZoneCounts     []ModemAccessibleZoneCount
+}
+
+// computeModemAccessibleStats calculates summary statistics from modem accessible nodes
+func computeModemAccessibleStats(nodes []storage.ModemAccessibleNode) ModemAccessibleSummaryStats {
+	stats := ModemAccessibleSummaryStats{
+		TotalCount: len(nodes),
+	}
+
+	speedMap := make(map[string]int)
+	protoMap := make(map[string]int)
+	operMap := make(map[string]int)
+	zoneMap := make(map[int]int)
+
+	for _, n := range nodes {
+		zoneMap[n.Zone]++
+
+		// Speed tier classification
+		switch {
+		case n.ModemConnectSpeed >= 28800:
+			speedMap["28800+"]++
+		case n.ModemConnectSpeed >= 14400:
+			speedMap["14400"]++
+		case n.ModemConnectSpeed >= 9600:
+			speedMap["9600"]++
+		case n.ModemConnectSpeed > 0:
+			speedMap["300-2400"]++
+		default:
+			speedMap["Unknown"]++
+		}
+
+		// Protocol distribution
+		proto := n.ModemProtocol
+		if proto == "" {
+			proto = "Unknown"
+		}
+		protoMap[proto]++
+
+		// Operator distribution
+		if n.ModemOperatorName != "" {
+			operMap[n.ModemOperatorName]++
+		}
+	}
+
+	// Convert maps to sorted slices
+	// Speed tiers in logical order
+	tierOrder := []string{"28800+", "14400", "9600", "300-2400", "Unknown"}
+	for _, tier := range tierOrder {
+		if count, ok := speedMap[tier]; ok {
+			stats.SpeedTiers = append(stats.SpeedTiers, ModemAccessibleSpeedTier{Tier: tier, Count: count})
+		}
+	}
+
+	// Protocols sorted by count descending
+	stats.ProtocolCounts = sortedProtocolCounts(protoMap)
+
+	// Operators sorted by count descending
+	stats.OperatorCounts = sortedOperatorCounts(operMap)
+
+	// Zones sorted by zone number
+	stats.ZoneCounts = sortedModemZoneCounts(zoneMap)
+
+	return stats
+}
+
+// sortedProtocolCounts converts protocol map to sorted slice (by count desc)
+func sortedProtocolCounts(m map[string]int) []ModemAccessibleProtocolCount {
+	result := make([]ModemAccessibleProtocolCount, 0, len(m))
+	for proto, count := range m {
+		result = append(result, ModemAccessibleProtocolCount{Protocol: proto, Count: count})
+	}
+	for i := 0; i < len(result); i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[j].Count > result[i].Count {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+	return result
+}
+
+// sortedOperatorCounts converts operator map to sorted slice (by count desc)
+func sortedOperatorCounts(m map[string]int) []ModemAccessibleOperatorCount {
+	result := make([]ModemAccessibleOperatorCount, 0, len(m))
+	for oper, count := range m {
+		result = append(result, ModemAccessibleOperatorCount{Operator: oper, Count: count})
+	}
+	for i := 0; i < len(result); i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[j].Count > result[i].Count {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+	return result
+}
+
+// sortedModemZoneCounts converts zone map to sorted slice (by zone number)
+func sortedModemZoneCounts(m map[int]int) []ModemAccessibleZoneCount {
+	result := make([]ModemAccessibleZoneCount, 0, len(m))
+	for zone, count := range m {
+		result = append(result, ModemAccessibleZoneCount{Zone: zone, Count: count})
+	}
+	for i := 0; i < len(result); i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[j].Zone < result[i].Zone {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+	return result
+}
+
+// ModemAccessibleAnalyticsHandler shows nodes successfully reached via modem calls
+func (s *Server) ModemAccessibleAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	params := parseAnalyticsParams(r)
+
+	nodes, err := s.storage.GetModemAccessibleNodes(params.Limit, params.Days, params.IncludeZeroNodes)
+	var displayError error
+	if err != nil {
+		log.Printf("[ERROR] Modem Accessible Analytics: Error fetching nodes: %v", err)
+		nodes = []storage.ModemAccessibleNode{}
+		displayError = fmt.Errorf("Failed to fetch modem accessible analytics data. Please try again later")
+	} else if params.ValidationError != "" {
+		displayError = fmt.Errorf("%s", params.ValidationError)
+	}
+
+	stats := computeModemAccessibleStats(nodes)
+
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		Nodes            []storage.ModemAccessibleNode
+		Stats            ModemAccessibleSummaryStats
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
+	}{
+		Title:            "PSTN Accessible Nodes (Verified by Modem)",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		Nodes:            nodes,
+		Stats:            stats,
+		Days:             params.Days,
+		Limit:            params.Limit,
+		IncludeZeroNodes: params.IncludeZeroNodes,
+		Error:            displayError,
+	}
+
+	tmpl, exists := s.templates["pstn_accessible_analytics"]
+	if !exists {
+		log.Printf("[ERROR] Modem Accessible Analytics: Template 'pstn_accessible_analytics' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Modem Accessible Analytics: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // FileRequestFlagCount holds count for a single flag (for ordered display)
 type FileRequestFlagCount struct {
 	Flag  string

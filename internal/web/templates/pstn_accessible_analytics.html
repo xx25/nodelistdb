@@ -1,0 +1,146 @@
+{{template "base" .}}
+
+{{define "title"}}PSTN Accessible Nodes{{end}}
+
+{{define "page_title"}}PSTN Accessible Nodes (Verified by Modem){{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">Nodes successfully reached via actual modem calls</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+<div class="alert alert-info" style="margin-bottom: 1.5rem;">
+    <strong>Note:</strong> PSTN modem testing is still in progress. This list is not complete and will grow as more nodes are tested.
+</div>
+
+{{template "analytics_filters" .}}
+{{template "error_display" .}}
+
+{{if .Nodes}}
+<!-- Summary Statistics -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h3>{{.Stats.TotalCount}}</h3>
+        <p>Nodes Reached</p>
+    </div>
+</div>
+
+<!-- Speed Tiers and Protocol Distribution side by side -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+    {{if .Stats.SpeedTiers}}
+    <div class="stats-box">
+        <h4>By Connect Speed</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Speed</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range .Stats.SpeedTiers}}
+                <tr><td>{{if eq .Tier "Unknown"}}Unknown{{else}}{{.Tier}} bps{{end}}</td><td>{{.Count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+    {{if .Stats.ProtocolCounts}}
+    <div class="stats-box">
+        <h4>By Modem Protocol</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Protocol</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range .Stats.ProtocolCounts}}
+                <tr><td>{{.Protocol}}</td><td>{{.Count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+</div>
+
+<!-- Zone and Operator Breakdown side by side -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+    {{if .Stats.ZoneCounts}}
+    <div class="stats-box">
+        <h4>By Zone</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Zone</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range .Stats.ZoneCounts}}
+                <tr><td>Zone {{.Zone}}</td><td>{{.Count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+    {{if .Stats.OperatorCounts}}
+    <div class="stats-box">
+        <h4>By Operator</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Operator</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range .Stats.OperatorCounts}}
+                <tr><td>{{.Operator}}</td><td>{{.Count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+</div>
+
+<!-- Main Node Table -->
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">Phone Dialed</th>
+                <th data-sortable data-type="number">Connect Speed</th>
+                <th data-sortable data-type="string">Protocol</th>
+                <th data-sortable data-type="string">Operator</th>
+                <th data-sortable data-type="string">EMSI System Name</th>
+                <th data-sortable data-type="string">Mailer Info</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Nodes}}
+            <tr>
+                <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}">
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                        {{.Zone}}:{{.Net}}/{{.Node}}
+                    </a>
+                </td>
+                <td>{{if .ModemPhoneDialed}}<span class="badge badge-success">{{.ModemPhoneDialed}}</span>{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td data-value="{{.ModemConnectSpeed}}">{{if .ModemConnectSpeed}}{{.ModemConnectSpeed}} bps{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td>{{if .ModemProtocol}}<span class="badge badge-info">{{.ModemProtocol}}</span>{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td>{{if .ModemOperatorName}}{{.ModemOperatorName}}{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td>{{if .ModemSystemName}}{{replaceUnderscores .ModemSystemName}}{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td>{{if .ModemMailerInfo}}{{.ModemMailerInfo}}{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td data-value="{{.TestTime.Unix}}">
+                    <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
+                </td>
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>About this report:</strong> This page shows FidoNet nodes that have been successfully reached via actual modem (PSTN) calls within the last {{.Days}} days. Unlike the <a href="/analytics/pstn">PSTN Nodes</a> page (which shows nodes from the nodelist with phone numbers), this report only includes nodes where a modem connection was successfully established.</p>
+    <p><strong>Connect Speed:</strong> The modem connection speed negotiated during the call (e.g., 28800 for V.34, 33600 for V.34+).</p>
+    <p><strong>Protocol:</strong> The modem modulation protocol used (V.34, V.92, V.32bis, etc.).</p>
+    <p><strong>Operator:</strong> The VoIP/carrier operator used for the call routing.</p>
+    <p><strong>EMSI System Name:</strong> The system name announced by the remote node during the EMSI handshake. This confirms the node identity.</p>
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>No modem-accessible nodes found.</strong><br>
+    No nodes were successfully reached via modem within the last {{.Days}} days. Try increasing the time range.
+</div>
+{{end}}
+{{end}}
