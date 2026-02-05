@@ -321,6 +321,19 @@ func (s *Server) loadTemplates() {
 			}
 			return strings.Join(parts, "\n")
 		},
+		"isNotNil": func(v interface{}) bool {
+			if v == nil {
+				return false
+			}
+			rv := reflect.ValueOf(v)
+			return !rv.IsNil()
+		},
+		"deref": func(v *bool) bool {
+			if v == nil {
+				return false
+			}
+			return *v
+		},
 		"countryFlag": func(countryCode string) string {
 			// Convert ISO 3166-1 alpha-2 country code to flag emoji
 			// Each letter is converted to regional indicator symbol (U+1F1E6 to U+1F1FF)

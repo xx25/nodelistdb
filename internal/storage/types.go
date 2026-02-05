@@ -141,10 +141,11 @@ type NodeTestResult struct {
 	TelnetError      string `json:"telnet_error"`
 
 	// FTP Test Results
-	FTPTested     bool   `json:"ftp_tested"`
-	FTPSuccess    bool   `json:"ftp_success"`
-	FTPResponseMs uint32 `json:"ftp_response_ms"`
-	FTPError      string `json:"ftp_error"`
+	FTPTested      bool   `json:"ftp_tested"`
+	FTPSuccess     bool   `json:"ftp_success"`
+	FTPResponseMs  uint32 `json:"ftp_response_ms"`
+	FTPError       string `json:"ftp_error"`
+	FTPAnonSuccess *bool  `json:"ftp_anon_success"` // nil=not attempted, true=success, false=rejected
 
 	// VModem Test Results
 	VModemTested     bool   `json:"vmodem_tested"`

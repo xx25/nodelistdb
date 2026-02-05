@@ -342,10 +342,17 @@ func (d *Daemon) testFTP(ctx context.Context, node *models.Node, result *models.
 					ftpResult.Error,
 				)
 
-				// Store banner if successful
-				if ftpResult.Success && ftpResult.Banner != "" {
-					logging.Debugf("[%s]     FTP IPv6 success: %s (%dms)", node.Address(), ftpResult.Banner, ftpResult.ResponseMs)
-					result.FTPResult.Details["ipv6_banner"] = ftpResult.Banner
+				// Store banner and anon login if successful
+				if ftpResult.Success {
+					if ftpResult.Banner != "" {
+						logging.Debugf("[%s]     FTP IPv6 success: %s (%dms)", node.Address(), ftpResult.Banner, ftpResult.ResponseMs)
+						result.FTPResult.Details["ipv6_banner"] = ftpResult.Banner
+					} else {
+						logging.Debugf("[%s]     FTP IPv6 success (%dms)", node.Address(), ftpResult.ResponseMs)
+					}
+					if ftpResult.AnonTested {
+						result.FTPResult.Details["ipv6_anon_login"] = ftpResult.AnonLogin
+					}
 					break // First successful IPv6 is enough
 				} else if ftpResult.Error != "" {
 					logging.Debugf("[%s]     FTP IPv6 failed: %s", node.Address(), ftpResult.Error)
@@ -370,10 +377,17 @@ func (d *Daemon) testFTP(ctx context.Context, node *models.Node, result *models.
 					ftpResult.Error,
 				)
 
-				// Store banner if successful
-				if ftpResult.Success && ftpResult.Banner != "" {
-					logging.Debugf("[%s]     FTP IPv4 success: %s (%dms)", node.Address(), ftpResult.Banner, ftpResult.ResponseMs)
-					result.FTPResult.Details["ipv4_banner"] = ftpResult.Banner
+				// Store banner and anon login if successful
+				if ftpResult.Success {
+					if ftpResult.Banner != "" {
+						logging.Debugf("[%s]     FTP IPv4 success: %s (%dms)", node.Address(), ftpResult.Banner, ftpResult.ResponseMs)
+						result.FTPResult.Details["ipv4_banner"] = ftpResult.Banner
+					} else {
+						logging.Debugf("[%s]     FTP IPv4 success (%dms)", node.Address(), ftpResult.ResponseMs)
+					}
+					if ftpResult.AnonTested {
+						result.FTPResult.Details["ipv4_anon_login"] = ftpResult.AnonLogin
+					}
 					break // First successful IPv4 is enough
 				} else if ftpResult.Error != "" {
 					logging.Debugf("[%s]     FTP IPv4 failed: %s", node.Address(), ftpResult.Error)

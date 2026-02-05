@@ -15,6 +15,7 @@ type ProtocolPageConfig struct {
 	StatsHeading    string        // e.g., "BinkP Enabled" (used in "Found X {StatsHeading} Nodes")
 	ShowVersion     bool          // Show version column (true for BinkP, IFCICO)
 	VersionField    string        // Field name: "BinkPVersion", "IfcicoVersion"
+	ShowAnonLogin   bool          // Show anonymous login column (FTP only)
 	InfoText        []string      // Info paragraphs (can use %d for days substitution)
 	EmptyStateTitle string        // Title when no results found
 	EmptyStateDesc  string        // Description when no results found

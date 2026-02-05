@@ -26,20 +26,20 @@ func (t *FTPTester) GetProtocolName() string {
 	return "FTP"
 }
 
-// Test performs an FTP connectivity test
+// Test performs an FTP connectivity test with anonymous login attempt
 func (t *FTPTester) Test(ctx context.Context, host string, port int, expectedAddress string) TestResult {
 	startTime := time.Now()
-	
+
 	// Default FTP port is 21
 	if port == 0 {
 		port = 21
 	}
-	
+
 	// Create connection with timeout
 	dialer := net.Dialer{
 		Timeout: t.timeout,
 	}
-	
+
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 	if err != nil {
 		return &FTPTestResult{
@@ -52,14 +52,14 @@ func (t *FTPTester) Test(ctx context.Context, host string, port int, expectedAdd
 		}
 	}
 	defer conn.Close()
-	
+
 	// Set read deadline
 	_ = conn.SetReadDeadline(time.Now().Add(t.timeout))
-	
-	// Read FTP banner (220 response)
+
+	// Read FTP banner (220 response), handling multi-line banners
 	reader := bufio.NewReader(conn)
-	banner, responseCode := t.readFTPResponse(reader)
-	
+	banner, responseCode := t.readFullFTPResponse(reader)
+
 	result := &FTPTestResult{
 		BaseTestResult: BaseTestResult{
 			Success:    false,
@@ -68,78 +68,120 @@ func (t *FTPTester) Test(ctx context.Context, host string, port int, expectedAdd
 		},
 		Banner: banner,
 	}
-	
+
 	// Check if we got a valid FTP response
 	if responseCode == "220" {
 		result.Success = true
-		
-		// Try to send QUIT command for clean disconnect
-		_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-		_, _ = fmt.Fprintf(conn, "QUIT\r\n")
+
+		// Attempt anonymous login
+		t.tryAnonymousLogin(conn, reader, result)
 	} else if responseCode != "" {
 		result.Error = fmt.Sprintf("unexpected FTP response code: %s", responseCode)
 	} else {
 		result.Error = "no FTP response received"
 	}
-	
+
+	// Send QUIT for clean disconnect
+	_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	_, _ = fmt.Fprintf(conn, "QUIT\r\n")
+
 	return result
 }
 
-// readFTPResponse reads an FTP response and returns the banner and response code
-func (t *FTPTester) readFTPResponse(reader *bufio.Reader) (string, string) {
-	// FTP responses format: "NNN message\r\n" where NNN is the response code
-	
-	// Try to read response with timeout
-	responseChan := make(chan string, 1)
-	go func() {
+// tryAnonymousLogin attempts anonymous FTP login after a successful banner
+func (t *FTPTester) tryAnonymousLogin(conn net.Conn, reader *bufio.Reader, result *FTPTestResult) {
+	// Send USER anonymous
+	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	_, err := fmt.Fprintf(conn, "USER anonymous\r\n")
+	if err != nil {
+		return
+	}
+
+	// Read USER response
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, userCode := t.readFullFTPResponse(reader)
+
+	if userCode == "" {
+		return
+	}
+
+	result.AnonTested = true
+
+	switch userCode {
+	case "230":
+		// Login accepted without password
+		result.AnonLogin = true
+	case "331":
+		// Password required, send PASS
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		_, err := fmt.Fprintf(conn, "PASS anonymous@\r\n")
+		if err != nil {
+			return
+		}
+
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_, passCode := t.readFullFTPResponse(reader)
+
+		if passCode == "230" {
+			result.AnonLogin = true
+		}
+		// 530 = login rejected, 332 = need account, etc. - AnonLogin stays false
+	}
+	// 530, 421, other codes - AnonLogin stays false
+}
+
+// readFullFTPResponse reads a complete FTP response, handling multi-line responses.
+// Multi-line FTP responses use "NNN-text" for continuation lines and "NNN text" for the final line.
+// Returns the text of the final line and the response code.
+func (t *FTPTester) readFullFTPResponse(reader *bufio.Reader) (string, string) {
+	var lastText string
+	var responseCode string
+
+	for {
 		line, err := reader.ReadString('\n')
-		if err == nil {
-			responseChan <- line
-		} else {
-			responseChan <- ""
+		if err != nil {
+			// Return whatever we have so far
+			return lastText, responseCode
 		}
-	}()
-	
-	select {
-	case response := <-responseChan:
-		if response == "" {
-			return "", ""
+
+		line = strings.TrimSpace(line)
+		if len(line) < 3 {
+			continue
 		}
-		
-		// Clean up response
-		response = strings.TrimSpace(response)
-		
+
 		// Extract response code (first 3 characters)
-		responseCode := ""
-		if len(response) >= 3 {
-			responseCode = response[:3]
-			
-			// Validate that it's a numeric code
-			for _, c := range responseCode {
-				if c < '0' || c > '9' {
-					responseCode = ""
-					break
-				}
+		code := line[:3]
+		isNumeric := true
+		for _, c := range code {
+			if c < '0' || c > '9' {
+				isNumeric = false
+				break
 			}
 		}
-		
-		// Extract banner message (after code and space)
-		banner := response
-		if len(response) > 4 && response[3] == ' ' {
-			banner = response[4:]
+		if !isNumeric {
+			continue
 		}
-		
-		// Clean up banner
-		banner = strings.TrimSpace(banner)
-		
-		// Limit banner length
-		if len(banner) > 500 {
-			banner = banner[:500] + "..."
+
+		responseCode = code
+
+		// Extract text after code
+		text := line
+		if len(line) > 4 {
+			text = line[4:]
+		} else if len(line) > 3 {
+			text = ""
 		}
-		
-		return banner, responseCode
-		
-	case <-time.After(t.timeout):
-		return "", ""
+
+		text = strings.TrimSpace(text)
+		if len(text) > 500 {
+			text = text[:500] + "..."
+		}
+		lastText = text
+
+		// Check if this is the final line: "NNN " (space after code, not dash)
+		if len(line) == 3 || (len(line) > 3 && line[3] == ' ') {
+			return lastText, responseCode
+		}
+		// If line[3] == '-', it's a continuation line, keep reading
 	}
 }

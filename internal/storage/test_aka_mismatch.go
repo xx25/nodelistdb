@@ -120,7 +120,8 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string
 			r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
 			r.is_operational, r.has_connectivity_issues, r.address_validated,
 			r.tested_hostname, r.hostname_index, r.is_aggregated,
-			r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+			r.ftp_anon_success
 		FROM node_test_results r
 		JOIN best_results br ON r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
 		WHERE r.address_validated = false
@@ -203,6 +204,7 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 			&n.IsOperational, &n.HasConnectivityIssues, &n.AddressValidated,
 			&n.TestedHostname, &n.HostnameIndex, &n.IsAggregated,
 			&n.TotalHostnames, &n.HostnamesTested, &n.HostnamesOperational,
+			&n.FTPAnonSuccess,
 			// Extra fields for IP version mismatch
 			&n.BinkPIPv4Addresses, &n.BinkPIPv6Addresses,
 			&n.IfcicoIPv4Addresses, &n.IfcicoIPv6Addresses,
@@ -276,6 +278,7 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 			r.is_operational, r.has_connectivity_issues, r.address_validated,
 			r.tested_hostname, r.hostname_index, r.is_aggregated,
 			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+			r.ftp_anon_success,
 			r.binkp_ipv4_addresses, r.binkp_ipv6_addresses,
 			r.ifcico_ipv4_addresses, r.ifcico_ipv6_addresses,
 			r.address_validated_ipv4, r.address_validated_ipv6

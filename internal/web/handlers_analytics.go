@@ -538,8 +538,9 @@ func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{
 		PageTitle:    "FTP Enabled Nodes",
 		PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with FTP protocol</p>`),
-		StatsHeading: "FTP Enabled",
-		ShowVersion:  false,
+		StatsHeading:  "FTP Enabled",
+		ShowVersion:   false,
+		ShowAnonLogin: true,
 		InfoText: []string{
 			`<strong>Note:</strong> This report shows nodes that have been successfully tested with FTP protocol over the last %d days. FTP is used for file distribution and downloads in the FidoNet network.`,
 		},

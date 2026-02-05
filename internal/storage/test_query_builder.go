@@ -41,7 +41,8 @@ func (tqb *TestQueryBuilder) BuildTestHistoryQuery() string {
 			vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
 			is_operational, has_connectivity_issues, address_validated,
 			tested_hostname, hostname_index, is_aggregated,
-			total_hostnames, hostnames_tested, hostnames_operational
+			total_hostnames, hostnames_tested, hostnames_operational,
+			ftp_anon_success
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
 		AND test_time >= now() - INTERVAL ? DAY
@@ -74,7 +75,8 @@ func (tqb *TestQueryBuilder) BuildDetailedTestResultQuery() string {
 			vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
 			is_operational, has_connectivity_issues, address_validated,
 			tested_hostname, hostname_index, is_aggregated,
-			total_hostnames, hostnames_tested, hostnames_operational
+			total_hostnames, hostnames_tested, hostnames_operational,
+			ftp_anon_success
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ? AND test_time = parseDateTimeBestEffort(?)
 		ORDER BY is_aggregated DESC, hostname_index ASC
@@ -254,7 +256,8 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter stri
 			r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
 			r.is_operational, r.has_connectivity_issues, r.address_validated,
 			r.tested_hostname, r.hostname_index, r.is_aggregated,
-			r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+			r.ftp_anon_success
 		FROM node_test_results r
 		JOIN best_results br ON r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
 		LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
@@ -288,7 +291,8 @@ func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
 			vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
 			is_operational, has_connectivity_issues, address_validated,
 			tested_hostname, hostname_index, is_aggregated,
-			total_hostnames, hostnames_tested, hostnames_operational
+			total_hostnames, hostnames_tested, hostnames_operational,
+			ftp_anon_success
 		FROM (
 			SELECT *, row_number() OVER (PARTITION BY zone, net, node ORDER BY test_time DESC) as rn
 			FROM node_test_results

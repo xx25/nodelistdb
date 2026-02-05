@@ -32,6 +32,11 @@
                     <th data-sortable data-type="string">Version</th>
                 {{end}}
 
+                {{/* Anonymous login column for FTP */}}
+                {{if .Config.ShowAnonLogin}}
+                    <th data-sortable data-type="string">Anon Login</th>
+                {{end}}
+
                 <th data-sortable data-type="string">Location</th>
                 <th data-sortable data-type="date">Last Tested</th>
                 <th>Actions</th>
@@ -54,6 +59,21 @@
                             <span class="badge badge-info">{{$version}}</span>
                         {{else}}
                             <span class="text-muted">Unknown</span>
+                        {{end}}
+                    </td>
+                {{end}}
+
+                {{/* Anonymous login column rendering */}}
+                {{if $.Config.ShowAnonLogin}}
+                    <td>
+                        {{if isNotNil .FTPAnonSuccess}}
+                            {{if deref .FTPAnonSuccess}}
+                                <span class="badge badge-success">Yes</span>
+                            {{else}}
+                                <span class="badge badge-danger">No</span>
+                            {{end}}
+                        {{else}}
+                            <span class="text-muted">N/A</span>
                         {{end}}
                     </td>
                 {{end}}

@@ -134,6 +134,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+					r.ftp_anon_success,
 					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
@@ -164,7 +165,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational
+				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+				rr.ftp_anon_success
 			FROM ranked_results rr
 			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
@@ -209,7 +211,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success
 			FROM node_test_results r
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
@@ -337,6 +340,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+					r.ftp_anon_success,
 					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_failed_tests lft ON r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
@@ -367,7 +371,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational
+				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+				rr.ftp_anon_success
 			FROM ranked_results rr
 			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
@@ -434,7 +439,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success
 			FROM node_test_results r
 			INNER JOIN latest_failed_tests lft ON r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
 				AND r.test_time = lft.latest_test_time
@@ -565,6 +571,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+					r.ftp_anon_success,
 					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_ipv4_only_tests lit ON r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
@@ -595,7 +602,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational
+				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+				rr.ftp_anon_success
 			FROM ranked_results rr
 			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
@@ -664,7 +672,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success
 			FROM node_test_results r
 			INNER JOIN latest_ipv4_only_tests lit ON r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
 				AND r.test_time = lit.latest_test_time
@@ -772,6 +781,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+					r.ftp_anon_success,
 					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
@@ -802,7 +812,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational
+				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+				rr.ftp_anon_success
 			FROM ranked_results rr
 			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
@@ -847,7 +858,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success
 			FROM node_test_results r
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
@@ -954,6 +966,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+					r.ftp_anon_success,
 					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
@@ -984,7 +997,8 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational
+				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+				rr.ftp_anon_success
 			FROM ranked_results rr
 			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
@@ -1029,7 +1043,8 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success
 			FROM node_test_results r
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time

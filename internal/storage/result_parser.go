@@ -319,6 +319,7 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 		&result.TotalHostnames,
 		&result.HostnamesTested,
 		&result.HostnamesOperational,
+		&result.FTPAnonSuccess,
 	)
 
 	if err != nil {

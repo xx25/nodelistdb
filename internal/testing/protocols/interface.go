@@ -87,7 +87,9 @@ type TelnetTestResult struct {
 // FTPTestResult contains FTP-specific test results
 type FTPTestResult struct {
 	BaseTestResult
-	Banner string
+	Banner     string
+	AnonTested bool // Whether anonymous login was attempted
+	AnonLogin  bool // Whether anonymous login succeeded
 }
 
 // VModemTestResult contains VModem-specific test results

@@ -79,7 +79,8 @@ func (s *ClickHouseStorage) flushBatch(ctx context.Context) error {
 		vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
 		tested_hostname, hostname_index, is_aggregated, total_hostnames, hostnames_tested, hostnames_operational,
 		binkp_ipv4_addresses, binkp_ipv6_addresses, ifcico_ipv4_addresses, ifcico_ipv6_addresses,
-		address_validated_ipv4, address_validated_ipv6
+		address_validated_ipv4, address_validated_ipv6,
+		ftp_anon_success
 	)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
@@ -639,6 +640,19 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		vmodemIPv6Error = r.VModemResult.IPv6Error
 	}
 
+	// Extract FTP anonymous login result (OR of IPv4/IPv6)
+	var ftpAnonSuccess *bool
+	if r.FTPResult != nil {
+		if v, ok := r.FTPResult.Details["ipv6_anon_login"].(bool); ok {
+			ftpAnonSuccess = &v
+		}
+		if v, ok := r.FTPResult.Details["ipv4_anon_login"].(bool); ok {
+			if ftpAnonSuccess == nil || v {
+				ftpAnonSuccess = &v
+			}
+		}
+	}
+
 	// Extract per-IP-version announced addresses for IPv4/IPv6 AKA mismatch detection
 	var binkpIPv4Addrs, binkpIPv6Addrs []string
 	if r.BinkPResult != nil {
@@ -699,5 +713,7 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		// Per-IP-version AKA addresses and validation flags
 		binkpIPv4Addrs, binkpIPv6Addrs, ifcicoIPv4Addrs, ifcicoIPv6Addrs,
 		r.AddressValidatedIPv4, r.AddressValidatedIPv6,
+		// FTP anonymous login result
+		ftpAnonSuccess,
 	}
 }

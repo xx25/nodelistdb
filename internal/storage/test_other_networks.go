@@ -182,6 +182,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 			r.is_operational, r.has_connectivity_issues, r.address_validated,
 			r.tested_hostname, r.hostname_index, r.is_aggregated,
 			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+			r.ftp_anon_success,
 			-- Extract addresses for this specific network
 			arrayFilter(addr -> lower(addr) LIKE '%@' || lower(?) || '%', arrayConcat(r.binkp_addresses, r.ifcico_addresses)) as network_addresses
 		FROM node_test_results r
@@ -225,6 +226,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 			&n.IsOperational, &n.HasConnectivityIssues, &n.AddressValidated,
 			&n.TestedHostname, &n.HostnameIndex, &n.IsAggregated,
 			&n.TotalHostnames, &n.HostnamesTested, &n.HostnamesOperational,
+			&n.FTPAnonSuccess,
 			&n.NetworkAddresses,
 		)
 		if err != nil {

@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `ftp_success` Bool,
     `ftp_response_ms` UInt32,
     `ftp_error` String,
+    `ftp_anon_success` Nullable(Bool) DEFAULT NULL,
     `vmodem_tested` Bool,
     `vmodem_success` Bool,
     `vmodem_response_ms` UInt32,
