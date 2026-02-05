@@ -38,6 +38,9 @@ type Config struct {
 	// Compatibility
 	AcceptFDLenWithCR bool `yaml:"accept_fd_len_with_cr"` // true (FrontDoor bug)
 
+	// RX Phase Behavior
+	SkipFirstRXReq bool `yaml:"skip_first_rx_req"` // true (FSC-0056: caller waits on first RX try)
+
 	// Protocol Features
 	Protocols []string `yaml:"protocols"` // ["ZMO", "ZAP"]
 
@@ -113,6 +116,10 @@ func DefaultConfig() *Config {
 		// Compatibility workarounds (enabled by default)
 		AcceptFDLenWithCR: true, // FrontDoor bug workaround
 
+		// RX phase: caller should not send REQ on first try per FSC-0056.001
+		// (answering system sends REQ; caller waits then sends NAK on retry)
+		SkipFirstRXReq: true,
+
 		// Minimum protocol set
 		Protocols: []string{"ZMO", "ZAP"},
 
@@ -162,6 +169,9 @@ type NodeOverride struct {
 
 	// Compatibility
 	AcceptFDLenWithCR *bool `yaml:"accept_fd_len_with_cr,omitempty"`
+
+	// RX Phase Behavior
+	SkipFirstRXReq *bool `yaml:"skip_first_rx_req,omitempty"`
 
 	// Protocol Features - pointer allows explicit empty list for NCP
 	Protocols *[]string `yaml:"protocols,omitempty"`
@@ -349,6 +359,7 @@ func (c *Config) MergeFromComplete(other *Config) {
 	c.NoFileRequests = other.NoFileRequests
 	c.RequireFNC = other.RequireFNC
 	c.SuppressDeprecated = other.SuppressDeprecated
+	c.SkipFirstRXReq = other.SkipFirstRXReq
 }
 
 // applyDefaultFalseBoolsFrom applies bool fields that default to false when set to true.
@@ -384,6 +395,9 @@ func (c *Config) applyDefaultFalseBoolsFrom(other *Config) {
 	}
 	if other.SuppressDeprecated {
 		c.SuppressDeprecated = true
+	}
+	if other.SkipFirstRXReq {
+		c.SkipFirstRXReq = true
 	}
 }
 
@@ -507,6 +521,10 @@ func (c *Config) ApplyOverride(override *NodeOverride) {
 	// Compatibility
 	if override.AcceptFDLenWithCR != nil {
 		c.AcceptFDLenWithCR = *override.AcceptFDLenWithCR
+	}
+	// RX Phase
+	if override.SkipFirstRXReq != nil {
+		c.SkipFirstRXReq = *override.SkipFirstRXReq
 	}
 	// Protocols - pointer allows explicit empty list for NCP
 	if override.Protocols != nil {

@@ -2,7 +2,9 @@ package emsi
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -15,15 +17,15 @@ import (
 type CompletionReason string
 
 const (
-	ReasonNone      CompletionReason = ""           // Not completed yet
-	ReasonComplete  CompletionReason = "COMPLETE"   // Normal handshake finished
-	ReasonNCP       CompletionReason = "NCP"        // No Compatible Protocols (test mode)
-	ReasonTimeout   CompletionReason = "TIMEOUT"    // Timed out waiting for response
-	ReasonError     CompletionReason = "ERROR"      // Error during handshake
+	ReasonNone     CompletionReason = ""         // Not completed yet
+	ReasonComplete CompletionReason = "COMPLETE" // Normal handshake finished
+	ReasonNCP      CompletionReason = "NCP"      // No Compatible Protocols (test mode)
+	ReasonTimeout  CompletionReason = "TIMEOUT"  // Timed out waiting for response
+	ReasonError    CompletionReason = "ERROR"     // Error during handshake
 )
 
 // DebugFunc is a callback for routing debug output to an external logger.
-type DebugFunc func(format string, args ...interface{})
+type DebugFunc func(format string, args ...any)
 
 // Session represents an EMSI session
 type Session struct {
@@ -44,6 +46,9 @@ type Session struct {
 	completionReason CompletionReason
 	handshakeTiming  HandshakeTiming
 
+	// Master deadline for the current handshake (set by Handshake())
+	masterDeadline time.Time
+
 	// EMSI-II negotiation state (FSC-0088.001)
 	emsi2Negotiated  bool   // Both sides presented EII
 	selectedProtocol string // Final negotiated protocol
@@ -51,9 +56,9 @@ type Session struct {
 
 // HandshakeTiming records timing for each handshake phase
 type HandshakeTiming struct {
-	InitialPhase  time.Duration // Time to get first EMSI response
-	DATExchange   time.Duration // Time for DAT packet exchange
-	Total         time.Duration // Total handshake time
+	InitialPhase time.Duration // Time to get first EMSI response
+	DATExchange  time.Duration // Time for DAT packet exchange
+	Total        time.Duration // Total handshake time
 }
 
 // NewSession creates a new EMSI session with FSC-0056.001 defaults
@@ -108,7 +113,7 @@ func (s *Session) SetDebugFunc(fn DebugFunc) {
 
 // dbg emits a debug message if debug mode is enabled.
 // Routes to debugFunc if set, otherwise falls back to internal logger.
-func (s *Session) dbg(format string, args ...interface{}) {
+func (s *Session) dbg(format string, args ...any) {
 	if !s.debug {
 		return
 	}
@@ -246,37 +251,489 @@ func (s *Session) SetTimeout(timeout time.Duration) {
 	s.config.PreventiveINQTimeout = scaleTimeout(s.config.PreventiveINQTimeout)
 }
 
-// Handshake performs the EMSI handshake as caller (we initiate)
+// ---------------------------------------------------------------------------
+// Token types for the FSM
+// ---------------------------------------------------------------------------
+
+// emsiToken represents the type of EMSI sequence detected by readToken.
+type emsiToken int
+
+const (
+	tokenNone    emsiToken = iota
+	tokenINQ                // **EMSI_INQC816
+	tokenREQ                // **EMSI_REQA77E
+	tokenACK                // **EMSI_ACKA490
+	tokenNAK                // **EMSI_NAKEEC3
+	tokenCLI                // **EMSI_CLIFA8C
+	tokenHBT                // **EMSI_HBTEAEE
+	tokenDAT                // **EMSI_DAT (header only; caller must read payload via readEMSI_DAT)
+	tokenTimeout            // Step or master timeout expired
+	tokenCarrier            // Carrier lost (NO CARRIER / BUSY / etc.)
+	tokenError              // I/O or other unrecoverable error
+)
+
+func (t emsiToken) String() string {
+	switch t {
+	case tokenNone:
+		return "NONE"
+	case tokenINQ:
+		return "INQ"
+	case tokenREQ:
+		return "REQ"
+	case tokenACK:
+		return "ACK"
+	case tokenNAK:
+		return "NAK"
+	case tokenCLI:
+		return "CLI"
+	case tokenHBT:
+		return "HBT"
+	case tokenDAT:
+		return "DAT"
+	case tokenTimeout:
+		return "TIMEOUT"
+	case tokenCarrier:
+		return "CARRIER"
+	case tokenError:
+		return "ERROR"
+	default:
+		return fmt.Sprintf("TOKEN(%d)", int(t))
+	}
+}
+
+// Sentinel errors returned by charReader.getchar.
+var (
+	errCharTimeout = errors.New("character timeout")
+	errCarrierLost = errors.New("carrier lost")
+)
+
+// ---------------------------------------------------------------------------
+// charReader — single-byte I/O layer
+// ---------------------------------------------------------------------------
+
+// charReader provides character-at-a-time reading with line-based carrier
+// detection and banner text accumulation.
+type charReader struct {
+	conn    net.Conn
+	reader  *bufio.Reader
+	banner  strings.Builder // accumulated non-EMSI text
+	debug   bool
+	dbgFunc func(string, ...any)
+
+	// Line-based carrier detection
+	lineBuf     [64]byte
+	linePos     int
+	carrierLost bool
+}
+
+// newCharReader creates a charReader for the given session.
+func newCharReader(s *Session) *charReader {
+	return &charReader{
+		conn:    s.conn,
+		reader:  s.reader,
+		debug:   s.debug,
+		dbgFunc: s.dbg,
+	}
+}
+
+// getchar reads a single byte with the given per-character timeout.
+// Returns errCharTimeout on deadline expiry and errCarrierLost if a modem
+// disconnect signal was detected on a line boundary.
+func (cr *charReader) getchar(timeout time.Duration) (byte, error) {
+	if cr.carrierLost {
+		return 0, errCarrierLost
+	}
+
+	_ = cr.conn.SetReadDeadline(time.Now().Add(timeout))
+	b, err := cr.reader.ReadByte()
+	if err != nil {
+		if isTimeoutError(err) {
+			return 0, errCharTimeout
+		}
+		// EOF / connection reset → treat as carrier lost
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			cr.carrierLost = true
+			return 0, errCarrierLost
+		}
+		var opErr *net.OpError
+		if errors.As(err, &opErr) {
+			cr.carrierLost = true
+			return 0, errCarrierLost
+		}
+		return 0, err
+	}
+
+	// Feed to carrier detector
+	cr.feedCarrierDetect(b)
+	if cr.carrierLost {
+		return 0, errCarrierLost
+	}
+
+	// Accumulate into banner (printable + whitespace only)
+	if b >= 0x20 || b == '\r' || b == '\n' || b == '\t' {
+		cr.banner.WriteByte(b)
+	}
+
+	return b, nil
+}
+
+// getcharFiltered reads a single byte, skipping XON (0x11), XOFF (0x13), and
+// NUL (0x00) bytes per FSC-0056. These flow-control bytes can appear anywhere
+// in the stream and must be transparently stripped before processing.
+// Uses a deadline derived from timeout to prevent a stream of only filtered
+// bytes from extending past the intended timeout.
+func (cr *charReader) getcharFiltered(timeout time.Duration) (byte, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return 0, errCharTimeout
+		}
+		b, err := cr.getchar(remaining)
+		if err != nil {
+			return 0, err
+		}
+		if b == 0x00 || b == 0x11 || b == 0x13 {
+			continue
+		}
+		return b, nil
+	}
+}
+
+// feedCarrierDetect accumulates bytes into a line buffer and checks complete
+// lines for modem disconnect signals. Only matches at line boundaries to avoid
+// false positives from banner/EMSI data containing these words mid-line.
+func (cr *charReader) feedCarrierDetect(b byte) {
+	// Skip flow-control bytes that would corrupt line matching
+	if b == 0x00 || b == 0x11 || b == 0x13 {
+		return
+	}
+	if b == '\r' || b == '\n' {
+		if cr.linePos > 0 {
+			line := strings.TrimSpace(string(cr.lineBuf[:cr.linePos]))
+			switch line {
+			case "NO CARRIER", "BUSY", "NO DIALTONE", "NO DIAL TONE", "NO ANSWER":
+				cr.carrierLost = true
+			}
+			cr.linePos = 0
+		}
+		return
+	}
+	if cr.linePos < len(cr.lineBuf) {
+		cr.lineBuf[cr.linePos] = b
+		cr.linePos++
+	}
+}
+
+// getBannerText returns the accumulated banner text.
+func (cr *charReader) getBannerText() string {
+	return cr.banner.String()
+}
+
+// isTimeoutError checks whether err is a net timeout.
+func isTimeoutError(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
+
+// ---------------------------------------------------------------------------
+// readToken — sliding-window EMSI sequence detector
+// ---------------------------------------------------------------------------
+
+// emsiTokenDef maps a suffix (after "EMSI_") to a token type plus expected CRC.
+type emsiTokenDef struct {
+	suffix   string    // e.g. "INQ"
+	token    emsiToken
+	fullCRC  string    // full 14-char constant including ** prefix, e.g. "**EMSI_INQC816"
+}
+
+var fixedTokenDefs = []emsiTokenDef{
+	{"INQ", tokenINQ, EMSI_INQ},
+	{"REQ", tokenREQ, EMSI_REQ},
+	{"ACK", tokenACK, EMSI_ACK},
+	{"NAK", tokenNAK, EMSI_NAK},
+	{"CLI", tokenCLI, EMSI_CLI},
+	{"HBT", tokenHBT, EMSI_HBT},
+}
+
+// readToken reads bytes one-at-a-time and uses a sliding window to detect
+// EMSI sequences. It respects both the step timeout (overall for this call)
+// and the character timeout (per-byte).
+//
+// For fixed-length tokens (INQ, REQ, ACK, NAK, CLI, HBT) it detects the
+// "**EMSI_XXX" or "EMSI_XXX" prefix, then reads the 4 CRC bytes and
+// validates (logging a warning on mismatch but still returning the token).
+//
+// For DAT it detects "**EMSI_DAT" or "EMSI_DAT" and returns tokenDAT
+// immediately without consuming the length bytes — the caller must use
+// readEMSI_DAT() next.
+//
+// XON (0x11), XOFF (0x13), and NUL (0x00) are silently stripped via getcharFiltered.
+func (cr *charReader) readToken(stepTimeout, charTimeout time.Duration, masterDeadline time.Time) emsiToken {
+	deadline := time.Now().Add(stepTimeout)
+	if !masterDeadline.IsZero() && masterDeadline.Before(deadline) {
+		deadline = masterDeadline
+	}
+
+	// Sliding window: we look for "EMSI_" (5 chars) then the 3-char type.
+	// The window is big enough for "**EMSI_DAT" (10 chars) or "**EMSI_XXXCCCC" (14 chars).
+	var window [14]byte
+	wpos := 0 // number of valid bytes in window
+
+	for {
+		if time.Now().After(deadline) {
+			return tokenTimeout
+		}
+
+		// Cap character timeout at remaining step time
+		remaining := time.Until(deadline)
+		ct := min(charTimeout, remaining)
+		if ct <= 0 {
+			return tokenTimeout
+		}
+
+		b, err := cr.getcharFiltered(ct)
+		if err != nil {
+			if errors.Is(err, errCharTimeout) {
+				continue // re-check step deadline at top of loop
+			}
+			if errors.Is(err, errCarrierLost) {
+				return tokenCarrier
+			}
+			return tokenError
+		}
+
+		// High-bit strip for window matching (FSC-0056 §7-bit)
+		stripped := b & 0x7F
+
+		// Shift window left and append
+		if wpos < len(window) {
+			window[wpos] = stripped
+			wpos++
+		} else {
+			copy(window[:], window[1:])
+			window[len(window)-1] = stripped
+		}
+
+		// Check for "EMSI_" in the window at various positions
+		// We look for both "**EMSI_" and bare "EMSI_" for non-compliant mailers
+		tok := cr.matchToken(window[:wpos])
+		if tok != tokenNone {
+			return tok
+		}
+	}
+}
+
+// matchToken checks the current window for an EMSI sequence.
+// Returns tokenNone if nothing matches yet.
+// Fixed-length tokens are validated against their expected CRC; mismatches
+// are rejected to prevent banner data from driving the FSM.
+func (cr *charReader) matchToken(window []byte) emsiToken {
+	w := string(window)
+
+	// Look for "EMSI_DAT" with optional "**" prefix (no CRC on header — payload has its own)
+	if idx := strings.Index(w, "EMSI_DAT"); idx >= 0 {
+		return tokenDAT
+	}
+
+	// Look for fixed-length tokens: "EMSI_XXX" (8 chars) optionally preceded by "**"
+	for _, def := range fixedTokenDefs {
+		target := "EMSI_" + def.suffix // 8 chars
+		idx := strings.Index(w, target)
+		if idx < 0 {
+			continue
+		}
+		afterPrefix := idx + len(target)
+		crcCharsAvail := len(w) - afterPrefix
+		if crcCharsAvail >= 4 {
+			crcGot := w[afterPrefix : afterPrefix+4]
+			crcExpected := def.fullCRC[len(def.fullCRC)-4:]
+
+			if !isHexString(crcGot) {
+				// Not valid hex after prefix — not a real EMSI token
+				return tokenNone
+			}
+
+			if !strings.EqualFold(crcGot, crcExpected) {
+				if cr.debug {
+					cr.dbgFunc("EMSI: readToken: CRC mismatch for %s: got %q, expected %q",
+						def.suffix, crcGot, crcExpected)
+				}
+				return tokenNone
+			}
+			return def.token
+		}
+		// Have the prefix but not all 4 CRC chars yet — wait for more bytes.
+		if afterPrefix == len(w) || crcCharsAvail < 4 {
+			return tokenNone
+		}
+	}
+
+	return tokenNone
+}
+
+// isHexString returns true if s is non-empty and contains only hex digits.
+func isHexString(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// ---------------------------------------------------------------------------
+// readEMSI_DAT — length-driven DAT payload reader
+// ---------------------------------------------------------------------------
+
+// readEMSI_DAT reads an EMSI_DAT payload after the "EMSI_DAT" header has
+// already been detected and consumed by readToken. It reads:
+//   - 4 hex chars → payload length
+//   - payloadLen bytes (high-bit stripped)
+//   - 4 hex chars → CRC
+//
+// Returns the reconstructed full packet string suitable for ParseEMSI_DAT.
+func (cr *charReader) readEMSI_DAT(charTimeout time.Duration, masterDeadline time.Time, acceptFDLen bool) (string, error) {
+	// Read 4 hex length chars
+	lenHex := make([]byte, 4)
+	for i := range 4 {
+		ct := charTimeout
+		if !masterDeadline.IsZero() {
+			remaining := time.Until(masterDeadline)
+			if remaining < ct {
+				ct = remaining
+			}
+			if ct <= 0 {
+				return "", fmt.Errorf("master timeout reading DAT length")
+			}
+		}
+		b, err := cr.getcharFiltered(ct)
+		if err != nil {
+			return "", fmt.Errorf("reading DAT length byte %d: %w", i, err)
+		}
+		lenHex[i] = b & 0x7F
+	}
+
+	payloadLen, err := strconv.ParseInt(string(lenHex), 16, 32)
+	if err != nil {
+		return "", fmt.Errorf("invalid DAT length hex %q: %w", string(lenHex), err)
+	}
+	if payloadLen < 0 || payloadLen > 8192 {
+		return "", fmt.Errorf("DAT length %d out of range", payloadLen)
+	}
+
+	// Read exactly payloadLen bytes with high-bit strip
+	payload := make([]byte, payloadLen)
+	for i := range int(payloadLen) {
+		ct := charTimeout
+		if !masterDeadline.IsZero() {
+			remaining := time.Until(masterDeadline)
+			if remaining < ct {
+				ct = remaining
+			}
+			if ct <= 0 {
+				return "", fmt.Errorf("master timeout reading DAT payload at byte %d/%d", i, payloadLen)
+			}
+		}
+		b, err := cr.getcharFiltered(ct)
+		if err != nil {
+			return "", fmt.Errorf("reading DAT payload byte %d/%d: %w", i, payloadLen, err)
+		}
+		payload[i] = b & 0x7F
+	}
+
+	// Read 4 hex CRC chars
+	crcHex := make([]byte, 4)
+	for i := range 4 {
+		ct := charTimeout
+		if !masterDeadline.IsZero() {
+			remaining := time.Until(masterDeadline)
+			if remaining < ct {
+				ct = remaining
+			}
+			if ct <= 0 {
+				return "", fmt.Errorf("master timeout reading DAT CRC")
+			}
+		}
+		b, err := cr.getcharFiltered(ct)
+		if err != nil {
+			return "", fmt.Errorf("reading DAT CRC byte %d: %w", i, err)
+		}
+		crcHex[i] = b & 0x7F
+	}
+
+	remoteCRC, err := strconv.ParseUint(string(crcHex), 16, 16)
+	if err != nil {
+		return "", fmt.Errorf("invalid DAT CRC hex %q: %w", string(crcHex), err)
+	}
+
+	// CRC is computed over "EMSI_DAT" + lenHex + payload (without ** prefix)
+	crcData := append([]byte("EMSI_DAT"), lenHex...)
+	crcData = append(crcData, payload...)
+	localCRC := CalculateCRC16(crcData)
+
+	if uint16(remoteCRC) != localCRC {
+		// FrontDoor length bug: last byte is CR, retry with payload[:len-1]
+		if acceptFDLen && payloadLen > 0 && payload[payloadLen-1] == '\r' {
+			trimmed := payload[:payloadLen-1]
+			crcData2 := append([]byte("EMSI_DAT"), lenHex...)
+			crcData2 = append(crcData2, trimmed...)
+			if CalculateCRC16(crcData2) == uint16(remoteCRC) {
+				if cr.debug {
+					cr.dbgFunc("EMSI: readEMSI_DAT: FrontDoor length bug workaround applied")
+				}
+				payload = trimmed
+			} else {
+				return "", fmt.Errorf("DAT CRC mismatch: local=%04X remote=%04X", localCRC, remoteCRC)
+			}
+		} else {
+			return "", fmt.Errorf("DAT CRC mismatch: local=%04X remote=%04X", localCRC, remoteCRC)
+		}
+	}
+
+	// Reconstruct full packet for ParseEMSI_DAT
+	packet := fmt.Sprintf("**EMSI_DAT%s%s%s", string(lenHex), string(payload), string(crcHex))
+	return packet, nil
+}
+
+// ---------------------------------------------------------------------------
+// FSM handshake phases
+// ---------------------------------------------------------------------------
+
+// Handshake performs the EMSI handshake as caller (we initiate).
 // Strategy is selected based on config.InitialStrategy:
-// - "wait": FSC-0056.001 default - wait for remote EMSI_INQ/REQ
-// - "send_cr": Send CRs to wake remote, then wait for EMSI
-// - "send_inq": Immediately send EMSI_INQ
+//   - "wait": FSC-0056.001 default - wait for remote EMSI_INQ/REQ
+//   - "send_cr": Send CRs to wake remote, then wait for EMSI
+//   - "send_inq": Immediately send EMSI_INQ
 func (s *Session) Handshake() error {
 	handshakeStart := time.Now()
 	s.completionReason = ReasonNone
+	masterDeadline := handshakeStart.Add(s.config.MasterTimeout)
+	s.masterDeadline = masterDeadline
 
 	if s.debug {
-		s.dbg("EMSI: === Starting EMSI Handshake ===")
+		s.dbg("EMSI: === Starting EMSI Handshake (FSM) ===")
 		s.dbg("EMSI: Strategy: %s, PreventiveINQ: %v", s.config.InitialStrategy, s.config.PreventiveINQ)
-		s.dbg("EMSI: Master timeout: %v, Step timeout: %v", s.config.MasterTimeout, s.config.StepTimeout)
+		s.dbg("EMSI: Master timeout: %v, Step timeout: %v, Char timeout: %v",
+			s.config.MasterTimeout, s.config.StepTimeout, s.config.CharacterTimeout)
 		s.dbg("EMSI: Our address: %s", s.localAddress)
 	}
 
-	var response string
-	var responseType string
-	var err error
+	cr := newCharReader(s)
 
+	// --- Phase 1: Initial Contact ---
 	initialPhaseStart := time.Now()
+	initTok, initDAT, err := s.runInitialPhase(cr, masterDeadline)
+	s.handshakeTiming.InitialPhase = time.Since(initialPhaseStart)
 
-	// Select initial strategy
-	switch s.config.InitialStrategy {
-	case "send_cr":
-		response, responseType, err = s.handshakeInitialSendCR()
-	case "send_inq":
-		response, responseType, err = s.handshakeInitialSendINQ()
-	default: // "wait" is the FSC-0056.001 default
-		response, responseType, err = s.handshakeInitialWait()
-	}
+	// Capture banner text for fallback extraction
+	s.bannerText = cr.getBannerText()
 
 	if err != nil {
 		s.completionReason = ReasonError
@@ -284,219 +741,99 @@ func (s *Session) Handshake() error {
 		return err
 	}
 
-	// If we got banner but no EMSI and PreventiveINQ is enabled,
-	// send EMSI_INQ to speed up handshake
-	if (responseType == "BANNER" || responseType == "UNKNOWN") && s.config.PreventiveINQ {
-		response, responseType, err = s.sendPreventiveINQ()
-		if err != nil {
-			s.completionReason = ReasonError
-			s.handshakeTiming.Total = time.Since(handshakeStart)
-			return err
-		}
+	if s.debug {
+		s.dbg("EMSI: Initial phase completed in %v, token=%s", s.handshakeTiming.InitialPhase, initTok)
 	}
 
-	s.handshakeTiming.InitialPhase = time.Since(initialPhaseStart)
 	datExchangeStart := time.Now()
 
-	if s.debug {
-		s.dbg("EMSI: Initial phase completed in %v", s.handshakeTiming.InitialPhase)
-		s.dbg("EMSI: Received response type: %s", responseType)
-		if len(response) > 0 && len(response) < 500 {
-			s.dbg("EMSI: Response data (first 500 chars): %q", response)
-		} else if len(response) > 0 {
-			s.dbg("EMSI: Response data (first 500 chars): %q...", response[:500])
+	// --- Phase 2 & 3: DAT exchange ---
+	switch initTok {
+	case tokenREQ:
+		// Remote wants our DAT first, then we get theirs
+		if err := s.runTXPhase(cr, masterDeadline); err != nil {
+			s.completionReason = ReasonError
+			s.handshakeTiming.Total = time.Since(handshakeStart)
+			return fmt.Errorf("TX phase: %w", err)
 		}
-	}
-
-	switch responseType {
-	case "REQ":
-		// Remote wants our EMSI_DAT
-		if s.debug {
-			s.dbg("EMSI: Remote requested our data (EMSI_REQ), sending EMSI_DAT...")
-		}
-		if err := s.sendEMSI_DAT(); err != nil {
-			if s.debug {
-				s.dbg("EMSI: ERROR sending EMSI_DAT: %v", err)
-			}
-			return fmt.Errorf("failed to send EMSI_DAT: %w", err)
-		}
-		
-		// Now we need to wait for their EMSI_DAT
-		// They might send multiple REQs or other messages before sending DAT
-		maxAttempts := s.config.MaxRetries
-		if maxAttempts <= 0 {
-			maxAttempts = 6 // FSC-0056.001 default
-		}
-		if s.debug {
-			s.dbg("EMSI: Waiting for remote's EMSI_DAT (max %d attempts)...", maxAttempts)
-		}
-		for i := 0; i < maxAttempts; i++ {
-			if s.debug {
-				s.dbg("EMSI: Reading response attempt %d/%d...", i+1, maxAttempts)
-			}
-			response, responseType, err = s.readEMSIResponseWithTimeout(s.config.StepTimeout)
-			if err != nil {
-				if s.debug {
-					s.dbg("EMSI: ERROR reading response (attempt %d): %v", i+1, err)
-				}
-				return fmt.Errorf("failed to read EMSI_DAT response (attempt %d): %w", i+1, err)
-			}
-			
-			if s.debug {
-				s.dbg("EMSI: After sending DAT, received response type: %s (attempt %d)", responseType, i+1)
-			}
-			
-			if responseType == "DAT" {
-				// Parse remote's EMSI_DAT
-				if s.debug {
-					s.dbg("EMSI: Received remote's EMSI_DAT, parsing...")
-				}
-				var parseErr error
-				s.remoteInfo, parseErr = ParseEMSI_DAT(response)
-				if s.debug {
-					if parseErr != nil {
-						s.dbg("EMSI: ERROR parsing remote data: %v", parseErr)
-					} else {
-						s.dbg("EMSI: Successfully parsed remote data:")
-						s.dbg("EMSI:   System: %s", s.remoteInfo.SystemName)
-						s.dbg("EMSI:   Location: %s", s.remoteInfo.Location)
-						s.dbg("EMSI:   Sysop: %s", s.remoteInfo.Sysop)
-						s.dbg("EMSI:   Mailer: %s %s", s.remoteInfo.MailerName, s.remoteInfo.MailerVersion)
-						s.dbg("EMSI:   Addresses: %v", s.remoteInfo.Addresses)
-					}
-				}
-				// Send ACK
-				if err := s.sendEMSI_ACK(); err != nil {
-					if s.debug {
-						s.dbg("EMSI: WARNING: Failed to send ACK: %v", err)
-					}
-				} else if s.debug {
-					s.dbg("EMSI: Sent ACK for remote's DAT")
-				}
-				break
-			} else if responseType == "REQ" {
-				// They're still requesting, send our DAT again
-				if s.debug {
-					s.dbg("EMSI: Remote sent another REQ, resending our DAT")
-				}
-				if err := s.sendEMSI_DAT(); err != nil {
-					return fmt.Errorf("failed to resend EMSI_DAT: %w", err)
-				}
-			} else if responseType == "ACK" {
-				// They acknowledged but didn't send their DAT yet
-				if s.debug {
-					s.dbg("EMSI: Remote sent ACK, waiting for DAT")
-				}
-				continue
-			} else if responseType == "NAK" {
-				// Remote is rejecting our DAT - there might be a CRC or format issue
-				if s.debug {
-					s.dbg("EMSI: Remote sent NAK, our EMSI_DAT might be invalid")
-				}
-				// Some implementations might still work after NAK, keep trying
-				continue
-			}
+		if err := s.runRXPhase(cr, masterDeadline, false); err != nil {
+			s.completionReason = ReasonError
+			s.handshakeTiming.Total = time.Since(handshakeStart)
+			return fmt.Errorf("RX phase: %w", err)
 		}
 
-		if s.remoteInfo == nil {
-			if s.debug {
-				s.dbg("EMSI: WARNING: Failed to receive remote DAT after %d attempts", maxAttempts)
-				s.dbg("EMSI: Attempting banner text extraction as fallback...")
-			}
+	case tokenINQ:
+		// Remote sent INQ — we already sent REQ in initial phase
+		if err := s.runRXPhase(cr, masterDeadline, true); err != nil {
+			s.completionReason = ReasonError
+			s.handshakeTiming.Total = time.Since(handshakeStart)
+			return fmt.Errorf("RX phase: %w", err)
+		}
+		if err := s.runTXPhase(cr, masterDeadline); err != nil {
+			s.completionReason = ReasonError
+			s.handshakeTiming.Total = time.Since(handshakeStart)
+			return fmt.Errorf("TX phase: %w", err)
+		}
 
-			// Try to extract software from banner text
-			if software := s.extractSoftwareFromBanner(); software != nil {
-				s.remoteInfo = &EMSIData{
-					MailerName:    software.Name,
-					MailerVersion: software.Version,
-					SystemName:    "[Extracted from banner]",
-				}
-				if software.Platform != "" {
-					s.remoteInfo.MailerSerial = software.Platform
-				}
-				if s.debug {
-					s.dbg("EMSI: Successfully extracted software from banner: %s %s", software.Name, software.Version)
-				}
-			} else if s.debug {
-				s.dbg("EMSI: Handshake incomplete - no remote data received and banner extraction failed")
-			}
-		} else if s.debug {
-			s.dbg("EMSI: Handshake completed successfully after REQ exchange")
-		}
-		
-	case "DAT":
-		// Remote sent their EMSI_DAT directly
-		if s.debug {
-			s.dbg("EMSI: Remote sent EMSI_DAT directly, parsing...")
-		}
-		var parseErr error
-		s.remoteInfo, parseErr = ParseEMSI_DAT(response)
-		if s.debug {
-			if parseErr != nil {
-				s.dbg("EMSI: ERROR parsing remote data: %v", parseErr)
-			} else {
-				s.dbg("EMSI: Successfully parsed remote data:")
-				s.dbg("EMSI:   System: %s", s.remoteInfo.SystemName)
-				s.dbg("EMSI:   Location: %s", s.remoteInfo.Location)
-				s.dbg("EMSI:   Sysop: %s", s.remoteInfo.Sysop)
-				s.dbg("EMSI:   Mailer: %s %s", s.remoteInfo.MailerName, s.remoteInfo.MailerVersion)
-				s.dbg("EMSI:   Addresses: %v", s.remoteInfo.Addresses)
-			}
-		}
-		
-		// Send our EMSI_DAT in response
-		if s.debug {
-			s.dbg("EMSI: Sending our EMSI_DAT in response...")
-		}
-		if err := s.sendEMSI_DAT(); err != nil {
-			if s.debug {
-				s.dbg("EMSI: ERROR sending EMSI_DAT: %v", err)
-			}
-			return fmt.Errorf("failed to send EMSI_DAT: %w", err)
-		}
-		
-		// Send ACK
+	case tokenDAT:
+		// Remote sent DAT directly — FSC-0056.001: ACK before processing
 		if err := s.sendEMSI_ACK(); err != nil {
 			if s.debug {
 				s.dbg("EMSI: WARNING: Failed to send ACK: %v", err)
 			}
-		} else if s.debug {
-			s.dbg("EMSI: Sent ACK for remote's DAT")
-			s.dbg("EMSI: Handshake completed successfully after DAT exchange")
 		}
-		
-	case "NAK":
-		s.completionReason = ReasonError
-		s.handshakeTiming.Total = time.Since(handshakeStart)
-		return fmt.Errorf("remote sent EMSI_NAK")
-
-	case "CLI":
-		s.completionReason = ReasonError
-		s.handshakeTiming.Total = time.Since(handshakeStart)
-		return fmt.Errorf("remote sent EMSI_CLI (calling system only)")
-
-	case "HBT":
-		s.completionReason = ReasonError
-		s.handshakeTiming.Total = time.Since(handshakeStart)
-		return fmt.Errorf("remote sent EMSI_HBT (heartbeat)")
+		if s.config.SendACKTwice {
+			_ = s.sendEMSI_ACK()
+		}
+		info, parseErr := ParseEMSI_DAT(initDAT)
+		if parseErr != nil {
+			if s.debug {
+				s.dbg("EMSI: DAT-first parse failed after ACK: %v (proceeding without remote info)", parseErr)
+			}
+		} else {
+			s.remoteInfo = info
+			s.logRemoteInfo()
+		}
+		// Send our DAT
+		if err := s.runTXPhase(cr, masterDeadline); err != nil {
+			s.completionReason = ReasonError
+			s.handshakeTiming.Total = time.Since(handshakeStart)
+			return fmt.Errorf("TX phase: %w", err)
+		}
 
 	default:
-		if s.debug {
-			s.dbg("EMSI: ERROR: Unexpected response type: %s", responseType)
+		// No EMSI token received — try banner extraction fallback
+		s.bannerText = cr.getBannerText()
+		if software := s.extractSoftwareFromBanner(); software != nil {
+			s.remoteInfo = &EMSIData{
+				MailerName:    software.Name,
+				MailerVersion: software.Version,
+				SystemName:    "[Extracted from banner]",
+			}
+			if software.Platform != "" {
+				s.remoteInfo.MailerSerial = software.Platform
+			}
+			if s.debug {
+				s.dbg("EMSI: Extracted software from banner: %s %s", software.Name, software.Version)
+			}
 		}
+
 		s.completionReason = ReasonTimeout
 		s.handshakeTiming.Total = time.Since(handshakeStart)
-		// Include the actual data received for BANNER/UNKNOWN to help diagnose
-		if (responseType == "BANNER" || responseType == "UNKNOWN") && len(response) > 0 {
-			preview := formatResponsePreview(response, 200)
-			return fmt.Errorf("unexpected response type: %s\nReceived %d bytes: %s", responseType, len(response), preview)
+		bannerText := cr.getBannerText()
+		if len(bannerText) > 0 {
+			preview := formatResponsePreview(bannerText, 200)
+			return fmt.Errorf("no EMSI token received\nReceived %d bytes: %s", len(bannerText), preview)
 		}
-		return fmt.Errorf("unexpected response type: %s", responseType)
+		return fmt.Errorf("no EMSI token received (timeout)")
 	}
 
 	// Record timing
 	s.handshakeTiming.DATExchange = time.Since(datExchangeStart)
 	s.handshakeTiming.Total = time.Since(handshakeStart)
+
+	// Capture final banner text
+	s.bannerText = cr.getBannerText()
 
 	// EMSI-II negotiation (FSC-0088.001)
 	s.negotiateEMSI2()
@@ -506,7 +843,6 @@ func (s *Session) Handshake() error {
 	if len(s.config.Protocols) == 0 {
 		s.completionReason = ReasonNCP // No Compatible Protocols (test mode)
 	} else if s.selectedProtocol == "" && len(s.config.Protocols) > 0 {
-		// We have protocols but couldn't negotiate one
 		s.completionReason = ReasonNCP
 	} else {
 		s.completionReason = ReasonComplete
@@ -521,169 +857,465 @@ func (s *Session) Handshake() error {
 	return nil
 }
 
-// handshakeInitialWait implements FSC-0056.001 "wait" strategy
-// Wait for remote to send EMSI_INQ or EMSI_REQ first
-func (s *Session) handshakeInitialWait() (string, string, error) {
-	if s.debug {
-		s.dbg("EMSI: Strategy=wait: Waiting for remote EMSI (timeout=%v)...", s.config.StepTimeout)
-	}
-
-	response, responseType, err := s.readEMSIResponseWithTimeout(s.config.StepTimeout)
-	if err != nil {
-		if s.debug {
-			s.dbg("EMSI: Strategy=wait: No response, error: %v", err)
+// runInitialPhase implements Phase 1: Initial Contact.
+// Returns the token that ended the phase plus any DAT packet data.
+func (s *Session) runInitialPhase(cr *charReader, masterDeadline time.Time) (emsiToken, string, error) {
+	// Execute strategy-specific preamble
+	switch s.config.InitialStrategy {
+	case "send_cr":
+		if err := s.initialSendCRs(cr, masterDeadline); err != nil {
+			return tokenError, "", err
 		}
-		return "", "", fmt.Errorf("wait strategy: %w", err)
+	case "send_inq":
+		if err := s.sendEMSI_INQ(); err != nil {
+			return tokenError, "", fmt.Errorf("send_inq strategy: failed to send INQ: %w", err)
+		}
+	}
+	// "wait" strategy: do nothing, just read
+
+	// First read attempt uses FirstStepTimeout
+	stepTimeout := s.config.FirstStepTimeout
+	if stepTimeout <= 0 {
+		stepTimeout = s.config.StepTimeout
 	}
 
-	return response, responseType, nil
+	tok := cr.readToken(stepTimeout, s.config.CharacterTimeout, masterDeadline)
+
+	if tok == tokenDAT {
+		// Read the full DAT packet
+		dat, err := cr.readEMSI_DAT(s.config.CharacterTimeout, masterDeadline, s.config.AcceptFDLenWithCR)
+		if err != nil {
+			if s.debug {
+				s.dbg("EMSI: Initial phase: DAT header detected but read failed: %v", err)
+			}
+			// Fall through to retry/preventive INQ logic
+			tok = tokenTimeout
+		} else {
+			return tokenDAT, dat, nil
+		}
+	}
+
+	// Handle INQ: send REQ in response, then return INQ so Handshake knows the flow
+	if tok == tokenINQ {
+		if s.debug {
+			s.dbg("EMSI: Received INQ, sending REQ")
+		}
+		if err := s.sendEMSI_REQ(); err != nil {
+			return tokenError, "", fmt.Errorf("failed to send REQ after INQ: %w", err)
+		}
+		return tokenINQ, "", nil
+	}
+
+	// REQ = remote wants our DAT → return to Handshake
+	if tok == tokenREQ {
+		return tok, "", nil
+	}
+
+	// ACK/NAK/CLI are noise during initial phase (stale from previous session
+	// or non-compliant mailer). Treat like HBT: retry with step timeout.
+	// HBT = keepalive, also restart step timer.
+	if tok == tokenHBT || tok == tokenACK || tok == tokenNAK || tok == tokenCLI {
+		if s.debug && tok != tokenHBT {
+			s.dbg("EMSI: Initial phase: ignoring unexpected %s, retrying", tok)
+		}
+		return s.initialRetry(cr, masterDeadline, s.config.StepTimeout)
+	}
+
+	// Timeout or carrier with no EMSI — try PreventiveINQ if enabled
+	if tok == tokenCarrier {
+		return tokenCarrier, "", fmt.Errorf("carrier lost during initial phase")
+	}
+	if tok == tokenError {
+		return tokenError, "", fmt.Errorf("I/O error during initial phase")
+	}
+
+	// tokenTimeout — try preventive INQ or send_inq retry
+	if s.config.PreventiveINQ || s.config.InitialStrategy == "send_inq" {
+		if s.debug {
+			s.dbg("EMSI: Initial phase timeout, sending INQ")
+		}
+		if err := s.sendEMSI_INQ(); err != nil {
+			return tokenError, "", fmt.Errorf("failed to send INQ: %w", err)
+		}
+
+		// Second attempt — use PreventiveINQTimeout if set, otherwise StepTimeout
+		retryTimeout := s.config.StepTimeout
+		if s.config.PreventiveINQ && s.config.PreventiveINQTimeout > 0 {
+			retryTimeout = s.config.PreventiveINQTimeout
+		}
+		return s.initialRetry(cr, masterDeadline, retryTimeout)
+	}
+
+	// If SendINQTwice is set for send_inq strategy, this was already the second attempt
+	return tokenTimeout, "", fmt.Errorf("timeout waiting for EMSI response in initial phase")
 }
 
-// handshakeInitialSendCR implements "send_cr" strategy
-// Send CRs to wake remote BBS, then wait for EMSI
-func (s *Session) handshakeInitialSendCR() (string, string, error) {
+// initialRetry reads another token after sending INQ or receiving HBT.
+func (s *Session) initialRetry(cr *charReader, masterDeadline time.Time, stepTimeout time.Duration) (emsiToken, string, error) {
+	tok := cr.readToken(stepTimeout, s.config.CharacterTimeout, masterDeadline)
+
+	if tok == tokenDAT {
+		dat, err := cr.readEMSI_DAT(s.config.CharacterTimeout, masterDeadline, s.config.AcceptFDLenWithCR)
+		if err != nil {
+			return tokenTimeout, "", fmt.Errorf("incomplete DAT in initial retry: %w", err)
+		}
+		return tokenDAT, dat, nil
+	}
+	if tok == tokenINQ {
+		if s.debug {
+			s.dbg("EMSI: Received INQ in retry, sending REQ")
+		}
+		if err := s.sendEMSI_REQ(); err != nil {
+			return tokenError, "", fmt.Errorf("failed to send REQ: %w", err)
+		}
+		return tokenINQ, "", nil
+	}
+	if tok == tokenREQ {
+		return tokenREQ, "", nil
+	}
+	if tok == tokenHBT {
+		// HBT again — restart, but check master deadline
+		if time.Now().After(masterDeadline) {
+			return tokenTimeout, "", fmt.Errorf("master timeout after HBT in initial phase")
+		}
+		return s.initialRetry(cr, masterDeadline, stepTimeout)
+	}
+	if tok == tokenCarrier {
+		return tokenCarrier, "", fmt.Errorf("carrier lost during initial phase")
+	}
+	if tok == tokenTimeout {
+		return tokenTimeout, "", fmt.Errorf("timeout in initial phase retry")
+	}
+	return tok, "", fmt.Errorf("unexpected token %s in initial phase", tok)
+}
+
+// initialSendCRs sends CRs at InitialCRInterval to wake a remote BBS.
+func (s *Session) initialSendCRs(cr *charReader, masterDeadline time.Time) error {
 	if s.debug {
 		s.dbg("EMSI: Strategy=send_cr: Sending CRs to trigger remote EMSI...")
 	}
 
-	initialWait := s.config.InitialCRTimeout
-	deadline := time.Now().Add(initialWait)
-	gotData := false
+	deadline := time.Now().Add(s.config.InitialCRTimeout)
+	if masterDeadline.Before(deadline) {
+		deadline = masterDeadline
+	}
 
 	for time.Now().Before(deadline) {
 		_ = s.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 		if _, err := s.writer.WriteString("\r"); err != nil {
-			if s.debug {
-				s.dbg("EMSI: Strategy=send_cr: ERROR sending CR: %v", err)
-			}
-			return "", "", fmt.Errorf("failed to send CR: %w", err)
+			return fmt.Errorf("failed to send CR: %w", err)
 		}
 		if err := s.writer.Flush(); err != nil {
-			if s.debug {
-				s.dbg("EMSI: Strategy=send_cr: ERROR flushing CR: %v", err)
-			}
-			return "", "", fmt.Errorf("failed to flush CR: %w", err)
+			return fmt.Errorf("failed to flush CR: %w", err)
 		}
 
-		// Wait for any data (using configured CR interval)
 		time.Sleep(s.config.InitialCRInterval)
 
-		// Check if we have data available using Peek (non-destructive)
+		// Check if we have data available
 		_ = s.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		if _, err := s.reader.Peek(1); err == nil {
-			gotData = true
+		if _, err := cr.reader.Peek(1); err == nil {
 			if s.debug {
 				s.dbg("EMSI: Strategy=send_cr: Got initial data from remote")
 			}
 			break
 		}
 	}
-
-	if !gotData {
-		if s.debug {
-			s.dbg("EMSI: Strategy=send_cr: No data received after %v", initialWait)
-		}
-	}
-
-	// Read with FirstStepTimeout to check for EMSI in data
-	response, responseType, err := s.readEMSIResponseWithTimeout(s.config.FirstStepTimeout)
-	if err != nil {
-		// Return empty response type so PreventiveINQ can be triggered
-		return "", "UNKNOWN", nil
-	}
-
-	return response, responseType, nil
+	return nil
 }
 
-// handshakeInitialSendINQ implements "send_inq" strategy
-// Immediately send EMSI_INQ and wait for response
-func (s *Session) handshakeInitialSendINQ() (string, string, error) {
-	if s.debug {
-		s.dbg("EMSI: Strategy=send_inq: Sending immediate EMSI_INQ...")
+// runTXPhase implements Phase 2: Send our EMSI_DAT and wait for ACK.
+func (s *Session) runTXPhase(cr *charReader, masterDeadline time.Time) error {
+	maxRetries := s.config.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 6
 	}
 
-	if err := s.sendEMSI_INQ(); err != nil {
-		return "", "", fmt.Errorf("send_inq strategy: failed to send INQ: %w", err)
-	}
+	for retry := 0; retry < maxRetries; retry++ {
+		if time.Now().After(masterDeadline) {
+			return fmt.Errorf("master timeout in TX phase")
+		}
+		if retry > 0 && s.config.RetryDelay > 0 {
+			time.Sleep(s.config.RetryDelay)
+		}
 
-	// Wait with StepTimeout (T1)
-	response, responseType, err := s.readEMSIResponseWithTimeout(s.config.StepTimeout)
-
-	// If SendINQTwice is enabled and no EMSI, send second INQ
-	if (err != nil || responseType == "BANNER" || responseType == "UNKNOWN") && s.config.SendINQTwice {
 		if s.debug {
-			s.dbg("EMSI: Strategy=send_inq: Sending second EMSI_INQ...")
+			s.dbg("EMSI: TX: Sending EMSI_DAT (attempt %d/%d)", retry+1, maxRetries)
 		}
-		time.Sleep(s.config.INQInterval)
-		if err := s.sendEMSI_INQ(); err != nil {
-			return "", "", fmt.Errorf("send_inq strategy: failed to send second INQ: %w", err)
+		if err := s.sendEMSI_DAT(); err != nil {
+			return fmt.Errorf("failed to send EMSI_DAT: %w", err)
 		}
-		response, responseType, err = s.readEMSIResponseWithTimeout(s.config.StepTimeout)
+
+		// Wait for ACK, skipping HBTs (FSC-0056: HBT resets step timer only)
+		tok := cr.readToken(s.config.StepTimeout, s.config.CharacterTimeout, masterDeadline)
+		for tok == tokenHBT {
+			if s.debug {
+				s.dbg("EMSI: TX: Received HBT, restarting step timer")
+			}
+			tok = cr.readToken(s.config.StepTimeout, s.config.CharacterTimeout, masterDeadline)
+		}
+
+		switch tok {
+		case tokenACK:
+			if s.debug {
+				s.dbg("EMSI: TX: Received ACK")
+			}
+			return nil
+
+		case tokenNAK:
+			if s.debug {
+				s.dbg("EMSI: TX: Received NAK, retrying")
+			}
+			continue
+
+		case tokenREQ:
+			if s.debug {
+				s.dbg("EMSI: TX: Received REQ, resending DAT")
+			}
+			continue
+
+		case tokenINQ:
+			if s.debug {
+				s.dbg("EMSI: TX: Received INQ, remote restarting")
+			}
+			continue
+
+		case tokenDAT:
+			// Remote sent DAT before ACKing ours
+			dat, err := cr.readEMSI_DAT(s.config.CharacterTimeout, masterDeadline, s.config.AcceptFDLenWithCR)
+			if err != nil {
+				if s.debug {
+					s.dbg("EMSI: TX: Received DAT but read failed: %v", err)
+				}
+				continue
+			}
+			// FSC-0056.001: send ACK before processing
+			if ackErr := s.sendEMSI_ACK(); ackErr != nil {
+				if s.debug {
+					s.dbg("EMSI: TX: WARNING: Failed to send ACK: %v", ackErr)
+				}
+			}
+			if s.config.SendACKTwice {
+				_ = s.sendEMSI_ACK()
+			}
+			info, parseErr := ParseEMSI_DAT(dat)
+			if parseErr != nil {
+				if s.debug {
+					s.dbg("EMSI: TX: DAT parse failed after ACK: %v (proceeding)", parseErr)
+				}
+			} else {
+				s.remoteInfo = info
+				s.logRemoteInfo()
+			}
+			return nil
+
+		case tokenTimeout:
+			if s.debug {
+				s.dbg("EMSI: TX: Step timeout, retrying")
+			}
+			continue
+
+		case tokenCarrier:
+			return fmt.Errorf("carrier lost in TX phase")
+
+		default:
+			if s.debug {
+				s.dbg("EMSI: TX: Unexpected token %s", tok)
+			}
+			continue
+		}
 	}
 
-	if err != nil {
-		return "", "", fmt.Errorf("send_inq strategy: %w", err)
-	}
-
-	return response, responseType, nil
+	return fmt.Errorf("TX phase: max retries (%d) exceeded", maxRetries)
 }
 
-// sendPreventiveINQ sends EMSI_INQ when we have banner but no EMSI response
-// This is a Qico-style optimization to speed up handshake with slow remotes
-func (s *Session) sendPreventiveINQ() (string, string, error) {
-	if s.debug {
-		s.dbg("EMSI: Sending preventive EMSI_INQ (PreventiveINQ enabled)...")
-	}
-
-	if err := s.sendEMSI_INQ(); err != nil {
+// runRXPhase implements Phase 3: Receive remote's EMSI_DAT.
+// reqAlreadySent indicates whether REQ was already sent (e.g. in initial phase
+// after receiving INQ), preventing a redundant REQ on the first try.
+func (s *Session) runRXPhase(cr *charReader, masterDeadline time.Time, reqAlreadySent bool) error {
+	// If we already have remoteInfo (from TX phase receiving DAT), skip RX
+	if s.remoteInfo != nil {
 		if s.debug {
-			s.dbg("EMSI: ERROR sending preventive EMSI_INQ: %v", err)
+			s.dbg("EMSI: RX: Remote info already available, skipping RX phase")
 		}
-		return "", "", fmt.Errorf("failed to send preventive EMSI_INQ: %w", err)
+		return nil
 	}
 
-	// Wait with PreventiveINQTimeout (typically shorter than StepTimeout)
-	timeout := s.config.PreventiveINQTimeout
-	if timeout <= 0 {
-		timeout = s.config.StepTimeout
+	maxRetries := s.config.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 6
 	}
 
-	if s.debug {
-		s.dbg("EMSI: Preventive EMSI_INQ sent, waiting for response (timeout=%v)...", timeout)
+	firstTry := true
+	for retry := 0; retry < maxRetries; retry++ {
+		if time.Now().After(masterDeadline) {
+			return fmt.Errorf("master timeout in RX phase")
+		}
+		if retry > 0 && s.config.RetryDelay > 0 {
+			time.Sleep(s.config.RetryDelay)
+		}
+
+		// Send REQ (or NAK on retry)
+		if firstTry && (s.config.SkipFirstRXReq || reqAlreadySent) {
+			if s.debug {
+				s.dbg("EMSI: RX: Skipping first REQ")
+			}
+		} else if retry > 0 && s.config.SendNAKOnRetry {
+			if s.debug {
+				s.dbg("EMSI: RX: Sending NAK (retry %d)", retry)
+			}
+			s.sendEMSI_NAK()
+		} else {
+			if s.debug {
+				s.dbg("EMSI: RX: Sending REQ (attempt %d/%d)", retry+1, maxRetries)
+			}
+			if err := s.sendEMSI_REQ(); err != nil {
+				return fmt.Errorf("failed to send REQ: %w", err)
+			}
+		}
+		firstTry = false
+
+		// Wait for DAT, skipping HBTs and stale ACKs (FSC-0056: reset timer only)
+		tok := cr.readToken(s.config.StepTimeout, s.config.CharacterTimeout, masterDeadline)
+		for tok == tokenHBT || tok == tokenACK {
+			if s.debug {
+				if tok == tokenHBT {
+					s.dbg("EMSI: RX: Received HBT, restarting step timer")
+				} else {
+					s.dbg("EMSI: RX: Received stale ACK, ignoring")
+				}
+			}
+			tok = cr.readToken(s.config.StepTimeout, s.config.CharacterTimeout, masterDeadline)
+		}
+
+		switch tok {
+		case tokenDAT:
+			dat, err := cr.readEMSI_DAT(s.config.CharacterTimeout, masterDeadline, s.config.AcceptFDLenWithCR)
+			if err != nil {
+				if s.debug {
+					s.dbg("EMSI: RX: DAT read failed: %v, retrying", err)
+				}
+				continue
+			}
+			return s.rxValidate(dat)
+
+		case tokenINQ:
+			if s.debug {
+				s.dbg("EMSI: RX: Received INQ, remote restarting")
+			}
+			continue
+
+		case tokenREQ:
+			if s.debug {
+				s.dbg("EMSI: RX: Received REQ, resending our DAT")
+			}
+			_ = s.sendEMSI_DAT()
+			continue
+
+		case tokenNAK:
+			if s.debug {
+				s.dbg("EMSI: RX: Received NAK, resending our DAT")
+			}
+			_ = s.sendEMSI_DAT()
+			continue
+
+		case tokenTimeout:
+			if s.debug {
+				s.dbg("EMSI: RX: Step timeout, retrying")
+			}
+			continue
+
+		case tokenCarrier:
+			return fmt.Errorf("carrier lost in RX phase")
+
+		default:
+			if s.debug {
+				s.dbg("EMSI: RX: Unexpected token %s", tok)
+			}
+			continue
+		}
 	}
 
-	response, responseType, err := s.readEMSIResponseWithTimeout(timeout)
-
-	// If SendINQTwice is enabled and still no EMSI, send second INQ
-	if (err != nil || responseType == "BANNER" || responseType == "UNKNOWN") && s.config.SendINQTwice {
+	// Exhausted retries — try banner extraction fallback
+	s.bannerText = cr.getBannerText()
+	if software := s.extractSoftwareFromBanner(); software != nil {
+		s.remoteInfo = &EMSIData{
+			MailerName:    software.Name,
+			MailerVersion: software.Version,
+			SystemName:    "[Extracted from banner]",
+		}
+		if software.Platform != "" {
+			s.remoteInfo.MailerSerial = software.Platform
+		}
 		if s.debug {
-			s.dbg("EMSI: Still no EMSI after preventive INQ, sending second EMSI_INQ...")
+			s.dbg("EMSI: RX: Extracted software from banner: %s %s", software.Name, software.Version)
 		}
-		time.Sleep(s.config.INQInterval)
-		if err := s.sendEMSI_INQ(); err != nil {
-			return "", "", fmt.Errorf("failed to send second EMSI_INQ: %w", err)
-		}
-		response, responseType, err = s.readEMSIResponseWithTimeout(s.config.StepTimeout)
+		return nil
 	}
 
-	if err != nil {
-		if s.debug {
-			s.dbg("EMSI: ERROR reading response after preventive INQ: %v", err)
-		}
-		return "", "", fmt.Errorf("failed to read EMSI response: %w", err)
-	}
-
-	return response, responseType, nil
+	return fmt.Errorf("RX phase: max retries (%d) exceeded, no remote DAT received", maxRetries)
 }
 
-// sendEMSI_INQ sends EMSI inquiry
+// rxValidate sends ACK then parses a received DAT packet.
+// FSC-0056.001: transmit ACK before processing (CRC already validated by readEMSI_DAT).
+func (s *Session) rxValidate(datPacket string) error {
+	// Send ACK before processing per FSC-0056.001
+	if err := s.sendEMSI_ACK(); err != nil {
+		if s.debug {
+			s.dbg("EMSI: RX: WARNING: Failed to send ACK: %v", err)
+		}
+	}
+	if s.config.SendACKTwice {
+		_ = s.sendEMSI_ACK()
+	}
+
+	info, err := ParseEMSI_DAT(datPacket)
+	if err != nil {
+		if s.debug {
+			s.dbg("EMSI: RX: DAT parse failed after ACK: %v", err)
+		}
+		return fmt.Errorf("RX phase: DAT parse failed: %w", err)
+	}
+
+	s.remoteInfo = info
+	s.logRemoteInfo()
+	return nil
+}
+
+// logRemoteInfo logs parsed remote info at debug level.
+func (s *Session) logRemoteInfo() {
+	if !s.debug || s.remoteInfo == nil {
+		return
+	}
+	s.dbg("EMSI: Parsed remote data:")
+	s.dbg("EMSI:   System: %s", s.remoteInfo.SystemName)
+	s.dbg("EMSI:   Location: %s", s.remoteInfo.Location)
+	s.dbg("EMSI:   Sysop: %s", s.remoteInfo.Sysop)
+	s.dbg("EMSI:   Mailer: %s %s", s.remoteInfo.MailerName, s.remoteInfo.MailerVersion)
+	s.dbg("EMSI:   Addresses: %v", s.remoteInfo.Addresses)
+}
+
+// ---------------------------------------------------------------------------
+// Wire-write methods
+// ---------------------------------------------------------------------------
+
+// writeDeadline returns a write deadline capped at the handshake's master
+// deadline to prevent writes from extending beyond the overall timeout.
+func (s *Session) writeDeadline() time.Time {
+	deadline := time.Now().Add(s.config.MasterTimeout)
+	if !s.masterDeadline.IsZero() && s.masterDeadline.Before(deadline) {
+		deadline = s.masterDeadline
+	}
+	return deadline
+}
+
+// sendEMSI_INQ sends EMSI inquiry. If SendINQTwice is configured, sends
+// twice with INQInterval delay between sends (per FSC-0056.001 step 1).
 func (s *Session) sendEMSI_INQ() error {
 	if s.debug {
 		s.dbg("EMSI: sendEMSI_INQ: Sending EMSI_INQ")
 	}
 
-	deadline := time.Now().Add(s.config.MasterTimeout)
-	_ = s.conn.SetWriteDeadline(deadline)
+	_ = s.conn.SetWriteDeadline(s.writeDeadline())
 
 	if _, err := s.writer.WriteString(EMSI_INQ + "\r"); err != nil {
 		if s.debug {
@@ -691,14 +1323,31 @@ func (s *Session) sendEMSI_INQ() error {
 		}
 		return err
 	}
-	
+
 	if err := s.writer.Flush(); err != nil {
 		if s.debug {
 			s.dbg("EMSI: sendEMSI_INQ: ERROR flushing: %v", err)
 		}
 		return err
 	}
-	
+
+	// FSC-0056 step 1: "Transmit EMSI_INQ twice"
+	if s.config.SendINQTwice {
+		if s.config.INQInterval > 0 {
+			time.Sleep(s.config.INQInterval)
+		}
+		_ = s.conn.SetWriteDeadline(s.writeDeadline())
+		if _, err := s.writer.WriteString(EMSI_INQ + "\r"); err != nil {
+			if s.debug {
+				s.dbg("EMSI: sendEMSI_INQ: ERROR writing second INQ: %v", err)
+			}
+			return err
+		}
+		if err := s.writer.Flush(); err != nil {
+			return err
+		}
+	}
+
 	if s.debug {
 		s.dbg("EMSI: sendEMSI_INQ: Successfully sent EMSI_INQ")
 	}
@@ -711,9 +1360,49 @@ func (s *Session) sendEMSI_ACK() error {
 		s.dbg("EMSI: Sending EMSI_ACK")
 	}
 
-	_ = s.conn.SetWriteDeadline(time.Now().Add(s.config.MasterTimeout))
-	
+	_ = s.conn.SetWriteDeadline(s.writeDeadline())
+
 	if _, err := s.writer.WriteString(EMSI_ACK + "\r"); err != nil {
+		return err
+	}
+	return s.writer.Flush()
+}
+
+// sendEMSI_REQ sends EMSI request. If SendREQTwice is configured, sends
+// twice (per FSC-0056.001).
+func (s *Session) sendEMSI_REQ() error {
+	if s.debug {
+		s.dbg("EMSI: Sending EMSI_REQ")
+	}
+
+	_ = s.conn.SetWriteDeadline(s.writeDeadline())
+
+	if _, err := s.writer.WriteString(EMSI_REQ + "\r"); err != nil {
+		return err
+	}
+	if err := s.writer.Flush(); err != nil {
+		return err
+	}
+
+	if s.config.SendREQTwice {
+		_ = s.conn.SetWriteDeadline(s.writeDeadline())
+		if _, err := s.writer.WriteString(EMSI_REQ + "\r"); err != nil {
+			return err
+		}
+		return s.writer.Flush()
+	}
+	return nil
+}
+
+// sendEMSI_NAK sends EMSI negative acknowledgment
+func (s *Session) sendEMSI_NAK() error {
+	if s.debug {
+		s.dbg("EMSI: Sending EMSI_NAK")
+	}
+
+	_ = s.conn.SetWriteDeadline(s.writeDeadline())
+
+	if _, err := s.writer.WriteString(EMSI_NAK + "\r"); err != nil {
 		return err
 	}
 	return s.writer.Flush()
@@ -724,7 +1413,7 @@ func (s *Session) sendEMSI_DAT() error {
 	if s.debug {
 		s.dbg("EMSI: sendEMSI_DAT: Preparing EMSI_DAT packet...")
 	}
-	
+
 	// Create our EMSI data using configured protocols
 	protocols := s.config.Protocols
 	if len(protocols) == 0 {
@@ -743,32 +1432,23 @@ func (s *Session) sendEMSI_DAT() error {
 		MailerSerial:  "LNX",                    // Traditional OS identifier
 		Addresses:     []string{s.localAddress}, // Bare address without @fidonet suffix
 		Protocols:     protocols,
-		Password:      "",                       // Empty password
+		Password:      "", // Empty password
 	}
 
 	// Use config-aware packet builder for EMSI-II support
 	packet := CreateEMSI_DATWithConfig(data, s.config)
-	
+
 	if s.debug {
 		s.dbg("EMSI: sendEMSI_DAT: Created EMSI_DAT packet (%d bytes)", len(packet))
-		// Log first 200 chars of packet for debugging
 		if len(packet) > 200 {
 			s.dbg("EMSI: sendEMSI_DAT: DAT packet (first 200): %q", packet[:200])
 		} else {
 			s.dbg("EMSI: sendEMSI_DAT: DAT packet: %q", packet)
 		}
-		// Also log what we're actually writing including CRs
-		fullPacket := packet + "\r\r"
-		s.dbg("EMSI: sendEMSI_DAT: Full packet with terminators (%d bytes)", len(fullPacket))
 	}
-	
-	deadline := time.Now().Add(s.config.MasterTimeout)
-	_ = s.conn.SetWriteDeadline(deadline)
 
-	if s.debug {
-		s.dbg("EMSI: sendEMSI_DAT: Sending packet with deadline %v...", deadline.Format("15:04:05.000"))
-	}
-	
+	_ = s.conn.SetWriteDeadline(s.writeDeadline())
+
 	// Send the packet with CR (binkleyforce-compatible, ifcico drops XON anyway)
 	if _, err := s.writer.WriteString(packet + "\r"); err != nil {
 		if s.debug {
@@ -784,14 +1464,14 @@ func (s *Session) sendEMSI_DAT() error {
 		}
 		return fmt.Errorf("failed to write additional CR: %w", err)
 	}
-	
+
 	if err := s.writer.Flush(); err != nil {
 		if s.debug {
 			s.dbg("EMSI: sendEMSI_DAT: ERROR flushing buffer: %v", err)
 		}
 		return fmt.Errorf("failed to flush EMSI_DAT: %w", err)
 	}
-	
+
 	if s.debug {
 		s.dbg("EMSI: sendEMSI_DAT: Successfully sent EMSI_DAT packet")
 	}
@@ -799,207 +1479,9 @@ func (s *Session) sendEMSI_DAT() error {
 	return nil
 }
 
-// readEMSIResponseWithTimeout reads and identifies EMSI response with a specific timeout
-// We read continuously until we find an EMSI sequence or timeout expires
-func (s *Session) readEMSIResponseWithTimeout(timeout time.Duration) (string, string, error) {
-	deadline := time.Now().Add(timeout)
-	_ = s.conn.SetReadDeadline(deadline)
-
-	if s.debug {
-		s.dbg("EMSI: readEMSIResponse: Starting read with timeout %v (deadline: %v)", timeout, deadline.Format("15:04:05.000"))
-	}
-
-	// Accumulate response data, some systems send banner first
-	var response strings.Builder
-	buffer := make([]byte, 4096)
-	totalBytesRead := 0
-	startTime := time.Now()
-
-	// Keep reading until timeout - don't limit attempts
-	// Remote BBS may send banner for 30+ seconds before EMSI_REQ
-	for time.Now().Before(deadline) {
-		elapsed := time.Since(startTime)
-		if s.debug && totalBytesRead == 0 && elapsed > 5*time.Second && int(elapsed.Seconds())%10 == 0 {
-			s.dbg("EMSI: readEMSIResponse: Still waiting for data after %v...", elapsed)
-		}
-
-		n, err := s.reader.Read(buffer)
-
-		if err != nil {
-			elapsed := time.Since(startTime)
-			if s.debug {
-				s.dbg("EMSI: readEMSIResponse: Read error after %v: %v (bytes so far: %d)", elapsed, err, totalBytesRead)
-			}
-			// If we have accumulated data, check it before giving up
-			if response.Len() > 0 {
-				responseStr := response.String()
-				if signal := detectModemDisconnect(responseStr); signal != "" {
-					return responseStr, "", fmt.Errorf("modem disconnect: %s", signal)
-				}
-				if emsiType := s.detectEMSIType(responseStr); emsiType != "" {
-					// Return incomplete EMSI_DAT as error rather than pretending it's valid
-					if emsiType == "DAT" && !isEMSI_DATComplete(responseStr) {
-						return responseStr, "", fmt.Errorf("incomplete EMSI_DAT on read error: %w", err)
-					}
-					return responseStr, emsiType, nil
-				}
-				// Have data but no EMSI, return as banner
-				return responseStr, "BANNER", nil
-			}
-			return "", "", fmt.Errorf("read failed after %v: %w", elapsed, err)
-		}
-
-		if n > 0 {
-			chunk := string(buffer[:n])
-			response.WriteString(chunk)
-			totalBytesRead += n
-			elapsed := time.Since(startTime)
-
-			if s.debug {
-				s.dbg("EMSI: readEMSIResponse: Received %d bytes (total: %d, elapsed: %v)",
-					n, totalBytesRead, elapsed)
-				if n < 200 {
-					s.dbg("EMSI: readEMSIResponse: Data: %q", chunk)
-				} else {
-					s.dbg("EMSI: readEMSIResponse: Data (first 200): %q...", chunk[:200])
-				}
-			}
-
-			responseStr := response.String()
-
-			// Always update banner text with accumulated response to capture initial banner
-			if len(responseStr) > len(s.bannerText) {
-				s.bannerText = responseStr
-			}
-
-			// Check for modem disconnect signals before EMSI detection.
-			// NO CARRIER can arrive in the same read as EMSI data when the
-			// remote drops carrier immediately after sending EMSI_REQ.
-			if signal := detectModemDisconnect(responseStr); signal != "" {
-				if s.debug {
-					s.dbg("EMSI: readEMSIResponse: Modem disconnect (%s) detected after %v", signal, elapsed)
-				}
-				return responseStr, "", fmt.Errorf("modem disconnect: %s", signal)
-			}
-
-			// Check if we have EMSI sequences
-			if emsiType := s.detectEMSIType(responseStr); emsiType != "" {
-				// For EMSI_DAT, wait until the full packet arrives (length field tells us how much)
-				if emsiType == "DAT" && !isEMSI_DATComplete(responseStr) {
-					if s.debug {
-						s.dbg("EMSI: readEMSIResponse: EMSI_DAT detected but incomplete, continuing read...")
-					}
-					continue
-				}
-				if s.debug {
-					s.dbg("EMSI: readEMSIResponse: Found EMSI_%s in response after %v", emsiType, elapsed)
-				}
-				return responseStr, emsiType, nil
-			}
-
-			if s.debug {
-				s.dbg("EMSI: readEMSIResponse: No EMSI sequence found yet, continuing...")
-			}
-		}
-	}
-
-	// Timeout expired, check what we got
-	responseStr := response.String()
-	finalElapsed := time.Since(startTime)
-
-	if len(responseStr) > 0 {
-		// Got some data but no EMSI, treat as banner
-		if s.debug {
-			s.dbg("EMSI: readEMSIResponse: Timeout after %v, treating %d bytes as BANNER", finalElapsed, len(responseStr))
-			if len(responseStr) < 500 {
-				s.dbg("EMSI: readEMSIResponse: Banner content: %q", responseStr)
-			} else {
-				s.dbg("EMSI: readEMSIResponse: Banner content (first 500): %q...", responseStr[:500])
-			}
-		}
-		return responseStr, "BANNER", nil
-	}
-
-	if s.debug {
-		s.dbg("EMSI: readEMSIResponse: No data received after %v, returning timeout error", finalElapsed)
-	}
-	return "", "", fmt.Errorf("timeout waiting for EMSI response after %v", finalElapsed)
-}
-
-// detectModemDisconnect checks if the response contains a modem disconnect signal
-// on its own line (e.g. "\r\nNO CARRIER\r\n"). Matching full lines avoids false
-// positives from banner text or EMSI fields that happen to contain these words.
-func detectModemDisconnect(responseStr string) string {
-	for _, signal := range []string{"NO CARRIER", "NO DIALTONE", "NO DIAL TONE", "BUSY", "NO ANSWER"} {
-		// Match as a standalone line: preceded by \r\n or start of string,
-		// followed by \r\n or end of string
-		idx := strings.Index(responseStr, signal)
-		for idx >= 0 {
-			before := idx == 0 || responseStr[idx-1] == '\n' || responseStr[idx-1] == '\r'
-			end := idx + len(signal)
-			after := end == len(responseStr) || responseStr[end] == '\r' || responseStr[end] == '\n'
-			if before && after {
-				return signal
-			}
-			// Search for next occurrence
-			next := strings.Index(responseStr[end:], signal)
-			if next < 0 {
-				break
-			}
-			idx = end + next
-		}
-	}
-	return ""
-}
-
-// isEMSI_DATComplete checks if the buffer contains a complete EMSI_DAT packet.
-// EMSI_DAT format: **EMSI_DATxxxx<data><CRC4>\r  where xxxx is hex length of <data>.
-// Total expected: len up to "**EMSI_DAT" + 4 (len field) + dataLen + 4 (CRC) + 1 (\r)
-func isEMSI_DATComplete(responseStr string) bool {
-	idx := strings.Index(responseStr, "EMSI_DAT")
-	if idx < 0 {
-		return false
-	}
-	// Need at least EMSI_DAT + 4 hex digits for the length field
-	hdrEnd := idx + len("EMSI_DAT") + 4 // position after length field
-	if len(responseStr) < hdrEnd {
-		return false
-	}
-	lenHex := responseStr[idx+len("EMSI_DAT") : hdrEnd]
-	dataLen, err := strconv.ParseInt(lenHex, 16, 32)
-	if err != nil || dataLen < 0 || dataLen > 8192 {
-		return true // can't parse length or absurd size, return what we have
-	}
-	// Full packet: up to hdrEnd + dataLen + 4 (CRC hex)
-	needed := hdrEnd + int(dataLen) + 4
-	return len(responseStr) >= needed
-}
-
-// detectEMSIType checks if the response contains an EMSI sequence and returns its type
-func (s *Session) detectEMSIType(responseStr string) string {
-	if strings.Contains(responseStr, "EMSI_NAK") {
-		return "NAK"
-	}
-	if strings.Contains(responseStr, "EMSI_DAT") {
-		return "DAT"
-	}
-	if strings.Contains(responseStr, "EMSI_ACK") {
-		return "ACK"
-	}
-	if strings.Contains(responseStr, "EMSI_REQ") {
-		return "REQ"
-	}
-	if strings.Contains(responseStr, "EMSI_CLI") {
-		return "CLI"
-	}
-	if strings.Contains(responseStr, "EMSI_HBT") {
-		return "HBT"
-	}
-	if strings.Contains(responseStr, "EMSI_INQ") {
-		return "INQ"
-	}
-	return ""
-}
+// ---------------------------------------------------------------------------
+// Public API (unchanged)
+// ---------------------------------------------------------------------------
 
 // GetRemoteInfo returns the collected remote node information
 func (s *Session) GetRemoteInfo() *EMSIData {
@@ -1019,18 +1501,22 @@ func (s *Session) ValidateAddress(expectedAddress string) bool {
 	if s.remoteInfo == nil {
 		return false
 	}
-	
+
 	// Normalize addresses for comparison
 	expected := normalizeAddress(expectedAddress)
-	
+
 	for _, addr := range s.remoteInfo.Addresses {
 		if normalizeAddress(addr) == expected {
 			return true
 		}
 	}
-	
+
 	return false
 }
+
+// ---------------------------------------------------------------------------
+// Utilities (unchanged)
+// ---------------------------------------------------------------------------
 
 // normalizeAddress normalizes a FidoNet address for comparison
 func normalizeAddress(addr string) string {
@@ -1048,6 +1534,7 @@ func normalizeAddress(addr string) string {
 
 	return addr
 }
+
 // formatResponsePreview formats response data for error messages.
 // Returns text if data is 7-bit ASCII printable, otherwise hex dump.
 func formatResponsePreview(data string, maxLen int) string {
@@ -1083,13 +1570,10 @@ func formatResponsePreview(data string, maxLen int) string {
 	}
 
 	// Show as hex dump
-	hexLen := maxLen / 3 // Each byte takes ~3 chars in hex
-	if hexLen > len(data) {
-		hexLen = len(data)
-	}
+	hexLen := min(maxLen/3, len(data)) // Each byte takes ~3 chars in hex
 
 	var hex strings.Builder
-	for i := 0; i < hexLen; i++ {
+	for i := range hexLen {
 		if i > 0 {
 			hex.WriteByte(' ')
 		}
