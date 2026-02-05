@@ -32,23 +32,45 @@ func (m *Modem) GetConn() *ModemConn {
 	}
 }
 
-// Read reads data from the modem serial port
+// Read reads data from the modem serial port.
+// Uses short polling intervals (50ms) to return data promptly when available,
+// rather than blocking for the full read deadline. This matches the proven
+// pattern used by readResponseLocked() in modem.go.
 func (c *ModemConn) Read(b []byte) (n int, err error) {
 	if c.modem.port == nil {
 		return 0, net.ErrClosed
 	}
 
-	// Apply read deadline if set
-	if !c.readDeadline.IsZero() {
+	// No deadline set - single read with default timeout
+	if c.readDeadline.IsZero() {
+		return c.modem.port.Read(b)
+	}
+
+	// Poll with short timeout until data arrives or deadline expires
+	const pollTimeoutMs = 50 // milliseconds - same as readResponseLocked
+
+	for {
 		remaining := time.Until(c.readDeadline)
 		if remaining <= 0 {
 			return 0, &net.OpError{Op: "read", Net: "serial", Err: timeoutError{}}
 		}
-		_ = c.modem.port.SetReadTimeout(int(remaining.Milliseconds()))
-	}
 
-	n, err = c.modem.port.Read(b)
-	return n, err
+		// Use the shorter of poll timeout or remaining time
+		timeout := pollTimeoutMs
+		if remainMs := int(remaining.Milliseconds()); remainMs < timeout {
+			timeout = remainMs
+			if timeout < 10 {
+				timeout = 10 // minimum 10ms
+			}
+		}
+		_ = c.modem.port.SetReadTimeout(timeout)
+
+		n, err = c.modem.port.Read(b)
+		if n > 0 || err != nil {
+			return n, err
+		}
+		// No data yet, continue polling until deadline
+	}
 }
 
 // Write writes data to the modem serial port
