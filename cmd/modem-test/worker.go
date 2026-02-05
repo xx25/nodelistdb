@@ -229,8 +229,30 @@ func (w *ModemWorker) Run(ctx context.Context) {
 					}
 				}
 
+				// Callback for intermediate operator results - emits full result before trying next operator
+				onOperatorResult := func(opResult testResult, opName, opPrefix string) {
+					select {
+					case w.results <- WorkerResult{
+						WorkerID:       w.id,
+						WorkerName:     w.name,
+						Phone:          job.phone,
+						OperatorName:   opName,
+						OperatorPrefix: opPrefix,
+						NodeAddress:    job.nodeAddress,
+						NodeSystemName: job.nodeSystemName,
+						NodeLocation:   job.nodeLocation,
+						NodeSysop:      job.nodeSysop,
+						TestNum:        job.testNum,
+						Result:         opResult,
+						Timestamp:      time.Now(),
+					}:
+					case <-ctx.Done():
+						return
+					}
+				}
+
 				// Run with failover
-				failoverResult := w.runTestWithFailover(ctx, job, job.operators, w.operatorCache, onRetryAttempt)
+				failoverResult := w.runTestWithFailover(ctx, job, job.operators, w.operatorCache, onRetryAttempt, onOperatorResult)
 				result = failoverResult.LastResult
 
 				// Set operator info - use SuccessOperator if succeeded, LastOperator otherwise

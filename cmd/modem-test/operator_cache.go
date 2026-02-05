@@ -302,6 +302,11 @@ type FailoverResult struct {
 	AllOperatorsFail bool            // True if all operators failed
 }
 
+// OperatorResultCallback is called when an intermediate operator attempt completes
+// (success or failure) before trying the next operator. This allows recording
+// each operator's result to CSV, databases, and the NodelistDB API.
+type OperatorResultCallback func(result testResult, operatorName, operatorPrefix string)
+
 // runTestWithFailover executes tests with operator failover.
 // It tries operators in order (cached first if available), caches successful operators,
 // and handles "User Busy" specially by not switching operators.
@@ -312,6 +317,7 @@ type FailoverResult struct {
 //   - operators: full list of operators to try
 //   - cache: operator cache (may be nil)
 //   - onRetryAttempt: callback for retry tracking
+//   - onOperatorResult: callback to emit intermediate operator results
 //
 // Returns FailoverResult with the outcome.
 func (w *ModemWorker) runTestWithFailover(
@@ -320,6 +326,7 @@ func (w *ModemWorker) runTestWithFailover(
 	operators []OperatorConfig,
 	cache *OperatorCache,
 	onRetryAttempt RetryAttemptCallback,
+	onOperatorResult OperatorResultCallback,
 ) FailoverResult {
 	if len(operators) == 0 {
 		// No operators configured - run test directly
@@ -427,6 +434,10 @@ func (w *ModemWorker) runTestWithFailover(
 		// Not user busy - this might be an operator/routing issue
 		// Continue to next operator if available
 		if i < len(orderedOperators)-1 {
+			// Emit this operator's result before trying the next one
+			if onOperatorResult != nil {
+				onOperatorResult(lastResult, currentOp.Name, currentOp.Prefix)
+			}
 			w.log.Warn("Operator %q failed, will try next", op.Name)
 		}
 	}
