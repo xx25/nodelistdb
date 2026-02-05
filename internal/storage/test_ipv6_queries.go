@@ -1191,18 +1191,30 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 // detectIPv6Type determines IPv6 connectivity type from resolved addresses.
 // If a node has both tunneled and native addresses, prefers "Native".
 func detectIPv6Type(addresses []string) string {
+	if len(addresses) == 0 {
+		return "Unknown"
+	}
 	tunnelType := ""
 	for _, addr := range addresses {
 		if strings.HasPrefix(addr, "2002:") {
+			// 6to4 tunnel: 2002::/16 (RFC 3056)
 			if tunnelType == "" {
 				tunnelType = "T-6to4"
 			}
 		} else if strings.HasPrefix(addr, "2001:0000:") || strings.HasPrefix(addr, "2001:0:") {
+			// Teredo tunnel: 2001:0000::/32 (RFC 4380)
 			if tunnelType == "" {
 				tunnelType = "T-Teredo"
 			}
 		} else if strings.HasPrefix(addr, "2001:470:") || strings.HasPrefix(addr, "2001:0470:") {
 			// Hurricane Electric tunnel broker: 2001:470::/32
+			// Note: this is HE's entire allocation; native HE customers also use this range,
+			// but in the FidoNet community most HE users are tunnel broker users.
+			if tunnelType == "" {
+				tunnelType = "T-6in4"
+			}
+		} else if strings.HasPrefix(addr, "2001:5c0:") || strings.HasPrefix(addr, "2001:05c0:") {
+			// Freenet6/GoGo6 tunnel broker: 2001:5c0::/32
 			if tunnelType == "" {
 				tunnelType = "T-6in4"
 			}
@@ -1231,13 +1243,12 @@ func detectProvider(isp, org string) string {
 
 // hasFidoStyleAddress checks if any resolved IPv6 address ends with the ::f1d0:zone:net:node pattern.
 // The FidoNet IPv6 address convention uses hex-encoded values: ::f1d0:ZONE:NET:NODE
-// Uses suffix matching with proper segment boundaries to avoid false positives.
+// Uses suffix matching with a colon prefix to ensure segment boundary alignment.
 func hasFidoStyleAddress(addresses []string, zone, net, node int) bool {
-	// Build expected suffix patterns - address should end with this
-	fidoSuffix := fmt.Sprintf("f1d0:%x:%x:%x", zone, net, node)
+	// Build expected suffix with leading colon for segment boundary
+	fidoSuffix := fmt.Sprintf(":f1d0:%x:%x:%x", zone, net, node)
 	for _, addr := range addresses {
 		lower := strings.ToLower(addr)
-		// Must end with the pattern (not just contain it) to avoid node=64 matching node=6400
 		if strings.HasSuffix(lower, fidoSuffix) {
 			return true
 		}
