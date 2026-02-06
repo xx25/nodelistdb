@@ -194,7 +194,9 @@ func (r *WhoisResolver) lookupWhois(domain string) *models.WhoisResult {
 	}
 
 	// Registrar and status
-	result.Registrar = parsed.Registrar.Name
+	if parsed.Registrar != nil {
+		result.Registrar = parsed.Registrar.Name
+	}
 	if len(parsed.Domain.Status) > 0 {
 		result.Status = strings.Join(parsed.Domain.Status, ", ")
 	}
