@@ -218,7 +218,7 @@ func (w *NodelistDBWriter) convertRecord(rec *TestRecord) nodelistDBResultReques
 		SystemName:     rec.RemoteSystem,
 		MailerInfo:     rec.RemoteMailer,
 		Addresses:      parseAddresses(rec.RemoteAddress),
-		AddressValid:   rec.RemoteAddress != "" && rec.RemoteAddress == rec.NodeAddress,
+		AddressValid:   validateModemAddress(rec.RemoteAddress, rec.NodeAddress),
 		ResponseType:   "", // Not tracked in CLI
 		Error:          rec.EMSIError,
 		ConnectSpeed:   uint32(rec.ConnectSpeed),
@@ -299,6 +299,32 @@ func parseAddresses(addresses string) []string {
 		}
 	}
 	return result
+}
+
+// normalizeAddress strips domain suffix, point .0, and lowercases a FidoNet address
+func normalizeAddress(addr string) string {
+	addr = strings.TrimSpace(strings.ToLower(addr))
+	if idx := strings.Index(addr, "@"); idx != -1 {
+		addr = addr[:idx]
+	}
+	addr = strings.TrimSuffix(addr, ".0")
+	return addr
+}
+
+// validateModemAddress checks if any address in a comma/space-separated list matches the expected node address
+func validateModemAddress(remoteAddresses, expectedAddress string) bool {
+	if remoteAddresses == "" || expectedAddress == "" {
+		return false
+	}
+	expected := normalizeAddress(expectedAddress)
+	for _, addr := range strings.FieldsFunc(remoteAddresses, func(r rune) bool {
+		return r == ',' || r == ' '
+	}) {
+		if normalizeAddress(addr) == expected {
+			return true
+		}
+	}
+	return false
 }
 
 // Flush sends all buffered results to the server

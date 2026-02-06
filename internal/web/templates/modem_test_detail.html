@@ -352,7 +352,7 @@
                     {{end}}
                     {{if .TestResult.AstHangupCause}}
                     <span class="detail-label">Hangup Cause:</span>
-                    <span class="detail-value">{{.TestResult.AstHangupCause}}</span>
+                    <span class="detail-value">{{q931Cause .TestResult.AstHangupCause}}</span>
                     {{end}}
                     {{if .TestResult.AstHangupSource}}
                     <span class="detail-label">Hangup Source:</span>
