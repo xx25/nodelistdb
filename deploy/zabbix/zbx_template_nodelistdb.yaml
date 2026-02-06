@@ -1,7 +1,7 @@
 zabbix_export:
   version: '6.4'
   templates:
-    - uuid: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+    - uuid: 54e13f77b72b4b5a93bf72b13e6c131f
       template: NodelistDB
       name: 'NodelistDB FidoNet Server'
       description: |
@@ -30,7 +30,7 @@ zabbix_export:
           description: 'No data timeout before alerting (seconds)'
 
       valuemaps:
-        - uuid: b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5
+        - uuid: c18bd8ddefed4c009967fd6d28b72bd7
           name: 'Service state'
           mappings:
             - value: '0'
@@ -42,7 +42,7 @@ zabbix_export:
         # ==============================
         # Master item: full health JSON
         # ==============================
-        - uuid: c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6
+        - uuid: d6ca23a67e5d46308f0a43faafeeac57
           name: 'NodelistDB health raw'
           key: nodelistdb.health
           delay: '{$NODELISTDB.HEALTH.INTERVAL}'
@@ -57,7 +57,7 @@ zabbix_export:
         # ==============================
         # Dependent items (from health JSON)
         # ==============================
-        - uuid: d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1
+        - uuid: 43dd71c5c5ef4ce1837cdad222cd0a9a
           name: 'NodelistDB status'
           type: DEPENDENT
           key: nodelistdb.health.status
@@ -76,7 +76,7 @@ zabbix_export:
             - tag: component
               value: health
 
-        - uuid: e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+        - uuid: f5404e9b9ab645c495df996e90da7f73
           name: 'NodelistDB uptime'
           type: DEPENDENT
           key: nodelistdb.health.uptime
@@ -97,7 +97,7 @@ zabbix_export:
             - tag: component
               value: health
 
-        - uuid: f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3
+        - uuid: d1d8a71058a04404aa2ea8cd5925007a
           name: 'NodelistDB version'
           type: DEPENDENT
           key: nodelistdb.health.version
@@ -117,7 +117,7 @@ zabbix_export:
             - tag: component
               value: health
 
-        - uuid: a1c2e3f4a1c2e3f4a1c2e3f4a1c2e3f4
+        - uuid: bee67b6f2f134a3ab43b4cc8fa046deb
           name: 'NodelistDB DB connected'
           type: DEPENDENT
           key: nodelistdb.health.db.connected
@@ -139,7 +139,7 @@ zabbix_export:
             - tag: component
               value: database
 
-        - uuid: b2d3f4a1b2d3f4a1b2d3f4a1b2d3f4a1
+        - uuid: 2ee7c52a12ef445fb7e543a31ecea4c2
           name: 'NodelistDB DB response time'
           type: DEPENDENT
           key: nodelistdb.health.db.response_ms
@@ -160,7 +160,7 @@ zabbix_export:
             - tag: component
               value: database
 
-        - uuid: c3e4a1b2c3e4a1b2c3e4a1b2c3e4a1b2
+        - uuid: 55222e3a2f5542baa528eefd39ff6cf6
           name: 'NodelistDB node count'
           type: DEPENDENT
           key: nodelistdb.health.nodes.count
@@ -180,7 +180,7 @@ zabbix_export:
             - tag: component
               value: data
 
-        - uuid: d4f5b2c3d4f5b2c3d4f5b2c3d4f5b2c3
+        - uuid: 7c3b607f945b486fb4c86c349752f3c8
           name: 'NodelistDB latest nodelist date'
           type: DEPENDENT
           key: nodelistdb.health.nodes.date
@@ -200,7 +200,7 @@ zabbix_export:
             - tag: component
               value: data
 
-        - uuid: e5a1c2d3e5a1c2d3e5a1c2d3e5a1c2d3
+        - uuid: 03936113a3494f53b30acc727073b333
           name: 'NodelistDB cache hit rate'
           type: DEPENDENT
           key: nodelistdb.health.cache.hit_rate
@@ -221,7 +221,7 @@ zabbix_export:
             - tag: component
               value: cache
 
-        - uuid: f6b2d3e4f6b2d3e4f6b2d3e4f6b2d3e4
+        - uuid: 519f269768264b339c61934a664f6a4d
           name: 'NodelistDB cache keys'
           type: DEPENDENT
           key: nodelistdb.health.cache.keys
@@ -244,7 +244,7 @@ zabbix_export:
         # ==============================
         # Direct UserParameter items
         # ==============================
-        - uuid: a1a2a3a4a5a6a7a8a1a2a3a4a5a6a7a8
+        - uuid: d4d7b2038768469eb570d0ab5572aa7d
           name: 'NodelistDB server service'
           key: nodelistdb.service.server
           delay: '60'
@@ -258,7 +258,7 @@ zabbix_export:
             - tag: component
               value: service
 
-        - uuid: b1b2b3b4b5b6b7b8b1b2b3b4b5b6b7b8
+        - uuid: 2bb48876ec8d45b69c0cdc5996b18342
           name: 'NodelistDB testdaemon service'
           key: nodelistdb.service.testdaemon
           delay: '60'
@@ -272,7 +272,7 @@ zabbix_export:
             - tag: component
               value: service
 
-        - uuid: c1c2c3c4c5c6c7c8c1c2c3c4c5c6c7c8
+        - uuid: 984ff054d0d34d1ab419ff4b400c8281
           name: 'NodelistDB server log errors'
           key: nodelistdb.log.errors.server
           delay: '300'
@@ -284,7 +284,7 @@ zabbix_export:
             - tag: component
               value: logs
 
-        - uuid: d1d2d3d4d5d6d7d8d1d2d3d4d5d6d7d8
+        - uuid: 1855f095653e4961baff606572e131a7
           name: 'NodelistDB daemon log errors'
           key: nodelistdb.log.errors.daemon
           delay: '300'
@@ -298,7 +298,7 @@ zabbix_export:
 
   triggers:
     # --- HIGH ---
-    - uuid: 11112222333344445555666677778888
+    - uuid: ac0d3902b6704579b6611e2445cdb3ff
       expression: 'last(/NodelistDB/nodelistdb.service.server)=0'
       name: 'NodelistDB server service is down'
       priority: HIGH
@@ -307,7 +307,7 @@ zabbix_export:
         - tag: scope
           value: availability
 
-    - uuid: 22223333444455556666777788889999
+    - uuid: 04f38738e9d2414a9d44d5b584686966
       expression: 'last(/NodelistDB/nodelistdb.health.status)="unreachable"'
       name: 'NodelistDB health endpoint unreachable'
       priority: HIGH
@@ -319,7 +319,7 @@ zabbix_export:
         - tag: scope
           value: availability
 
-    - uuid: 33334444555566667777888899990000
+    - uuid: d7b870c4c35d40b0863f1c018f96efa4
       expression: 'last(/NodelistDB/nodelistdb.health.db.connected)=0'
       name: 'NodelistDB ClickHouse disconnected'
       priority: HIGH
@@ -332,7 +332,7 @@ zabbix_export:
           value: availability
 
     # --- AVERAGE ---
-    - uuid: 4444555566667777888899990000aaaa
+    - uuid: e9b8117ccbf14bccb448aabb5573397f
       expression: 'nodata(/NodelistDB/nodelistdb.health,{$NODELISTDB.NODATA.TIMEOUT})=1'
       name: 'NodelistDB no health data for {$NODELISTDB.NODATA.TIMEOUT}s'
       priority: AVERAGE
@@ -344,7 +344,7 @@ zabbix_export:
         - tag: scope
           value: availability
 
-    - uuid: 5555666677778888999900001111bbbb
+    - uuid: f4f36b7b04b64deab73b2eea4e5d7e85
       expression: 'min(/NodelistDB/nodelistdb.health.db.response_ms,5m)>{$NODELISTDB.DB.RESPONSE_MS.HIGH}'
       name: 'NodelistDB DB response time critical (>{$NODELISTDB.DB.RESPONSE_MS.HIGH}ms)'
       priority: AVERAGE
@@ -357,7 +357,7 @@ zabbix_export:
           value: performance
 
     # --- WARNING ---
-    - uuid: 6666777788889999000011112222cccc
+    - uuid: ea61f5b83eee4b20870d59bdbab59cbe
       expression: 'last(/NodelistDB/nodelistdb.health.status)="degraded"'
       name: 'NodelistDB health status degraded'
       priority: WARNING
@@ -369,7 +369,7 @@ zabbix_export:
         - tag: scope
           value: performance
 
-    - uuid: 7777888899990000111122223333dddd
+    - uuid: 4fc390194f544f409dfe63074bbc1328
       expression: 'min(/NodelistDB/nodelistdb.health.db.response_ms,5m)>{$NODELISTDB.DB.RESPONSE_MS.WARN}'
       name: 'NodelistDB DB response time elevated (>{$NODELISTDB.DB.RESPONSE_MS.WARN}ms)'
       priority: WARNING
@@ -381,7 +381,7 @@ zabbix_export:
         - tag: scope
           value: performance
 
-    - uuid: 888899990000111122223333444455ee
+    - uuid: b196c40f41e54e84bbc2c8befe4c0f20
       expression: 'last(/NodelistDB/nodelistdb.service.testdaemon)=0'
       name: 'NodelistDB testdaemon service is down'
       priority: WARNING
@@ -390,7 +390,7 @@ zabbix_export:
         - tag: scope
           value: availability
 
-    - uuid: 99990000111122223333444455556666
+    - uuid: 020ee6bfe2d04f389db9fb9565c978d0
       expression: 'change(/NodelistDB/nodelistdb.log.errors.server)>{$NODELISTDB.ERROR.THRESHOLD}'
       name: 'NodelistDB server error rate elevated'
       priority: WARNING
@@ -399,7 +399,7 @@ zabbix_export:
         - tag: scope
           value: performance
 
-    - uuid: 0000111122223333444455556666ffff
+    - uuid: b23785a798a3447687fa4dbc7ee90973
       expression: 'change(/NodelistDB/nodelistdb.log.errors.daemon)>{$NODELISTDB.ERROR.THRESHOLD}'
       name: 'NodelistDB daemon error rate elevated'
       priority: WARNING
@@ -409,7 +409,7 @@ zabbix_export:
           value: performance
 
     # --- INFO ---
-    - uuid: aaaa1111bbbb2222cccc3333dddd4444
+    - uuid: fd737c4abb884c1588061dd421931741
       expression: 'last(/NodelistDB/nodelistdb.health.uptime)<600'
       name: 'NodelistDB server recently restarted'
       priority: INFO
@@ -419,7 +419,7 @@ zabbix_export:
         - tag: scope
           value: notice
 
-    - uuid: bbbb2222cccc3333dddd4444eeee5555
+    - uuid: 54e13f77b72b4b5a93bf72b13e6c131e
       expression: 'change(/NodelistDB/nodelistdb.health.version)<>0'
       name: 'NodelistDB version changed'
       priority: INFO
