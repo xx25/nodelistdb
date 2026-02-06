@@ -165,3 +165,47 @@ func (mq *ModemQueryOperations) GetDetailedModemTestResult(zone, net, node int, 
 
 	return &d, nil
 }
+
+// GetRecentModemSuccessPhones returns distinct phone numbers that had a successful
+// modem test within the specified number of days.
+func (mq *ModemQueryOperations) GetRecentModemSuccessPhones(days int) ([]string, error) {
+	mq.mu.RLock()
+	defer mq.mu.RUnlock()
+
+	if days <= 0 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+
+	conn := mq.db.Conn()
+
+	query := `SELECT DISTINCT modem_phone_dialed
+		FROM node_test_results
+		WHERE test_time >= now() - INTERVAL ? DAY
+			AND modem_tested = true
+			AND modem_success = true
+			AND modem_phone_dialed != ''`
+
+	rows, err := conn.Query(query, days)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent modem success phones: %w", err)
+	}
+	defer rows.Close()
+
+	var phones []string
+	for rows.Next() {
+		var phone string
+		if err := rows.Scan(&phone); err != nil {
+			return nil, fmt.Errorf("failed to scan phone row: %w", err)
+		}
+		phones = append(phones, phone)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating phone rows: %w", err)
+	}
+
+	return phones, nil
+}

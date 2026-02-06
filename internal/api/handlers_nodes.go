@@ -327,3 +327,39 @@ func (s *Server) GetPSTNNodesHandler(w http.ResponseWriter, r *http.Request) {
 
 	WriteJSONSuccess(w, response)
 }
+
+// GetRecentModemSuccessPhonesHandler returns phone numbers that were successfully tested via modem
+// within a recent time window.
+// GET /api/nodes/pstn/recent-success?days=7
+func (s *Server) GetRecentModemSuccessPhonesHandler(w http.ResponseWriter, r *http.Request) {
+	if !CheckMethod(w, r, http.MethodGet) {
+		return
+	}
+
+	days := 7
+	if daysStr := r.URL.Query().Get("days"); daysStr != "" {
+		parsed, err := strconv.Atoi(daysStr)
+		if err != nil || parsed < 1 || parsed > 90 {
+			WriteJSONError(w, "Invalid days parameter (must be 1-90)", http.StatusBadRequest)
+			return
+		}
+		days = parsed
+	}
+
+	phones, err := s.storage.GetRecentModemSuccessPhones(days)
+	if err != nil {
+		WriteJSONError(w, fmt.Sprintf("Failed to fetch recent modem success phones: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if phones == nil {
+		phones = []string{}
+	}
+
+	response := map[string]interface{}{
+		"phones": phones,
+		"count":  len(phones),
+	}
+
+	WriteJSONSuccess(w, response)
+}

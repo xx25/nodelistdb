@@ -349,6 +349,7 @@ type Operations interface {
 	GetPSTNNodes(limit int, zone int) ([]PSTNNode, error)
 	GetFileRequestNodes(limit int) ([]FileRequestNode, error)
 	GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error)
+	GetRecentModemSuccessPhones(days int) ([]string, error)
 	GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error)
 	GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error)
 

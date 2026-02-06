@@ -114,6 +114,44 @@ func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration) ([]NodeTarget
 	return nodes, apiResp.Count, nil
 }
 
+// recentSuccessResponse matches the JSON response from GET /api/nodes/pstn/recent-success.
+type recentSuccessResponse struct {
+	Phones []string `json:"phones"`
+	Count  int      `json:"count"`
+}
+
+// FetchRecentSuccessPhones fetches phone numbers that were successfully tested via modem
+// within the specified number of days. Returns a set for O(1) lookup.
+func FetchRecentSuccessPhones(apiURL string, days int, timeout time.Duration) (map[string]bool, error) {
+	url := fmt.Sprintf("%s/api/nodes/pstn/recent-success?days=%d",
+		strings.TrimRight(apiURL, "/"), days)
+
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var apiResp recentSuccessResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("failed to parse API response: %w", err)
+	}
+
+	phoneSet := make(map[string]bool, len(apiResp.Phones))
+	for _, p := range apiResp.Phones {
+		// Normalize: strip leading + so lookups match CLI's stripped phones
+		phoneSet[strings.TrimPrefix(p, "+")] = true
+	}
+
+	return phoneSet, nil
+}
+
 // ParseNodeAddress parses "zone:net/node" format, returns error for points.
 func ParseNodeAddress(addr string) (zone, net, node int, err error) {
 	// Check for point address (not supported)

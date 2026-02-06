@@ -876,6 +876,11 @@ func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZer
 	return results, nil
 }
 
+// GetRecentModemSuccessPhones returns phone numbers successfully tested via modem (pass-through, no cache)
+func (cs *CachedStorage) GetRecentModemSuccessPhones(days int) ([]string, error) {
+	return cs.Storage.GetRecentModemSuccessPhones(days)
+}
+
 // GetDetailedModemTestResult returns detailed modem test data (cached)
 func (cs *CachedStorage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
 	if !cs.config.Enabled {

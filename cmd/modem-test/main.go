@@ -36,6 +36,8 @@ var (
 	nodeAddr    = flag.String("node", "", "Single node address to test (format: zone:net/node, e.g., 2:5001/100)")
 	allNodes    = flag.Bool("all", false, "Test all PSTN nodes (use with -except to exclude prefixes)")
 	exceptPfx   = flag.String("except", "", "Comma-separated prefixes to exclude from -all mode (e.g., \"+7,+1\")")
+	forceRetest = flag.Bool("force", false, "Force re-testing of recently successful nodes")
+	skipDays    = flag.Int("skip-days", 7, "Skip nodes tested successfully within N days (0 to disable)")
 	showVersion = flag.Bool("version", false, "Show version information and exit")
 )
 
@@ -66,7 +68,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  # Interactive AT command mode\n")
 		fmt.Fprintf(os.Stderr, "  %s -interactive\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Custom pause between calls (default: 60s)\n")
-		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -pause 30s\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -pause 30s\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Force re-test all nodes (ignore recent success)\n")
+		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -force\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Custom skip window (skip nodes tested in last 14 days)\n")
+		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -skip-days 14\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -354,6 +360,50 @@ func main() {
 		*batch = true
 	}
 	// Mode 2: Phone list mode - phones already set from config/CLI
+
+	// Clamp -skip-days to valid range
+	if *skipDays > 90 {
+		*skipDays = 90
+	}
+
+	// Skip recently-tested nodes (unless -force or -skip-days 0)
+	beforeCount := len(cfg.GetPhones())
+	if !*forceRetest && *skipDays > 0 && beforeCount > 0 && cfg.NodelistDB.URL != "" {
+		recentPhones, err := FetchRecentSuccessPhones(cfg.NodelistDB.URL, *skipDays, 30*time.Second)
+		if err != nil {
+			log.Warn("Could not fetch recent test results, testing all nodes: %v", err)
+		} else if len(recentPhones) > 0 {
+			if len(filteredNodes) > 0 {
+				// Modes 1/3/4: filter node list, then rebuild phones and lookup
+				var kept []NodeTarget
+				for _, n := range filteredNodes {
+					if !recentPhones[strings.TrimPrefix(n.Phone, "+")] {
+						kept = append(kept, n)
+					}
+				}
+				filteredNodes = kept
+				cfg.Test.Phones = UniquePhones(filteredNodes)
+				nodeLookup = BuildNodeLookupByPhone(filteredNodes)
+			} else {
+				// Mode 2: filter phone list directly
+				var kept []string
+				for _, p := range cfg.GetPhones() {
+					if !recentPhones[strings.TrimPrefix(p, "+")] {
+						kept = append(kept, p)
+					}
+				}
+				cfg.Test.Phones = kept
+			}
+			skipped := beforeCount - len(cfg.GetPhones())
+			if skipped > 0 {
+				log.Info("Skipped %d phone(s) tested successfully in last %d day(s) (use -force to override)", skipped, *skipDays)
+			}
+			if len(cfg.GetPhones()) == 0 {
+				log.Info("All nodes were recently tested, nothing to do")
+				return
+			}
+		}
+	}
 
 	// Update phones after mode handling
 	phones := cfg.GetPhones()
