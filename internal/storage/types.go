@@ -349,6 +349,7 @@ type Operations interface {
 	GetPSTNNodes(limit int, zone int) ([]PSTNNode, error)
 	GetFileRequestNodes(limit int) ([]FileRequestNode, error)
 	GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error)
+	GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error)
 	GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error)
 
 	// Utility operations (delegated to NodeOps())
@@ -537,6 +538,86 @@ type ModemAccessibleNode struct {
 	ModemRxSpeed        uint32    `json:"modem_rx_speed"`
 	ModemModulation     string    `json:"modem_modulation"`
 	TestSource          string    `json:"test_source"`
+}
+
+// ModemTestDetail represents detailed modem test data for a single test result
+type ModemTestDetail struct {
+	// Basic identification
+	Zone       int       `json:"zone"`
+	Net        int       `json:"net"`
+	Node       int       `json:"node"`
+	Address    string    `json:"address"`
+	TestTime   time.Time `json:"test_time"`
+	TestSource string    `json:"test_source"`
+
+	// Connection info
+	ConnectSpeed  uint32 `json:"modem_connect_speed"`
+	Protocol      string `json:"modem_protocol"`
+	PhoneDialed   string `json:"modem_phone_dialed"`
+	RingCount     uint8  `json:"modem_ring_count"`
+	CarrierTimeMs uint32 `json:"modem_carrier_time_ms"`
+	ConnectString string `json:"modem_connect_string"`
+	ResponseMs    uint32 `json:"modem_response_ms"`
+
+	// EMSI handshake
+	SystemName     string   `json:"modem_system_name"`
+	MailerInfo     string   `json:"modem_mailer_info"`
+	Addresses      []string `json:"modem_addresses"`
+	AddressValid   bool     `json:"modem_address_valid"`
+	ResponseType   string   `json:"modem_response_type"`
+	RemoteLocation string   `json:"modem_remote_location"`
+	RemoteSysop    string   `json:"modem_remote_sysop"`
+	Error          string   `json:"modem_error"`
+
+	// Operator routing
+	OperatorName   string `json:"modem_operator_name"`
+	OperatorPrefix string `json:"modem_operator_prefix"`
+	DialTimeMs     uint32 `json:"modem_dial_time_ms"`
+	EmsiTimeMs     uint32 `json:"modem_emsi_time_ms"`
+
+	// Line statistics
+	TxSpeed           uint32  `json:"modem_tx_speed"`
+	RxSpeed           uint32  `json:"modem_rx_speed"`
+	Compression       string  `json:"modem_compression"`
+	Modulation        string  `json:"modem_modulation"`
+	LineQuality       uint8   `json:"modem_line_quality"`
+	SNR               float32 `json:"modem_snr"`
+	RxLevel           int16   `json:"modem_rx_level"`
+	TxPower           int16   `json:"modem_tx_power"`
+	RoundTripDelay    uint16  `json:"modem_round_trip_delay"`
+	LocalRetrains     uint8   `json:"modem_local_retrains"`
+	RemoteRetrains    uint8   `json:"modem_remote_retrains"`
+	TerminationReason string  `json:"modem_termination_reason"`
+	StatsNotes        string  `json:"modem_stats_notes"`
+	RawLineStats      string  `json:"modem_line_stats"`
+
+	// AudioCodes CDR
+	CdrSessionId        string `json:"modem_cdr_session_id"`
+	CdrCodec            string `json:"modem_cdr_codec"`
+	CdrRtpJitterMs      uint16 `json:"modem_cdr_rtp_jitter_ms"`
+	CdrRtpDelayMs       uint16 `json:"modem_cdr_rtp_delay_ms"`
+	CdrPacketLoss       uint8  `json:"modem_cdr_packet_loss"`
+	CdrRemotePacketLoss uint8  `json:"modem_cdr_remote_packet_loss"`
+	CdrLocalMos         uint8  `json:"modem_cdr_local_mos"`
+	CdrRemoteMos        uint8  `json:"modem_cdr_remote_mos"`
+	CdrLocalRFactor     uint8  `json:"modem_cdr_local_r_factor"`
+	CdrRemoteRFactor    uint8  `json:"modem_cdr_remote_r_factor"`
+	CdrTermReason       string `json:"modem_cdr_term_reason"`
+	CdrTermCategory     string `json:"modem_cdr_term_category"`
+
+	// Asterisk CDR
+	AstDisposition  string `json:"modem_ast_disposition"`
+	AstPeer         string `json:"modem_ast_peer"`
+	AstDuration     uint16 `json:"modem_ast_duration"`
+	AstBillsec      uint16 `json:"modem_ast_billsec"`
+	AstHangupCause  uint8  `json:"modem_ast_hangup_cause"`
+	AstHangupSource string `json:"modem_ast_hangup_source"`
+	AstEarlyMedia   bool   `json:"modem_ast_early_media"`
+
+	// Test metadata
+	CallerID    string `json:"modem_caller_id"`
+	ModemUsed   string `json:"modem_used"`
+	MatchReason string `json:"modem_match_reason"`
 }
 
 // IPv6NodeListEntry represents a node for the IPv6 node list report (Michiel's format)

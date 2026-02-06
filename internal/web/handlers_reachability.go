@@ -427,3 +427,66 @@ func (s *Server) TestResultDetailHandler(w http.ResponseWriter, r *http.Request)
 		log.Printf("Error executing test detail template: %v", err)
 	}
 }
+
+// ModemTestDetailHandler shows detailed information about a specific modem test result
+func (s *Server) ModemTestDetailHandler(w http.ResponseWriter, r *http.Request) {
+	zoneStr := r.URL.Query().Get("zone")
+	netStr := r.URL.Query().Get("net")
+	nodeStr := r.URL.Query().Get("node")
+	testTime := r.URL.Query().Get("time")
+
+	if zoneStr == "" || netStr == "" || nodeStr == "" || testTime == "" {
+		http.Error(w, "Missing required parameters", http.StatusBadRequest)
+		return
+	}
+
+	zone, err := strconv.Atoi(zoneStr)
+	if err != nil {
+		http.Error(w, "Invalid zone", http.StatusBadRequest)
+		return
+	}
+
+	net, err := strconv.Atoi(netStr)
+	if err != nil {
+		http.Error(w, "Invalid net", http.StatusBadRequest)
+		return
+	}
+
+	node, err := strconv.Atoi(nodeStr)
+	if err != nil {
+		http.Error(w, "Invalid node", http.StatusBadRequest)
+		return
+	}
+
+	result, err := s.storage.TestOps().GetDetailedModemTestResult(zone, net, node, testTime)
+	if err != nil {
+		log.Printf("Error getting detailed modem test result: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if result == nil {
+		http.Error(w, "Modem test result not found", http.StatusNotFound)
+		return
+	}
+
+	// Get node info from main database for context
+	nodeHistory, err := s.storage.NodeOps().GetNodeHistory(zone, net, node)
+	var nodeInfo *database.Node
+	if err == nil && len(nodeHistory) > 0 {
+		nodeInfo = &nodeHistory[len(nodeHistory)-1]
+	}
+
+	data := map[string]interface{}{
+		"Title":      "Modem Test Details",
+		"Version":    version.GetVersionInfo(),
+		"ActivePage": "analytics",
+		"TestResult": result,
+		"NodeInfo":   nodeInfo,
+		"Address":    fmt.Sprintf("%d:%d/%d", zone, net, node),
+	}
+
+	if err := s.templates["modem_test_detail"].Execute(w, data); err != nil {
+		log.Printf("Error executing modem test detail template: %v", err)
+	}
+}

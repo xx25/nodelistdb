@@ -98,3 +98,70 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 
 	return results, nil
 }
+
+// GetDetailedModemTestResult returns a single detailed modem test result for a specific node and test time
+func (mq *ModemQueryOperations) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
+	mq.mu.RLock()
+	defer mq.mu.RUnlock()
+
+	conn := mq.db.Conn()
+
+	query := `
+		SELECT
+			zone, net, node, address, test_time, test_source,
+			modem_connect_speed, modem_protocol, modem_phone_dialed,
+			modem_ring_count, modem_carrier_time_ms, modem_connect_string, modem_response_ms,
+			modem_system_name, modem_mailer_info, modem_addresses, modem_address_valid,
+			modem_response_type, modem_remote_location, modem_remote_sysop, modem_error,
+			modem_operator_name, modem_operator_prefix, modem_dial_time_ms, modem_emsi_time_ms,
+			modem_tx_speed, modem_rx_speed, modem_compression, modem_modulation,
+			modem_line_quality, modem_snr, modem_rx_level, modem_tx_power,
+			modem_round_trip_delay, modem_local_retrains, modem_remote_retrains,
+			modem_termination_reason, modem_stats_notes, modem_line_stats,
+			modem_cdr_session_id, modem_cdr_codec, modem_cdr_rtp_jitter_ms, modem_cdr_rtp_delay_ms,
+			modem_cdr_packet_loss, modem_cdr_remote_packet_loss,
+			modem_cdr_local_mos, modem_cdr_remote_mos,
+			modem_cdr_local_r_factor, modem_cdr_remote_r_factor,
+			modem_cdr_term_reason, modem_cdr_term_category,
+			modem_ast_disposition, modem_ast_peer, modem_ast_duration, modem_ast_billsec,
+			modem_ast_hangup_cause, modem_ast_hangup_source, modem_ast_early_media,
+			modem_caller_id, modem_used, modem_match_reason
+		FROM node_test_results
+		WHERE zone = ? AND net = ? AND node = ?
+			AND test_time = parseDateTimeBestEffort(?)
+			AND modem_tested = true
+		ORDER BY modem_tx_speed DESC, modem_connect_speed DESC, modem_response_ms ASC
+		LIMIT 1`
+
+	row := conn.QueryRow(query, zone, net, node, testTime)
+
+	var d ModemTestDetail
+	err := row.Scan(
+		&d.Zone, &d.Net, &d.Node, &d.Address, &d.TestTime, &d.TestSource,
+		&d.ConnectSpeed, &d.Protocol, &d.PhoneDialed,
+		&d.RingCount, &d.CarrierTimeMs, &d.ConnectString, &d.ResponseMs,
+		&d.SystemName, &d.MailerInfo, &d.Addresses, &d.AddressValid,
+		&d.ResponseType, &d.RemoteLocation, &d.RemoteSysop, &d.Error,
+		&d.OperatorName, &d.OperatorPrefix, &d.DialTimeMs, &d.EmsiTimeMs,
+		&d.TxSpeed, &d.RxSpeed, &d.Compression, &d.Modulation,
+		&d.LineQuality, &d.SNR, &d.RxLevel, &d.TxPower,
+		&d.RoundTripDelay, &d.LocalRetrains, &d.RemoteRetrains,
+		&d.TerminationReason, &d.StatsNotes, &d.RawLineStats,
+		&d.CdrSessionId, &d.CdrCodec, &d.CdrRtpJitterMs, &d.CdrRtpDelayMs,
+		&d.CdrPacketLoss, &d.CdrRemotePacketLoss,
+		&d.CdrLocalMos, &d.CdrRemoteMos,
+		&d.CdrLocalRFactor, &d.CdrRemoteRFactor,
+		&d.CdrTermReason, &d.CdrTermCategory,
+		&d.AstDisposition, &d.AstPeer, &d.AstDuration, &d.AstBillsec,
+		&d.AstHangupCause, &d.AstHangupSource, &d.AstEarlyMedia,
+		&d.CallerID, &d.ModemUsed, &d.MatchReason,
+	)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to scan modem test detail: %w", err)
+	}
+
+	return &d, nil
+}

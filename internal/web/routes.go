@@ -46,6 +46,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/reachability", s.ReachabilityHandler)
 	mux.HandleFunc("/reachability/node", s.ReachabilityNodeHandler)
 	mux.HandleFunc("/reachability/test", s.TestResultDetailHandler)
+	mux.HandleFunc("/reachability/modem-test", s.ModemTestDetailHandler)
 
 	// Serve static files
 	mux.HandleFunc("/static/", s.StaticHandler)

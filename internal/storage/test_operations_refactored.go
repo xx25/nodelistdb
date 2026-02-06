@@ -204,3 +204,8 @@ func (to *TestOperationsRefactored) GetNodesInNetwork(networkName string, limit 
 func (to *TestOperationsRefactored) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
 	return to.modemOps.GetModemAccessibleNodes(limit, days, includeZeroNodes)
 }
+
+// GetDetailedModemTestResult returns detailed modem test data for a specific test
+func (to *TestOperationsRefactored) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
+	return to.modemOps.GetDetailedModemTestResult(zone, net, node, testTime)
+}

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Address}} - Modem Test Details - NodelistDB</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .detail-section {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+            text-align: right;
+            padding-right: 10px;
+        }
+        .detail-value {
+            color: #333;
+        }
+        .protocol-section {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .protocol-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .failed {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .array-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .array-item {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .node-info {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .error-details {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .response-time {
+            font-weight: bold;
+            color: #17a2b8;
+        }
+        .raw-stats {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Modem Test Details</h1>
+            <p class="subtitle">PSTN test information for {{.Address}}</p>
+        </header>
+
+        {{template "nav" .}}
+
+        <div class="content">
+            <a href="/analytics/pstn-accessible" class="back-link">&larr; Back to PSTN Accessible Nodes</a>
+
+            {{if .NodeInfo}}
+            <div class="node-info">
+                <h3>Node Information</h3>
+                <div class="detail-grid">
+                    <span class="detail-label">System:</span>
+                    <span class="detail-value">{{.NodeInfo.SystemName}}</span>
+                    <span class="detail-label">Location:</span>
+                    <span class="detail-value">{{.NodeInfo.Location}}</span>
+                    <span class="detail-label">Sysop:</span>
+                    <span class="detail-value">{{.NodeInfo.SysopName}}</span>
+                </div>
+            </div>
+            {{end}}
+
+            <!-- Connection Summary -->
+            <div class="detail-section">
+                <h2>Connection Summary</h2>
+                <div class="detail-grid">
+                    <span class="detail-label">Test Time:</span>
+                    <span class="detail-value">{{.TestResult.TestTime.Format "2006-01-02 15:04:05 UTC"}}</span>
+                    <span class="detail-label">Node Address:</span>
+                    <span class="detail-value">{{.Address}}</span>
+                    <span class="detail-label">Phone Dialed:</span>
+                    <span class="detail-value">{{if .TestResult.PhoneDialed}}{{.TestResult.PhoneDialed}}{{else}}-{{end}}</span>
+                    <span class="detail-label">Connect Speed:</span>
+                    <span class="detail-value">{{if .TestResult.ConnectSpeed}}{{.TestResult.ConnectSpeed}} bps{{else}}-{{end}}</span>
+                    <span class="detail-label">Protocol:</span>
+                    <span class="detail-value">{{if .TestResult.Protocol}}<span class="badge badge-info">{{.TestResult.Protocol}}</span>{{else}}-{{end}}</span>
+                    {{if .TestResult.ConnectString}}
+                    <span class="detail-label">Connect String:</span>
+                    <span class="detail-value"><code>{{.TestResult.ConnectString}}</code></span>
+                    {{end}}
+                    <span class="detail-label">Response Time:</span>
+                    <span class="detail-value"><span class="response-time">{{.TestResult.ResponseMs}} ms</span></span>
+                    {{if .TestResult.RingCount}}
+                    <span class="detail-label">Ring Count:</span>
+                    <span class="detail-value">{{.TestResult.RingCount}}</span>
+                    {{end}}
+                    {{if .TestResult.CarrierTimeMs}}
+                    <span class="detail-label">Carrier Time:</span>
+                    <span class="detail-value">{{.TestResult.CarrierTimeMs}} ms</span>
+                    {{end}}
+                    {{if .TestResult.OperatorName}}
+                    <span class="detail-label">Operator:</span>
+                    <span class="detail-value">{{.TestResult.OperatorName}}{{if .TestResult.OperatorPrefix}} (prefix: {{.TestResult.OperatorPrefix}}){{end}}</span>
+                    {{end}}
+                    {{if .TestResult.DialTimeMs}}
+                    <span class="detail-label">Dial Time:</span>
+                    <span class="detail-value">{{.TestResult.DialTimeMs}} ms</span>
+                    {{end}}
+                    {{if .TestResult.Error}}
+                    <span class="detail-label">Error:</span>
+                    <span class="detail-value"><div class="error-details">{{.TestResult.Error}}</div></span>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- EMSI Handshake -->
+            <div class="protocol-section">
+                <div class="protocol-header">EMSI Handshake</div>
+                <div class="detail-grid">
+                    {{if .TestResult.SystemName}}
+                    <span class="detail-label">System Name:</span>
+                    <span class="detail-value">{{.TestResult.SystemName}}</span>
+                    {{end}}
+                    {{if .TestResult.RemoteSysop}}
+                    <span class="detail-label">Sysop:</span>
+                    <span class="detail-value">{{.TestResult.RemoteSysop}}</span>
+                    {{end}}
+                    {{if .TestResult.RemoteLocation}}
+                    <span class="detail-label">Location:</span>
+                    <span class="detail-value">{{.TestResult.RemoteLocation}}</span>
+                    {{end}}
+                    {{if .TestResult.MailerInfo}}
+                    <span class="detail-label">Mailer Info:</span>
+                    <span class="detail-value">{{.TestResult.MailerInfo}}</span>
+                    {{end}}
+                    {{if .TestResult.Addresses}}
+                    <span class="detail-label">Addresses:</span>
+                    <span class="detail-value">
+                        <div class="array-list">
+                            {{range .TestResult.Addresses}}
+                            <span class="array-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </span>
+                    {{end}}
+                    <span class="detail-label">Address Valid:</span>
+                    <span class="detail-value {{if .TestResult.AddressValid}}success{{else}}failed{{end}}">
+                        {{if .TestResult.AddressValid}}Yes{{else}}No{{end}}
+                    </span>
+                    {{if .TestResult.ResponseType}}
+                    <span class="detail-label">Response Type:</span>
+                    <span class="detail-value">{{.TestResult.ResponseType}}</span>
+                    {{end}}
+                    {{if .TestResult.EmsiTimeMs}}
+                    <span class="detail-label">EMSI Time:</span>
+                    <span class="detail-value">{{.TestResult.EmsiTimeMs}} ms</span>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Line Statistics -->
+            {{if or .TestResult.TxSpeed .TestResult.RxSpeed .TestResult.Modulation .TestResult.RawLineStats}}
+            <div class="protocol-section">
+                <div class="protocol-header">Line Statistics</div>
+                <div class="detail-grid">
+                    {{if .TestResult.TxSpeed}}
+                    <span class="detail-label">TX Speed:</span>
+                    <span class="detail-value">{{.TestResult.TxSpeed}} bps</span>
+                    {{end}}
+                    {{if .TestResult.RxSpeed}}
+                    <span class="detail-label">RX Speed:</span>
+                    <span class="detail-value">{{.TestResult.RxSpeed}} bps</span>
+                    {{end}}
+                    {{if .TestResult.Modulation}}
+                    <span class="detail-label">Modulation:</span>
+                    <span class="detail-value">{{.TestResult.Modulation}}</span>
+                    {{end}}
+                    {{if .TestResult.Compression}}
+                    <span class="detail-label">Compression:</span>
+                    <span class="detail-value">{{.TestResult.Compression}}</span>
+                    {{end}}
+                    {{if .TestResult.SNR}}
+                    <span class="detail-label">SNR:</span>
+                    <span class="detail-value">{{printf "%.1f" .TestResult.SNR}} dB</span>
+                    {{end}}
+                    {{if .TestResult.RxLevel}}
+                    <span class="detail-label">RX Level:</span>
+                    <span class="detail-value">{{.TestResult.RxLevel}} dBm</span>
+                    {{end}}
+                    {{if .TestResult.TxPower}}
+                    <span class="detail-label">TX Power:</span>
+                    <span class="detail-value">{{.TestResult.TxPower}} dBm</span>
+                    {{end}}
+                    {{if .TestResult.RoundTripDelay}}
+                    <span class="detail-label">Round-Trip Delay:</span>
+                    <span class="detail-value">{{.TestResult.RoundTripDelay}} ms</span>
+                    {{end}}
+                    {{if .TestResult.LineQuality}}
+                    <span class="detail-label">Line Quality:</span>
+                    <span class="detail-value">{{.TestResult.LineQuality}}</span>
+                    {{end}}
+                    {{if or .TestResult.LocalRetrains .TestResult.RemoteRetrains}}
+                    <span class="detail-label">Retrains (L/R):</span>
+                    <span class="detail-value">{{.TestResult.LocalRetrains}} / {{.TestResult.RemoteRetrains}}</span>
+                    {{end}}
+                    {{if .TestResult.TerminationReason}}
+                    <span class="detail-label">Termination:</span>
+                    <span class="detail-value">{{.TestResult.TerminationReason}}</span>
+                    {{end}}
+                    {{if .TestResult.StatsNotes}}
+                    <span class="detail-label">Notes:</span>
+                    <span class="detail-value">{{.TestResult.StatsNotes}}</span>
+                    {{end}}
+                </div>
+                {{if .TestResult.RawLineStats}}
+                <h4>Raw Line Statistics</h4>
+                <div class="raw-stats">{{.TestResult.RawLineStats}}</div>
+                {{end}}
+            </div>
+            {{end}}
+
+            <!-- AudioCodes VoIP CDR -->
+            {{if or .TestResult.CdrSessionId .TestResult.CdrCodec .TestResult.CdrTermReason}}
+            <div class="protocol-section">
+                <div class="protocol-header">AudioCodes VoIP CDR</div>
+                <div class="detail-grid">
+                    {{if .TestResult.CdrSessionId}}
+                    <span class="detail-label">Session ID:</span>
+                    <span class="detail-value"><code>{{.TestResult.CdrSessionId}}</code></span>
+                    {{end}}
+                    {{if .TestResult.CdrCodec}}
+                    <span class="detail-label">Codec:</span>
+                    <span class="detail-value">{{.TestResult.CdrCodec}}</span>
+                    {{end}}
+                    {{if .TestResult.CdrRtpJitterMs}}
+                    <span class="detail-label">RTP Jitter:</span>
+                    <span class="detail-value">{{.TestResult.CdrRtpJitterMs}} ms</span>
+                    {{end}}
+                    {{if .TestResult.CdrRtpDelayMs}}
+                    <span class="detail-label">RTP Delay:</span>
+                    <span class="detail-value">{{.TestResult.CdrRtpDelayMs}} ms</span>
+                    {{end}}
+                    {{if .TestResult.CdrPacketLoss}}
+                    <span class="detail-label">Packet Loss (Local):</span>
+                    <span class="detail-value">{{.TestResult.CdrPacketLoss}}%</span>
+                    {{end}}
+                    {{if .TestResult.CdrRemotePacketLoss}}
+                    <span class="detail-label">Packet Loss (Remote):</span>
+                    <span class="detail-value">{{.TestResult.CdrRemotePacketLoss}}%</span>
+                    {{end}}
+                    {{if .TestResult.CdrLocalMos}}
+                    <span class="detail-label">MOS (Local):</span>
+                    <span class="detail-value">{{.TestResult.CdrLocalMos}}</span>
+                    {{end}}
+                    {{if .TestResult.CdrRemoteMos}}
+                    <span class="detail-label">MOS (Remote):</span>
+                    <span class="detail-value">{{.TestResult.CdrRemoteMos}}</span>
+                    {{end}}
+                    {{if .TestResult.CdrLocalRFactor}}
+                    <span class="detail-label">R-Factor (Local):</span>
+                    <span class="detail-value">{{.TestResult.CdrLocalRFactor}}</span>
+                    {{end}}
+                    {{if .TestResult.CdrRemoteRFactor}}
+                    <span class="detail-label">R-Factor (Remote):</span>
+                    <span class="detail-value">{{.TestResult.CdrRemoteRFactor}}</span>
+                    {{end}}
+                    {{if .TestResult.CdrTermReason}}
+                    <span class="detail-label">Termination Reason:</span>
+                    <span class="detail-value">{{.TestResult.CdrTermReason}}</span>
+                    {{end}}
+                    {{if .TestResult.CdrTermCategory}}
+                    <span class="detail-label">Termination Category:</span>
+                    <span class="detail-value">{{.TestResult.CdrTermCategory}}</span>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+
+            <!-- Asterisk CDR -->
+            {{if or .TestResult.AstDisposition .TestResult.AstPeer .TestResult.AstHangupSource}}
+            <div class="protocol-section">
+                <div class="protocol-header">Asterisk CDR</div>
+                <div class="detail-grid">
+                    {{if .TestResult.AstDisposition}}
+                    <span class="detail-label">Disposition:</span>
+                    <span class="detail-value">{{.TestResult.AstDisposition}}</span>
+                    {{end}}
+                    {{if .TestResult.AstPeer}}
+                    <span class="detail-label">Peer:</span>
+                    <span class="detail-value">{{.TestResult.AstPeer}}</span>
+                    {{end}}
+                    {{if .TestResult.AstDuration}}
+                    <span class="detail-label">Duration:</span>
+                    <span class="detail-value">{{.TestResult.AstDuration}}s</span>
+                    {{end}}
+                    {{if .TestResult.AstBillsec}}
+                    <span class="detail-label">Billable Seconds:</span>
+                    <span class="detail-value">{{.TestResult.AstBillsec}}s</span>
+                    {{end}}
+                    {{if .TestResult.AstHangupCause}}
+                    <span class="detail-label">Hangup Cause:</span>
+                    <span class="detail-value">{{.TestResult.AstHangupCause}}</span>
+                    {{end}}
+                    {{if .TestResult.AstHangupSource}}
+                    <span class="detail-label">Hangup Source:</span>
+                    <span class="detail-value">{{.TestResult.AstHangupSource}}</span>
+                    {{end}}
+                    <span class="detail-label">Early Media:</span>
+                    <span class="detail-value">{{if .TestResult.AstEarlyMedia}}Yes{{else}}No{{end}}</span>
+                </div>
+            </div>
+            {{end}}
+
+            <!-- Test Metadata -->
+            <div class="detail-section">
+                <h2>Test Metadata</h2>
+                <div class="detail-grid">
+                    <span class="detail-label">Test Source:</span>
+                    <span class="detail-value">{{if .TestResult.TestSource}}{{.TestResult.TestSource}}{{else}}-{{end}}</span>
+                    {{if .TestResult.CallerID}}
+                    <span class="detail-label">Caller ID:</span>
+                    <span class="detail-value">{{.TestResult.CallerID}}</span>
+                    {{end}}
+                    {{if .TestResult.ModemUsed}}
+                    <span class="detail-label">Modem Used:</span>
+                    <span class="detail-value">{{.TestResult.ModemUsed}}</span>
+                    {{end}}
+                    {{if .TestResult.MatchReason}}
+                    <span class="detail-label">Match Reason:</span>
+                    <span class="detail-value">{{.TestResult.MatchReason}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        {{template "footer" .}}
+    </div>
+</body>
+</html>

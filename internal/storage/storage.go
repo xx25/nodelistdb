@@ -313,6 +313,10 @@ func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes 
 	return s.testOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes)
 }
 
+func (s *Storage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
+	return s.testOperations.GetDetailedModemTestResult(zone, net, node, testTime)
+}
+
 // --- Utility Methods ---
 
 // GetQueryBuilder returns the query builder for direct access

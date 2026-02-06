@@ -848,3 +848,8 @@ func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days i
 func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
 	return cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes)
 }
+
+// GetDetailedModemTestResult returns detailed modem test data (pass-through, no caching)
+func (cs *CachedStorage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
+	return cs.Storage.GetDetailedModemTestResult(zone, net, node, testTime)
+}
