@@ -20,7 +20,7 @@ func TestGetchar_BasicRead(t *testing.T) {
 	defer s.Close()
 
 	go func() {
-		s.Write([]byte("A"))
+		_, _ = s.Write([]byte("A"))
 	}()
 
 	cr := &charReader{
@@ -60,7 +60,7 @@ func TestGetchar_CarrierDetect(t *testing.T) {
 	defer s.Close()
 
 	go func() {
-		s.Write([]byte("OK\r\nNO CARRIER\r\n"))
+		_, _ = s.Write([]byte("OK\r\nNO CARRIER\r\n"))
 	}()
 
 	cr := &charReader{
@@ -88,7 +88,7 @@ func TestGetchar_CarrierNoFalsePositive(t *testing.T) {
 
 	// "NO CARRIER" embedded in middle of a longer line — not a standalone signal
 	go func() {
-		s.Write([]byte("Status: NO CARRIER detected previously\r\nDONE\r\n"))
+		_, _ = s.Write([]byte("Status: NO CARRIER detected previously\r\nDONE\r\n"))
 	}()
 
 	cr := &charReader{
@@ -672,7 +672,7 @@ func TestHandshake_REQFlow(t *testing.T) {
 		ch := drainReader(remote)
 
 		// Send EMSI_REQ — remote requests our DAT
-		remote.Write([]byte(EMSI_REQ + "\r"))
+		_, _ = remote.Write([]byte(EMSI_REQ + "\r"))
 
 		// Wait for our DAT to arrive
 		if !waitForData(ch, "EMSI_DAT", 5*time.Second) {
@@ -680,11 +680,11 @@ func TestHandshake_REQFlow(t *testing.T) {
 		}
 
 		// Send ACK for our DAT
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Send their DAT (with SkipFirstRXReq=true, session waits without sending REQ first)
 		datPacket := buildRemoteDATPacket("Remote System", "2:5001/100")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Wait for remaining data (our ACK) then close
 		waitForData(ch, "EMSI_ACK", 5*time.Second)
@@ -716,7 +716,7 @@ func TestHandshake_DATFlow(t *testing.T) {
 
 		// Send their DAT directly
 		datPacket := buildRemoteDATPacket("Direct DAT System", "2:5001/200")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Drain and respond: we'll get ACK + our DAT
 		reader := bufio.NewReader(remote)
@@ -734,10 +734,10 @@ func TestHandshake_DATFlow(t *testing.T) {
 		}
 
 		// Send ACK for our DAT
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Drain remaining
-		io.Copy(io.Discard, reader)
+		_, _ = io.Copy(io.Discard, reader)
 	}()
 
 	err := sess.Handshake()
@@ -762,7 +762,7 @@ func TestHandshake_INQFlow(t *testing.T) {
 		defer remote.Close()
 
 		// Send INQ
-		remote.Write([]byte(EMSI_INQ + "\r"))
+		_, _ = remote.Write([]byte(EMSI_INQ + "\r"))
 
 		// Continuously drain from local side while responding
 		ch := drainReader(remote)
@@ -772,13 +772,13 @@ func TestHandshake_INQFlow(t *testing.T) {
 
 		// Send their DAT
 		datPacket := buildRemoteDATPacket("INQ System", "2:5001/300")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Wait for our ACK + DAT
 		waitForData(ch, "EMSI_DAT", 3*time.Second)
 
 		// Send ACK for our DAT
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Let drain finish
 		time.Sleep(100 * time.Millisecond)
@@ -806,13 +806,13 @@ func TestHandshake_BannerThenREQ(t *testing.T) {
 		defer remote.Close()
 
 		// Send long banner first
-		remote.Write([]byte("Welcome to FidoNet BBS!\r\n"))
+		_, _ = remote.Write([]byte("Welcome to FidoNet BBS!\r\n"))
 		time.Sleep(50 * time.Millisecond)
-		remote.Write([]byte("Running qico v0.57.1xe\r\n"))
+		_, _ = remote.Write([]byte("Running qico v0.57.1xe\r\n"))
 		time.Sleep(50 * time.Millisecond)
 
 		// Then EMSI_REQ
-		remote.Write([]byte(EMSI_REQ + "\r"))
+		_, _ = remote.Write([]byte(EMSI_REQ + "\r"))
 
 		ch := drainReader(remote)
 
@@ -820,11 +820,11 @@ func TestHandshake_BannerThenREQ(t *testing.T) {
 		waitForData(ch, "EMSI_DAT", 3*time.Second)
 
 		// Send ACK
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Send their DAT
 		datPacket := buildRemoteDATPacket("Banner System", "2:5001/400")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Let drain finish
 		time.Sleep(100 * time.Millisecond)
@@ -859,7 +859,7 @@ func TestHandshake_MasterTimeout(t *testing.T) {
 	sess := NewSessionWithConfig(local, "2:5001/0", cfg)
 
 	// Drain remote side (to prevent write blocks from our INQ retries)
-	go io.Copy(io.Discard, remote)
+	go func() { _, _ = io.Copy(io.Discard, remote) }()
 
 	err := sess.Handshake()
 	if err == nil {
@@ -881,7 +881,7 @@ func TestHandshake_CarrierLoss(t *testing.T) {
 
 	go func() {
 		// Send NO CARRIER on its own line
-		remote.Write([]byte("\r\nNO CARRIER\r\n"))
+		_, _ = remote.Write([]byte("\r\nNO CARRIER\r\n"))
 		remote.Close()
 	}()
 
@@ -899,7 +899,7 @@ func TestHandshake_RetryOnNAK(t *testing.T) {
 		defer remote.Close()
 
 		// Send REQ
-		remote.Write([]byte(EMSI_REQ + "\r"))
+		_, _ = remote.Write([]byte(EMSI_REQ + "\r"))
 
 		ch := drainReader(remote)
 
@@ -907,20 +907,20 @@ func TestHandshake_RetryOnNAK(t *testing.T) {
 		waitForData(ch, "EMSI_DAT", 3*time.Second)
 
 		// Send NAK (reject first DAT)
-		remote.Write([]byte(EMSI_NAK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_NAK + "\r"))
 
 		// Wait for retry DAT
 		waitForData(ch, "EMSI_DAT", 3*time.Second)
 
 		// Send ACK this time
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Wait for REQ from RX phase
 		waitForData(ch, "EMSI_REQ", 3*time.Second)
 
 		// Send their DAT
 		datPacket := buildRemoteDATPacket("NAK Retry System", "2:5001/500")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Let drain finish
 		time.Sleep(100 * time.Millisecond)
@@ -958,7 +958,7 @@ func TestHandshake_RetryOnTimeout(t *testing.T) {
 		defer remote.Close()
 
 		// Send REQ
-		remote.Write([]byte(EMSI_REQ + "\r"))
+		_, _ = remote.Write([]byte(EMSI_REQ + "\r"))
 
 		ch := drainReader(remote)
 
@@ -972,14 +972,14 @@ func TestHandshake_RetryOnTimeout(t *testing.T) {
 		waitForData(ch, "EMSI_DAT", 3*time.Second)
 
 		// Now send ACK
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Wait for REQ
 		waitForData(ch, "EMSI_REQ", 3*time.Second)
 
 		// Send their DAT
 		datPacket := buildRemoteDATPacket("Timeout Retry System", "2:5001/600")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Let drain finish
 		time.Sleep(100 * time.Millisecond)
@@ -1023,20 +1023,20 @@ func TestHandshake_SendINQStrategy(t *testing.T) {
 		waitForData(ch, "EMSI_INQ", 3*time.Second)
 
 		// Send REQ in response
-		remote.Write([]byte(EMSI_REQ + "\r"))
+		_, _ = remote.Write([]byte(EMSI_REQ + "\r"))
 
 		// Wait for our DAT
 		waitForData(ch, "EMSI_DAT", 3*time.Second)
 
 		// Send ACK
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Wait for REQ
 		waitForData(ch, "EMSI_REQ", 3*time.Second)
 
 		// Send their DAT
 		datPacket := buildRemoteDATPacket("INQ Strategy System", "2:5001/700")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Let drain finish
 		time.Sleep(100 * time.Millisecond)
@@ -1064,11 +1064,11 @@ func TestHandshake_HBTKeepalive(t *testing.T) {
 		defer remote.Close()
 
 		// Send HBT first (keepalive)
-		remote.Write([]byte(EMSI_HBT + "\r"))
+		_, _ = remote.Write([]byte(EMSI_HBT + "\r"))
 		time.Sleep(50 * time.Millisecond)
 
 		// Then send REQ
-		remote.Write([]byte(EMSI_REQ + "\r"))
+		_, _ = remote.Write([]byte(EMSI_REQ + "\r"))
 
 		ch := drainReader(remote)
 
@@ -1076,14 +1076,14 @@ func TestHandshake_HBTKeepalive(t *testing.T) {
 		waitForData(ch, "EMSI_DAT", 3*time.Second)
 
 		// Send ACK
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Wait for REQ
 		waitForData(ch, "EMSI_REQ", 3*time.Second)
 
 		// Send their DAT
 		datPacket := buildRemoteDATPacket("HBT System", "2:5001/800")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Let drain finish
 		time.Sleep(100 * time.Millisecond)
@@ -1124,20 +1124,20 @@ func TestHandshake_PreventiveINQ(t *testing.T) {
 		waitForData(ch, "EMSI_INQ", 3*time.Second)
 
 		// Respond with REQ
-		remote.Write([]byte(EMSI_REQ + "\r"))
+		_, _ = remote.Write([]byte(EMSI_REQ + "\r"))
 
 		// Wait for our DAT
 		waitForData(ch, "EMSI_DAT", 3*time.Second)
 
 		// ACK
-		remote.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = remote.Write([]byte(EMSI_ACK + "\r"))
 
 		// Wait for REQ
 		waitForData(ch, "EMSI_REQ", 3*time.Second)
 
 		// Their DAT
 		datPacket := buildRemoteDATPacket("Preventive INQ System", "2:5001/900")
-		remote.Write([]byte(datPacket))
+		_, _ = remote.Write([]byte(datPacket))
 
 		// Let drain finish
 		time.Sleep(100 * time.Millisecond)

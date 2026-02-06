@@ -112,11 +112,9 @@ func (r *WhoisResolver) doResolve(ctx context.Context, domain string) *models.Wh
 	// Check persistent cache (read-only, respects context for cancellation)
 	if r.persistentCache != nil {
 		if cached, err := r.persistentCache.GetWithContext(ctx, domain); err == nil && cached != nil {
-			// Use shorter freshness for errors vs successes
-			if cached.Error != "" && cached.Error != "domain not found" {
-				// Don't trust persistent transient errors — do a fresh lookup
-			} else {
-				// Store in in-memory cache too
+			// Only trust successes and stable "not found" from persistent cache.
+			// Transient errors fall through to a fresh lookup.
+			if cached.Error == "" || cached.Error == "domain not found" {
 				r.cacheResult(domain, cached)
 				cached.Cached = true
 				return cached

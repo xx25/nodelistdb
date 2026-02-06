@@ -1163,7 +1163,7 @@ func (s *Session) runRXPhase(cr *charReader, masterDeadline time.Time, reqAlread
 			if s.debug {
 				s.dbg("EMSI: RX: Sending NAK (retry %d)", retry)
 			}
-			s.sendEMSI_NAK()
+			_ = s.sendEMSI_NAK()
 		} else {
 			if s.debug {
 				s.dbg("EMSI: RX: Sending REQ (attempt %d/%d)", retry+1, maxRetries)
