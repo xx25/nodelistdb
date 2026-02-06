@@ -1767,8 +1767,11 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 	var totalDomains, expiredCount, expiringSoonCount, unknownCount int
 	totalDomains = len(results)
 	for _, r := range results {
-		if r.ExpirationDate == nil {
+		if r.ExpirationDate == nil && r.WhoisStatus == "" {
 			unknownCount++
+		} else if r.ExpirationDate == nil {
+			// Has a WHOIS status (e.g., "active") but no expiration date
+			// (some registries like .nl don't publish expiration dates)
 		} else if r.ExpirationDate.Before(now) {
 			expiredCount++
 		} else if r.ExpirationDate.Before(now.AddDate(0, 0, 30)) {

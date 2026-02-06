@@ -82,7 +82,11 @@
                     {{if .CheckError}}
                         <span class="badge badge-secondary" title="{{.CheckError}}">Error</span>
                     {{else if not .ExpirationDate}}
-                        <span class="badge badge-secondary">Unknown</span>
+                        {{if .WhoisStatus}}
+                            <span class="badge badge-success" title="No expiration date published by registry">{{.WhoisStatus}}</span>
+                        {{else}}
+                            <span class="badge badge-secondary">Unknown</span>
+                        {{end}}
                     {{else if .ExpirationDate.Before $.Now}}
                         <span class="badge badge-danger">Expired</span>
                     {{else if .ExpirationDate.Before ($.Now.AddDate 0 0 30)}}
