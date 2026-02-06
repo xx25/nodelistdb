@@ -38,8 +38,10 @@ func (s *ClickHouseStorage) StoreWhoisResult(ctx context.Context, result *models
 func (s *ClickHouseStorage) GetRecentWhoisResult(ctx context.Context, domain string, maxAge time.Duration) (*models.WhoisResult, error) {
 	query := `SELECT
 		domain, expiration_date, creation_date, registrar, whois_status, check_time, check_error
-		FROM domain_whois_cache FINAL
-		WHERE domain = ? AND check_time >= ?`
+		FROM domain_whois_cache
+		WHERE domain = ? AND check_time >= ?
+		ORDER BY check_time DESC
+		LIMIT 1`
 
 	cutoff := time.Now().Add(-maxAge)
 	row := s.db.QueryRowContext(ctx, query, domain, cutoff)

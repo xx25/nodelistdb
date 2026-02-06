@@ -54,66 +54,73 @@ func (m *ModemCallerOperations) GetCallerStatus(ctx context.Context, callerID st
 	return &status, nil
 }
 
-// UpdateHeartbeat updates the heartbeat and stats for a modem daemon
+// UpdateHeartbeat updates the heartbeat and stats for a modem daemon.
+// Uses INSERT instead of ALTER TABLE UPDATE because ReplacingMergeTree(updated_at)
+// deduplicates by keeping the row with the highest updated_at for each caller_id.
 func (m *ModemCallerOperations) UpdateHeartbeat(ctx context.Context, callerID string, stats HeartbeatStats) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now()
 
-	// Check if caller exists
-	existsQuery := `SELECT count() FROM modem_caller_status WHERE caller_id = ?`
-	var count uint64
-	err := m.db.Conn().QueryRowContext(ctx, existsQuery, callerID).Scan(&count)
+	query := `
+		INSERT INTO modem_caller_status (
+			caller_id, last_heartbeat, status, modems_available, modems_in_use,
+			tests_completed, tests_failed, last_test_time, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	_, err := m.db.Conn().ExecContext(ctx, query,
+		callerID, now, stats.Status, stats.ModemsAvailable, stats.ModemsInUse,
+		stats.TestsCompleted, stats.TestsFailed, stats.LastTestTime, now)
 	if err != nil {
-		return fmt.Errorf("failed to check caller existence: %w", err)
-	}
-
-	if count == 0 {
-		// Insert new status
-		insertQuery := `
-			INSERT INTO modem_caller_status (
-				caller_id, last_heartbeat, status, modems_available, modems_in_use,
-				tests_completed, tests_failed, last_test_time, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`
-		_, err = m.db.Conn().ExecContext(ctx, insertQuery,
-			callerID, now, stats.Status, stats.ModemsAvailable, stats.ModemsInUse,
-			stats.TestsCompleted, stats.TestsFailed, stats.LastTestTime, now)
-		if err != nil {
-			return fmt.Errorf("failed to insert caller status: %w", err)
-		}
-	} else {
-		// Update existing status using ALTER TABLE UPDATE (ClickHouse)
-		updateQuery := `
-			ALTER TABLE modem_caller_status
-			UPDATE last_heartbeat = ?, status = ?, modems_available = ?, modems_in_use = ?,
-				   tests_completed = ?, tests_failed = ?, last_test_time = ?, updated_at = ?
-			WHERE caller_id = ?
-		`
-		_, err = m.db.Conn().ExecContext(ctx, updateQuery,
-			now, stats.Status, stats.ModemsAvailable, stats.ModemsInUse,
-			stats.TestsCompleted, stats.TestsFailed, stats.LastTestTime, now, callerID)
-		if err != nil {
-			return fmt.Errorf("failed to update caller status: %w", err)
-		}
+		return fmt.Errorf("failed to upsert caller status: %w", err)
 	}
 
 	return nil
 }
 
-// SetCallerStatus updates just the status field for a modem daemon
-func (m *ModemCallerOperations) SetCallerStatus(ctx context.Context, callerID string, status string) error {
+// SetCallerStatus updates just the status field for a modem daemon.
+// Reads current row then INSERTs with updated status (ReplacingMergeTree pattern).
+func (m *ModemCallerOperations) SetCallerStatus(ctx context.Context, callerID string, newStatus string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now()
-	query := `
-		ALTER TABLE modem_caller_status
-		UPDATE status = ?, updated_at = ?
+
+	// Read current values so we preserve them in the new row
+	readQuery := `
+		SELECT last_heartbeat, modems_available, modems_in_use,
+			   tests_completed, tests_failed, last_test_time
+		FROM modem_caller_status
 		WHERE caller_id = ?
+		ORDER BY updated_at DESC
+		LIMIT 1
 	`
-	_, err := m.db.Conn().ExecContext(ctx, query, status, now, callerID)
+	var lastHeartbeat time.Time
+	var modemsAvailable, modemsInUse uint8
+	var testsCompleted, testsFailed uint32
+	var lastTestTime time.Time
+
+	err := m.db.Conn().QueryRowContext(ctx, readQuery, callerID).Scan(
+		&lastHeartbeat, &modemsAvailable, &modemsInUse,
+		&testsCompleted, &testsFailed, &lastTestTime,
+	)
+	if err == sql.ErrNoRows {
+		// Caller doesn't exist yet, insert with defaults
+		lastHeartbeat = now
+	} else if err != nil {
+		return fmt.Errorf("failed to read caller status: %w", err)
+	}
+
+	query := `
+		INSERT INTO modem_caller_status (
+			caller_id, last_heartbeat, status, modems_available, modems_in_use,
+			tests_completed, tests_failed, last_test_time, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	_, err = m.db.Conn().ExecContext(ctx, query,
+		callerID, lastHeartbeat, newStatus, modemsAvailable, modemsInUse,
+		testsCompleted, testsFailed, lastTestTime, now)
 	if err != nil {
 		return fmt.Errorf("failed to set caller status: %w", err)
 	}
@@ -130,7 +137,8 @@ func (m *ModemCallerOperations) GetAllCallerStatuses(ctx context.Context) ([]Mod
 		SELECT caller_id, last_heartbeat, status, modems_available, modems_in_use,
 			   tests_completed, tests_failed, last_test_time, updated_at
 		FROM modem_caller_status
-		ORDER BY caller_id
+		ORDER BY caller_id, updated_at DESC
+		LIMIT 1 BY caller_id
 	`
 
 	rows, err := m.db.Conn().QueryContext(ctx, query)

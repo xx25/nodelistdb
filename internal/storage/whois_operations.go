@@ -80,8 +80,9 @@ func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 func (w *WhoisOperations) getWhoisEntries(ctx context.Context) ([]DomainWhoisResult, error) {
 	query := `SELECT
 		domain, expiration_date, creation_date, registrar, whois_status, check_time, check_error
-		FROM domain_whois_cache FINAL
-		ORDER BY domain`
+		FROM domain_whois_cache
+		ORDER BY domain, check_time DESC
+		LIMIT 1 BY domain`
 
 	conn := w.db.Conn()
 	rows, err := conn.QueryContext(ctx, query)
