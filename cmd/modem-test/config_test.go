@@ -647,3 +647,317 @@ func TestConfig_IsMultiModem(t *testing.T) {
 		})
 	}
 }
+
+// Test GetOperatorsForPhone with prefix overrides
+func TestConfig_GetOperatorsForPhone(t *testing.T) {
+	globalOps := []OperatorConfig{
+		{Name: "Plusofon", Prefix: "02"},
+		{Name: "Telfin", Prefix: "03"},
+		{Name: "MGTS", Prefix: "00"},
+	}
+
+	prefixOps := []PrefixOperatorConfig{
+		{
+			PhonePrefix: "7405",
+			Operators:   []OperatorConfig{{Name: "MGTS", Prefix: "00"}},
+		},
+		{
+			PhonePrefix: "7495",
+			Operators: []OperatorConfig{
+				{Name: "MGTS", Prefix: "00"},
+				{Name: "Telfin", Prefix: "03"},
+			},
+		},
+	}
+
+	cfg := DefaultConfig()
+	cfg.Test.Operators = globalOps
+	cfg.Test.PrefixOperators = prefixOps
+
+	tests := []struct {
+		name    string
+		phone   string
+		wantLen int
+		wantOps []OperatorConfig
+	}{
+		{
+			name:    "no prefix match uses global operators",
+			phone:   "79001234567",
+			wantLen: 3,
+			wantOps: globalOps,
+		},
+		{
+			name:    "matching prefix 7405 uses override",
+			phone:   "74051234567",
+			wantLen: 1,
+			wantOps: []OperatorConfig{{Name: "MGTS", Prefix: "00"}},
+		},
+		{
+			name:    "matching prefix 7495 uses override",
+			phone:   "74951234567",
+			wantLen: 2,
+			wantOps: []OperatorConfig{{Name: "MGTS", Prefix: "00"}, {Name: "Telfin", Prefix: "03"}},
+		},
+		{
+			name:    "short phone no match uses global",
+			phone:   "917",
+			wantLen: 3,
+			wantOps: globalOps,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cfg.GetOperatorsForPhone(tt.phone)
+			if len(got) != tt.wantLen {
+				t.Errorf("GetOperatorsForPhone(%q) len = %d, want %d", tt.phone, len(got), tt.wantLen)
+				return
+			}
+			for i, op := range got {
+				if op != tt.wantOps[i] {
+					t.Errorf("GetOperatorsForPhone(%q)[%d] = %v, want %v", tt.phone, i, op, tt.wantOps[i])
+				}
+			}
+		})
+	}
+}
+
+// Test GetOperatorsForPhone longest prefix match
+func TestConfig_GetOperatorsForPhone_LongestMatch(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Test.Operators = []OperatorConfig{{Name: "Global", Prefix: ""}}
+	cfg.Test.PrefixOperators = []PrefixOperatorConfig{
+		{
+			PhonePrefix: "74",
+			Operators:   []OperatorConfig{{Name: "Short", Prefix: "01"}},
+		},
+		{
+			PhonePrefix: "7495",
+			Operators:   []OperatorConfig{{Name: "Long", Prefix: "02"}},
+		},
+	}
+
+	got := cfg.GetOperatorsForPhone("74951234567")
+	if len(got) != 1 || got[0].Name != "Long" {
+		t.Errorf("GetOperatorsForPhone(\"74951234567\") = %v, want [{Long 02}]", got)
+	}
+
+	// Phone matching only the shorter prefix
+	got = cfg.GetOperatorsForPhone("74001234567")
+	if len(got) != 1 || got[0].Name != "Short" {
+		t.Errorf("GetOperatorsForPhone(\"74001234567\") = %v, want [{Short 01}]", got)
+	}
+}
+
+// Test GetOperatorsForPhone with + prefix normalization
+func TestConfig_GetOperatorsForPhone_PlusNormalization(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Test.Operators = []OperatorConfig{{Name: "Global", Prefix: ""}}
+	cfg.Test.PrefixOperators = []PrefixOperatorConfig{
+		{PhonePrefix: "+7495", Operators: []OperatorConfig{{Name: "MGTS", Prefix: "00"}}},
+	}
+
+	// Validate normalizes +7495 -> 7495
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+
+	// Phone without + should match the normalized prefix
+	got := cfg.GetOperatorsForPhone("74951234567")
+	if len(got) != 1 || got[0].Name != "MGTS" {
+		t.Errorf("GetOperatorsForPhone(\"74951234567\") = %v, want [{MGTS 00}]", got)
+	}
+}
+
+// Test GetOperatorsForPhone with empty prefix_operators
+func TestConfig_GetOperatorsForPhone_EmptyPrefixOperators(t *testing.T) {
+	globalOps := []OperatorConfig{{Name: "A", Prefix: "01"}}
+	cfg := DefaultConfig()
+	cfg.Test.Operators = globalOps
+
+	got := cfg.GetOperatorsForPhone("79001234567")
+	if len(got) != 1 || got[0] != globalOps[0] {
+		t.Errorf("GetOperatorsForPhone() = %v, want %v", got, globalOps)
+	}
+}
+
+// Test ValidatePrefixOperators validation
+func TestConfig_ValidatePrefixOperators(t *testing.T) {
+	tests := []struct {
+		name      string
+		prefixOps []PrefixOperatorConfig
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name:      "empty prefix_operators is valid",
+			prefixOps: nil,
+			wantErr:   false,
+		},
+		{
+			name: "valid single prefix override",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{{Name: "MGTS", Prefix: "00"}}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty phone_prefix rejected",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "", Operators: []OperatorConfig{{Name: "MGTS", Prefix: "00"}}},
+			},
+			wantErr:   true,
+			errSubstr: "phone_prefix must not be empty",
+		},
+		{
+			name: "empty operators rejected",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{}},
+			},
+			wantErr:   true,
+			errSubstr: "operators must not be empty",
+		},
+		{
+			name: "duplicate phone_prefix rejected",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{{Name: "A", Prefix: "01"}}},
+				{PhonePrefix: "7495", Operators: []OperatorConfig{{Name: "B", Prefix: "02"}}},
+			},
+			wantErr:   true,
+			errSubstr: "duplicate phone_prefix",
+		},
+		{
+			name: "multiple operators require names",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{
+					{Prefix: "01"},
+					{Prefix: "02"},
+				}},
+			},
+			wantErr:   true,
+			errSubstr: "name is required",
+		},
+		{
+			name: "duplicate operator names within prefix rejected",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{
+					{Name: "Same", Prefix: "01"},
+					{Name: "Same", Prefix: "02"},
+				}},
+			},
+			wantErr:   true,
+			errSubstr: "duplicate operator name",
+		},
+		{
+			name: "single operator without name is valid",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{{Prefix: "01"}}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "leading + is stripped during validation",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "+7495", Operators: []OperatorConfig{{Name: "A", Prefix: "01"}}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "duplicate after normalization rejected",
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "+7495", Operators: []OperatorConfig{{Name: "A", Prefix: "01"}}},
+				{PhonePrefix: "7495", Operators: []OperatorConfig{{Name: "B", Prefix: "02"}}},
+			},
+			wantErr:   true,
+			errSubstr: "duplicate phone_prefix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Test.PrefixOperators = tt.prefixOps
+
+			err := cfg.Validate()
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Validate() error = nil, want error")
+					return
+				}
+				if tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("Validate() error = %q, want substring %q", err.Error(), tt.errSubstr)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Validate() unexpected error = %v", err)
+				}
+			}
+		})
+	}
+}
+
+// Test HasMultipleOperators
+func TestConfig_HasMultipleOperators(t *testing.T) {
+	tests := []struct {
+		name      string
+		operators []OperatorConfig
+		prefixOps []PrefixOperatorConfig
+		want      bool
+	}{
+		{
+			name:      "no operators at all",
+			operators: nil,
+			prefixOps: nil,
+			want:      false,
+		},
+		{
+			name:      "single global operator",
+			operators: []OperatorConfig{{Name: "A", Prefix: "01"}},
+			prefixOps: nil,
+			want:      false,
+		},
+		{
+			name:      "multiple global operators",
+			operators: []OperatorConfig{{Name: "A", Prefix: "01"}, {Name: "B", Prefix: "02"}},
+			prefixOps: nil,
+			want:      true,
+		},
+		{
+			name:      "single global, single prefix with multiple operators",
+			operators: []OperatorConfig{{Name: "A", Prefix: "01"}},
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{{Name: "B", Prefix: "02"}, {Name: "C", Prefix: "03"}}},
+			},
+			want: true,
+		},
+		{
+			name:      "no global, prefix with multiple operators",
+			operators: nil,
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{{Name: "B", Prefix: "02"}, {Name: "C", Prefix: "03"}}},
+			},
+			want: true,
+		},
+		{
+			name:      "single global, prefix with single operator",
+			operators: []OperatorConfig{{Name: "A", Prefix: "01"}},
+			prefixOps: []PrefixOperatorConfig{
+				{PhonePrefix: "7495", Operators: []OperatorConfig{{Name: "B", Prefix: "02"}}},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Test.Operators = tt.operators
+			cfg.Test.PrefixOperators = tt.prefixOps
+
+			if got := cfg.HasMultipleOperators(); got != tt.want {
+				t.Errorf("HasMultipleOperators() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

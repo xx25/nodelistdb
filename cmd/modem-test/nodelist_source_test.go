@@ -43,7 +43,8 @@ func TestScheduleNodes_SingleJobPerNode(t *testing.T) {
 	defer cancel()
 
 	log := NewTestLogger(LoggingConfig{})
-	jobsChan := ScheduleNodes(ctx, nodes, operators, log)
+	operatorsForPhone := func(_ string) []OperatorConfig { return operators }
+	jobsChan := ScheduleNodes(ctx, nodes, operatorsForPhone, log)
 
 	var jobs []phoneJob
 	for job := range jobsChan {
@@ -110,9 +111,9 @@ func TestScheduleNodes_EmptyOperators(t *testing.T) {
 		t.Fatalf("ScheduleNodes() emitted %d jobs, want 1", len(jobs))
 	}
 
-	// Job should have empty operators slice
-	if len(jobs[0].operators) != 0 {
-		t.Errorf("job.operators = %v, want nil or empty", jobs[0].operators)
+	// Job should have nil operators slice (nil func produces nil slice)
+	if jobs[0].operators != nil {
+		t.Errorf("job.operators = %v, want nil", jobs[0].operators)
 	}
 
 	// Node info should still be populated
@@ -127,7 +128,8 @@ func TestScheduleNodes_EmptyNodes(t *testing.T) {
 	defer cancel()
 
 	log := NewTestLogger(LoggingConfig{})
-	jobsChan := ScheduleNodes(ctx, []NodeTarget{}, nil, log)
+	noOps := func(_ string) []OperatorConfig { return nil }
+	jobsChan := ScheduleNodes(ctx, []NodeTarget{}, noOps, log)
 
 	var jobs []phoneJob
 	for job := range jobsChan {
@@ -162,7 +164,8 @@ func TestScheduleNodes_Cancellation(t *testing.T) {
 	// Use a smaller buffer (1) to force blocking and test cancellation
 	// But ScheduleNodes creates its own channel with buffer 100, so we need
 	// to test that the channel closes after context cancellation
-	jobsChan := ScheduleNodes(ctx, nodes, nil, log)
+	noOps := func(_ string) []OperatorConfig { return nil }
+	jobsChan := ScheduleNodes(ctx, nodes, noOps, log)
 
 	// Read one job then cancel immediately
 	<-jobsChan

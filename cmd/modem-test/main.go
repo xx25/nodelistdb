@@ -360,7 +360,7 @@ func main() {
 
 	// Initialize operator cache for failover mode (multi-operator scenarios)
 	var operatorCache *OperatorCache
-	if len(cfg.GetOperators()) > 1 && cfg.Test.OperatorCache.Enabled {
+	if cfg.HasMultipleOperators() && cfg.Test.OperatorCache.Enabled {
 		var err error
 		operatorCache, err = NewOperatorCache(cfg.Test.OperatorCache, log)
 		if err != nil {
@@ -587,7 +587,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 	// Use ScheduleNodes for time-aware job ordering (handles CM, availability windows)
 	var schedChan <-chan phoneJob
 	if len(filteredNodes) > 0 {
-		schedChan = ScheduleNodes(ctx, filteredNodes, cfg.GetOperators(), log)
+		schedChan = ScheduleNodes(ctx, filteredNodes, cfg.GetOperatorsForPhone, log)
 	}
 
 	for i := 1; ; i++ {

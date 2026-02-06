@@ -96,8 +96,9 @@ type TestConfig struct {
 	CDRDelay      Duration            `yaml:"cdr_delay"`      // CDR lookup delay after call (default: pause value)
 	Phone         string              `yaml:"phone"`          // Single phone (for backward compatibility)
 	Phones        []string            `yaml:"phones"`         // Multiple phones (called in circular order)
-	Operators     []OperatorConfig    `yaml:"operators"`      // Operator prefixes for routing comparison (optional)
-	OperatorCache OperatorCacheConfig `yaml:"operator_cache"` // Operator failover cache settings
+	Operators       []OperatorConfig       `yaml:"operators"`        // Operator prefixes for routing comparison (optional)
+	PrefixOperators []PrefixOperatorConfig `yaml:"prefix_operators"` // Per-prefix operator overrides (optional)
+	OperatorCache   OperatorCacheConfig    `yaml:"operator_cache"`   // Operator failover cache settings
 	CSVFile       string              `yaml:"csv_file"`       // Path to CSV output file (optional)
 	Prefix        string              `yaml:"prefix"`         // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
 }
@@ -106,6 +107,12 @@ type TestConfig struct {
 type OperatorConfig struct {
 	Name   string `yaml:"name"`   // Friendly name for reports (e.g., "Verizon", "VoIP-A")
 	Prefix string `yaml:"prefix"` // Dial prefix to prepend (e.g., "1#", "2#", "" for direct)
+}
+
+// PrefixOperatorConfig overrides the operator list for phones matching a specific prefix.
+type PrefixOperatorConfig struct {
+	PhonePrefix string           `yaml:"phone_prefix"`
+	Operators   []OperatorConfig `yaml:"operators"`
 }
 
 // EMSIConfig contains EMSI handshake parameters
@@ -314,6 +321,38 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("duplicate operator name: %s", op.Name)
 			}
 			opNames[op.Name] = true
+		}
+	}
+
+	// Prefix operator overrides validation
+	if len(c.Test.PrefixOperators) > 0 {
+		phonePrefixes := make(map[string]bool)
+		for i := range c.Test.PrefixOperators {
+			po := &c.Test.PrefixOperators[i]
+			// Normalize: strip leading + to match how phones are processed
+			po.PhonePrefix = strings.TrimPrefix(strings.TrimSpace(po.PhonePrefix), "+")
+			if po.PhonePrefix == "" {
+				return fmt.Errorf("test.prefix_operators[%d].phone_prefix must not be empty", i)
+			}
+			if phonePrefixes[po.PhonePrefix] {
+				return fmt.Errorf("duplicate phone_prefix %q in test.prefix_operators", po.PhonePrefix)
+			}
+			phonePrefixes[po.PhonePrefix] = true
+			if len(po.Operators) == 0 {
+				return fmt.Errorf("test.prefix_operators[%d].operators must not be empty", i)
+			}
+			if len(po.Operators) > 1 {
+				opNames := make(map[string]bool)
+				for j, op := range po.Operators {
+					if op.Name == "" {
+						return fmt.Errorf("test.prefix_operators[%d].operators[%d].name is required when multiple operators are configured", i, j)
+					}
+					if opNames[op.Name] {
+						return fmt.Errorf("duplicate operator name %q in test.prefix_operators[%d]", op.Name, i)
+					}
+					opNames[op.Name] = true
+				}
+			}
 		}
 	}
 
@@ -575,6 +614,38 @@ func (c *Config) GetRetryCount() int {
 // GetOperators returns the configured operators for routing comparison.
 func (c *Config) GetOperators() []OperatorConfig {
 	return c.Test.Operators
+}
+
+// GetOperatorsForPhone returns the operator list for a given phone number.
+// If a prefix_operators entry matches, the longest matching prefix wins.
+// Otherwise falls back to the global operators list.
+func (c *Config) GetOperatorsForPhone(phone string) []OperatorConfig {
+	var bestMatch *PrefixOperatorConfig
+	bestLen := 0
+	for i := range c.Test.PrefixOperators {
+		po := &c.Test.PrefixOperators[i]
+		if strings.HasPrefix(phone, po.PhonePrefix) && len(po.PhonePrefix) > bestLen {
+			bestMatch = po
+			bestLen = len(po.PhonePrefix)
+		}
+	}
+	if bestMatch != nil {
+		return bestMatch.Operators
+	}
+	return c.Test.Operators
+}
+
+// HasMultipleOperators returns true if any operator group (global or per-prefix) has more than one operator.
+func (c *Config) HasMultipleOperators() bool {
+	if len(c.Test.Operators) > 1 {
+		return true
+	}
+	for _, po := range c.Test.PrefixOperators {
+		if len(po.Operators) > 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // parsePhoneList splits a comma-separated phone list into individual numbers.

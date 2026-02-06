@@ -55,7 +55,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 
 	// Log operator configuration if multiple operators configured
 	if len(operators) > 0 && (len(operators) > 1 || operators[0].Name != "") {
-		log.Info("Operator failover enabled with %d operator(s):", len(operators))
+		log.Info("Operator failover enabled with %d global operator(s):", len(operators))
 		for i, op := range operators {
 			priority := ""
 			if i == 0 {
@@ -69,6 +69,18 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		}
 		if operatorCache != nil {
 			log.Info("Operator cache enabled")
+		}
+	}
+
+	// Log prefix operator overrides
+	if len(cfg.Test.PrefixOperators) > 0 {
+		log.Info("Per-prefix operator overrides configured:")
+		for _, po := range cfg.Test.PrefixOperators {
+			opNames := make([]string, len(po.Operators))
+			for i, op := range po.Operators {
+				opNames[i] = op.Name
+			}
+			log.Info("  prefix %q -> %s", po.PhonePrefix, strings.Join(opNames, ", "))
 		}
 	}
 
@@ -244,7 +256,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		// Prefix mode: use ScheduleNodes for time-aware job ordering.
 		// ScheduleNodes sorts callable nodes first, waits for call windows,
 		// and emits one job per node with full operator list for failover.
-		jobs := ScheduleNodes(ctx, filteredNodes, cfg.GetOperators(), log)
+		jobs := ScheduleNodes(ctx, filteredNodes, cfg.GetOperatorsForPhone, log)
 		for job := range jobs {
 			submitted++
 			job.testNum = submitted
@@ -276,7 +288,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 
 			job := phoneJob{
 				phone:     phone,
-				operators: operators, // Full list for failover
+				operators: cfg.GetOperatorsForPhone(phone),
 				testNum:   submitted,
 			}
 			if nodeLookup != nil {

@@ -307,7 +307,7 @@ type nodeCallSchedule struct {
 // emitted when their call window opens. When operators are configured, each job
 // includes the full operator list for failover (rather than emitting separate jobs).
 // The goroutine exits when all nodes have been emitted or ctx is cancelled.
-func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []OperatorConfig, log *TestLogger) <-chan phoneJob {
+func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone func(string) []OperatorConfig, log *TestLogger) <-chan phoneJob {
 	jobs := make(chan phoneJob, 100)
 
 	go func() {
@@ -368,12 +368,16 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operators []Operator
 				}
 			}
 
-			// Emit ONE job per node with full operator list for failover
+			// Emit ONE job per node with operator list for failover
 			testNum++
+			var ops []OperatorConfig
+			if operatorsForPhone != nil {
+				ops = operatorsForPhone(n.Phone)
+			}
 			job := phoneJob{
-				phone:          n.Phone,
-				operators:      operators, // Full list for failover (may be empty)
-				testNum:        testNum,
+				phone:     n.Phone,
+				operators: ops,
+				testNum:   testNum,
 				nodeAddress:    n.Address(),
 				nodeSystemName: strings.ReplaceAll(n.SystemName, "_", " "),
 				nodeLocation:   strings.ReplaceAll(n.Location, "_", " "),

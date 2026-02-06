@@ -67,6 +67,19 @@ test:
   # Test 4: 918 via Direct → ATDT918
   # ... and so on
 
+  # prefix_operators:           # Override operators for specific phone prefixes
+  #   - phone_prefix: "7405"   # Phones starting with 7405...
+  #     operators:              # ...use only MGTS
+  #       - name: "MGTS"
+  #         prefix: "00"
+  #   - phone_prefix: "7495"   # Moscow landlines...
+  #     operators:              # ...use MGTS and Telfin
+  #       - name: "MGTS"
+  #         prefix: "00"
+  #       - name: "Telfin"
+  #         prefix: "03"
+  # Matching: longest prefix wins. No match = use global operators above.
+
   # csv_file: "modem-test-results.csv"  # Optional: output results to CSV file
 
 emsi:
