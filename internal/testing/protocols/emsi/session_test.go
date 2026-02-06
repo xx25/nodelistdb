@@ -118,7 +118,7 @@ func TestGetchar_EOF(t *testing.T) {
 	defer c.Close()
 
 	go func() {
-		s.Write([]byte("AB"))
+		_, _ = s.Write([]byte("AB"))
 		s.Close()
 	}()
 
@@ -149,7 +149,7 @@ func TestGetchar_BannerAccumulation(t *testing.T) {
 	defer s.Close()
 
 	go func() {
-		s.Write([]byte("Hello World\r\n"))
+		_, _ = s.Write([]byte("Hello World\r\n"))
 	}()
 
 	cr := &charReader{
@@ -180,7 +180,7 @@ func TestReadToken_INQ(t *testing.T) {
 	defer s.Close()
 
 	go func() {
-		s.Write([]byte(EMSI_INQ + "\r"))
+		_, _ = s.Write([]byte(EMSI_INQ + "\r"))
 	}()
 
 	cr := &charReader{
@@ -200,7 +200,7 @@ func TestReadToken_REQ(t *testing.T) {
 	defer s.Close()
 
 	go func() {
-		s.Write([]byte(EMSI_REQ + "\r"))
+		_, _ = s.Write([]byte(EMSI_REQ + "\r"))
 	}()
 
 	cr := &charReader{
@@ -220,7 +220,7 @@ func TestReadToken_ACK(t *testing.T) {
 	defer s.Close()
 
 	go func() {
-		s.Write([]byte(EMSI_ACK + "\r"))
+		_, _ = s.Write([]byte(EMSI_ACK + "\r"))
 	}()
 
 	cr := &charReader{
@@ -240,7 +240,7 @@ func TestReadToken_NAK(t *testing.T) {
 	defer s.Close()
 
 	go func() {
-		s.Write([]byte(EMSI_NAK + "\r"))
+		_, _ = s.Write([]byte(EMSI_NAK + "\r"))
 	}()
 
 	cr := &charReader{
@@ -261,7 +261,7 @@ func TestReadToken_DAT(t *testing.T) {
 
 	// Send just the DAT header — readToken should detect it without reading the length
 	go func() {
-		s.Write([]byte("**EMSI_DAT"))
+		_, _ = s.Write([]byte("**EMSI_DAT"))
 	}()
 
 	cr := &charReader{
@@ -282,7 +282,7 @@ func TestReadToken_BannerThenEMSI(t *testing.T) {
 
 	go func() {
 		// Simulate a BBS banner followed by EMSI_REQ
-		s.Write([]byte("Welcome to FidoNet BBS!\r\nPlease wait...\r\n" + EMSI_REQ + "\r"))
+		_, _ = s.Write([]byte("Welcome to FidoNet BBS!\r\nPlease wait...\r\n" + EMSI_REQ + "\r"))
 	}()
 
 	cr := &charReader{
@@ -327,7 +327,7 @@ func TestReadToken_XONXOFFStripped(t *testing.T) {
 	go func() {
 		// Insert XON (0x11) and XOFF (0x13) inside the token
 		data := []byte{'*', '*', 0x11, 'E', 'M', 'S', 'I', 0x13, '_', 'R', 'E', 'Q', 'A', '7', '7', 'E'}
-		s.Write(data)
+		_, _ = s.Write(data)
 	}()
 
 	cr := &charReader{
@@ -367,7 +367,7 @@ func TestReadToken_BareEMSI(t *testing.T) {
 
 	// Some non-compliant mailers omit the ** prefix
 	go func() {
-		s.Write([]byte("EMSI_REQA77E\r"))
+		_, _ = s.Write([]byte("EMSI_REQA77E\r"))
 	}()
 
 	cr := &charReader{
@@ -414,7 +414,7 @@ func TestReadEMSI_DAT_ValidPacket(t *testing.T) {
 
 	go func() {
 		// Send the part after "EMSI_DAT" (lenHex + data + CRC)
-		s.Write([]byte(afterHeader))
+		_, _ = s.Write([]byte(afterHeader))
 	}()
 
 	cr := &charReader{
@@ -456,7 +456,7 @@ func TestReadEMSI_DAT_CRCMismatch(t *testing.T) {
 	corrupted := afterHeader[:len(afterHeader)-4] + "0000"
 
 	go func() {
-		s.Write([]byte(corrupted))
+		_, _ = s.Write([]byte(corrupted))
 	}()
 
 	cr := &charReader{
@@ -480,7 +480,7 @@ func TestReadEMSI_DAT_Timeout(t *testing.T) {
 
 	// Only send 2 of the 4 length hex chars
 	go func() {
-		s.Write([]byte("00"))
+		_, _ = s.Write([]byte("00"))
 		// Don't send more
 	}()
 
@@ -501,7 +501,7 @@ func TestReadEMSI_DAT_InvalidLength(t *testing.T) {
 	defer s.Close()
 
 	go func() {
-		s.Write([]byte("ZZZZ")) // Invalid hex
+		_, _ = s.Write([]byte("ZZZZ")) // Invalid hex
 	}()
 
 	cr := &charReader{

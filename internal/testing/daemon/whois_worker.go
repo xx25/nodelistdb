@@ -83,9 +83,7 @@ func (w *WhoisWorker) Enqueue(domain string) {
 	// Non-blocking send with recover to handle race between Enqueue and Stop/close.
 	// The atomic check above catches most cases; recover handles the narrow window.
 	defer func() {
-		if r := recover(); r != nil {
-			// Channel was closed between stopped check and send — safe to ignore
-		}
+		_ = recover() // Channel was closed between stopped check and send — safe to ignore
 	}()
 
 	select {
