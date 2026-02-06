@@ -1,8 +1,5 @@
 zabbix_export:
   version: '6.4'
-  template_groups:
-    - uuid: 7df96b18c230490a9a0a9e2307226338
-      name: Templates/Applications
   templates:
     - uuid: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
       template: NodelistDB
