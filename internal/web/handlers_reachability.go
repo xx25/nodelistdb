@@ -458,7 +458,7 @@ func (s *Server) ModemTestDetailHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, err := s.storage.TestOps().GetDetailedModemTestResult(zone, net, node, testTime)
+	result, err := s.storage.GetDetailedModemTestResult(zone, net, node, testTime)
 	if err != nil {
 		log.Printf("Error getting detailed modem test result: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
