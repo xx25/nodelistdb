@@ -54,7 +54,7 @@ func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 	}
 
 	// Step 3: Count unique nodes per domain in Go
-	domainNodes := make(map[string]map[string]struct{}) // domain → set of "zone:net:node"
+	domainNodes := make(map[string]map[string]struct{}) // domain → set of "zone:net/node"
 	for _, hn := range hostnameNodes {
 		d := domain.ExtractRegistrableDomain(hn.hostname)
 		if d == "" {
@@ -122,7 +122,7 @@ func (w *WhoisOperations) getWhoisEntries(ctx context.Context) ([]DomainWhoisRes
 
 type hostnameNode struct {
 	hostname string
-	nodeKey  string // "zone:net:node" for dedup
+	nodeKey  string // "zone:net/node" for dedup
 }
 
 // getHostnameNodeMappings fetches distinct (hostname, zone, net, node) tuples from recent test results

@@ -18,7 +18,7 @@ import (
 // PersistentWhoisCache is a read-only callback interface for persistent WHOIS cache.
 // The worker is responsible for writing results to persistent storage.
 type PersistentWhoisCache interface {
-	Get(domain string) (*models.WhoisResult, error)
+	GetWithContext(ctx context.Context, domain string) (*models.WhoisResult, error)
 }
 
 // WhoisResolver handles WHOIS lookups with in-memory caching, singleflight dedup, and rate limiting
@@ -29,6 +29,7 @@ type WhoisResolver struct {
 	sfGroup         singleflight.Group
 	rateLimiter     chan struct{}
 	rateLimiterDone chan struct{} // closed to stop the rate limiter goroutine
+	closeOnce       sync.Once
 	persistentCache PersistentWhoisCache
 }
 
@@ -71,9 +72,11 @@ func NewWhoisResolver(timeout time.Duration) *WhoisResolver {
 	return r
 }
 
-// Close stops the rate limiter goroutine
+// Close stops the rate limiter goroutine. Safe to call multiple times.
 func (r *WhoisResolver) Close() {
-	close(r.rateLimiterDone)
+	r.closeOnce.Do(func() {
+		close(r.rateLimiterDone)
+	})
 }
 
 // SetPersistentCache sets an optional persistent cache for WHOIS results (read-only)
@@ -106,9 +109,9 @@ func (r *WhoisResolver) Resolve(ctx context.Context, domain string) *models.Whoi
 
 // doResolve performs the actual WHOIS lookup (within singleflight)
 func (r *WhoisResolver) doResolve(ctx context.Context, domain string) *models.WhoisResult {
-	// Check persistent cache (read-only)
+	// Check persistent cache (read-only, respects context for cancellation)
 	if r.persistentCache != nil {
-		if cached, err := r.persistentCache.Get(domain); err == nil && cached != nil {
+		if cached, err := r.persistentCache.GetWithContext(ctx, domain); err == nil && cached != nil {
 			// Use shorter freshness for errors vs successes
 			if cached.Error != "" && cached.Error != "domain not found" {
 				// Don't trust persistent transient errors — do a fresh lookup
@@ -121,10 +124,15 @@ func (r *WhoisResolver) doResolve(ctx context.Context, domain string) *models.Wh
 		}
 	}
 
-	// Wait for rate limiter token
+	// Wait for rate limiter token (also unblock if resolver is closed)
 	select {
 	case <-r.rateLimiter:
 		// Got token, proceed
+	case <-r.rateLimiterDone:
+		return &models.WhoisResult{
+			Domain: domain,
+			Error:  "resolver closed while waiting for rate limiter",
+		}
 	case <-ctx.Done():
 		return &models.WhoisResult{
 			Domain: domain,

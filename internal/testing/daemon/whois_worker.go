@@ -19,8 +19,8 @@ type whoisReadCache struct {
 	storage storage.Storage
 }
 
-func (c *whoisReadCache) Get(domain string) (*models.WhoisResult, error) {
-	return c.storage.GetRecentWhoisResult(context.Background(), domain, 24*time.Hour)
+func (c *whoisReadCache) GetWithContext(ctx context.Context, domain string) (*models.WhoisResult, error) {
+	return c.storage.GetRecentWhoisResult(ctx, domain, 24*time.Hour)
 }
 
 // WhoisWorker processes WHOIS lookups in a background goroutine,
@@ -29,9 +29,10 @@ type WhoisWorker struct {
 	resolver *services.WhoisResolver
 	storage  storage.Storage
 	queue    chan string
-	seen     sync.Map // domain → time.Time (enqueue time), for dedup with TTL
+	seen     sync.Map // domain → time.Time (last successful lookup), for dedup with TTL
 	seenTTL  time.Duration
 	stopped  atomic.Bool
+	stopOnce sync.Once
 	wg       sync.WaitGroup
 }
 
@@ -55,40 +56,42 @@ func (w *WhoisWorker) Start(ctx context.Context) {
 }
 
 // Stop signals the worker to stop and waits for it to finish.
-// Must be called after all producers (test workers) have stopped.
+// Safe to call multiple times (idempotent).
 func (w *WhoisWorker) Stop() {
-	w.stopped.Store(true)
-	close(w.queue)
+	w.stopOnce.Do(func() {
+		w.stopped.Store(true)
+		close(w.queue)
+	})
 	w.wg.Wait()
 }
 
 // Enqueue adds a domain to the WHOIS lookup queue.
-// Non-blocking: if queue is full, stopped, or domain was recently enqueued, it's silently skipped.
+// Non-blocking: if queue is full, stopped, or domain was recently looked up, it's silently skipped.
+// Safe to call concurrently with Stop() — uses recover to handle send-on-closed-channel.
 func (w *WhoisWorker) Enqueue(domain string) {
-	if domain == "" {
+	if domain == "" || w.stopped.Load() {
 		return
 	}
 
-	// Guard against send on closed channel after Stop()
-	if w.stopped.Load() {
-		return
-	}
-
-	now := time.Now()
-
-	// Dedup with TTL: skip if seen within seenTTL
+	// Dedup with TTL: skip if successfully looked up within seenTTL
 	if val, loaded := w.seen.Load(domain); loaded {
-		if seenAt, ok := val.(time.Time); ok && now.Sub(seenAt) < w.seenTTL {
+		if seenAt, ok := val.(time.Time); ok && time.Since(seenAt) < w.seenTTL {
 			return
 		}
 	}
 
-	// Non-blocking send — only mark as seen if successfully enqueued
+	// Non-blocking send with recover to handle race between Enqueue and Stop/close.
+	// The atomic check above catches most cases; recover handles the narrow window.
+	defer func() {
+		if r := recover(); r != nil {
+			// Channel was closed between stopped check and send — safe to ignore
+		}
+	}()
+
 	select {
 	case w.queue <- domain:
-		w.seen.Store(domain, now)
+		// domain enqueued; seen will be marked after successful lookup in processQueue
 	default:
-		// Queue full — domain will be retried on next encounter since we didn't mark it as seen
 		logging.Debugf("WHOIS queue full, skipping domain %s", domain)
 	}
 }
@@ -97,36 +100,86 @@ func (w *WhoisWorker) Enqueue(domain string) {
 func (w *WhoisWorker) processQueue(ctx context.Context) {
 	defer w.wg.Done()
 
-	for domain := range w.queue {
+	// Periodic cleanup of stale seen entries to prevent unbounded growth
+	cleanupTicker := time.NewTicker(1 * time.Hour)
+	defer cleanupTicker.Stop()
+
+	for {
 		select {
 		case <-ctx.Done():
 			return
-		default:
-		}
 
-		result := w.resolver.Resolve(ctx, domain)
-		if result.Cached {
-			logging.Debugf("WHOIS cache hit for %s", domain)
-			continue
-		}
+		case <-cleanupTicker.C:
+			w.cleanupSeen()
 
-		if result.Error != "" {
-			logging.Debugf("WHOIS lookup for %s: %s", domain, result.Error)
-		} else {
-			expiryStr := "unknown"
-			if result.ExpirationDate != nil {
-				expiryStr = result.ExpirationDate.Format("2006-01-02")
+		case domain, ok := <-w.queue:
+			if !ok {
+				return // queue closed
 			}
-			logging.Infof("WHOIS for %s: expires %s, registrar %s", domain, expiryStr, result.Registrar)
-		}
 
-		// Only persist successful lookups and "domain not found" to ClickHouse.
-		// Transient errors (network timeouts, rate limits) should not overwrite
-		// previously known good data in ReplacingMergeTree.
-		if result.Error == "" || result.Error == "domain not found" {
-			if err := w.storage.StoreWhoisResult(ctx, result); err != nil {
-				logging.Errorf("Failed to store WHOIS result for %s: %v", domain, err)
+			result := w.resolver.Resolve(ctx, domain)
+			if result.Cached {
+				logging.Debugf("WHOIS cache hit for %s", domain)
+				// Mark seen — the cached result is valid
+				w.seen.Store(domain, time.Now())
+				continue
+			}
+
+			if result.Error != "" {
+				logging.Debugf("WHOIS lookup for %s: %s", domain, result.Error)
+			} else {
+				expiryStr := "unknown"
+				if result.ExpirationDate != nil {
+					expiryStr = result.ExpirationDate.Format("2006-01-02")
+				}
+				logging.Infof("WHOIS for %s: expires %s, registrar %s", domain, expiryStr, result.Registrar)
+			}
+
+			// Determine what to persist and whether to mark as seen.
+			// Only persist to ClickHouse if we have meaningful data that won't
+			// overwrite good data in ReplacingMergeTree:
+			// - "domain not found" is stable and should be stored
+			// - Successful lookups WITH an expiration date should be stored
+			// - Successful lookups without expiration date are incomplete — skip
+			// - Transient errors should never overwrite known good data
+			shouldPersist := false
+			shouldMarkSeen := false
+
+			switch {
+			case result.Error == "domain not found":
+				shouldPersist = true
+				shouldMarkSeen = true
+			case result.Error == "":
+				shouldMarkSeen = true
+				// Only persist if we actually parsed an expiration date
+				if result.ExpirationDate != nil {
+					shouldPersist = true
+				}
+			// Transient errors: don't persist, don't mark seen (allow retry)
+			}
+
+			if shouldPersist {
+				if err := w.storage.StoreWhoisResult(ctx, result); err != nil {
+					logging.Errorf("Failed to store WHOIS result for %s: %v", domain, err)
+				}
+			}
+
+			if shouldMarkSeen {
+				w.seen.Store(domain, time.Now())
 			}
 		}
 	}
+}
+
+// cleanupSeen removes entries older than seenTTL from the seen map
+func (w *WhoisWorker) cleanupSeen() {
+	now := time.Now()
+	w.seen.Range(func(key, value any) bool {
+		if seenAt, ok := value.(time.Time); ok {
+			if now.Sub(seenAt) >= w.seenTTL {
+				w.seen.Delete(key)
+			}
+		}
+		return true
+	})
 }
