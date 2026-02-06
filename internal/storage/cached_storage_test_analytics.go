@@ -1035,3 +1035,165 @@ func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNod
 
 	return results, nil
 }
+
+// ===== Reachability Operations (cached) =====
+
+// GetReachabilityTrends returns reachability trend data (cached)
+func (cs *CachedStorage) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetReachabilityTrends(days)
+	}
+
+	key := cs.keyGen.ReachabilityTrendsKey(days)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []ReachabilityTrend
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetReachabilityTrends(days)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
+// SearchNodesByReachability returns nodes filtered by reachability status (cached)
+func (cs *CachedStorage) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.SearchNodesByReachability(operational, limit, days)
+	}
+
+	key := cs.keyGen.SearchNodesByReachabilityKey(operational, limit, days)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []NodeTestResult
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.SearchNodesByReachability(operational, limit, days)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
+// GetNodeTestHistory returns test history for a specific node (cached)
+func (cs *CachedStorage) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetNodeTestHistory(zone, net, node, days)
+	}
+
+	key := cs.keyGen.NodeTestHistoryKey(zone, net, node, days)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []NodeTestResult
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetNodeTestHistory(zone, net, node, days)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
+// GetNodeReachabilityStats returns reachability statistics for a specific node (cached)
+func (cs *CachedStorage) GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetNodeReachabilityStats(zone, net, node, days)
+	}
+
+	key := cs.keyGen.NodeReachabilityStatsKey(zone, net, node, days)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var result NodeReachabilityStats
+		if err := json.Unmarshal(data, &result); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return &result, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	result, err := cs.Storage.GetNodeReachabilityStats(zone, net, node, days)
+	if err != nil {
+		return nil, err
+	}
+
+	if result != nil {
+		if data, err := json.Marshal(result); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return result, nil
+}
+
+// GetDetailedTestResult returns detailed test result for a specific test (cached)
+func (cs *CachedStorage) GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetDetailedTestResult(zone, net, node, testTime)
+	}
+
+	key := cs.keyGen.DetailedTestResultKey(zone, net, node, testTime)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var result NodeTestResult
+		if err := json.Unmarshal(data, &result); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return &result, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	result, err := cs.Storage.GetDetailedTestResult(zone, net, node, testTime)
+	if err != nil {
+		return nil, err
+	}
+
+	if result != nil {
+		if data, err := json.Marshal(result); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return result, nil
+}

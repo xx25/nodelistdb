@@ -226,6 +226,26 @@ func (kg *KeyGenerator) ModemTestDetailKey(zone, net, node int, testTime string)
 	return fmt.Sprintf("%s:analytics:modem:detail:%d:%d:%d:%s", kg.Prefix, zone, net, node, testTime)
 }
 
+func (kg *KeyGenerator) ReachabilityTrendsKey(days int) string {
+	return fmt.Sprintf("%s:reachability:trends:%d", kg.Prefix, days)
+}
+
+func (kg *KeyGenerator) SearchNodesByReachabilityKey(operational bool, limit, days int) string {
+	return fmt.Sprintf("%s:reachability:search:%t:%d:%d", kg.Prefix, operational, limit, days)
+}
+
+func (kg *KeyGenerator) NodeTestHistoryKey(zone, net, node, days int) string {
+	return fmt.Sprintf("%s:reachability:history:%d:%d:%d:%d", kg.Prefix, zone, net, node, days)
+}
+
+func (kg *KeyGenerator) NodeReachabilityStatsKey(zone, net, node, days int) string {
+	return fmt.Sprintf("%s:reachability:stats:%d:%d:%d:%d", kg.Prefix, zone, net, node, days)
+}
+
+func (kg *KeyGenerator) DetailedTestResultKey(zone, net, node int, testTime string) string {
+	return fmt.Sprintf("%s:reachability:detail:%d:%d:%d:%s", kg.Prefix, zone, net, node, testTime)
+}
+
 func (kg *KeyGenerator) AnalyticsPattern() string {
 	return fmt.Sprintf("%s:analytics:*", kg.Prefix)
 }

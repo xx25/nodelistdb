@@ -28,7 +28,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 			if sysopName != "" {
 				// Perform sysop search
-				nodes, searchErr = s.storage.SearchOps().SearchNodesBySysop(sysopName, 100)
+				nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 100)
 				count = len(nodes)
 			} else {
 				// Perform node search
@@ -89,7 +89,7 @@ func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeS
 		}
 	}
 
-	nodes, err := s.storage.SearchOps().SearchNodesWithLifetime(filter)
+	nodes, err := s.storage.SearchNodesWithLifetime(filter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -106,7 +106,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get node history
-	history, err := s.storage.NodeOps().GetNodeHistory(zone, net, node)
+	history, err := s.storage.GetNodeHistory(zone, net, node)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error retrieving node history: %v", err), http.StatusInternalServerError)
 		return
@@ -118,7 +118,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all node changes without filtering
-	changes, err := s.storage.SearchOps().GetNodeChanges(zone, net, node)
+	changes, err := s.storage.GetNodeChanges(zone, net, node)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error retrieving node changes: %v", err), http.StatusInternalServerError)
 		return

@@ -45,7 +45,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get overall trends
-	trends, err := s.storage.TestOps().GetReachabilityTrends(trendsPeriodFilter)
+	trends, err := s.storage.GetReachabilityTrends(trendsPeriodFilter)
 	if err != nil {
 		log.Printf("Error getting reachability trends: %v", err)
 		trends = []storage.ReachabilityTrend{}
@@ -74,13 +74,13 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		data["FilteredNodes"] = filteredNodes
 	} else {
 		// Default behavior - get recently tested nodes (both operational and failed) for the last day
-		operational, err := s.storage.TestOps().SearchNodesByReachability(true, 10, nodesPeriodFilter)
+		operational, err := s.storage.SearchNodesByReachability(true, 10, nodesPeriodFilter)
 		if err != nil {
 			log.Printf("Error getting operational nodes: %v", err)
 			operational = []storage.NodeTestResult{}
 		}
 
-		failed, err := s.storage.TestOps().SearchNodesByReachability(false, 10, nodesPeriodFilter)
+		failed, err := s.storage.SearchNodesByReachability(false, 10, nodesPeriodFilter)
 		if err != nil {
 			log.Printf("Error getting failed nodes: %v", err)
 			failed = []storage.NodeTestResult{}
@@ -104,13 +104,13 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 
 	switch statusFilter {
 	case "operational":
-		nodes, err := s.storage.TestOps().SearchNodesByReachability(true, limitFilter*2, periodFilter) // Get more than needed for protocol filtering
+		nodes, err := s.storage.SearchNodesByReachability(true, limitFilter*2, periodFilter) // Get more than needed for protocol filtering
 		if err != nil {
 			return nil, err
 		}
 		allNodes = nodes
 	case "failed":
-		nodes, err := s.storage.TestOps().SearchNodesByReachability(false, limitFilter*2, periodFilter)
+		nodes, err := s.storage.SearchNodesByReachability(false, limitFilter*2, periodFilter)
 		if err != nil {
 			return nil, err
 		}
@@ -120,11 +120,11 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 		// When status=all, we want to show a mix of both operational and failed
 		// Fetch more than needed to account for protocol filtering
 		fetchLimit := limitFilter * 2
-		operational, err := s.storage.TestOps().SearchNodesByReachability(true, fetchLimit, periodFilter)
+		operational, err := s.storage.SearchNodesByReachability(true, fetchLimit, periodFilter)
 		if err != nil {
 			return nil, err
 		}
-		failed, err := s.storage.TestOps().SearchNodesByReachability(false, fetchLimit, periodFilter)
+		failed, err := s.storage.SearchNodesByReachability(false, fetchLimit, periodFilter)
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +256,7 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get test history
-	history, err := s.storage.TestOps().GetNodeTestHistory(zone, net, node, days)
+	history, err := s.storage.GetNodeTestHistory(zone, net, node, days)
 	if err != nil {
 		log.Printf("Error getting node test history: %v", err)
 		history = []storage.NodeTestResult{}
@@ -327,13 +327,13 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get statistics
-	stats, err := s.storage.TestOps().GetNodeReachabilityStats(zone, net, node, days)
+	stats, err := s.storage.GetNodeReachabilityStats(zone, net, node, days)
 	if err != nil {
 		log.Printf("Error getting node reachability stats: %v", err)
 	}
 
 	// Get node info from main database
-	nodeHistory, err := s.storage.NodeOps().GetNodeHistory(zone, net, node)
+	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node)
 	var nodeInfo *database.Node
 	if err == nil && len(nodeHistory) > 0 {
 		// Get the most recent entry
@@ -394,7 +394,7 @@ func (s *Server) TestResultDetailHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get detailed test result
-	testResult, err := s.storage.TestOps().GetDetailedTestResult(zone, net, node, testTime)
+	testResult, err := s.storage.GetDetailedTestResult(zone, net, node, testTime)
 	if err != nil {
 		log.Printf("Error getting detailed test result: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -407,7 +407,7 @@ func (s *Server) TestResultDetailHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get node info from main database for context
-	nodeHistory, err := s.storage.NodeOps().GetNodeHistory(zone, net, node)
+	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node)
 	var nodeInfo *database.Node
 	if err == nil && len(nodeHistory) > 0 {
 		// Get the most recent entry
@@ -471,7 +471,7 @@ func (s *Server) ModemTestDetailHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get node info from main database for context
-	nodeHistory, err := s.storage.NodeOps().GetNodeHistory(zone, net, node)
+	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node)
 	var nodeInfo *database.Node
 	if err == nil && len(nodeHistory) > 0 {
 		nodeInfo = &nodeHistory[len(nodeHistory)-1]
