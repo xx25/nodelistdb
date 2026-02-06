@@ -21,6 +21,7 @@ type Storage struct {
 	statsOperations     *StatisticsOperations
 	analyticsOperations *AnalyticsOperations
 	testOperations      *TestOperationsRefactored
+	whoisOperations     *WhoisOperations
 
 	mu sync.RWMutex
 }
@@ -55,6 +56,11 @@ func (s *Storage) TestOps() *TestOperationsRefactored {
 	return s.testOperations
 }
 
+// WhoisOps returns the WHOIS operations component for domain expiration data
+func (s *Storage) WhoisOps() *WhoisOperations {
+	return s.whoisOperations
+}
+
 // New creates a new Storage instance with ClickHouse-specific components
 func New(db database.DatabaseInterface) (*Storage, error) {
 	// Always use ClickHouse components (only supported database type)
@@ -74,6 +80,7 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 	storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
 	storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
 	storage.testOperations = NewTestOperationsRefactored(db, queryBuilder, resultParser)
+	storage.whoisOperations = NewWhoisOperations(db)
 
 	return storage, nil
 }
@@ -315,6 +322,11 @@ func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes 
 
 func (s *Storage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
 	return s.testOperations.GetDetailedModemTestResult(zone, net, node, testTime)
+}
+
+// WHOIS Operations delegated methods
+func (s *Storage) GetAllWhoisResults() ([]DomainWhoisResult, error) {
+	return s.whoisOperations.GetAllWhoisResults()
 }
 
 // --- Utility Methods ---

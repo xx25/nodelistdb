@@ -1,0 +1,117 @@
+{{template "base" .}}
+
+{{define "title"}}Domain Expiration Report{{end}}
+
+{{define "page_title"}}Domain Expiration Report{{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">WHOIS-based domain expiration status for FidoNet node hostnames</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+{{if .Error}}
+<div class="alert alert-danger">
+    <strong>Error:</strong> {{.Error}}
+</div>
+{{end}}
+
+{{if .Results}}
+<!-- Summary Statistics -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h3>{{.TotalDomains}}</h3>
+        <p>Total Domains</p>
+    </div>
+    <div class="stats-box" {{if gt .ExpiredCount 0}}style="border-left: 4px solid #dc3545;"{{end}}>
+        <h3 {{if gt .ExpiredCount 0}}style="color: #dc3545;"{{end}}>{{.ExpiredCount}}</h3>
+        <p>Expired</p>
+    </div>
+    <div class="stats-box" {{if gt .ExpiringSoonCount 0}}style="border-left: 4px solid #ffc107;"{{end}}>
+        <h3 {{if gt .ExpiringSoonCount 0}}style="color: #b8860b;"{{end}}>{{.ExpiringSoonCount}}</h3>
+        <p>Expiring Soon (30d)</p>
+    </div>
+    <div class="stats-box">
+        <h3 style="color: #6c757d;">{{.UnknownCount}}</h3>
+        <p>Unknown</p>
+    </div>
+</div>
+
+<!-- Domain Table -->
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="string">Domain</th>
+                <th data-sortable data-type="date">Expiration Date</th>
+                <th data-sortable data-type="date">Creation Date</th>
+                <th data-sortable data-type="string">Registrar</th>
+                <th data-sortable data-type="number">Nodes</th>
+                <th data-sortable data-type="string">Status</th>
+                <th data-sortable data-type="date">Last Checked</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Results}}
+            <tr>
+                <td><strong>{{.Domain}}</strong></td>
+
+                {{if .ExpirationDate}}
+                <td data-value="{{.ExpirationDate.Unix}}"
+                    {{if .ExpirationDate.Before $.Now}}style="color: #dc3545; font-weight: bold;"
+                    {{else if .ExpirationDate.Before ($.Now.AddDate 0 0 30)}}style="color: #b8860b; font-weight: bold;"
+                    {{end}}>
+                    {{.ExpirationDate.Format "2006-01-02"}}
+                </td>
+                {{else}}
+                <td data-value="0"><span class="text-muted">Unknown</span></td>
+                {{end}}
+
+                {{if .CreationDate}}
+                <td data-value="{{.CreationDate.Unix}}">{{.CreationDate.Format "2006-01-02"}}</td>
+                {{else}}
+                <td data-value="0"><span class="text-muted">Unknown</span></td>
+                {{end}}
+
+                <td>{{if .Registrar}}{{.Registrar}}{{else}}<span class="text-muted">Unknown</span>{{end}}</td>
+
+                <td>{{.NodeCount}}</td>
+
+                <td>
+                    {{if .CheckError}}
+                        <span class="badge badge-secondary" title="{{.CheckError}}">Error</span>
+                    {{else if not .ExpirationDate}}
+                        <span class="badge badge-secondary">Unknown</span>
+                    {{else if .ExpirationDate.Before $.Now}}
+                        <span class="badge badge-danger">Expired</span>
+                    {{else if .ExpirationDate.Before ($.Now.AddDate 0 0 30)}}
+                        <span class="badge badge-warning">Expiring Soon</span>
+                    {{else}}
+                        <span class="badge badge-success">Active</span>
+                    {{end}}
+                </td>
+
+                <td data-value="{{.CheckTime.Unix}}">
+                    <span class="text-muted">{{.CheckTime.Format "2006-01-02 15:04"}}</span>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>About Domain Expiration:</strong> This report shows WHOIS-based expiration data for domains used by FidoNet nodes. Expired domain registrations can cause nodes to become unreachable.</p>
+    <p><strong>How it works:</strong> The testing daemon performs WHOIS lookups for each unique domain encountered during node testing. Results are cached and refreshed periodically.</p>
+    <p><strong>Limitations:</strong> Some TLDs (especially ccTLDs and GDPR-redacted registrations) may not expose expiration dates via WHOIS. These appear as "Unknown" status.</p>
+    <p><strong>Node Count:</strong> Shows how many FidoNet nodes use hostnames under each domain (based on the last 30 days of test data).</p>
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>No domain expiration data available yet.</strong><br>
+    Domain WHOIS data is collected by the testing daemon during node tests. Data will appear here once the daemon has completed its first test cycle.
+</div>
+{{end}}
+{{end}}

@@ -1750,6 +1750,70 @@ func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// DomainExpirationHandler shows WHOIS-based domain expiration analytics
+func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request) {
+	results, err := s.storage.GetAllWhoisResults()
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] Domain Expiration: Error fetching data: %v", err)
+		displayError = fmt.Errorf("Failed to fetch domain expiration data. Please try again later")
+		results = []storage.DomainWhoisResult{}
+	}
+
+	now := time.Now()
+
+	// Compute summary statistics
+	var totalDomains, expiredCount, expiringSoonCount, unknownCount int
+	totalDomains = len(results)
+	for _, r := range results {
+		if r.ExpirationDate == nil {
+			unknownCount++
+		} else if r.ExpirationDate.Before(now) {
+			expiredCount++
+		} else if r.ExpirationDate.Before(now.AddDate(0, 0, 30)) {
+			expiringSoonCount++
+		}
+	}
+
+	// Build template data
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		Results          []storage.DomainWhoisResult
+		Now              time.Time
+		TotalDomains     int
+		ExpiredCount     int
+		ExpiringSoonCount int
+		UnknownCount     int
+		Error            error
+	}{
+		Title:            "Domain Expiration Report",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		Results:          results,
+		Now:              now,
+		TotalDomains:     totalDomains,
+		ExpiredCount:     expiredCount,
+		ExpiringSoonCount: expiringSoonCount,
+		UnknownCount:     unknownCount,
+		Error:            displayError,
+	}
+
+	tmpl, exists := s.templates["domain_expiration"]
+	if !exists {
+		log.Printf("[ERROR] Domain Expiration: Template 'domain_expiration' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Domain Expiration: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // renderIPv6NodeListText writes the IPv6 node list in Michiel van der Vlist's plain text format.
 func renderIPv6NodeListText(w http.ResponseWriter, nodes []storage.IPv6NodeListEntry) {
 	now := time.Now()

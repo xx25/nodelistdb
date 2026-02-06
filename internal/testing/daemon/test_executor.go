@@ -6,6 +6,7 @@ import (
 
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
+	"github.com/nodelistdb/internal/testing/services"
 )
 
 // TestExecutor handles test orchestration and execution
@@ -116,6 +117,11 @@ func (te *TestExecutor) performTesting(ctx context.Context, node *models.Node, h
 
 	// DNS resolution if hostname is provided
 	if hostname != "" {
+		// Enqueue WHOIS lookup for the domain (non-blocking, runs regardless of DNS result)
+		if domain := services.ExtractRegistrableDomain(hostname); domain != "" {
+			te.daemon.whoisWorker.Enqueue(domain)
+		}
+
 		logging.Debugf("Starting DNS resolution for %s", hostname)
 		dnsResult := te.daemon.dnsResolver.Resolve(ctx, hostname)
 

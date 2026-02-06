@@ -24,7 +24,11 @@ type Storage interface {
 	// Query operations
 	GetLatestTestResults(ctx context.Context, limit int) ([]*models.TestResult, error)
 	GetNodeTestHistory(ctx context.Context, zone, net, node int, days int) ([]*models.TestResult, error)
-	
+
+	// WHOIS operations
+	StoreWhoisResult(ctx context.Context, result *models.WhoisResult) error
+	GetRecentWhoisResult(ctx context.Context, domain string, maxAge time.Duration) (*models.WhoisResult, error)
+
 	// Lifecycle
 	Close() error
 }

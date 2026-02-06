@@ -352,6 +352,10 @@ type Operations interface {
 	GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error)
 	GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error)
 
+	// WHOIS operations (delegated to WhoisOps())
+	GetAllWhoisResults() ([]DomainWhoisResult, error)
+	WhoisOps() *WhoisOperations
+
 	// Utility operations (delegated to NodeOps())
 	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
 	FindConflictingNode(zone, net, node int, date time.Time) (bool, error)

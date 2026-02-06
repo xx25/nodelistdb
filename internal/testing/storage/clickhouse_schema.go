@@ -106,6 +106,19 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 		ORDER BY date`,
 	}
 
+	// Add domain_whois_cache table for WHOIS expiration tracking
+	schemas = append(schemas, `CREATE TABLE IF NOT EXISTS domain_whois_cache (
+		domain String,
+		expiration_date Nullable(DateTime),
+		creation_date Nullable(DateTime),
+		registrar String DEFAULT '',
+		whois_status String DEFAULT '',
+		check_time DateTime DEFAULT now(),
+		check_error String DEFAULT ''
+	) ENGINE = ReplacingMergeTree(check_time)
+	ORDER BY domain
+	TTL check_time + INTERVAL 90 DAY`)
+
 	for _, schema := range schemas {
 		if err := s.conn.Exec(ctx, schema); err != nil {
 			// Ignore "already exists" errors for views

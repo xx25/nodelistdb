@@ -114,6 +114,18 @@ type DNSResult struct {
 	ResolutionMs int64
 }
 
+// WhoisResult holds the parsed WHOIS result for a domain
+type WhoisResult struct {
+	Domain         string
+	ExpirationDate *time.Time
+	CreationDate   *time.Time
+	Registrar      string
+	Status         string
+	Error          string
+	LookupTimeMs   int64
+	Cached         bool
+}
+
 // GeolocationResult represents IP geolocation data
 type GeolocationResult struct {
 	IP          string

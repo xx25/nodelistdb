@@ -246,6 +246,10 @@ func (kg *KeyGenerator) DetailedTestResultKey(zone, net, node int, testTime stri
 	return fmt.Sprintf("%s:reachability:detail:%d:%d:%d:%s", kg.Prefix, zone, net, node, testTime)
 }
 
+func (kg *KeyGenerator) WhoisResultsKey() string {
+	return fmt.Sprintf("%s:analytics:whois:results", kg.Prefix)
+}
+
 func (kg *KeyGenerator) AnalyticsPattern() string {
 	return fmt.Sprintf("%s:analytics:*", kg.Prefix)
 }

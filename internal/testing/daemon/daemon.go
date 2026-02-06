@@ -21,8 +21,10 @@ type Daemon struct {
 	storage storage.Storage
 
 	// Services
-	dnsResolver *services.DNSResolver
-	geolocator  *services.Geolocation
+	dnsResolver   *services.DNSResolver
+	geolocator    *services.Geolocation
+	whoisResolver *services.WhoisResolver
+	whoisWorker   *WhoisWorker
 
 	// Persistent cache (optional) - now uses unified cache interface
 	persistentCache cache.Cache
@@ -165,6 +167,9 @@ func New(cfg *Config) (*Daemon, error) {
 		cfg.Services.Geolocation.RateLimit,
 	)
 
+	// Initialize WHOIS resolver (10s timeout for WHOIS queries)
+	d.whoisResolver = services.NewWhoisResolver(10 * time.Second)
+
 	// Wire persistent cache to services if available
 	if d.persistentCache != nil {
 		dnsCache := storage.NewDNSCache(d.persistentCache)
@@ -173,6 +178,12 @@ func New(cfg *Config) (*Daemon, error) {
 		geoCache := storage.NewGeolocationCache(d.persistentCache)
 		d.geolocator.SetPersistentCache(geoCache)
 	}
+
+	// Wire WHOIS persistent cache via ClickHouse (reuse test storage)
+	d.whoisResolver.SetPersistentCache(&whoisPersistentCache{storage: store})
+
+	// Initialize WHOIS background worker
+	d.whoisWorker = NewWhoisWorker(d.whoisResolver, store, 1000)
 
 	// Initialize EMSI configuration manager only if EMSI config is provided
 	// This preserves backward compatibility: when no testing.emsi section exists,
@@ -288,6 +299,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// Start worker pool
 	d.workerPool.Start()
 	defer d.workerPool.Stop()
+
+	// Start WHOIS background worker
+	d.whoisWorker.Start(ctx)
+	defer d.whoisWorker.Stop()
 
 	// Initialize scheduler with current nodes
 	nodes, err := d.storage.GetNodesWithInternet(ctx, 0)
