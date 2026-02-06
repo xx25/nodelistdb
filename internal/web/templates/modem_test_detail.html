@@ -145,23 +145,19 @@
                     <span class="detail-label">Connect String:</span>
                     <span class="detail-value"><code>{{.TestResult.ConnectString}}</code></span>
                     {{end}}
-                    <span class="detail-label">Response Time:</span>
-                    <span class="detail-value"><span class="response-time">{{.TestResult.ResponseMs}} ms</span></span>
+                    <span class="detail-label">Total Time:</span>
+                    <span class="detail-value"><span class="response-time">{{msToSec .TestResult.ResponseMs}}</span> (dial to EMSI complete)</span>
+                    {{if .TestResult.CarrierTimeMs}}
+                    <span class="detail-label">Carrier Time:</span>
+                    <span class="detail-value">{{msToSec .TestResult.CarrierTimeMs}} (dial to CONNECT)</span>
+                    {{end}}
                     {{if .TestResult.RingCount}}
                     <span class="detail-label">Ring Count:</span>
                     <span class="detail-value">{{.TestResult.RingCount}}</span>
                     {{end}}
-                    {{if .TestResult.CarrierTimeMs}}
-                    <span class="detail-label">Carrier Time:</span>
-                    <span class="detail-value">{{.TestResult.CarrierTimeMs}} ms</span>
-                    {{end}}
                     {{if .TestResult.OperatorName}}
                     <span class="detail-label">Operator:</span>
                     <span class="detail-value">{{.TestResult.OperatorName}}{{if .TestResult.OperatorPrefix}} (prefix: {{.TestResult.OperatorPrefix}}){{end}}</span>
-                    {{end}}
-                    {{if .TestResult.DialTimeMs}}
-                    <span class="detail-label">Dial Time:</span>
-                    <span class="detail-value">{{.TestResult.DialTimeMs}} ms</span>
                     {{end}}
                     {{if .TestResult.Error}}
                     <span class="detail-label">Error:</span>
@@ -210,7 +206,7 @@
                     {{end}}
                     {{if .TestResult.EmsiTimeMs}}
                     <span class="detail-label">EMSI Time:</span>
-                    <span class="detail-value">{{.TestResult.EmsiTimeMs}} ms</span>
+                    <span class="detail-value">{{msToSec .TestResult.EmsiTimeMs}}</span>
                     {{end}}
                 </div>
             </div>

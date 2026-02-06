@@ -95,6 +95,20 @@ func (s *Server) loadTemplates() {
 				return 0
 			}
 		},
+		"msToSec": func(ms any) string {
+			var v float64
+			switch ms := ms.(type) {
+			case uint32:
+				v = float64(ms) / 1000.0
+			case uint16:
+				v = float64(ms) / 1000.0
+			case int:
+				v = float64(ms) / 1000.0
+			default:
+				return "0s"
+			}
+			return fmt.Sprintf("%.1fs", v)
+		},
 		"mul": func(a, b interface{}) float64 {
 			switch a := a.(type) {
 			case int:
