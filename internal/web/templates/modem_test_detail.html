@@ -301,27 +301,27 @@
                     <span class="detail-label">Packet Loss (Remote):</span>
                     <span class="detail-value">{{.TestResult.CdrRemotePacketLoss}}%</span>
                     {{end}}
-                    {{if .TestResult.CdrLocalMos}}
+                    {{if and .TestResult.CdrLocalMos (ne (printf "%d" .TestResult.CdrLocalMos) "127")}}
                     <span class="detail-label">MOS (Local):</span>
                     <span class="detail-value">{{.TestResult.CdrLocalMos}}</span>
                     {{end}}
-                    {{if .TestResult.CdrRemoteMos}}
+                    {{if and .TestResult.CdrRemoteMos (ne (printf "%d" .TestResult.CdrRemoteMos) "127")}}
                     <span class="detail-label">MOS (Remote):</span>
                     <span class="detail-value">{{.TestResult.CdrRemoteMos}}</span>
                     {{end}}
-                    {{if .TestResult.CdrLocalRFactor}}
+                    {{if and .TestResult.CdrLocalRFactor (ne (printf "%d" .TestResult.CdrLocalRFactor) "127")}}
                     <span class="detail-label">R-Factor (Local):</span>
                     <span class="detail-value">{{.TestResult.CdrLocalRFactor}}</span>
                     {{end}}
-                    {{if .TestResult.CdrRemoteRFactor}}
+                    {{if and .TestResult.CdrRemoteRFactor (ne (printf "%d" .TestResult.CdrRemoteRFactor) "127")}}
                     <span class="detail-label">R-Factor (Remote):</span>
                     <span class="detail-value">{{.TestResult.CdrRemoteRFactor}}</span>
                     {{end}}
-                    {{if .TestResult.CdrTermReason}}
+                    {{if and .TestResult.CdrTermReason (ne .TestResult.CdrTermReason "REASON N/A")}}
                     <span class="detail-label">Termination Reason:</span>
                     <span class="detail-value">{{.TestResult.CdrTermReason}}</span>
                     {{end}}
-                    {{if .TestResult.CdrTermCategory}}
+                    {{if and .TestResult.CdrTermCategory (ne .TestResult.CdrTermCategory "UNKNOWN")}}
                     <span class="detail-label">Termination Category:</span>
                     <span class="detail-value">{{.TestResult.CdrTermCategory}}</span>
                     {{end}}
