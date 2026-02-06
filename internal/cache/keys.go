@@ -202,6 +202,30 @@ func (kg *KeyGenerator) PioneersByRegionKey(zone, region, limit int) string {
 	return fmt.Sprintf("%s:analytics:pioneers:%d:%d:%d", kg.Prefix, zone, region, limit)
 }
 
+func (kg *KeyGenerator) PSTNCMNodesKey(limit int) string {
+	return fmt.Sprintf("%s:analytics:pstn:cm:%d", kg.Prefix, limit)
+}
+
+func (kg *KeyGenerator) PSTNNodesKey(limit, zone int) string {
+	return fmt.Sprintf("%s:analytics:pstn:nodes:%d:%d", kg.Prefix, limit, zone)
+}
+
+func (kg *KeyGenerator) FileRequestNodesKey(limit int) string {
+	return fmt.Sprintf("%s:analytics:filerequest:%d", kg.Prefix, limit)
+}
+
+func (kg *KeyGenerator) AKAMismatchNodesKey(limit, days int, includeZeroNodes bool) string {
+	return fmt.Sprintf("%s:analytics:aka:mismatch:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+}
+
+func (kg *KeyGenerator) ModemAccessibleNodesKey(limit, days int, includeZeroNodes bool) string {
+	return fmt.Sprintf("%s:analytics:modem:accessible:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+}
+
+func (kg *KeyGenerator) ModemTestDetailKey(zone, net, node int, testTime string) string {
+	return fmt.Sprintf("%s:analytics:modem:detail:%d:%d:%d:%s", kg.Prefix, zone, net, node, testTime)
+}
+
 func (kg *KeyGenerator) AnalyticsPattern() string {
 	return fmt.Sprintf("%s:analytics:*", kg.Prefix)
 }

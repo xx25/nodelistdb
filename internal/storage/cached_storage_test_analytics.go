@@ -844,12 +844,194 @@ func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days i
 	return results, nil
 }
 
-// GetModemAccessibleNodes returns nodes successfully reached via modem tests (pass-through, no caching)
+// GetModemAccessibleNodes returns nodes successfully reached via modem tests (cached)
 func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
-	return cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes)
+	if !cs.config.Enabled {
+		return cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes)
+	}
+
+	key := cs.keyGen.ModemAccessibleNodesKey(limit, days, includeZeroNodes)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []ModemAccessibleNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
 }
 
-// GetDetailedModemTestResult returns detailed modem test data (pass-through, no caching)
+// GetDetailedModemTestResult returns detailed modem test data (cached)
 func (cs *CachedStorage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
-	return cs.Storage.GetDetailedModemTestResult(zone, net, node, testTime)
+	if !cs.config.Enabled {
+		return cs.Storage.GetDetailedModemTestResult(zone, net, node, testTime)
+	}
+
+	key := cs.keyGen.ModemTestDetailKey(zone, net, node, testTime)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var result ModemTestDetail
+		if err := json.Unmarshal(data, &result); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return &result, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	result, err := cs.Storage.GetDetailedModemTestResult(zone, net, node, testTime)
+	if err != nil {
+		return nil, err
+	}
+
+	if result != nil {
+		if data, err := json.Marshal(result); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return result, nil
+}
+
+// GetPSTNCMNodes returns PSTN CM nodes (cached)
+func (cs *CachedStorage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetPSTNCMNodes(limit)
+	}
+
+	key := cs.keyGen.PSTNCMNodesKey(limit)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []PSTNNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetPSTNCMNodes(limit)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
+// GetPSTNNodes returns PSTN nodes (cached)
+func (cs *CachedStorage) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetPSTNNodes(limit, zone)
+	}
+
+	key := cs.keyGen.PSTNNodesKey(limit, zone)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []PSTNNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetPSTNNodes(limit, zone)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
+// GetFileRequestNodes returns file request capable nodes (cached)
+func (cs *CachedStorage) GetFileRequestNodes(limit int) ([]FileRequestNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetFileRequestNodes(limit)
+	}
+
+	key := cs.keyGen.FileRequestNodesKey(limit)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []FileRequestNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetFileRequestNodes(limit)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
+// GetAKAMismatchNodes returns AKA mismatch nodes (cached)
+func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes)
+	}
+
+	key := cs.keyGen.AKAMismatchNodesKey(limit, days, includeZeroNodes)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []NodeTestResult
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
 }
