@@ -15,18 +15,20 @@ import (
 	"github.com/nodelistdb/internal/testing/models"
 )
 
-// PersistentWhoisCache is a callback interface for persistent WHOIS cache
+// PersistentWhoisCache is a read-only callback interface for persistent WHOIS cache.
+// The worker is responsible for writing results to persistent storage.
 type PersistentWhoisCache interface {
 	Get(domain string) (*models.WhoisResult, error)
-	Set(domain string, result *models.WhoisResult) error
 }
 
 // WhoisResolver handles WHOIS lookups with in-memory caching, singleflight dedup, and rate limiting
 type WhoisResolver struct {
 	timeout         time.Duration
+	client          *whois.Client
 	cache           sync.Map // domain → *whoisCacheEntry
 	sfGroup         singleflight.Group
 	rateLimiter     chan struct{}
+	rateLimiterDone chan struct{} // closed to stop the rate limiter goroutine
 	persistentCache PersistentWhoisCache
 }
 
@@ -37,19 +39,29 @@ type whoisCacheEntry struct {
 
 // NewWhoisResolver creates a new WHOIS resolver with rate limiting
 func NewWhoisResolver(timeout time.Duration) *WhoisResolver {
+	client := whois.NewClient()
+	client.SetTimeout(timeout)
+
 	r := &WhoisResolver{
-		timeout:     timeout,
-		rateLimiter: make(chan struct{}, 1),
+		timeout:         timeout,
+		client:          client,
+		rateLimiter:     make(chan struct{}, 1),
+		rateLimiterDone: make(chan struct{}),
 	}
 
 	// Start rate limiter: allows one lookup per second
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
+		for {
 			select {
-			case r.rateLimiter <- struct{}{}:
-			default:
+			case <-r.rateLimiterDone:
+				return
+			case <-ticker.C:
+				select {
+				case r.rateLimiter <- struct{}{}:
+				default:
+				}
 			}
 		}
 	}()
@@ -59,7 +71,12 @@ func NewWhoisResolver(timeout time.Duration) *WhoisResolver {
 	return r
 }
 
-// SetPersistentCache sets an optional persistent cache for WHOIS results
+// Close stops the rate limiter goroutine
+func (r *WhoisResolver) Close() {
+	close(r.rateLimiterDone)
+}
+
+// SetPersistentCache sets an optional persistent cache for WHOIS results (read-only)
 func (r *WhoisResolver) SetPersistentCache(cache PersistentWhoisCache) {
 	r.persistentCache = cache
 }
@@ -89,13 +106,18 @@ func (r *WhoisResolver) Resolve(ctx context.Context, domain string) *models.Whoi
 
 // doResolve performs the actual WHOIS lookup (within singleflight)
 func (r *WhoisResolver) doResolve(ctx context.Context, domain string) *models.WhoisResult {
-	// Check persistent cache
+	// Check persistent cache (read-only)
 	if r.persistentCache != nil {
 		if cached, err := r.persistentCache.Get(domain); err == nil && cached != nil {
-			// Store in in-memory cache too
-			r.cacheResult(domain, cached)
-			cached.Cached = true
-			return cached
+			// Use shorter freshness for errors vs successes
+			if cached.Error != "" && cached.Error != "domain not found" {
+				// Don't trust persistent transient errors — do a fresh lookup
+			} else {
+				// Store in in-memory cache too
+				r.cacheResult(domain, cached)
+				cached.Cached = true
+				return cached
+			}
 		}
 	}
 
@@ -115,13 +137,8 @@ func (r *WhoisResolver) doResolve(ctx context.Context, domain string) *models.Wh
 	result := r.lookupWhois(domain)
 	result.LookupTimeMs = time.Since(start).Milliseconds()
 
-	// Cache the result
+	// Cache the result in memory only (worker handles persistent storage)
 	r.cacheResult(domain, result)
-
-	// Store in persistent cache
-	if r.persistentCache != nil {
-		_ = r.persistentCache.Set(domain, result)
-	}
 
 	return result
 }
@@ -132,8 +149,8 @@ func (r *WhoisResolver) lookupWhois(domain string) *models.WhoisResult {
 		Domain: domain,
 	}
 
-	// Perform WHOIS query
-	rawWhois, err := whois.Whois(domain)
+	// Perform WHOIS query using configured client with timeout
+	rawWhois, err := r.client.Whois(domain)
 	if err != nil {
 		result.Error = fmt.Sprintf("WHOIS lookup failed: %v", err)
 		return result
@@ -197,20 +214,20 @@ func (r *WhoisResolver) cacheResult(domain string, result *models.WhoisResult) {
 }
 
 // parseFlexibleDate tries multiple date formats common in WHOIS responses
-func parseFlexibleDate(s string) (time.Time, error) {
-	formats := []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05Z",
-		"2006-01-02T15:04:05-07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-		"02-Jan-2006",
-		"January 02 2006",
-		"2006/01/02",
-	}
+var flexibleDateFormats = []string{
+	time.RFC3339,
+	"2006-01-02T15:04:05Z",
+	"2006-01-02T15:04:05-07:00",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+	"02-Jan-2006",
+	"January 02 2006",
+	"2006/01/02",
+}
 
+func parseFlexibleDate(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
-	for _, format := range formats {
+	for _, format := range flexibleDateFormats {
 		if t, err := time.Parse(format, s); err == nil {
 			return t, nil
 		}

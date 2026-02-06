@@ -179,8 +179,8 @@ func New(cfg *Config) (*Daemon, error) {
 		d.geolocator.SetPersistentCache(geoCache)
 	}
 
-	// Wire WHOIS persistent cache via ClickHouse (reuse test storage)
-	d.whoisResolver.SetPersistentCache(&whoisPersistentCache{storage: store})
+	// Wire WHOIS persistent cache via ClickHouse (read-only, for cache hits)
+	d.whoisResolver.SetPersistentCache(&whoisReadCache{storage: store})
 
 	// Initialize WHOIS background worker
 	d.whoisWorker = NewWhoisWorker(d.whoisResolver, store, 1000)
@@ -296,13 +296,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to start CLI server: %w", err)
 	}
 
-	// Start worker pool
-	d.workerPool.Start()
-	defer d.workerPool.Stop()
-
-	// Start WHOIS background worker
+	// Start WHOIS background worker (must defer Stop before workerPool
+	// so worker pool stops first, preventing sends on closed queue)
 	d.whoisWorker.Start(ctx)
 	defer d.whoisWorker.Stop()
+
+	// Start worker pool (defers are LIFO, so this stops before whoisWorker)
+	d.workerPool.Start()
+	defer d.workerPool.Stop()
 
 	// Initialize scheduler with current nodes
 	nodes, err := d.storage.GetNodesWithInternet(ctx, 0)
@@ -383,6 +384,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 func (d *Daemon) Close() error {
 	if d.workerPool != nil {
 		d.workerPool.Stop()
+	}
+
+	if d.whoisResolver != nil {
+		d.whoisResolver.Close()
 	}
 
 	if d.persistentCache != nil {

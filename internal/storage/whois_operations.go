@@ -3,10 +3,11 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
-	"github.com/nodelistdb/internal/testing/services"
+	"github.com/nodelistdb/internal/domain"
 )
 
 // DomainWhoisResult represents a WHOIS lookup result for the analytics page
@@ -45,20 +46,30 @@ func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 		return whoisResults, nil
 	}
 
-	// Step 2: Get unique hostnames from recent test results
-	hostnames, err := w.getUniqueHostnames(ctx, 30)
+	// Step 2: Get hostname→node mappings from recent test results
+	hostnameNodes, err := w.getHostnameNodeMappings(ctx, 30)
 	if err != nil {
 		// Return WHOIS results without node counts rather than failing
 		return whoisResults, nil
 	}
 
-	// Step 3: Map hostnames to domains and count nodes per domain in Go
-	domainCounts := services.ExtractUniqueDomains(hostnames)
+	// Step 3: Count unique nodes per domain in Go
+	domainNodes := make(map[string]map[string]struct{}) // domain → set of "zone:net:node"
+	for _, hn := range hostnameNodes {
+		d := domain.ExtractRegistrableDomain(hn.hostname)
+		if d == "" {
+			continue
+		}
+		if domainNodes[d] == nil {
+			domainNodes[d] = make(map[string]struct{})
+		}
+		domainNodes[d][hn.nodeKey] = struct{}{}
+	}
 
 	// Step 4: Merge node counts into WHOIS results
 	for i := range whoisResults {
-		if count, ok := domainCounts[whoisResults[i].Domain]; ok {
-			whoisResults[i].NodeCount = count
+		if nodes, ok := domainNodes[whoisResults[i].Domain]; ok {
+			whoisResults[i].NodeCount = len(nodes)
 		}
 	}
 
@@ -109,9 +120,14 @@ func (w *WhoisOperations) getWhoisEntries(ctx context.Context) ([]DomainWhoisRes
 	return results, rows.Err()
 }
 
-// getUniqueHostnames fetches unique hostnames from recent test results
-func (w *WhoisOperations) getUniqueHostnames(ctx context.Context, days int) ([]string, error) {
-	query := `SELECT DISTINCT hostname
+type hostnameNode struct {
+	hostname string
+	nodeKey  string // "zone:net:node" for dedup
+}
+
+// getHostnameNodeMappings fetches distinct (hostname, zone, net, node) tuples from recent test results
+func (w *WhoisOperations) getHostnameNodeMappings(ctx context.Context, days int) ([]hostnameNode, error) {
+	query := `SELECT DISTINCT hostname, zone, net, node
 		FROM node_test_results
 		WHERE hostname != ''
 		  AND is_aggregated = false
@@ -124,14 +140,20 @@ func (w *WhoisOperations) getUniqueHostnames(ctx context.Context, days int) ([]s
 	}
 	defer rows.Close()
 
-	var hostnames []string
+	var results []hostnameNode
 	for rows.Next() {
-		var h string
-		if err := rows.Scan(&h); err != nil {
+		var (
+			h                string
+			zone, net, node  int
+		)
+		if err := rows.Scan(&h, &zone, &net, &node); err != nil {
 			return nil, err
 		}
-		hostnames = append(hostnames, h)
+		results = append(results, hostnameNode{
+			hostname: h,
+			nodeKey:  fmt.Sprintf("%d:%d/%d", zone, net, node),
+		})
 	}
 
-	return hostnames, rows.Err()
+	return results, rows.Err()
 }

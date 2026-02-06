@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nodelistdb/internal/testing/logging"
@@ -11,17 +12,15 @@ import (
 	"github.com/nodelistdb/internal/testing/storage"
 )
 
-// whoisPersistentCache adapts testdaemon storage to the PersistentWhoisCache interface
-type whoisPersistentCache struct {
+// whoisReadCache adapts testdaemon storage to the PersistentWhoisCache interface (read-only).
+// Lookups use a 24h freshness window — transient errors stored in ClickHouse are not
+// returned since the worker only persists success/"not found" results.
+type whoisReadCache struct {
 	storage storage.Storage
 }
 
-func (c *whoisPersistentCache) Get(domain string) (*models.WhoisResult, error) {
+func (c *whoisReadCache) Get(domain string) (*models.WhoisResult, error) {
 	return c.storage.GetRecentWhoisResult(context.Background(), domain, 24*time.Hour)
-}
-
-func (c *whoisPersistentCache) Set(domain string, result *models.WhoisResult) error {
-	return c.storage.StoreWhoisResult(context.Background(), result)
 }
 
 // WhoisWorker processes WHOIS lookups in a background goroutine,
@@ -30,7 +29,9 @@ type WhoisWorker struct {
 	resolver *services.WhoisResolver
 	storage  storage.Storage
 	queue    chan string
-	seen     sync.Map // domain → struct{}, for dedup within a daemon lifecycle
+	seen     sync.Map // domain → time.Time (enqueue time), for dedup with TTL
+	seenTTL  time.Duration
+	stopped  atomic.Bool
 	wg       sync.WaitGroup
 }
 
@@ -43,6 +44,7 @@ func NewWhoisWorker(resolver *services.WhoisResolver, store storage.Storage, que
 		resolver: resolver,
 		storage:  store,
 		queue:    make(chan string, queueSize),
+		seenTTL:  24 * time.Hour,
 	}
 }
 
@@ -52,29 +54,41 @@ func (w *WhoisWorker) Start(ctx context.Context) {
 	go w.processQueue(ctx)
 }
 
-// Stop signals the worker to stop and waits for it to finish
+// Stop signals the worker to stop and waits for it to finish.
+// Must be called after all producers (test workers) have stopped.
 func (w *WhoisWorker) Stop() {
+	w.stopped.Store(true)
 	close(w.queue)
 	w.wg.Wait()
 }
 
 // Enqueue adds a domain to the WHOIS lookup queue.
-// Non-blocking: if queue is full or domain was already enqueued, it's silently skipped.
+// Non-blocking: if queue is full, stopped, or domain was recently enqueued, it's silently skipped.
 func (w *WhoisWorker) Enqueue(domain string) {
 	if domain == "" {
 		return
 	}
 
-	// Dedup: skip if already seen in this daemon lifecycle
-	if _, loaded := w.seen.LoadOrStore(domain, struct{}{}); loaded {
+	// Guard against send on closed channel after Stop()
+	if w.stopped.Load() {
 		return
 	}
 
-	// Non-blocking send
+	now := time.Now()
+
+	// Dedup with TTL: skip if seen within seenTTL
+	if val, loaded := w.seen.Load(domain); loaded {
+		if seenAt, ok := val.(time.Time); ok && now.Sub(seenAt) < w.seenTTL {
+			return
+		}
+	}
+
+	// Non-blocking send — only mark as seen if successfully enqueued
 	select {
 	case w.queue <- domain:
+		w.seen.Store(domain, now)
 	default:
-		// Queue full — domain will be picked up on next test cycle
+		// Queue full — domain will be retried on next encounter since we didn't mark it as seen
 		logging.Debugf("WHOIS queue full, skipping domain %s", domain)
 	}
 }
@@ -106,9 +120,13 @@ func (w *WhoisWorker) processQueue(ctx context.Context) {
 			logging.Infof("WHOIS for %s: expires %s, registrar %s", domain, expiryStr, result.Registrar)
 		}
 
-		// Store result in ClickHouse
-		if err := w.storage.StoreWhoisResult(ctx, result); err != nil {
-			logging.Errorf("Failed to store WHOIS result for %s: %v", domain, err)
+		// Only persist successful lookups and "domain not found" to ClickHouse.
+		// Transient errors (network timeouts, rate limits) should not overwrite
+		// previously known good data in ReplacingMergeTree.
+		if result.Error == "" || result.Error == "domain not found" {
+			if err := w.storage.StoreWhoisResult(ctx, result); err != nil {
+				logging.Errorf("Failed to store WHOIS result for %s: %v", domain, err)
+			}
 		}
 	}
 }

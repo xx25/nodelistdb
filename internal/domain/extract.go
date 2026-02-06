@@ -1,4 +1,4 @@
-package services
+package domain
 
 import (
 	"net"
@@ -38,20 +38,18 @@ func ExtractRegistrableDomain(hostname string) string {
 	}
 
 	// Check if the suffix is ICANN-managed (not a private suffix like github.io)
-	suffix, icann := publicsuffix.PublicSuffix(host)
+	_, icann := publicsuffix.PublicSuffix(host)
 	if !icann {
-		// Private suffix (e.g., user.github.io) — no meaningful WHOIS
-		_ = suffix
 		return ""
 	}
 
 	// Extract registrable domain (eTLD+1)
-	domain, err := publicsuffix.EffectiveTLDPlusOne(host)
+	d, err := publicsuffix.EffectiveTLDPlusOne(host)
 	if err != nil {
 		return ""
 	}
 
-	return domain
+	return d
 }
 
 // ExtractUniqueDomains extracts unique registrable domains from a list of hostnames.
@@ -59,9 +57,9 @@ func ExtractRegistrableDomain(hostname string) string {
 func ExtractUniqueDomains(hostnames []string) map[string]int {
 	domains := make(map[string]int)
 	for _, hostname := range hostnames {
-		domain := ExtractRegistrableDomain(hostname)
-		if domain != "" {
-			domains[domain]++
+		d := ExtractRegistrableDomain(hostname)
+		if d != "" {
+			domains[d]++
 		}
 	}
 	return domains
