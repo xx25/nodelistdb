@@ -11,13 +11,19 @@ import (
 
 // Server represents the API server
 type Server struct {
-	storage      storage.Operations
-	modemHandler *ModemHandler
+	storage       storage.Operations
+	modemHandler  *ModemHandler
+	healthChecker HealthChecker
 }
 
 // SetModemHandler sets the modem handler for the server
 func (s *Server) SetModemHandler(handler *ModemHandler) {
 	s.modemHandler = handler
+}
+
+// SetHealthChecker sets the health checker for the server
+func (s *Server) SetHealthChecker(hc HealthChecker) {
+	s.healthChecker = hc
 }
 
 // New creates a new API server
@@ -29,11 +35,15 @@ func New(storage storage.Operations) *Server {
 
 // HealthHandler handles health check requests
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
-	response := map[string]interface{}{
+	if s.healthChecker != nil {
+		WriteJSONSuccess(w, s.healthChecker.CheckHealth())
+		return
+	}
+	// Fallback: backward-compatible trivial response
+	response := map[string]any{
 		"status": "ok",
 		"time":   time.Now().UTC(),
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
 }

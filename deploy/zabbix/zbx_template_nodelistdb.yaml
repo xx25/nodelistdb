@@ -1,0 +1,433 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    - uuid: 7df96b18c230490a9a0a9e2307226338
+      name: Templates/Applications
+  templates:
+    - uuid: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+      template: NodelistDB
+      name: 'NodelistDB FidoNet Server'
+      description: |
+        Monitoring template for NodelistDB server and testdaemon.
+        Monitors health endpoint, ClickHouse connectivity, systemd services, and error rates.
+
+        Requires deploy/zabbix/nodelistdb.conf installed on the agent host.
+      groups:
+        - name: Templates/Applications
+
+      macros:
+        - macro: '{$NODELISTDB.HEALTH.INTERVAL}'
+          value: '60'
+          description: 'Health check polling interval (seconds)'
+        - macro: '{$NODELISTDB.DB.RESPONSE_MS.WARN}'
+          value: '500'
+          description: 'DB response time warning threshold (ms)'
+        - macro: '{$NODELISTDB.DB.RESPONSE_MS.HIGH}'
+          value: '2000'
+          description: 'DB response time critical threshold (ms)'
+        - macro: '{$NODELISTDB.ERROR.THRESHOLD}'
+          value: '10'
+          description: 'New errors per check interval for alerting'
+        - macro: '{$NODELISTDB.NODATA.TIMEOUT}'
+          value: '300'
+          description: 'No data timeout before alerting (seconds)'
+
+      valuemaps:
+        - uuid: b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5
+          name: 'Service state'
+          mappings:
+            - value: '0'
+              newvalue: Down
+            - value: '1'
+              newvalue: Up
+
+      items:
+        # ==============================
+        # Master item: full health JSON
+        # ==============================
+        - uuid: c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6
+          name: 'NodelistDB health raw'
+          key: nodelistdb.health
+          delay: '{$NODELISTDB.HEALTH.INTERVAL}'
+          history: 1h
+          trends: '0'
+          value_type: TEXT
+          description: 'Raw JSON from /api/health endpoint. All dependent items parse fields from this.'
+          tags:
+            - tag: component
+              value: health
+
+        # ==============================
+        # Dependent items (from health JSON)
+        # ==============================
+        - uuid: d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1
+          name: 'NodelistDB status'
+          type: DEPENDENT
+          key: nodelistdb.health.status
+          delay: '0'
+          history: 7d
+          trends: '0'
+          value_type: CHAR
+          description: 'Health status: ok, degraded, or unreachable'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.status'
+          master_item:
+            key: nodelistdb.health
+          tags:
+            - tag: component
+              value: health
+
+        - uuid: e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+          name: 'NodelistDB uptime'
+          type: DEPENDENT
+          key: nodelistdb.health.uptime
+          delay: '0'
+          history: 30d
+          trends: 90d
+          value_type: FLOAT
+          units: s
+          description: 'Server uptime in seconds'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.uptime_seconds'
+              error_handler: DISCARD_VALUE
+          master_item:
+            key: nodelistdb.health
+          tags:
+            - tag: component
+              value: health
+
+        - uuid: f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3
+          name: 'NodelistDB version'
+          type: DEPENDENT
+          key: nodelistdb.health.version
+          delay: '0'
+          history: 30d
+          trends: '0'
+          value_type: CHAR
+          description: 'Server version string'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.version.version'
+              error_handler: DISCARD_VALUE
+          master_item:
+            key: nodelistdb.health
+          tags:
+            - tag: component
+              value: health
+
+        - uuid: a1c2e3f4a1c2e3f4a1c2e3f4a1c2e3f4
+          name: 'NodelistDB DB connected'
+          type: DEPENDENT
+          key: nodelistdb.health.db.connected
+          delay: '0'
+          history: 7d
+          trends: 90d
+          value_type: UNSIGNED
+          description: 'ClickHouse connection: 1=connected, 0=disconnected'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.database.connected'
+            - type: BOOL_TO_DECIMAL
+          master_item:
+            key: nodelistdb.health
+          valuemap:
+            name: 'Service state'
+          tags:
+            - tag: component
+              value: database
+
+        - uuid: b2d3f4a1b2d3f4a1b2d3f4a1b2d3f4a1
+          name: 'NodelistDB DB response time'
+          type: DEPENDENT
+          key: nodelistdb.health.db.response_ms
+          delay: '0'
+          history: 30d
+          trends: 90d
+          value_type: UNSIGNED
+          units: ms
+          description: 'ClickHouse ping response time in milliseconds'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.database.response_ms'
+              error_handler: DISCARD_VALUE
+          master_item:
+            key: nodelistdb.health
+          tags:
+            - tag: component
+              value: database
+
+        - uuid: c3e4a1b2c3e4a1b2c3e4a1b2c3e4a1b2
+          name: 'NodelistDB node count'
+          type: DEPENDENT
+          key: nodelistdb.health.nodes.count
+          delay: '0'
+          history: 30d
+          trends: 90d
+          value_type: UNSIGNED
+          description: 'Total nodes in the latest nodelist'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.nodes.count'
+              error_handler: DISCARD_VALUE
+          master_item:
+            key: nodelistdb.health
+          tags:
+            - tag: component
+              value: data
+
+        - uuid: d4f5b2c3d4f5b2c3d4f5b2c3d4f5b2c3
+          name: 'NodelistDB latest nodelist date'
+          type: DEPENDENT
+          key: nodelistdb.health.nodes.date
+          delay: '0'
+          history: 30d
+          trends: '0'
+          value_type: CHAR
+          description: 'Date of the latest imported nodelist'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.nodes.latest_date'
+              error_handler: DISCARD_VALUE
+          master_item:
+            key: nodelistdb.health
+          tags:
+            - tag: component
+              value: data
+
+        - uuid: e5a1c2d3e5a1c2d3e5a1c2d3e5a1c2d3
+          name: 'NodelistDB cache hit rate'
+          type: DEPENDENT
+          key: nodelistdb.health.cache.hit_rate
+          delay: '0'
+          history: 30d
+          trends: 90d
+          value_type: FLOAT
+          units: '%'
+          description: 'Cache hit rate percentage (only when cache enabled)'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.cache.hit_rate'
+              error_handler: DISCARD_VALUE
+          master_item:
+            key: nodelistdb.health
+          tags:
+            - tag: component
+              value: cache
+
+        - uuid: f6b2d3e4f6b2d3e4f6b2d3e4f6b2d3e4
+          name: 'NodelistDB cache keys'
+          type: DEPENDENT
+          key: nodelistdb.health.cache.keys
+          delay: '0'
+          history: 30d
+          trends: 90d
+          value_type: UNSIGNED
+          description: 'Number of keys in the cache'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.cache.keys'
+              error_handler: DISCARD_VALUE
+          master_item:
+            key: nodelistdb.health
+          tags:
+            - tag: component
+              value: cache
+
+        # ==============================
+        # Direct UserParameter items
+        # ==============================
+        - uuid: a1a2a3a4a5a6a7a8a1a2a3a4a5a6a7a8
+          name: 'NodelistDB server service'
+          key: nodelistdb.service.server
+          delay: '60'
+          history: 7d
+          trends: 90d
+          value_type: UNSIGNED
+          description: 'systemd nodelistdb service: 1=active, 0=down'
+          valuemap:
+            name: 'Service state'
+          tags:
+            - tag: component
+              value: service
+
+        - uuid: b1b2b3b4b5b6b7b8b1b2b3b4b5b6b7b8
+          name: 'NodelistDB testdaemon service'
+          key: nodelistdb.service.testdaemon
+          delay: '60'
+          history: 7d
+          trends: 90d
+          value_type: UNSIGNED
+          description: 'systemd nodelistdb-testdaemon service: 1=active, 0=down'
+          valuemap:
+            name: 'Service state'
+          tags:
+            - tag: component
+              value: service
+
+        - uuid: c1c2c3c4c5c6c7c8c1c2c3c4c5c6c7c8
+          name: 'NodelistDB server log errors'
+          key: nodelistdb.log.errors.server
+          delay: '300'
+          history: 30d
+          trends: 90d
+          value_type: UNSIGNED
+          description: 'Cumulative ERROR count in server.log. Use change() trigger for rate.'
+          tags:
+            - tag: component
+              value: logs
+
+        - uuid: d1d2d3d4d5d6d7d8d1d2d3d4d5d6d7d8
+          name: 'NodelistDB daemon log errors'
+          key: nodelistdb.log.errors.daemon
+          delay: '300'
+          history: 30d
+          trends: 90d
+          value_type: UNSIGNED
+          description: 'Cumulative ERROR count in daemon.log. Use change() trigger for rate.'
+          tags:
+            - tag: component
+              value: logs
+
+      triggers:
+        # --- HIGH ---
+        - uuid: 11112222333344445555666677778888
+          expression: 'last(/NodelistDB/nodelistdb.service.server)=0'
+          name: 'NodelistDB server service is down'
+          priority: HIGH
+          description: 'The systemd nodelistdb service is not active.'
+          tags:
+            - tag: scope
+              value: availability
+
+        - uuid: 22223333444455556666777788889999
+          expression: 'last(/NodelistDB/nodelistdb.health.status)="unreachable"'
+          name: 'NodelistDB health endpoint unreachable'
+          priority: HIGH
+          description: 'Cannot reach /api/health - server may be down or unresponsive.'
+          dependencies:
+            - name: 'NodelistDB server service is down'
+              expression: 'last(/NodelistDB/nodelistdb.service.server)=0'
+          tags:
+            - tag: scope
+              value: availability
+
+        - uuid: 33334444555566667777888899990000
+          expression: 'last(/NodelistDB/nodelistdb.health.db.connected)=0'
+          name: 'NodelistDB ClickHouse disconnected'
+          priority: HIGH
+          description: 'Database ping failed - ClickHouse may be down or unreachable.'
+          dependencies:
+            - name: 'NodelistDB health endpoint unreachable'
+              expression: 'last(/NodelistDB/nodelistdb.health.status)="unreachable"'
+          tags:
+            - tag: scope
+              value: availability
+
+        # --- AVERAGE ---
+        - uuid: 4444555566667777888899990000aaaa
+          expression: 'nodata(/NodelistDB/nodelistdb.health,{$NODELISTDB.NODATA.TIMEOUT})=1'
+          name: 'NodelistDB no health data for {$NODELISTDB.NODATA.TIMEOUT}s'
+          priority: AVERAGE
+          description: 'No health check data received - agent or server may be down.'
+          dependencies:
+            - name: 'NodelistDB server service is down'
+              expression: 'last(/NodelistDB/nodelistdb.service.server)=0'
+          tags:
+            - tag: scope
+              value: availability
+
+        - uuid: 5555666677778888999900001111bbbb
+          expression: 'min(/NodelistDB/nodelistdb.health.db.response_ms,5m)>{$NODELISTDB.DB.RESPONSE_MS.HIGH}'
+          name: 'NodelistDB DB response time critical (>{$NODELISTDB.DB.RESPONSE_MS.HIGH}ms)'
+          priority: AVERAGE
+          description: 'ClickHouse response time sustained above {$NODELISTDB.DB.RESPONSE_MS.HIGH}ms for 5 minutes.'
+          dependencies:
+            - name: 'NodelistDB ClickHouse disconnected'
+              expression: 'last(/NodelistDB/nodelistdb.health.db.connected)=0'
+          tags:
+            - tag: scope
+              value: performance
+
+        # --- WARNING ---
+        - uuid: 6666777788889999000011112222cccc
+          expression: 'last(/NodelistDB/nodelistdb.health.status)="degraded"'
+          name: 'NodelistDB health status degraded'
+          priority: WARNING
+          description: 'Health check reports degraded status (likely a database issue).'
+          dependencies:
+            - name: 'NodelistDB health endpoint unreachable'
+              expression: 'last(/NodelistDB/nodelistdb.health.status)="unreachable"'
+          tags:
+            - tag: scope
+              value: performance
+
+        - uuid: 7777888899990000111122223333dddd
+          expression: 'min(/NodelistDB/nodelistdb.health.db.response_ms,5m)>{$NODELISTDB.DB.RESPONSE_MS.WARN}'
+          name: 'NodelistDB DB response time elevated (>{$NODELISTDB.DB.RESPONSE_MS.WARN}ms)'
+          priority: WARNING
+          description: 'ClickHouse response time sustained above {$NODELISTDB.DB.RESPONSE_MS.WARN}ms for 5 minutes.'
+          dependencies:
+            - name: 'NodelistDB DB response time critical (>{$NODELISTDB.DB.RESPONSE_MS.HIGH}ms)'
+              expression: 'min(/NodelistDB/nodelistdb.health.db.response_ms,5m)>{$NODELISTDB.DB.RESPONSE_MS.HIGH}'
+          tags:
+            - tag: scope
+              value: performance
+
+        - uuid: 888899990000111122223333444455ee
+          expression: 'last(/NodelistDB/nodelistdb.service.testdaemon)=0'
+          name: 'NodelistDB testdaemon service is down'
+          priority: WARNING
+          description: 'The systemd nodelistdb-testdaemon service is not active.'
+          tags:
+            - tag: scope
+              value: availability
+
+        - uuid: 99990000111122223333444455556666
+          expression: 'change(/NodelistDB/nodelistdb.log.errors.server)>{$NODELISTDB.ERROR.THRESHOLD}'
+          name: 'NodelistDB server error rate elevated'
+          priority: WARNING
+          description: 'More than {$NODELISTDB.ERROR.THRESHOLD} new errors in server.log since last check.'
+          tags:
+            - tag: scope
+              value: performance
+
+        - uuid: 0000111122223333444455556666ffff
+          expression: 'change(/NodelistDB/nodelistdb.log.errors.daemon)>{$NODELISTDB.ERROR.THRESHOLD}'
+          name: 'NodelistDB daemon error rate elevated'
+          priority: WARNING
+          description: 'More than {$NODELISTDB.ERROR.THRESHOLD} new errors in daemon.log since last check.'
+          tags:
+            - tag: scope
+              value: performance
+
+        # --- INFO ---
+        - uuid: aaaa1111bbbb2222cccc3333dddd4444
+          expression: 'last(/NodelistDB/nodelistdb.health.uptime)<600'
+          name: 'NodelistDB server recently restarted'
+          priority: INFO
+          description: 'Server uptime is under 10 minutes - likely just restarted or deployed.'
+          manual_close: 'YES'
+          tags:
+            - tag: scope
+              value: notice
+
+        - uuid: bbbb2222cccc3333dddd4444eeee5555
+          expression: 'change(/NodelistDB/nodelistdb.health.version)<>0'
+          name: 'NodelistDB version changed'
+          priority: INFO
+          description: 'Server version has changed (deployment detected).'
+          manual_close: 'YES'
+          tags:
+            - tag: scope
+              value: notice

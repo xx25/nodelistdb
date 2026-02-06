@@ -288,6 +288,13 @@ func main() {
 
 	// Initialize API and Web servers
 	apiServer := api.New(finalStorage)
+	apiServer.SetHealthChecker(&serverHealthChecker{
+		db:        db,
+		storage:   finalStorage,
+		cache:     cacheImpl,
+		ftpServer: ftpServer,
+		startTime: time.Now(),
+	})
 	if modemHandler != nil {
 		apiServer.SetModemHandler(modemHandler)
 	}
