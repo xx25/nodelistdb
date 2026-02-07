@@ -382,8 +382,6 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 				}
 			}
 			if !pool.SubmitJob(ctx, job) {
-				// Context cancelled
-				cancelled = true
 				break
 			}
 
