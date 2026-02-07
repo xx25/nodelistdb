@@ -79,7 +79,9 @@
                 <td>{{.NodeCount}}</td>
 
                 <td>
-                    {{if .CheckError}}
+                    {{if eq .CheckError "domain not found"}}
+                        <span class="badge badge-danger" title="Domain is no longer registered">Not Registered</span>
+                    {{else if .CheckError}}
                         <span class="badge badge-secondary" title="{{.CheckError}}">Error</span>
                     {{else if not .ExpirationDate}}
                         {{if .WhoisStatus}}
