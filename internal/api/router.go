@@ -27,6 +27,7 @@ func (s *Server) SetupRouter() http.Handler {
 	r.Route("/api/nodes", func(r chi.Router) {
 		r.Get("/", s.SearchNodesHandler)
 		r.Get("/pstn", s.GetPSTNNodesHandler)
+		r.Get("/pstn/dead", s.ListPSTNDeadHandler)
 		r.Get("/pstn/recent-success", s.GetRecentModemSuccessPhonesHandler)
 		r.Get("/{zone}/{net}/{node}", s.GetNodeHandler)
 		r.Get("/{zone}/{net}/{node}/history", s.GetNodeHistoryHandler)
@@ -77,6 +78,8 @@ func (s *Server) SetupRouter() http.Handler {
 			r.Post("/heartbeat", s.modemHandler.Heartbeat)
 			r.Post("/release", s.modemHandler.ReleaseNodes)
 			r.Get("/stats", s.modemHandler.GetQueueStats) // Admin endpoint
+			r.Post("/pstn-dead", s.MarkPSTNDeadHandler)
+			r.Delete("/pstn-dead", s.UnmarkPSTNDeadHandler)
 		})
 	}
 

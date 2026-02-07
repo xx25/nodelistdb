@@ -40,6 +40,9 @@ var (
 	forceRetest = flag.Bool("force", false, "Force re-testing of recently successful nodes")
 	skipDays    = flag.Int("skip-days", 7, "Skip nodes tested successfully within N days (0 to disable)")
 	showVersion = flag.Bool("version", false, "Show version information and exit")
+	markDead    = flag.String("mark-dead", "", "Mark a node's PSTN number as dead (format: zone:net/node)")
+	unmarkDead  = flag.String("unmark-dead", "", "Unmark a node's PSTN number as dead (format: zone:net/node)")
+	deadReason  = flag.String("reason", "", "Reason for marking a node as PSTN dead")
 )
 
 func main() {
@@ -73,7 +76,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  # Force re-test all nodes (ignore recent success)\n")
 		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -force\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Custom skip window (skip nodes tested in last 14 days)\n")
-		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -skip-days 14\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -skip-days 14\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Mark a node's phone as dead (requires nodelistdb config)\n")
+		fmt.Fprintf(os.Stderr, "  %s -mark-dead 2:5001/100 -reason \"number disconnected\"\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Unmark a previously dead node\n")
+		fmt.Fprintf(os.Stderr, "  %s -unmark-dead 2:5001/100\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -82,6 +89,12 @@ func main() {
 	if *showVersion {
 		fmt.Printf("modem-test %s\n", version.GetFullVersionInfo())
 		os.Exit(0)
+	}
+
+	// Handle mark-dead / unmark-dead (no modem needed, exits immediately)
+	if *markDead != "" || *unmarkDead != "" {
+		handlePSTNDeadCommand(*markDead, *unmarkDead, *deadReason, *configPath)
+		return
 	}
 
 	// Validate mutually exclusive mode flags

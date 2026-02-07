@@ -3,11 +3,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -56,6 +59,7 @@ type apiNode struct {
 	Flags           []string `json:"flags"`
 	ModemFlags      []string `json:"modem_flags"`
 	MaxSpeed        uint32   `json:"max_speed"`
+	IsPSTNDead      bool     `json:"is_pstn_dead"`
 }
 
 // FetchPSTNNodes fetches PSTN nodes from the NodelistDB API.
@@ -86,7 +90,13 @@ func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration) ([]NodeTarget
 	}
 
 	nodes := make([]NodeTarget, 0, len(apiResp.Nodes))
+	deadSkipped := 0
 	for _, n := range apiResp.Nodes {
+		if n.IsPSTNDead {
+			deadSkipped++
+			continue
+		}
+
 		phone := n.PhoneNormalized
 		if phone == "" {
 			phone = modemPkg.NormalizePhone(n.Phone)
@@ -109,6 +119,10 @@ func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration) ([]NodeTarget
 			ModemFlags: n.ModemFlags,
 			MaxSpeed:   n.MaxSpeed,
 		})
+	}
+
+	if deadSkipped > 0 {
+		log.Printf("Skipped %d PSTN-dead nodes", deadSkipped)
 	}
 
 	return nodes, apiResp.Count, nil
@@ -477,4 +491,97 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 	}()
 
 	return jobs
+}
+
+// handlePSTNDeadCommand handles the -mark-dead and -unmark-dead CLI commands.
+// Loads config for API URL/key, calls the API, and exits.
+func handlePSTNDeadCommand(markAddr, unmarkAddr, reason, configPath string) {
+	// Load config to get API credentials
+	var cfg *Config
+	var err error
+	if configPath != "" {
+		cfg, err = LoadConfig(configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to load config: %v\n", err)
+			os.Exit(1)
+		}
+	} else if discovered := DiscoverConfigFile(); discovered != "" {
+		cfg, err = LoadConfig(discovered)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to load config %s: %v\n", discovered, err)
+			os.Exit(1)
+		}
+	} else {
+		cfg = DefaultConfig()
+	}
+
+	if cfg.NodelistDB.URL == "" {
+		fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.url is required in config for PSTN dead management\n")
+		os.Exit(1)
+	}
+	if cfg.NodelistDB.APIKey == "" {
+		fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.api_key is required in config for PSTN dead management\n")
+		os.Exit(1)
+	}
+
+	// Determine operation
+	addr := markAddr
+	method := "POST"
+	action := "Marking"
+	if addr == "" {
+		addr = unmarkAddr
+		method = "DELETE"
+		action = "Unmarking"
+	}
+
+	zone, net, node, err := ParseNodeAddress(addr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Invalid node address %q: %v\n", addr, err)
+		os.Exit(1)
+	}
+
+	// Build request body
+	reqBody := struct {
+		Zone   int    `json:"zone"`
+		Net    int    `json:"net"`
+		Node   int    `json:"node"`
+		Reason string `json:"reason,omitempty"`
+	}{
+		Zone:   zone,
+		Net:    net,
+		Node:   node,
+		Reason: reason,
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Failed to encode request: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Make API call
+	apiURL := strings.TrimRight(cfg.NodelistDB.URL, "/") + "/api/modem/pstn-dead"
+	req, err := http.NewRequestWithContext(context.Background(), method, apiURL, bytes.NewReader(body))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Failed to create request: %v\n", err)
+		os.Exit(1)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.NodelistDB.APIKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: API request failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "ERROR: API returned status %d: %s\n", resp.StatusCode, string(respBody))
+		os.Exit(1)
+	}
+
+	fmt.Fprintf(os.Stderr, "%s node %d:%d/%d as PSTN dead: OK\n", action, zone, net, node)
 }

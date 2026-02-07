@@ -347,6 +347,9 @@ type Operations interface {
 	GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error)
 	GetPSTNCMNodes(limit int) ([]PSTNNode, error)
 	GetPSTNNodes(limit int, zone int) ([]PSTNNode, error)
+	MarkPSTNDead(zone, net, node int, reason, markedBy string) error
+	UnmarkPSTNDead(zone, net, node int, markedBy string) error
+	GetPSTNDeadNodes() ([]PSTNDeadNode, error)
 	GetFileRequestNodes(limit int) ([]FileRequestNode, error)
 	GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error)
 	GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error)
@@ -488,6 +491,18 @@ type PSTNNode struct {
 	MaxSpeed        uint32    `json:"max_speed"`        // Maximum baud rate
 	Flags           []string  `json:"flags"`            // Node flags
 	ModemFlags      []string  `json:"modem_flags"`      // Modem capability flags (V34, V42B, etc.)
+	IsPSTNDead      bool      `json:"is_pstn_dead"`
+	PSTNDeadReason  string    `json:"pstn_dead_reason,omitempty"`
+}
+
+// PSTNDeadNode represents a node marked as having a dead/disconnected PSTN phone number
+type PSTNDeadNode struct {
+	Zone     int       `json:"zone"`
+	Net      int       `json:"net"`
+	Node     int       `json:"node"`
+	Reason   string    `json:"reason"`
+	MarkedBy string    `json:"marked_by"`
+	MarkedAt time.Time `json:"marked_at"`
 }
 
 // OnThisDayNode represents a node that was first added on this day in a previous year

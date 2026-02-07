@@ -56,15 +56,17 @@ type AnalyticsOperations struct {
 	db           database.DatabaseInterface
 	queryBuilder QueryBuilderInterface
 	resultParser ResultParserInterface
+	pstnDeadOps  *PSTNDeadOperations
 	mu           sync.RWMutex
 }
 
 // NewAnalyticsOperations creates a new AnalyticsOperations instance
-func NewAnalyticsOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser ResultParserInterface) *AnalyticsOperations {
+func NewAnalyticsOperations(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser ResultParserInterface, pstnDeadOps *PSTNDeadOperations) *AnalyticsOperations {
 	return &AnalyticsOperations{
 		db:           db,
 		queryBuilder: queryBuilder,
 		resultParser: resultParser,
+		pstnDeadOps:  pstnDeadOps,
 	}
 }
 
@@ -697,6 +699,20 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, er
 
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating PSTN rows: %w", err)
+	}
+
+	// Enrich with PSTN dead status
+	if ao.pstnDeadOps != nil {
+		deadSet, err := ao.pstnDeadOps.GetDeadNodeSet()
+		if err == nil && len(deadSet) > 0 {
+			for i := range results {
+				key := [3]int{results[i].Zone, results[i].Net, results[i].Node}
+				if reason, ok := deadSet[key]; ok {
+					results[i].IsPSTNDead = true
+					results[i].PSTNDeadReason = reason
+				}
+			}
+		}
 	}
 
 	return results, nil

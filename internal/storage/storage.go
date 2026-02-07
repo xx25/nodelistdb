@@ -22,6 +22,7 @@ type Storage struct {
 	analyticsOperations *AnalyticsOperations
 	testOperations      *TestOperationsRefactored
 	whoisOperations     *WhoisOperations
+	pstnDeadOperations  *PSTNDeadOperations
 
 	mu sync.RWMutex
 }
@@ -61,6 +62,11 @@ func (s *Storage) WhoisOps() *WhoisOperations {
 	return s.whoisOperations
 }
 
+// PSTNDeadOps returns the PSTN dead node operations component
+func (s *Storage) PSTNDeadOps() *PSTNDeadOperations {
+	return s.pstnDeadOperations
+}
+
 // New creates a new Storage instance with ClickHouse-specific components
 func New(db database.DatabaseInterface) (*Storage, error) {
 	// Always use ClickHouse components (only supported database type)
@@ -78,7 +84,8 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 	storage.nodeOperations = NewNodeOperations(db, queryBuilder, resultParser)
 	storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
 	storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
-	storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser)
+	storage.pstnDeadOperations = NewPSTNDeadOperations(db)
+	storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser, storage.pstnDeadOperations)
 	storage.testOperations = NewTestOperationsRefactored(db, queryBuilder, resultParser)
 	storage.whoisOperations = NewWhoisOperations(db)
 
@@ -310,6 +317,18 @@ func (s *Storage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 
 func (s *Storage) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
 	return s.analyticsOperations.GetPSTNNodes(limit, zone)
+}
+
+func (s *Storage) MarkPSTNDead(zone, net, node int, reason, markedBy string) error {
+	return s.pstnDeadOperations.MarkDead(zone, net, node, reason, markedBy)
+}
+
+func (s *Storage) UnmarkPSTNDead(zone, net, node int, markedBy string) error {
+	return s.pstnDeadOperations.UnmarkDead(zone, net, node, markedBy)
+}
+
+func (s *Storage) GetPSTNDeadNodes() ([]PSTNDeadNode, error) {
+	return s.pstnDeadOperations.GetAllDeadNodes()
 }
 
 func (s *Storage) GetFileRequestNodes(limit int) ([]FileRequestNode, error) {
