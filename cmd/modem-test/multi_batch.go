@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -117,6 +118,14 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	results := make([]string, 0)
 	sessionStart := time.Now()
 
+	// Deferred node tracking for re-scheduling when call windows close
+	var deferredMu sync.Mutex
+	var deferredNodes []NodeTarget
+
+	// Completion tracking: atomic counter so collector can signal when a batch is done
+	var completedCount atomic.Int64
+	completionSignal := make(chan struct{}, 1)
+
 	// Result collector goroutine
 	var collectorWg sync.WaitGroup
 	collectorWg.Add(1)
@@ -124,6 +133,23 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		defer collectorWg.Done()
 		for result := range pool.Results() {
 			statsMu.Lock()
+
+			// Track deferred nodes for re-scheduling
+			if result.WindowClosed {
+				if target, ok := nodeLookup[result.Phone]; ok {
+					deferredMu.Lock()
+					deferredNodes = append(deferredNodes, *target)
+					deferredMu.Unlock()
+				}
+				// Don't count deferred results as success/failure
+				statsMu.Unlock()
+				completedCount.Add(1)
+				select {
+				case completionSignal <- struct{}{}:
+				default:
+				}
+				continue
+			}
 
 			// Update phone stats
 			ps := phoneStats[result.Phone]
@@ -232,6 +258,12 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			}
 
 			statsMu.Unlock()
+
+			completedCount.Add(1)
+			select {
+			case completionSignal <- struct{}{}:
+			default:
+			}
 		}
 	}()
 
@@ -251,6 +283,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	}
 
 	submitted := 0
+	cancelled := false
 
 	if len(filteredNodes) > 0 {
 		// Prefix mode: use ScheduleNodes for time-aware job ordering.
@@ -261,15 +294,61 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			submitted++
 			job.testNum = submitted
 			if !pool.SubmitJob(ctx, job) {
-				goto cleanup
+				cancelled = true
+				break
 			}
 			// Pace submissions to maintain overall test rate
 			if submissionDelay > 0 {
 				select {
 				case <-time.After(submissionDelay):
 				case <-ctx.Done():
-					goto cleanup
+					cancelled = true
 				}
+			}
+			if cancelled {
+				break
+			}
+		}
+
+		// Wait for all submitted jobs to complete before checking deferred
+		if !cancelled {
+			waitForCompletion(ctx, submitted, &completedCount, completionSignal)
+		}
+
+		// Re-schedule deferred nodes (call windows that closed during processing)
+		for !cancelled {
+			deferredMu.Lock()
+			pending := deferredNodes
+			deferredNodes = nil
+			deferredMu.Unlock()
+
+			if len(pending) == 0 {
+				break
+			}
+
+			log.Info("%d node(s) deferred due to closed call windows, re-scheduling...", len(pending))
+			reJobs := ScheduleNodes(ctx, pending, cfg.GetOperatorsForPhone, log)
+			for job := range reJobs {
+				submitted++
+				job.testNum = submitted
+				if !pool.SubmitJob(ctx, job) {
+					cancelled = true
+					break
+				}
+				if submissionDelay > 0 {
+					select {
+					case <-time.After(submissionDelay):
+					case <-ctx.Done():
+						cancelled = true
+					}
+				}
+				if cancelled {
+					break
+				}
+			}
+
+			if !cancelled {
+				waitForCompletion(ctx, submitted, &completedCount, completionSignal)
 			}
 		}
 	} else {
@@ -277,8 +356,11 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		for i := 0; infinite || submitted < testCount; i++ {
 			select {
 			case <-ctx.Done():
-				goto cleanup
+				cancelled = true
 			default:
+			}
+			if cancelled {
+				break
 			}
 
 			phoneIndex := i % len(phones)
@@ -301,7 +383,8 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			}
 			if !pool.SubmitJob(ctx, job) {
 				// Context cancelled
-				goto cleanup
+				cancelled = true
+				break
 			}
 
 			// Pace submissions to maintain overall test rate
@@ -309,13 +392,12 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 				select {
 				case <-time.After(submissionDelay):
 				case <-ctx.Done():
-					goto cleanup
+					cancelled = true
 				}
 			}
 		}
 	}
 
-cleanup:
 	pool.Stop()
 	collectorWg.Wait()
 
@@ -339,4 +421,20 @@ cleanup:
 		modemStats,
 		operatorStats,
 	)
+}
+
+// waitForCompletion blocks until the number of completed results reaches the target
+// or the context is cancelled.
+func waitForCompletion(ctx context.Context, target int, completed *atomic.Int64, signal <-chan struct{}) {
+	for {
+		if completed.Load() >= int64(target) {
+			return
+		}
+		select {
+		case <-signal:
+			// Check again
+		case <-ctx.Done():
+			return
+		}
+	}
 }

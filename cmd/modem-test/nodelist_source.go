@@ -338,6 +338,7 @@ func GetNodeAvailability(node *NodeTarget) *timeavail.NodeAvailability {
 type nodeCallSchedule struct {
 	node     NodeTarget
 	schedule *timeavail.CallSchedule
+	avail    *timeavail.NodeAvailability // nil = always callable
 }
 
 // ScheduleNodes returns a channel that emits phoneJobs in time-aware order.
@@ -365,7 +366,7 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 				// No availability info = always callable
 				cs = &timeavail.CallSchedule{IsCallable: true, NextCall: now, Reason: "No time restrictions"}
 			}
-			scheduled = append(scheduled, nodeCallSchedule{node: n, schedule: cs})
+			scheduled = append(scheduled, nodeCallSchedule{node: n, schedule: cs, avail: avail})
 		}
 
 		sort.SliceStable(scheduled, func(i, j int) bool {
@@ -387,6 +388,7 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 		for _, entry := range scheduled {
 			n := entry.node
 			cs := entry.schedule
+			avail := entry.avail
 
 			// Wait for call window if not currently callable
 			if !cs.IsCallable {
@@ -406,6 +408,24 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 				}
 			}
 
+			// Recheck availability with CURRENT time (queue delay may have closed the window)
+			if avail != nil && !avail.IsCallableNow(time.Now().UTC()) {
+				recheckSched := timeavail.NewScheduler(time.Now().UTC())
+				recheckCS := recheckSched.GetNextCallTime(avail)
+				if !recheckCS.NextCall.IsZero() {
+					waitDur := time.Until(recheckCS.NextCall)
+					if waitDur > 0 {
+						log.Info("Node %s (%s): window closed during queue delay, waiting %v until %s UTC",
+							n.Address(), n.SystemName, waitDur.Round(time.Second), recheckCS.NextCall.Format("15:04"))
+						select {
+						case <-time.After(waitDur):
+						case <-ctx.Done():
+							return
+						}
+					}
+				}
+			}
+
 			// Emit ONE job per node with operator list for failover
 			testNum++
 			var ops []OperatorConfig
@@ -413,13 +433,14 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 				ops = operatorsForPhone(n.Phone)
 			}
 			job := phoneJob{
-				phone:     n.Phone,
-				operators: ops,
-				testNum:   testNum,
-				nodeAddress:    n.Address(),
-				nodeSystemName: strings.ReplaceAll(n.SystemName, "_", " "),
-				nodeLocation:   strings.ReplaceAll(n.Location, "_", " "),
-				nodeSysop:      strings.ReplaceAll(n.SysopName, "_", " "),
+				phone:            n.Phone,
+				operators:        ops,
+				testNum:          testNum,
+				nodeAddress:      n.Address(),
+				nodeSystemName:   strings.ReplaceAll(n.SystemName, "_", " "),
+				nodeLocation:     strings.ReplaceAll(n.Location, "_", " "),
+				nodeSysop:        strings.ReplaceAll(n.SysopName, "_", " "),
+				nodeAvailability: avail,
 			}
 
 			select {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/nodelistdb/internal/modemd/modem"
 	"github.com/nodelistdb/internal/testing/protocols/emsi"
+	"github.com/nodelistdb/internal/testing/timeavail"
 )
 
 // WorkerResult holds the result of a single test from a worker.
@@ -26,6 +27,7 @@ type WorkerResult struct {
 	TestNum        int
 	Result         testResult
 	Timestamp      time.Time
+	WindowClosed   bool // true = call window closed, node should be retried later
 }
 
 // WorkerStats holds per-worker statistics.
@@ -72,6 +74,8 @@ type phoneJob struct {
 	nodeSystemName string // BBS name (empty if not from API)
 	nodeLocation   string // Location (empty if not from API)
 	nodeSysop      string // Sysop name (empty if not from API)
+	// Time availability for pre-dial checks (nil = always callable)
+	nodeAvailability *timeavail.NodeAvailability
 }
 
 // newModemWorker creates a new modem worker.
@@ -223,6 +227,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 			// Determine effective operators and operator info for result
 			var result testResult
 			var resultOperatorName, resultOperatorPrefix string
+			var windowClosed bool
 
 			// Use failover mode if operators list is provided
 			if len(job.operators) > 0 {
@@ -280,6 +285,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				// Run with failover
 				failoverResult := w.runTestWithFailover(ctx, job, job.operators, w.operatorCache, onRetryAttempt, onOperatorResult)
 				result = failoverResult.LastResult
+				windowClosed = failoverResult.WindowClosed
 
 				// Set operator info - use SuccessOperator if succeeded, LastOperator otherwise
 				// This ensures we always know which operator was used for attribution
@@ -328,7 +334,8 @@ func (w *ModemWorker) Run(ctx context.Context) {
 					}
 				}
 
-				result = w.runTest(ctx, job.testNum, dialPhone, job.phone, onRetryAttempt)
+				result = w.runTest(ctx, job.testNum, dialPhone, job.phone, onRetryAttempt, job.nodeAvailability)
+				windowClosed = result.windowClosed
 				resultOperatorName = job.operatorName
 				resultOperatorPrefix = job.operatorPrefix
 			}
@@ -351,6 +358,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				TestNum:        job.testNum,
 				Result:         result,
 				Timestamp:      time.Now(),
+				WindowClosed:   windowClosed,
 			}:
 			case <-ctx.Done():
 				return
@@ -375,7 +383,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 type RetryAttemptCallback func(attempt int, dialTime time.Duration, reason, operatorName, operatorPrefix string)
 
 // runTest executes a single test call.
-func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber string, originalPhone string, onRetryAttempt RetryAttemptCallback) testResult {
+func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber string, originalPhone string, onRetryAttempt RetryAttemptCallback, nodeAvailability *timeavail.NodeAvailability) testResult {
 	m := w.modem
 	cfg := &w.config // For modem-specific settings (timeouts, post-disconnect commands, etc.)
 
@@ -423,6 +431,15 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 				message: fmt.Sprintf("Test %d [%s] %s: CANCELLED", testNum, w.name, phoneNumber),
 			}
 		default:
+		}
+
+		// Pre-dial availability check: stop if call window closed during retries
+		if nodeAvailability != nil && !nodeAvailability.IsCallableNow(time.Now().UTC()) {
+			w.log.Warn("Call window closed during retries for %s, deferring", phoneNumber)
+			return testResult{
+				windowClosed: true,
+				message:      fmt.Sprintf("Test %d [%s] %s: DEFERRED - call window closed", testNum, w.name, phoneNumber),
+			}
 		}
 
 		w.log.Dial("%s -> ATDT%s", phoneNumber, phoneNumber)

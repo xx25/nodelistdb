@@ -16,6 +16,7 @@ import (
 
 	"github.com/nodelistdb/internal/modemd/modem"
 	"github.com/nodelistdb/internal/testing/protocols/emsi"
+	"github.com/nodelistdb/internal/testing/timeavail"
 	"github.com/nodelistdb/internal/version"
 )
 
@@ -634,6 +635,9 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		phoneStats[phone] = &PhoneStats{Phone: phone}
 	}
 
+	// Deferred node tracking for re-scheduling when call windows close
+	var deferredNodes []NodeTarget
+
 	// Use ScheduleNodes for time-aware job ordering (handles CM, availability windows)
 	var schedChan <-chan phoneJob
 	if len(filteredNodes) > 0 {
@@ -649,6 +653,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 
 		var currentPhone string
 		var currentNodeAddress, currentNodeSystemName, currentNodeLocation, currentNodeSysop string
+		var currentAvail *timeavail.NodeAvailability
 
 		if schedChan != nil {
 			// Schedule mode: consume pre-scheduled, time-aware jobs
@@ -662,6 +667,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			currentNodeSystemName = job.nodeSystemName
 			currentNodeLocation = job.nodeLocation
 			currentNodeSysop = job.nodeSysop
+			currentAvail = job.nodeAvailability
 
 			log.PrintTestHeader(i, testCount)
 
@@ -690,7 +696,16 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		}
 
 		// Dial phone directly (no operator prefix)
-		result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, currentPhone, currentPhone)
+		result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, currentPhone, currentPhone, currentAvail)
+
+		// Handle deferred nodes (call window closed)
+		if result.windowClosed {
+			if target, ok := nodeLookup[currentPhone]; ok {
+				deferredNodes = append(deferredNodes, *target)
+			}
+			continue // Don't count, don't write records, don't pause
+		}
+
 		results = append(results, result.message)
 
 		// Lookup CDR data for VoIP quality metrics (AudioCodes)
@@ -812,6 +827,67 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		}
 	}
 
+	// Re-schedule deferred nodes (call windows that closed during processing)
+	for !cancelled && len(deferredNodes) > 0 {
+		pending := deferredNodes
+		deferredNodes = nil
+
+		log.Info("%d node(s) deferred due to closed call windows, re-scheduling...", len(pending))
+		schedChan = ScheduleNodes(ctx, pending, cfg.GetOperatorsForPhone, log)
+
+		for i := 1; ; i++ {
+			if cancelled {
+				break
+			}
+
+			job, ok := <-schedChan
+			if !ok {
+				break
+			}
+
+			currentPhone := job.phone
+			log.PrintTestHeader(i, len(pending))
+			if job.nodeAddress != "" {
+				log.Info("Node: %s %s (sysop: %s)", job.nodeAddress, job.nodeSystemName, job.nodeSysop)
+			}
+
+			result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, currentPhone, currentPhone, job.nodeAvailability)
+
+			if result.windowClosed {
+				if target, ok := nodeLookup[currentPhone]; ok {
+					deferredNodes = append(deferredNodes, *target)
+				}
+				continue
+			}
+
+			results = append(results, result.message)
+
+			if result.success {
+				success++
+				if stats, ok := phoneStats[currentPhone]; ok {
+					stats.Success++
+					stats.TotalDialTime += result.dialTime
+					stats.TotalEmsiTime += result.emsiTime
+				}
+				totalDialTime += result.dialTime
+				totalEmsiTime += result.emsiTime
+			} else {
+				failed++
+				if stats, ok := phoneStats[currentPhone]; ok {
+					stats.Failed++
+				}
+			}
+
+			if pause > 0 {
+				select {
+				case <-time.After(pause):
+				case <-ctx.Done():
+					cancelled = true
+				}
+			}
+		}
+	}
+
 	// Calculate averages
 	var avgDialTime, avgEmsiTime time.Duration
 	if success > 0 {
@@ -835,9 +911,10 @@ type testResult struct {
 	lineStats     *LineStats
 	cdrData       *CDRData         // VoIP quality metrics from AudioCodes CDR
 	asteriskCDR   *AsteriskCDRData // Call routing info from Asterisk CDR
+	windowClosed  bool             // true = stopped because call window closed, should retry later
 }
 
-func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, testNum int, phoneNumber string, originalPhone string) testResult {
+func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, testNum int, phoneNumber string, originalPhone string, nodeAvailability *timeavail.NodeAvailability) testResult {
 	// Determine retry settings
 	retryCount := cfg.GetRetryCount()
 	pause := cfg.GetPause()
@@ -874,6 +951,15 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 				message: fmt.Sprintf("Test %d [%s]: CANCELLED", testNum, phoneNumber),
 			}
 		default:
+		}
+
+		// Pre-dial availability check: stop if call window closed during retries
+		if nodeAvailability != nil && !nodeAvailability.IsCallableNow(time.Now().UTC()) {
+			log.Warn("Call window closed during retries for %s, deferring", phoneNumber)
+			return testResult{
+				windowClosed: true,
+				message:      fmt.Sprintf("Test %d [%s]: DEFERRED - call window closed", testNum, phoneNumber),
+			}
 		}
 
 		log.Dial("%s -> ATDT%s", phoneNumber, phoneNumber)

@@ -300,6 +300,7 @@ type FailoverResult struct {
 	TriedOperators   int             // How many operators were tried
 	UserBusy         bool            // True if stopped due to user busy (not operator failure)
 	AllOperatorsFail bool            // True if all operators failed
+	WindowClosed     bool            // True if call window closed during test, node should be retried later
 }
 
 // OperatorResultCallback is called when an intermediate operator attempt completes
@@ -330,10 +331,11 @@ func (w *ModemWorker) runTestWithFailover(
 ) FailoverResult {
 	if len(operators) == 0 {
 		// No operators configured - run test directly
-		result := w.runTest(ctx, job.testNum, job.phone, job.phone, onRetryAttempt)
+		result := w.runTest(ctx, job.testNum, job.phone, job.phone, onRetryAttempt, job.nodeAvailability)
 		return FailoverResult{
-			Success:    result.success,
-			LastResult: result,
+			Success:      result.success,
+			LastResult:   result,
+			WindowClosed: result.windowClosed,
 		}
 	}
 
@@ -350,6 +352,15 @@ func (w *ModemWorker) runTestWithFailover(
 			} else {
 				w.log.Info("Cached operator %q no longer in config, ignoring", cached.OperatorName)
 			}
+		}
+	}
+
+	// Pre-dial availability check before starting operator loop
+	if job.nodeAvailability != nil && !job.nodeAvailability.IsCallableNow(time.Now().UTC()) {
+		w.log.Warn("Node %s: outside call window, deferring", job.nodeAddress)
+		return FailoverResult{
+			WindowClosed: true,
+			LastResult:   testResult{windowClosed: true, message: fmt.Sprintf("Node %s: deferred - outside call window", job.nodeAddress)},
 		}
 	}
 
@@ -399,7 +410,17 @@ func (w *ModemWorker) runTestWithFailover(
 		}
 
 		// Run test with this operator
-		lastResult = w.runTest(ctx, job.testNum, dialPhone, job.phone, opRetryCallback)
+		lastResult = w.runTest(ctx, job.testNum, dialPhone, job.phone, opRetryCallback, job.nodeAvailability)
+
+		// If call window closed during test, stop immediately
+		if lastResult.windowClosed {
+			return FailoverResult{
+				WindowClosed:   true,
+				LastOperator:   lastOperator,
+				LastResult:     lastResult,
+				TriedOperators: i + 1,
+			}
+		}
 
 		if lastResult.success {
 			// Success! Cache this operator
@@ -419,6 +440,17 @@ func (w *ModemWorker) runTestWithFailover(
 
 		// Continue to next operator if available
 		if i < len(orderedOperators)-1 {
+			// Check availability before trying next operator
+			if job.nodeAvailability != nil && !job.nodeAvailability.IsCallableNow(time.Now().UTC()) {
+				w.log.Warn("Node %s: call window closed between operators, deferring", job.nodeAddress)
+				return FailoverResult{
+					WindowClosed:   true,
+					LastOperator:   lastOperator,
+					LastResult:     testResult{windowClosed: true, message: fmt.Sprintf("Node %s: deferred - call window closed between operators", job.nodeAddress)},
+					TriedOperators: i + 1,
+				}
+			}
+
 			// Emit this operator's result before trying the next one
 			if onOperatorResult != nil {
 				onOperatorResult(lastResult, currentOp.Name, currentOp.Prefix)
