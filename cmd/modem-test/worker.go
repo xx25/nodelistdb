@@ -28,6 +28,7 @@ type WorkerResult struct {
 	Result         testResult
 	Timestamp      time.Time
 	WindowClosed   bool // true = call window closed, node should be retried later
+	IsIntermediate bool // true = retry/intermediate operator result, not a final per-job result
 }
 
 // WorkerStats holds per-worker statistics.
@@ -254,6 +255,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 						TestNum:        job.testNum,
 						Result:         retryResult,
 						Timestamp:      time.Now(),
+						IsIntermediate: true,
 					}:
 					case <-ctx.Done():
 						return
@@ -276,6 +278,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 						TestNum:        job.testNum,
 						Result:         opResult,
 						Timestamp:      time.Now(),
+						IsIntermediate: true,
 					}:
 					case <-ctx.Done():
 						return
@@ -328,6 +331,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 						TestNum:        job.testNum,
 						Result:         retryResult,
 						Timestamp:      time.Now(),
+						IsIntermediate: true,
 					}:
 					case <-ctx.Done():
 						return

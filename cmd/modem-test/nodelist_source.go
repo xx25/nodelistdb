@@ -341,6 +341,33 @@ type nodeCallSchedule struct {
 	avail    *timeavail.NodeAvailability // nil = always callable
 }
 
+// waitForCallWindow blocks until the target time or context cancellation,
+// logging periodic reminders so the user knows the process is still alive.
+func waitForCallWindow(ctx context.Context, target time.Time, nodeAddr, nodeName string, log *TestLogger) {
+	const reminderInterval = 5 * time.Minute
+	for {
+		remaining := time.Until(target)
+		if remaining <= 0 {
+			return
+		}
+		// Use the shorter of remaining time or reminder interval
+		waitDur := remaining
+		if waitDur > reminderInterval {
+			waitDur = reminderInterval
+		}
+		select {
+		case <-time.After(waitDur):
+			if time.Until(target) > 0 {
+				log.Info("Node %s (%s): still waiting for call window at %s UTC (%v remaining, now %s UTC)",
+					nodeAddr, nodeName, target.Format("15:04"),
+					time.Until(target).Round(time.Second), time.Now().UTC().Format("15:04"))
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
 // ScheduleNodes returns a channel that emits phoneJobs in time-aware order.
 // CM and currently-callable nodes are emitted first, then deferred nodes are
 // emitted when their call window opens. When operators are configured, each job
@@ -399,9 +426,8 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 					if waitDur > 0 {
 						log.Info("Node %s (%s): waiting %v until call window at %s UTC (now %s UTC)",
 							n.Address(), n.SystemName, waitDur.Round(time.Second), cs.NextCall.Format("15:04"), time.Now().UTC().Format("15:04"))
-						select {
-						case <-time.After(waitDur):
-						case <-ctx.Done():
+						waitForCallWindow(ctx, cs.NextCall, n.Address(), n.SystemName, log)
+						if ctx.Err() != nil {
 							return
 						}
 					}
@@ -417,9 +443,8 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 					if waitDur > 0 {
 						log.Info("Node %s (%s): window closed during queue delay, waiting %v until %s UTC (now %s UTC)",
 							n.Address(), n.SystemName, waitDur.Round(time.Second), recheckCS.NextCall.Format("15:04"), time.Now().UTC().Format("15:04"))
-						select {
-						case <-time.After(waitDur):
-						case <-ctx.Done():
+						waitForCallWindow(ctx, recheckCS.NextCall, n.Address(), n.SystemName, log)
+						if ctx.Err() != nil {
 							return
 						}
 					}

@@ -259,10 +259,16 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 
 			statsMu.Unlock()
 
-			completedCount.Add(1)
-			select {
-			case completionSignal <- struct{}{}:
-			default:
+			// Only count final (non-intermediate) results toward job completion.
+			// Intermediate results (retry attempts, per-operator results before failover)
+			// should not inflate the completion counter, as waitForCompletion compares
+			// against the number of submitted jobs, not total results.
+			if !result.IsIntermediate {
+				completedCount.Add(1)
+				select {
+				case completionSignal <- struct{}{}:
+				default:
+				}
 			}
 		}
 	}()
