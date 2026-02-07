@@ -876,6 +876,38 @@ func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZer
 	return results, nil
 }
 
+// GetModemNoAnswerNodes returns nodes tested via modem that never answered (cached)
+func (cs *CachedStorage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes)
+	}
+
+	key := cs.keyGen.ModemNoAnswerNodesKey(limit, days, includeZeroNodes)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []ModemNoAnswerNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
 // GetRecentModemSuccessPhones returns phone numbers successfully tested via modem (pass-through, no cache)
 func (cs *CachedStorage) GetRecentModemSuccessPhones(days int) ([]string, error) {
 	return cs.Storage.GetRecentModemSuccessPhones(days)

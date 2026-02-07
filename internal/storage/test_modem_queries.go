@@ -99,6 +99,83 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 	return results, nil
 }
 
+// GetModemNoAnswerNodes returns nodes that have been tested via modem but never answered
+// within the specified time range. Only includes nodes with zero successful modem connections.
+func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error) {
+	mq.mu.RLock()
+	defer mq.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	}
+	if limit > MaxPSTNSearchLimit {
+		limit = MaxPSTNSearchLimit
+	}
+
+	conn := mq.db.Conn()
+
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	query := fmt.Sprintf(`
+		WITH failed_only AS (
+			SELECT
+				zone, net, node, address, test_time,
+				modem_phone_dialed, modem_operator_name, test_source,
+				modem_ast_disposition, modem_ast_hangup_cause,
+				row_number() OVER (
+					PARTITION BY zone, net, node
+					ORDER BY test_time DESC
+				) as rn,
+				count() OVER (PARTITION BY zone, net, node) as attempt_count
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL ? DAY
+				AND modem_tested = true
+				AND (zone, net, node) NOT IN (
+					SELECT zone, net, node FROM node_test_results
+					WHERE test_time >= now() - INTERVAL ? DAY
+						AND modem_tested = true AND modem_success = true
+				)
+				%s
+		)
+		SELECT
+			zone, net, node, address, test_time,
+			modem_phone_dialed, modem_operator_name, test_source,
+			modem_ast_disposition, modem_ast_hangup_cause, attempt_count
+		FROM failed_only
+		WHERE rn = 1
+		ORDER BY attempt_count DESC, test_time DESC
+		LIMIT ?`, nodeFilter)
+
+	rows, err := conn.Query(query, days, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query modem no-answer nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ModemNoAnswerNode
+	for rows.Next() {
+		var n ModemNoAnswerNode
+		err := rows.Scan(
+			&n.Zone, &n.Net, &n.Node, &n.Address, &n.TestTime,
+			&n.ModemPhoneDialed, &n.ModemOperatorName, &n.TestSource,
+			&n.ModemAstDisposition, &n.ModemAstHangupCause, &n.AttemptCount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan modem no-answer node row: %w", err)
+		}
+		results = append(results, n)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating modem no-answer rows: %w", err)
+	}
+
+	return results, nil
+}
+
 // GetDetailedModemTestResult returns a single detailed modem test result for a specific node and test time
 func (mq *ModemQueryOperations) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
 	mq.mu.RLock()

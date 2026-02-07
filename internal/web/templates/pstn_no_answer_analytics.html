@@ -1,0 +1,134 @@
+{{template "base" .}}
+
+{{define "title"}}PSTN No Answer Nodes{{end}}
+
+{{define "page_title"}}PSTN No Answer Nodes{{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">Nodes dialed via modem that never answered</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+<div class="alert alert-info" style="margin-bottom: 1.5rem;">
+    <strong>Note:</strong> This page shows nodes that have been tested via PSTN modem calls but have <strong>never</strong> successfully connected within the selected time range. Nodes that answered at least once are excluded.
+</div>
+
+{{template "analytics_filters" .}}
+{{template "error_display" .}}
+
+{{if .Nodes}}
+<!-- Summary Statistics -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h3>{{.Stats.TotalCount}}</h3>
+        <p>Nodes Never Answered</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.TotalAttempts}}</h3>
+        <p>Total Attempts</p>
+    </div>
+</div>
+
+<!-- Disposition and Operator Breakdown side by side -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+    {{if .Stats.DispositionCounts}}
+    <div class="stats-box">
+        <h4>By Last Disposition</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Disposition</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range .Stats.DispositionCounts}}
+                <tr><td>{{.Disposition}}</td><td>{{.Count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+    {{if .Stats.OperatorCounts}}
+    <div class="stats-box">
+        <h4>By Last Operator</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Operator</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range .Stats.OperatorCounts}}
+                <tr><td>{{.Operator}}</td><td>{{.Count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+</div>
+
+{{if .Stats.ZoneCounts}}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h4>By Zone</h4>
+        <table class="data-table" style="margin: 0;">
+            <thead><tr><th>Zone</th><th>Nodes</th></tr></thead>
+            <tbody>
+                {{range .Stats.ZoneCounts}}
+                <tr><td>Zone {{.Zone}}</td><td>{{.Count}}</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}
+
+<!-- Main Node Table -->
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">Phone Dialed</th>
+                <th data-sortable data-type="number">Attempts</th>
+                <th data-sortable data-type="string">Last Disposition</th>
+                <th data-sortable data-type="number">Hangup Cause</th>
+                <th data-sortable data-type="string">Last Operator</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Nodes}}
+            <tr>
+                <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}">
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+                        {{.Zone}}:{{.Net}}/{{.Node}}
+                    </a>
+                </td>
+                <td>{{if .ModemPhoneDialed}}<span class="badge badge-warning">{{.ModemPhoneDialed}}</span>{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td data-value="{{.AttemptCount}}">{{.AttemptCount}}</td>
+                <td>{{if .ModemAstDisposition}}<span class="badge badge-danger">{{.ModemAstDisposition}}</span>{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td data-value="{{.ModemAstHangupCause}}">{{if .ModemAstHangupCause}}{{q931Cause .ModemAstHangupCause}}{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td>{{if .ModemOperatorName}}{{.ModemOperatorName}}{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+                <td data-value="{{.TestTime.Unix}}">
+                    <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
+                </td>
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a>
+                    <a href="/reachability/modem-test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{urlquery (.TestTime.Format "2006-01-02T15:04:05Z07:00")}}" class="btn btn-sm">Details</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>About this report:</strong> This page shows FidoNet nodes that have been dialed via PSTN modem within the last {{.Days}} days but have <strong>never</strong> successfully connected. Only nodes with zero successful modem connections in the time range are shown.</p>
+    <p><strong>Attempts:</strong> Total number of modem dial attempts for each node across all operators.</p>
+    <p><strong>Disposition:</strong> The Asterisk CDR call disposition from the last attempt (NO ANSWER, ANSWERED but failed handshake, etc.).</p>
+    <p><strong>Hangup Cause:</strong> The Q.931/Q.850 cause code from the last attempt, indicating why the call ended.</p>
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>No unreachable nodes found.</strong><br>
+    All modem-tested nodes had at least one successful connection within the last {{.Days}} days. Try increasing the time range.
+</div>
+{{end}}
+{{end}}

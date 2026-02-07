@@ -222,6 +222,10 @@ func (kg *KeyGenerator) ModemAccessibleNodesKey(limit, days int, includeZeroNode
 	return fmt.Sprintf("%s:analytics:modem:accessible:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
 }
 
+func (kg *KeyGenerator) ModemNoAnswerNodesKey(limit, days int, includeZeroNodes bool) string {
+	return fmt.Sprintf("%s:analytics:modem:noanswer:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+}
+
 func (kg *KeyGenerator) ModemTestDetailKey(zone, net, node int, testTime string) string {
 	return fmt.Sprintf("%s:analytics:modem:detail:%d:%d:%d:%s", kg.Prefix, zone, net, node, testTime)
 }

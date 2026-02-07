@@ -320,6 +320,10 @@ func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes 
 	return s.testOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes)
 }
 
+func (s *Storage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error) {
+	return s.testOperations.GetModemNoAnswerNodes(limit, days, includeZeroNodes)
+}
+
 func (s *Storage) GetRecentModemSuccessPhones(days int) ([]string, error) {
 	return s.testOperations.GetRecentModemSuccessPhones(days)
 }

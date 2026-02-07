@@ -205,6 +205,11 @@ func (to *TestOperationsRefactored) GetModemAccessibleNodes(limit int, days int,
 	return to.modemOps.GetModemAccessibleNodes(limit, days, includeZeroNodes)
 }
 
+// GetModemNoAnswerNodes returns nodes tested via modem that never answered
+func (to *TestOperationsRefactored) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error) {
+	return to.modemOps.GetModemNoAnswerNodes(limit, days, includeZeroNodes)
+}
+
 // GetRecentModemSuccessPhones returns phone numbers successfully tested via modem within N days
 func (to *TestOperationsRefactored) GetRecentModemSuccessPhones(days int) ([]string, error) {
 	return to.modemOps.GetRecentModemSuccessPhones(days)

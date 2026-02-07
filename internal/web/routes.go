@@ -35,6 +35,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/other-networks/nodes", s.OtherNetworkNodesHandler)
 	mux.HandleFunc("/analytics/pstn", s.PSTNCMAnalyticsHandler)
 	mux.HandleFunc("/analytics/pstn-accessible", s.ModemAccessibleAnalyticsHandler)
+	mux.HandleFunc("/analytics/pstn-no-answer", s.ModemNoAnswerAnalyticsHandler)
 	mux.HandleFunc("/analytics/file-request", s.FileRequestAnalyticsHandler)
 	mux.HandleFunc("/analytics/software/binkp", s.BinkPSoftwareHandler)
 	mux.HandleFunc("/analytics/software/ifcico", s.IfcicoSoftwareHandler)

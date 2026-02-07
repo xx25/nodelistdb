@@ -1089,6 +1089,115 @@ func (s *Server) ModemAccessibleAnalyticsHandler(w http.ResponseWriter, r *http.
 	}
 }
 
+// ModemNoAnswerDispositionCount holds count for a single Asterisk disposition (for ordered display)
+type ModemNoAnswerDispositionCount struct {
+	Disposition string
+	Count       int
+}
+
+// ModemNoAnswerSummaryStats holds summary statistics for modem no-answer nodes
+type ModemNoAnswerSummaryStats struct {
+	TotalCount        int
+	TotalAttempts     int
+	DispositionCounts []ModemNoAnswerDispositionCount
+	OperatorCounts    []ModemAccessibleOperatorCount
+	ZoneCounts        []ModemAccessibleZoneCount
+}
+
+// computeModemNoAnswerStats calculates summary statistics from modem no-answer nodes
+func computeModemNoAnswerStats(nodes []storage.ModemNoAnswerNode) ModemNoAnswerSummaryStats {
+	stats := ModemNoAnswerSummaryStats{
+		TotalCount: len(nodes),
+	}
+
+	dispMap := make(map[string]int)
+	operMap := make(map[string]int)
+	zoneMap := make(map[int]int)
+
+	for _, n := range nodes {
+		zoneMap[n.Zone]++
+		stats.TotalAttempts += int(n.AttemptCount)
+
+		disp := n.ModemAstDisposition
+		if disp == "" {
+			disp = "Unknown"
+		}
+		dispMap[disp]++
+
+		if n.ModemOperatorName != "" {
+			operMap[n.ModemOperatorName]++
+		}
+	}
+
+	// Dispositions sorted by count descending
+	for disp, count := range dispMap {
+		stats.DispositionCounts = append(stats.DispositionCounts, ModemNoAnswerDispositionCount{Disposition: disp, Count: count})
+	}
+	for i := 0; i < len(stats.DispositionCounts); i++ {
+		for j := i + 1; j < len(stats.DispositionCounts); j++ {
+			if stats.DispositionCounts[j].Count > stats.DispositionCounts[i].Count {
+				stats.DispositionCounts[i], stats.DispositionCounts[j] = stats.DispositionCounts[j], stats.DispositionCounts[i]
+			}
+		}
+	}
+
+	stats.OperatorCounts = sortedOperatorCounts(operMap)
+	stats.ZoneCounts = sortedModemZoneCounts(zoneMap)
+
+	return stats
+}
+
+// ModemNoAnswerAnalyticsHandler shows nodes tested via modem that never answered
+func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	params := parseAnalyticsParams(r)
+
+	nodes, err := s.storage.GetModemNoAnswerNodes(params.Limit, params.Days, params.IncludeZeroNodes)
+	var displayError error
+	if err != nil {
+		log.Printf("[ERROR] Modem No Answer Analytics: Error fetching nodes: %v", err)
+		nodes = []storage.ModemNoAnswerNode{}
+		displayError = fmt.Errorf("Failed to fetch modem no-answer analytics data. Please try again later")
+	} else if params.ValidationError != "" {
+		displayError = fmt.Errorf("%s", params.ValidationError)
+	}
+
+	stats := computeModemNoAnswerStats(nodes)
+
+	data := struct {
+		Title            string
+		ActivePage       string
+		Version          string
+		Nodes            []storage.ModemNoAnswerNode
+		Stats            ModemNoAnswerSummaryStats
+		Days             int
+		Limit            int
+		IncludeZeroNodes bool
+		Error            error
+	}{
+		Title:            "PSTN No Answer Nodes",
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		Nodes:            nodes,
+		Stats:            stats,
+		Days:             params.Days,
+		Limit:            params.Limit,
+		IncludeZeroNodes: params.IncludeZeroNodes,
+		Error:            displayError,
+	}
+
+	tmpl, exists := s.templates["pstn_no_answer_analytics"]
+	if !exists {
+		log.Printf("[ERROR] Modem No Answer Analytics: Template 'pstn_no_answer_analytics' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Modem No Answer Analytics: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // FileRequestFlagCount holds count for a single flag (for ordered display)
 type FileRequestFlagCount struct {
 	Flag  string

@@ -349,6 +349,7 @@ type Operations interface {
 	GetPSTNNodes(limit int, zone int) ([]PSTNNode, error)
 	GetFileRequestNodes(limit int) ([]FileRequestNode, error)
 	GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error)
+	GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error)
 	GetRecentModemSuccessPhones(days int) ([]string, error)
 	GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error)
 	GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error)
@@ -543,6 +544,22 @@ type ModemAccessibleNode struct {
 	ModemRxSpeed        uint32    `json:"modem_rx_speed"`
 	ModemModulation     string    `json:"modem_modulation"`
 	TestSource          string    `json:"test_source"`
+}
+
+// ModemNoAnswerNode represents a node that was tested via modem but never answered
+// Used for the PSTN No Answer analytics report showing nodes that are always unreachable
+type ModemNoAnswerNode struct {
+	Zone               int       `json:"zone"`
+	Net                int       `json:"net"`
+	Node               int       `json:"node"`
+	Address            string    `json:"address"`
+	TestTime           time.Time `json:"test_time"`
+	ModemPhoneDialed   string    `json:"modem_phone_dialed"`
+	ModemOperatorName  string    `json:"modem_operator_name"`
+	ModemAstDisposition string   `json:"modem_ast_disposition"`
+	ModemAstHangupCause uint8   `json:"modem_ast_hangup_cause"`
+	TestSource         string    `json:"test_source"`
+	AttemptCount       uint32    `json:"attempt_count"`
 }
 
 // ModemTestDetail represents detailed modem test data for a single test result
