@@ -397,8 +397,8 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 				} else {
 					waitDur := time.Until(cs.NextCall)
 					if waitDur > 0 {
-						log.Info("Node %s (%s): waiting %v until call window at %s UTC",
-							n.Address(), n.SystemName, waitDur.Round(time.Second), cs.NextCall.Format("15:04"))
+						log.Info("Node %s (%s): waiting %v until call window at %s UTC (now %s UTC)",
+							n.Address(), n.SystemName, waitDur.Round(time.Second), cs.NextCall.Format("15:04"), time.Now().UTC().Format("15:04"))
 						select {
 						case <-time.After(waitDur):
 						case <-ctx.Done():
@@ -415,8 +415,8 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 				if !recheckCS.NextCall.IsZero() {
 					waitDur := time.Until(recheckCS.NextCall)
 					if waitDur > 0 {
-						log.Info("Node %s (%s): window closed during queue delay, waiting %v until %s UTC",
-							n.Address(), n.SystemName, waitDur.Round(time.Second), recheckCS.NextCall.Format("15:04"))
+						log.Info("Node %s (%s): window closed during queue delay, waiting %v until %s UTC (now %s UTC)",
+							n.Address(), n.SystemName, waitDur.Round(time.Second), recheckCS.NextCall.Format("15:04"), time.Now().UTC().Format("15:04"))
 						select {
 						case <-time.After(waitDur):
 						case <-ctx.Done():
