@@ -575,6 +575,8 @@ type ModemNoAnswerNode struct {
 	ModemAstHangupCause uint8   `json:"modem_ast_hangup_cause"`
 	TestSource         string    `json:"test_source"`
 	AttemptCount       uint32    `json:"attempt_count"`
+	IsPSTNDead         bool      `json:"is_pstn_dead"`
+	PSTNDeadReason     string    `json:"pstn_dead_reason,omitempty"`
 }
 
 // ModemTestDetail represents detailed modem test data for a single test result

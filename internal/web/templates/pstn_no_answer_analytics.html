@@ -29,6 +29,12 @@
         <h3>{{.Stats.TotalAttempts}}</h3>
         <p>Total Attempts</p>
     </div>
+    {{if .Stats.DeadCount}}
+    <div class="stats-box">
+        <h3>{{.Stats.DeadCount}}</h3>
+        <p>Marked PSTN Dead</p>
+    </div>
+    {{end}}
 </div>
 
 <!-- Disposition and Operator Breakdown side by side -->
@@ -98,7 +104,7 @@
                 <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}">
                     <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
                         {{.Zone}}:{{.Net}}/{{.Node}}
-                    </a>
+                    </a>{{if .IsPSTNDead}} <span class="badge badge-danger" title="{{.PSTNDeadReason}}">PSTN Dead</span>{{end}}
                 </td>
                 <td>{{if .ModemPhoneDialed}}<span class="badge badge-warning">{{.ModemPhoneDialed}}</span>{{else}}<span class="text-muted">N/A</span>{{end}}</td>
                 <td data-value="{{.AttemptCount}}">{{.AttemptCount}}</td>

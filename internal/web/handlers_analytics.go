@@ -1099,6 +1099,7 @@ type ModemNoAnswerDispositionCount struct {
 type ModemNoAnswerSummaryStats struct {
 	TotalCount        int
 	TotalAttempts     int
+	DeadCount         int
 	DispositionCounts []ModemNoAnswerDispositionCount
 	OperatorCounts    []ModemAccessibleOperatorCount
 	ZoneCounts        []ModemAccessibleZoneCount
@@ -1117,6 +1118,9 @@ func computeModemNoAnswerStats(nodes []storage.ModemNoAnswerNode) ModemNoAnswerS
 	for _, n := range nodes {
 		zoneMap[n.Zone]++
 		stats.TotalAttempts += int(n.AttemptCount)
+		if n.IsPSTNDead {
+			stats.DeadCount++
+		}
 
 		disp := n.ModemAstDisposition
 		if disp == "" {
@@ -1159,6 +1163,21 @@ func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Re
 		displayError = fmt.Errorf("Failed to fetch modem no-answer analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
+	}
+
+	// Enrich with PSTN dead status
+	if deadNodes, err := s.storage.GetPSTNDeadNodes(); err == nil && len(deadNodes) > 0 {
+		deadSet := make(map[[3]int]string, len(deadNodes))
+		for _, d := range deadNodes {
+			deadSet[[3]int{d.Zone, d.Net, d.Node}] = d.Reason
+		}
+		for i := range nodes {
+			key := [3]int{nodes[i].Zone, nodes[i].Net, nodes[i].Node}
+			if reason, ok := deadSet[key]; ok {
+				nodes[i].IsPSTNDead = true
+				nodes[i].PSTNDeadReason = reason
+			}
+		}
 	}
 
 	stats := computeModemNoAnswerStats(nodes)
