@@ -262,21 +262,11 @@ table td:last-child {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.software-detail-grid .software-chart-container {
-    margin: 0;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}
-
-.software-detail-grid .software-chart-container canvas {
-    flex: 1;
-}
-
 .software-detail-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 30px;
+    align-items: start;
 }
 
 @media (max-width: 1200px) {
