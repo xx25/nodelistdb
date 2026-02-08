@@ -24,6 +24,7 @@ type WorkerResult struct {
 	NodeSystemName string // BBS name from API
 	NodeLocation   string // Location from API
 	NodeSysop      string // Sysop name from API
+	NodeTarget     *NodeTarget // Original node target for deferred re-queue
 	TestNum        int
 	Result         testResult
 	Timestamp      time.Time
@@ -75,6 +76,8 @@ type phoneJob struct {
 	nodeSystemName string // BBS name (empty if not from API)
 	nodeLocation   string // Location (empty if not from API)
 	nodeSysop      string // Sysop name (empty if not from API)
+	// Original node target for deferred re-queue (nil if not from API)
+	nodeTarget *NodeTarget
 	// Time availability for pre-dial checks (nil = always callable)
 	nodeAvailability *timeavail.NodeAvailability
 }
@@ -359,6 +362,7 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				NodeSystemName: job.nodeSystemName,
 				NodeLocation:   job.nodeLocation,
 				NodeSysop:      job.nodeSysop,
+				NodeTarget:     job.nodeTarget,
 				TestNum:        job.testNum,
 				Result:         result,
 				Timestamp:      time.Now(),

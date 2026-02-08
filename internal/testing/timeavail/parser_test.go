@@ -232,6 +232,69 @@ func TestIsCallableNow(t *testing.T) {
 			testTime:   time.Date(2024, 1, 1, 20, 0, 0, 0, time.UTC),
 			expectCall: false,
 		},
+		{
+			// Bug: overnight window 19:00-08:00 on weekdays; Saturday 02:00 is
+			// the "after midnight" portion of Friday's window → should be callable
+			name: "Overnight weekday window - Saturday 02:00 (Friday overflow)",
+			avail: &NodeAvailability{
+				Windows: []TimeWindow{
+					{
+						StartUTC: time.Date(2024, 1, 1, 19, 0, 0, 0, time.UTC),
+						EndUTC:   time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC),
+						Days:     weekdays(),
+					},
+				},
+			},
+			// 2024-01-06 is a Saturday
+			testTime:   time.Date(2024, 1, 6, 2, 0, 0, 0, time.UTC),
+			expectCall: true,
+		},
+		{
+			// Saturday 10:00 — outside the overnight window entirely
+			name: "Overnight weekday window - Saturday 10:00 (outside)",
+			avail: &NodeAvailability{
+				Windows: []TimeWindow{
+					{
+						StartUTC: time.Date(2024, 1, 1, 19, 0, 0, 0, time.UTC),
+						EndUTC:   time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC),
+						Days:     weekdays(),
+					},
+				},
+			},
+			testTime:   time.Date(2024, 1, 6, 10, 0, 0, 0, time.UTC),
+			expectCall: false,
+		},
+		{
+			// Saturday 20:00 — weekend, window only covers weekdays
+			name: "Overnight weekday window - Saturday 20:00 (weekend, no start)",
+			avail: &NodeAvailability{
+				Windows: []TimeWindow{
+					{
+						StartUTC: time.Date(2024, 1, 1, 19, 0, 0, 0, time.UTC),
+						EndUTC:   time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC),
+						Days:     weekdays(),
+					},
+				},
+			},
+			testTime:   time.Date(2024, 1, 6, 20, 0, 0, 0, time.UTC),
+			expectCall: false,
+		},
+		{
+			// Sunday 03:00 — overflow from Saturday, but Saturday is not in weekdays
+			name: "Overnight weekday window - Sunday 03:00 (Saturday not in window)",
+			avail: &NodeAvailability{
+				Windows: []TimeWindow{
+					{
+						StartUTC: time.Date(2024, 1, 1, 19, 0, 0, 0, time.UTC),
+						EndUTC:   time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC),
+						Days:     weekdays(),
+					},
+				},
+			},
+			// 2024-01-07 is a Sunday
+			testTime:   time.Date(2024, 1, 7, 3, 0, 0, 0, time.UTC),
+			expectCall: false,
+		},
 	}
 
 	for _, tt := range tests {

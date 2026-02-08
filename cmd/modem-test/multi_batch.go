@@ -136,9 +136,15 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 
 			// Track deferred nodes for re-scheduling
 			if result.WindowClosed {
-				if target, ok := nodeLookup[result.Phone]; ok {
+				var deferredTarget *NodeTarget
+				if result.NodeTarget != nil {
+					deferredTarget = result.NodeTarget
+				} else if target, ok := nodeLookup[result.Phone]; ok {
+					deferredTarget = target
+				}
+				if deferredTarget != nil {
 					deferredMu.Lock()
-					deferredNodes = append(deferredNodes, *target)
+					deferredNodes = append(deferredNodes, *deferredTarget)
 					deferredMu.Unlock()
 				}
 				// Don't count deferred results as success/failure
@@ -385,6 +391,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 					job.nodeSystemName = strings.ReplaceAll(target.SystemName, "_", " ")
 					job.nodeLocation = strings.ReplaceAll(target.Location, "_", " ")
 					job.nodeSysop = strings.ReplaceAll(target.SysopName, "_", " ")
+					job.nodeTarget = target
 				}
 			}
 			if !pool.SubmitJob(ctx, job) {

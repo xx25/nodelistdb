@@ -49,17 +49,25 @@ func (na *NodeAvailability) IsCallableNow(now time.Time) bool {
 	currentWeekday := localTime.Weekday()
 	currentTime := localTime.Format("15:04")
 
-	for _, window := range na.Windows {
-		if window.IncludesDay(currentWeekday) {
-			windowStart := window.StartUTC.In(localTime.Location()).Format("15:04")
-			windowEnd := window.EndUTC.In(localTime.Location()).Format("15:04")
+	previousDay := (currentWeekday + 6) % 7 // Go weekday wraps: Sunday(0)-1 = Saturday(6)
 
-			// Use exclusive end time (half-open interval) for consistency with scheduler.go
-			if windowStart <= currentTime && currentTime < windowEnd {
+	for _, window := range na.Windows {
+		windowStart := window.StartUTC.In(localTime.Location()).Format("15:04")
+		windowEnd := window.EndUTC.In(localTime.Location()).Format("15:04")
+
+		if windowStart <= windowEnd {
+			// Normal window (same day): check current day
+			if window.IncludesDay(currentWeekday) && windowStart <= currentTime && currentTime < windowEnd {
 				return true
 			}
-			// Handle overnight windows (end time wraps to next day)
-			if windowStart > windowEnd && (currentTime >= windowStart || currentTime < windowEnd) {
+		} else {
+			// Overnight window (spans midnight)
+			if currentTime >= windowStart && window.IncludesDay(currentWeekday) {
+				// In the "before midnight" portion — check current day
+				return true
+			}
+			if currentTime < windowEnd && window.IncludesDay(previousDay) {
+				// In the "after midnight" portion — the window started on the previous day
 				return true
 			}
 		}

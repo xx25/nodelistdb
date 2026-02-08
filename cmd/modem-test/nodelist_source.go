@@ -470,6 +470,7 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 			if operatorsForPhone != nil {
 				ops = operatorsForPhone(n.Phone)
 			}
+			nodeCopy := n // copy for pointer stability
 			job := phoneJob{
 				phone:            n.Phone,
 				operators:        ops,
@@ -478,6 +479,7 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 				nodeSystemName:   strings.ReplaceAll(n.SystemName, "_", " "),
 				nodeLocation:     strings.ReplaceAll(n.Location, "_", " "),
 				nodeSysop:        strings.ReplaceAll(n.SysopName, "_", " "),
+				nodeTarget:       &nodeCopy,
 				nodeAvailability: avail,
 			}
 

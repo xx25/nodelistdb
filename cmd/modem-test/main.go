@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -604,9 +605,112 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
+// persistenceWriters groups all result persistence writers for passing to persistResult.
+type persistenceWriters struct {
+	cdrService         *CDRService
+	asteriskCDRService *AsteriskCDRService
+	csvWriter          *CSVWriter
+	pgWriter           *PostgresResultsWriter
+	mysqlWriter        *MySQLResultsWriter
+	sqliteWriter       *SQLiteResultsWriter
+	nodelistDBWriter   *NodelistDBWriter
+	log                *TestLogger
+}
+
+// persistResult performs CDR lookups and writes the result to CSV/databases.
+func persistResult(pw *persistenceWriters, testNum int, phone, nodeAddress, nodeSystemName, nodeLocation, nodeSysop string, result *testResult) {
+	// Lookup CDR data for VoIP quality metrics (AudioCodes)
+	if pw.cdrService != nil && pw.cdrService.IsEnabled() {
+		cdrCtx, cdrCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cdrData, err := pw.cdrService.LookupByPhone(cdrCtx, phone, time.Now())
+		cdrCancel()
+		if err != nil {
+			pw.log.Warn("AudioCodes CDR lookup failed for %s: %v", phone, err)
+		} else if cdrData != nil {
+			result.cdrData = cdrData
+			pw.log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s term=%s",
+				float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
+				cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec, cdrData.TermReason)
+		} else {
+			pw.log.Warn("AudioCodes CDR not found for phone %s", phone)
+		}
+	}
+
+	// Lookup Asterisk CDR for call routing info
+	if pw.asteriskCDRService != nil && pw.asteriskCDRService.IsEnabled() {
+		astCtx, astCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		asteriskCDR, err := pw.asteriskCDRService.LookupByPhone(astCtx, phone, time.Now())
+		astCancel()
+		if err != nil {
+			pw.log.Warn("Asterisk CDR lookup failed for %s: %v", phone, err)
+		} else if asteriskCDR != nil {
+			result.asteriskCDR = asteriskCDR
+			pw.log.Info("Asterisk: disposition=%s peer=%s duration=%ds cause=%s src=%s early_media=%t",
+				asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration,
+				asteriskCDR.HangupCauseString(), asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
+		} else {
+			pw.log.Warn("Asterisk CDR not found for phone %s", phone)
+		}
+	}
+
+	// Write to CSV and databases if enabled
+	var rec *TestRecord
+	if pw.csvWriter != nil || (pw.pgWriter != nil && pw.pgWriter.IsEnabled()) || (pw.mysqlWriter != nil && pw.mysqlWriter.IsEnabled()) || (pw.sqliteWriter != nil && pw.sqliteWriter.IsEnabled()) || (pw.nodelistDBWriter != nil && pw.nodelistDBWriter.IsEnabled()) {
+		rec = RecordFromTestResult(
+			testNum,
+			phone,
+			"", // No operator name in single-modem mode
+			"", // No operator prefix
+			nodeAddress,
+			nodeSystemName,
+			nodeLocation,
+			nodeSysop,
+			result.success,
+			result.dialTime,
+			result.connectSpeed,
+			result.connectString,
+			result.emsiTime,
+			result.emsiError,
+			result.emsiInfo,
+			result.lineStats,
+			result.cdrData,
+			result.asteriskCDR,
+		)
+	}
+	if pw.csvWriter != nil && rec != nil {
+		if err := pw.csvWriter.WriteRecord(rec); err != nil {
+			pw.log.Error("Failed to write CSV record: %v", err)
+		}
+	}
+	if pw.pgWriter != nil && pw.pgWriter.IsEnabled() && rec != nil {
+		if err := pw.pgWriter.WriteRecord(rec); err != nil {
+			pw.log.Error("Failed to write PostgreSQL record: %v", err)
+		}
+	}
+	if pw.mysqlWriter != nil && pw.mysqlWriter.IsEnabled() && rec != nil {
+		if err := pw.mysqlWriter.WriteRecord(rec); err != nil {
+			pw.log.Error("Failed to write MySQL record: %v", err)
+		}
+	}
+	if pw.sqliteWriter != nil && pw.sqliteWriter.IsEnabled() && rec != nil {
+		if err := pw.sqliteWriter.WriteRecord(rec); err != nil {
+			pw.log.Error("Failed to write SQLite record: %v", err)
+		}
+	}
+	if pw.nodelistDBWriter != nil && pw.nodelistDBWriter.IsEnabled() && rec != nil {
+		if err := pw.nodelistDBWriter.WriteRecord(rec); err != nil {
+			pw.log.Error("Failed to write NodelistDB record: %v", err)
+		}
+	}
+}
+
 func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodelistDBWriter *NodelistDBWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	testCount := len(phones)
+	if len(filteredNodes) > 0 {
+		// Scheduler emits one job per node, not per unique phone
+		testCount = len(filteredNodes)
+	}
 	pause := cfg.GetPause()
 
 	// Setup context for cancellation
@@ -614,11 +718,11 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 	defer cancel()
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	cancelled := false
+	var cancelled atomic.Bool
 	go func() {
 		<-sigChan
 		fmt.Fprintln(log.GetOutput(), "\nReceived interrupt, stopping...")
-		cancelled = true
+		cancelled.Store(true)
 		cancel()
 	}()
 
@@ -636,6 +740,18 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			defer csvWriter.Close()
 			log.Info("Writing results to: %s", cfg.Test.CSVFile)
 		}
+	}
+
+	// Persistence writers for CDR lookups and result writing
+	pw := &persistenceWriters{
+		cdrService:         cdrService,
+		asteriskCDRService: asteriskCDRService,
+		csvWriter:          csvWriter,
+		pgWriter:           pgWriter,
+		mysqlWriter:        mysqlWriter,
+		sqliteWriter:       sqliteWriter,
+		nodelistDBWriter:   nodelistDBWriter,
+		log:                log,
 	}
 
 	// Stats
@@ -661,7 +777,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 
 	for i := 1; ; i++ {
 		// Check for cancellation
-		if cancelled {
+		if cancelled.Load() {
 			log.Info("Test loop cancelled")
 			break
 		}
@@ -669,6 +785,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		var currentPhone string
 		var currentNodeAddress, currentNodeSystemName, currentNodeLocation, currentNodeSysop string
 		var currentAvail *timeavail.NodeAvailability
+		var currentNodeTarget *NodeTarget
 
 		if schedChan != nil {
 			// Schedule mode: consume pre-scheduled, time-aware jobs
@@ -683,6 +800,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			currentNodeLocation = job.nodeLocation
 			currentNodeSysop = job.nodeSysop
 			currentAvail = job.nodeAvailability
+			currentNodeTarget = job.nodeTarget
 
 			log.PrintTestHeader(i, testCount)
 
@@ -715,105 +833,21 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 
 		// Handle deferred nodes (call window closed)
 		if result.windowClosed {
-			if target, ok := nodeLookup[currentPhone]; ok {
-				deferredNodes = append(deferredNodes, *target)
+			// Use nodeTarget from scheduled job if available, fall back to nodeLookup
+			if currentNodeTarget != nil {
+				deferredNodes = append(deferredNodes, *currentNodeTarget)
+			} else if nodeLookup != nil {
+				if target, ok := nodeLookup[currentPhone]; ok {
+					deferredNodes = append(deferredNodes, *target)
+				}
 			}
 			continue // Don't count, don't write records, don't pause
 		}
 
 		results = append(results, result.message)
 
-		// Lookup CDR data for VoIP quality metrics (AudioCodes)
-		if cdrService != nil && cdrService.IsEnabled() {
-			cdrCtx, cdrCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			cdrData, err := cdrService.LookupByPhone(cdrCtx, currentPhone, time.Now())
-			cdrCancel()
-			if err != nil {
-				log.Warn("AudioCodes CDR lookup failed for %s: %v", currentPhone, err)
-			} else if cdrData != nil {
-				result.cdrData = cdrData
-				log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s term=%s",
-					float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
-					cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec, cdrData.TermReason)
-			} else {
-				log.Warn("AudioCodes CDR not found for phone %s", currentPhone)
-			}
-		}
-
-		// Lookup Asterisk CDR for call routing info
-		if asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
-			astCtx, astCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			asteriskCDR, err := asteriskCDRService.LookupByPhone(astCtx, currentPhone, time.Now())
-			astCancel()
-			if err != nil {
-				log.Warn("Asterisk CDR lookup failed for %s: %v", currentPhone, err)
-			} else if asteriskCDR != nil {
-				result.asteriskCDR = asteriskCDR
-				log.Info("Asterisk: disposition=%s peer=%s duration=%ds cause=%s src=%s early_media=%t",
-					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration,
-					asteriskCDR.HangupCauseString(), asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
-			} else {
-				log.Warn("Asterisk CDR not found for phone %s", currentPhone)
-			}
-		}
-
-		// Write to CSV and databases if enabled
-		var rec *TestRecord
-		if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) || (sqliteWriter != nil && sqliteWriter.IsEnabled()) || (nodelistDBWriter != nil && nodelistDBWriter.IsEnabled()) {
-			rec = RecordFromTestResult(
-				i,
-				currentPhone,
-				"", // No operator name
-				"", // No operator prefix
-				currentNodeAddress,
-				currentNodeSystemName,
-				currentNodeLocation,
-				currentNodeSysop,
-				result.success,
-				result.dialTime,
-				result.connectSpeed,
-				result.connectString,
-				result.emsiTime,
-				result.emsiError,
-				result.emsiInfo,
-				result.lineStats,
-				result.cdrData,
-				result.asteriskCDR,
-			)
-		}
-		if csvWriter != nil && rec != nil {
-			if err := csvWriter.WriteRecord(rec); err != nil {
-				log.Error("Failed to write CSV record: %v", err)
-			}
-		}
-
-		// Write to PostgreSQL if enabled
-		if pgWriter != nil && pgWriter.IsEnabled() && rec != nil {
-			if err := pgWriter.WriteRecord(rec); err != nil {
-				log.Error("Failed to write PostgreSQL record: %v", err)
-			}
-		}
-
-		// Write to MySQL if enabled
-		if mysqlWriter != nil && mysqlWriter.IsEnabled() && rec != nil {
-			if err := mysqlWriter.WriteRecord(rec); err != nil {
-				log.Error("Failed to write MySQL record: %v", err)
-			}
-		}
-
-		// Write to SQLite if enabled
-		if sqliteWriter != nil && sqliteWriter.IsEnabled() && rec != nil {
-			if err := sqliteWriter.WriteRecord(rec); err != nil {
-				log.Error("Failed to write SQLite record: %v", err)
-			}
-		}
-
-		// Write to NodelistDB if enabled
-		if nodelistDBWriter != nil && nodelistDBWriter.IsEnabled() && rec != nil {
-			if err := nodelistDBWriter.WriteRecord(rec); err != nil {
-				log.Error("Failed to write NodelistDB record: %v", err)
-			}
-		}
+		// CDR lookups and persistence (CSV, databases)
+		persistResult(pw, i, currentPhone, currentNodeAddress, currentNodeSystemName, currentNodeLocation, currentNodeSysop, &result)
 
 		// Update per-phone stats
 		stats := phoneStats[currentPhone]
@@ -843,7 +877,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 	}
 
 	// Re-schedule deferred nodes (call windows that closed during processing)
-	for !cancelled && len(deferredNodes) > 0 {
+	for !cancelled.Load() && len(deferredNodes) > 0 {
 		pending := deferredNodes
 		deferredNodes = nil
 
@@ -851,7 +885,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		schedChan = ScheduleNodes(ctx, pending, cfg.GetOperatorsForPhone, log)
 
 		for i := 1; ; i++ {
-			if cancelled {
+			if cancelled.Load() {
 				break
 			}
 
@@ -869,13 +903,20 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 			result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, currentPhone, currentPhone, job.nodeAvailability)
 
 			if result.windowClosed {
-				if target, ok := nodeLookup[currentPhone]; ok {
-					deferredNodes = append(deferredNodes, *target)
+				if job.nodeTarget != nil {
+					deferredNodes = append(deferredNodes, *job.nodeTarget)
+				} else if nodeLookup != nil {
+					if target, ok := nodeLookup[currentPhone]; ok {
+						deferredNodes = append(deferredNodes, *target)
+					}
 				}
 				continue
 			}
 
 			results = append(results, result.message)
+
+			// CDR lookups and persistence (CSV, databases)
+			persistResult(pw, i, currentPhone, job.nodeAddress, job.nodeSystemName, job.nodeLocation, job.nodeSysop, &result)
 
 			if result.success {
 				success++
@@ -897,7 +938,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				select {
 				case <-time.After(pause):
 				case <-ctx.Done():
-					cancelled = true
+					cancelled.Store(true)
 				}
 			}
 		}

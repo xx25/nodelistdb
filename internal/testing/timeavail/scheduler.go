@@ -70,22 +70,27 @@ func (s *Scheduler) GetNextCallTime(availability *NodeAvailability) *CallSchedul
 
 func (s *Scheduler) isInWindow(window TimeWindow) bool {
 	currentWeekday := s.currentTime.Weekday()
+	previousDay := (currentWeekday + 6) % 7
 	currentHour := s.currentTime.Hour()
 	currentMinute := s.currentTime.Minute()
 	currentTimeMinutes := currentHour*60 + currentMinute
-
-	if !window.IncludesDay(currentWeekday) {
-		return false
-	}
 
 	startMinutes := window.StartUTC.Hour()*60 + window.StartUTC.Minute()
 	endMinutes := window.EndUTC.Hour()*60 + window.EndUTC.Minute()
 
 	if startMinutes <= endMinutes {
-		return currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes
+		// Normal window (same day)
+		return window.IncludesDay(currentWeekday) && currentTimeMinutes >= startMinutes && currentTimeMinutes < endMinutes
 	}
 
-	return currentTimeMinutes >= startMinutes || currentTimeMinutes < endMinutes
+	// Overnight window (spans midnight)
+	if currentTimeMinutes >= startMinutes && window.IncludesDay(currentWeekday) {
+		return true
+	}
+	if currentTimeMinutes < endMinutes && window.IncludesDay(previousDay) {
+		return true
+	}
+	return false
 }
 
 func (s *Scheduler) findNextWindow(windows []TimeWindow) (*TimeWindow, time.Time) {
