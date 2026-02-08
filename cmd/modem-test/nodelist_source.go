@@ -124,7 +124,10 @@ func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration, log *TestLogg
 		log.Info("Skipped %d PSTN-dead nodes", deadSkipped)
 	}
 
-	return nodes, apiResp.Count, nil
+	// Return len(apiResp.Nodes) as the "fetched from API" count so callers can
+	// detect actual API-level truncation (limit hit). Using len(nodes) would
+	// false-alarm because dead/unparseable nodes are filtered locally.
+	return nodes, len(apiResp.Nodes), nil
 }
 
 // recentSuccessResponse matches the JSON response from GET /api/nodes/pstn/recent-success.
