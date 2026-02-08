@@ -359,6 +359,7 @@ type Operations interface {
 
 	// WHOIS operations (delegated to WhoisOps())
 	GetAllWhoisResults() ([]DomainWhoisResult, error)
+	GetNodesByDomain(domain string, days int) ([]NodeTestResult, error)
 	WhoisOps() *WhoisOperations
 
 	// Utility operations (delegated to NodeOps())

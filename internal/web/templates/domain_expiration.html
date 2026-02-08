@@ -55,7 +55,7 @@
         <tbody>
             {{range .Results}}
             <tr>
-                <td><strong>{{.Domain}}</strong></td>
+                <td><a href="/analytics/domain-expiration/nodes?domain={{.Domain}}"><strong>{{.Domain}}</strong></a></td>
 
                 {{if .ExpirationDate}}
                 <td data-value="{{.ExpirationDate.Unix}}"
@@ -76,7 +76,7 @@
 
                 <td>{{if .Registrar}}{{.Registrar}}{{else}}<span class="text-muted">Unknown</span>{{end}}</td>
 
-                <td>{{.NodeCount}}</td>
+                <td>{{if gt .NodeCount 0}}<a href="/analytics/domain-expiration/nodes?domain={{.Domain}}">{{.NodeCount}}</a>{{else}}{{.NodeCount}}{{end}}</td>
 
                 <td>
                     {{if eq .CheckError "domain not found"}}

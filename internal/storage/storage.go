@@ -356,6 +356,10 @@ func (s *Storage) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 	return s.whoisOperations.GetAllWhoisResults()
 }
 
+func (s *Storage) GetNodesByDomain(domain string, days int) ([]NodeTestResult, error) {
+	return s.whoisOperations.GetNodesByDomain(domain, days)
+}
+
 // --- Utility Methods ---
 
 // GetQueryBuilder returns the query builder for direct access

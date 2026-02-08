@@ -1947,6 +1947,73 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// DomainNodesHandler shows nodes using a specific domain
+func (s *Server) DomainNodesHandler(w http.ResponseWriter, r *http.Request) {
+	domainName := r.URL.Query().Get("domain")
+	if domainName == "" {
+		http.Redirect(w, r, "/analytics/domain-expiration", http.StatusFound)
+		return
+	}
+
+	// Get nodes for domain
+	nodes, err := s.storage.GetNodesByDomain(domainName, 30)
+	var displayError error
+
+	if err != nil {
+		log.Printf("[ERROR] Domain Nodes: Error fetching data for %s: %v", domainName, err)
+		displayError = fmt.Errorf("Failed to fetch nodes for domain. Please try again later")
+		nodes = []storage.NodeTestResult{}
+	}
+
+	// Build page config (reuse GeoPageConfig with "domain" ViewType)
+	config := GeoPageConfig{
+		PageTitle:       fmt.Sprintf("Nodes using %s", domainName),
+		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">FidoNet nodes with hostnames under <strong>%s</strong></p>`, template.HTMLEscapeString(domainName))),
+		StatsHeading:    "Nodes",
+		ViewType:        "domain",
+		ProviderName:    domainName, // Reuse ProviderName field for the domain name
+		Days:            30,
+		InfoText:        []string{},
+		EmptyStateTitle: fmt.Sprintf("No nodes found using %s.", domainName),
+		EmptyStateDesc:  "No nodes with hostnames under this domain were found in the last 30 days of test data.",
+	}
+
+	// Build template data
+	data := struct {
+		Title         string
+		ActivePage    string
+		Version       string
+		Days          int
+		GeoNodes      []storage.NodeTestResult
+		Error         error
+		Config        GeoPageConfig
+		ProcessedInfo []template.HTML
+	}{
+		Title:         config.PageTitle,
+		ActivePage:    "analytics",
+		Version:       version.GetVersionInfo(),
+		Days:          30,
+		GeoNodes:      nodes,
+		Error:         displayError,
+		Config:        config,
+		ProcessedInfo: config.processInfoText(),
+	}
+
+	// Check template exists before rendering
+	tmpl, exists := s.templates["geo_unified"]
+	if !exists {
+		log.Printf("[ERROR] Domain Nodes: Template 'geo_unified' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Render template
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] Domain Nodes: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // renderIPv6NodeListText writes the IPv6 node list in Michiel van der Vlist's plain text format.
 func renderIPv6NodeListText(w http.ResponseWriter, nodes []storage.IPv6NodeListEntry) {
 	now := time.Now()

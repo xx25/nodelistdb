@@ -254,6 +254,11 @@ func (kg *KeyGenerator) WhoisResultsKey() string {
 	return fmt.Sprintf("%s:analytics:whois:results", kg.Prefix)
 }
 
+func (kg *KeyGenerator) NodesByDomainKey(domain string, days int) string {
+	hash := md5.Sum([]byte(domain))
+	return fmt.Sprintf("%s:analytics:whois:domain:%s:%d", kg.Prefix, hex.EncodeToString(hash[:8]), days)
+}
+
 func (kg *KeyGenerator) AnalyticsPattern() string {
 	return fmt.Sprintf("%s:analytics:*", kg.Prefix)
 }

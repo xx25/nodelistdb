@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -74,6 +75,137 @@ func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 	}
 
 	return whoisResults, nil
+}
+
+// GetNodesByDomain returns all operational nodes whose hostname maps to the given domain.
+// Domain extraction uses publicsuffix in Go, so we fetch hostname→node mappings and filter in Go,
+// then query ClickHouse for full node details.
+func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]NodeTestResult, error) {
+	ctx := context.Background()
+
+	// Step 1: Get hostname→node mappings from recent test results
+	hostnameNodes, err := w.getHostnameNodeMappings(ctx, days)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hostname mappings: %w", err)
+	}
+
+	// Step 2: Filter for target domain, collect unique (zone, net, node) tuples
+	type nodeKey struct{ zone, net, node int }
+	matchedNodes := make(map[nodeKey]string) // nodeKey → first matching hostname
+	for _, hn := range hostnameNodes {
+		d := domain.ExtractRegistrableDomain(hn.hostname)
+		if d == targetDomain {
+			nk := nodeKey{}
+			fmt.Sscanf(hn.nodeKey, "%d:%d/%d", &nk.zone, &nk.net, &nk.node)
+			if _, exists := matchedNodes[nk]; !exists {
+				matchedNodes[nk] = hn.hostname
+			}
+		}
+	}
+
+	if len(matchedNodes) == 0 {
+		return []NodeTestResult{}, nil
+	}
+
+	// Step 3: Build IN-clause tuples for ClickHouse query
+	var tuples []string
+	for nk := range matchedNodes {
+		tuples = append(tuples, fmt.Sprintf("(%d, %d, %d)", nk.zone, nk.net, nk.node))
+	}
+
+	query := fmt.Sprintf(`
+		WITH latest_nodes AS (
+			SELECT
+				zone, net, node,
+				argMax(system_name, nodelist_date) as system_name,
+				argMax(sysop_name, nodelist_date) as sysop_name
+			FROM nodes
+			GROUP BY zone, net, node
+		)
+		SELECT
+			r.zone, r.net, r.node,
+			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
+			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
+			r.binkp_location,
+			r.hostname,
+			r.country, r.country_code, r.city, r.isp, r.org, r.asn,
+			r.resolved_ipv4, r.resolved_ipv6,
+			r.binkp_success, r.binkp_ipv6_success,
+			r.ifcico_success, r.ifcico_ipv6_success,
+			r.telnet_success, r.telnet_ipv6_success,
+			r.ftp_success, r.ftp_ipv6_success,
+			r.vmodem_success, r.vmodem_ipv6_success
+		FROM (
+			SELECT
+				zone, net, node,
+				argMax(binkp_system_name, test_time) as binkp_system_name,
+				argMax(ifcico_system_name, test_time) as ifcico_system_name,
+				argMax(binkp_sysop, test_time) as binkp_sysop,
+				argMax(binkp_location, test_time) as binkp_location,
+				argMax(hostname, test_time) as hostname,
+				argMax(country, test_time) as country,
+				argMax(country_code, test_time) as country_code,
+				argMax(city, test_time) as city,
+				argMax(isp, test_time) as isp,
+				argMax(org, test_time) as org,
+				argMax(asn, test_time) as asn,
+				argMax(resolved_ipv4, test_time) as resolved_ipv4,
+				argMax(resolved_ipv6, test_time) as resolved_ipv6,
+				argMax(binkp_success, test_time) as binkp_success,
+				argMax(binkp_ipv6_success, test_time) as binkp_ipv6_success,
+				argMax(ifcico_success, test_time) as ifcico_success,
+				argMax(ifcico_ipv6_success, test_time) as ifcico_ipv6_success,
+				argMax(telnet_success, test_time) as telnet_success,
+				argMax(telnet_ipv6_success, test_time) as telnet_ipv6_success,
+				argMax(ftp_success, test_time) as ftp_success,
+				argMax(ftp_ipv6_success, test_time) as ftp_ipv6_success,
+				argMax(vmodem_success, test_time) as vmodem_success,
+				argMax(vmodem_ipv6_success, test_time) as vmodem_ipv6_success
+			FROM node_test_results
+			WHERE is_aggregated = false
+				AND test_date >= today() - %d
+				AND (zone, net, node) IN (%s)
+			GROUP BY zone, net, node
+		) AS r
+		LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+		ORDER BY r.zone, r.net, r.node
+	`, days, strings.Join(tuples, ", "))
+
+	conn := w.db.Conn()
+	rows, err := conn.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query nodes by domain: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var result NodeTestResult
+		var resolvedIPv4, resolvedIPv6 []string
+
+		err := rows.Scan(
+			&result.Zone, &result.Net, &result.Node,
+			&result.BinkPSystemName, &result.BinkPSysop, &result.BinkPLocation,
+			&result.Hostname,
+			&result.Country, &result.CountryCode, &result.City,
+			&result.ISP, &result.Org, &result.ASN,
+			&resolvedIPv4, &resolvedIPv6,
+			&result.BinkPSuccess, &result.BinkPIPv6Success,
+			&result.IfcicoSuccess, &result.IfcicoIPv6Success,
+			&result.TelnetSuccess, &result.TelnetIPv6Success,
+			&result.FTPSuccess, &result.FTPIPv6Success,
+			&result.VModemSuccess, &result.VModemIPv6Success,
+		)
+		if err != nil {
+			continue
+		}
+
+		result.ResolvedIPv4 = resolvedIPv4
+		result.ResolvedIPv6 = resolvedIPv6
+		results = append(results, result)
+	}
+
+	return results, nil
 }
 
 // getWhoisEntries fetches all entries from domain_whois_cache
