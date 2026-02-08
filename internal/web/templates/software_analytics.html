@@ -1,0 +1,199 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">{{.Config.PageSubtitle}}</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/static/software-charts.js"></script>
+{{end}}
+
+{{define "content"}}
+<div id="loading" class="software-loading">Loading software distribution data...</div>
+<div id="error" class="software-error" style="display: none;"></div>
+
+<div id="stats-container" style="display: none;">
+    {{if .Config.InfoNote}}
+    <div class="info-box" style="margin-bottom: 20px;">
+        <p>{{.Config.InfoNote}}</p>
+    </div>
+    {{end}}
+
+    <div class="stat-card" style="max-width: 800px; margin: 0 auto 30px; text-align: left;">
+        <h3>Summary Statistics</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+            <p><strong>Total Nodes:</strong> <span id="total-nodes">0</span></p>
+            <p><strong>Software Types:</strong> <span id="software-types">0</span></p>
+            <p><strong>Last Updated:</strong> <span id="last-updated">-</span></p>
+        </div>
+    </div>
+
+    <div class="software-chart-container">
+        <h3>Software Type Distribution</h3>
+        <canvas id="softwareChart"></canvas>
+    </div>
+
+    <div class="stat-card" style="text-align: left;">
+        <h3>Software Types</h3>
+        <ul class="software-list" id="software-list"></ul>
+    </div>
+
+    {{if .Config.HasDetailSection}}
+    <div id="detail-section" style="display: none;">
+        <h2 style="margin-top: 40px;">{{.Config.DetailSectionTitle}}</h2>
+        {{if .Config.DetailSectionDesc}}
+        <p style="color: #7f8c8d;">{{.Config.DetailSectionDesc}}</p>
+        {{end}}
+
+        {{if eq .Config.DetailLayout "dual"}}
+        {{/* BinkP-style: version chart + OS chart side by side */}}
+        <div class="software-detail-grid">
+            <div>
+                <div class="software-chart-container" style="margin: 0 0 20px 0;">
+                    <h3 style="margin-top: 0;">{{.Config.DetailChartTitle}}</h3>
+                    <canvas id="detailChart1"></canvas>
+                </div>
+                <div class="stat-card" style="text-align: left;">
+                    <h3>{{.Config.DetailListTitle}}</h3>
+                    <ul class="software-list" id="detail-list-1"></ul>
+                </div>
+            </div>
+
+            <div>
+                <div class="software-chart-container" style="margin: 0 0 20px 0;">
+                    <h3 style="margin-top: 0;">{{.Config.DetailChart2Title}}</h3>
+                    <canvas id="detailChart2"></canvas>
+                </div>
+                <div class="stat-card" style="text-align: left;">
+                    <h3>{{.Config.DetailList2Title}}</h3>
+                    <ul class="software-list" id="detail-list-2"></ul>
+                </div>
+            </div>
+        </div>
+        {{else}}
+        {{/* IFCICO-style: single version chart */}}
+        <div class="software-chart-container" style="max-width: 100%;">
+            <h3>{{.Config.DetailChartTitle}}</h3>
+            <canvas id="detailChart1"></canvas>
+        </div>
+
+        <div class="stat-card" style="margin-top: 20px; text-align: left;">
+            <h3>{{.Config.DetailListTitle}}</h3>
+            <ul class="software-list" id="detail-list-1"></ul>
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+</div>
+{{end}}
+
+{{define "footer_scripts"}}
+<script>
+(function() {
+    var config = {
+        apiEndpoint: '{{.Config.APIEndpoint}}',
+        detailAPIEndpoint: '{{.Config.DetailAPIEndpoint}}',
+        hasDetailSection: {{.Config.HasDetailSection}},
+        detailLayout: '{{.Config.DetailLayout}}',
+        detailChartType: '{{.Config.DetailChartType}}',
+        detailSoftwareFilter: '{{.Config.DetailSoftwareFilter}}',
+        detailShowThreshold: {{.Config.DetailShowThreshold}}
+    };
+
+    async function loadData() {
+        try {
+            var response = await fetch(config.apiEndpoint);
+            if (!response.ok) throw new Error('Failed to load software data');
+            var data = await response.json();
+
+            var detailData = null;
+            if (config.hasDetailSection && config.detailAPIEndpoint) {
+                var detailResponse = await fetch(config.detailAPIEndpoint);
+                if (detailResponse.ok) detailData = await detailResponse.json();
+            }
+
+            displayData(data, detailData);
+        } catch (error) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error').textContent = 'Error loading data: ' + error.message;
+        }
+    }
+
+    function displayData(data, detailData) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('stats-container').style.display = 'block';
+
+        document.getElementById('total-nodes').textContent = data.total_nodes || 0;
+        document.getElementById('software-types').textContent = data.software_types ? data.software_types.length : 0;
+        document.getElementById('last-updated').textContent = data.last_updated ?
+            new Date(data.last_updated).toLocaleString() : '-';
+
+        if (data.software_types && data.software_types.length > 0) {
+            createPieChart('softwareChart',
+                data.software_types.map(function(s) { return s.software; }),
+                data.software_types.map(function(s) { return s.count; }),
+                'Software Types');
+            displaySoftwareList('software-list', data.software_types, 'software', 'count');
+        }
+
+        if (!config.hasDetailSection) return;
+
+        if (config.detailLayout === 'dual' && detailData && detailData.total_nodes > 0) {
+            // BinkP-style: separate detail API with version_breakdown and os_distribution
+            document.getElementById('detail-section').style.display = 'block';
+
+            if (detailData.version_breakdown && detailData.version_breakdown.length > 0) {
+                createPieChart('detailChart1',
+                    detailData.version_breakdown.map(function(v) { return v.version; }),
+                    detailData.version_breakdown.map(function(v) { return v.count; }),
+                    'Versions');
+                displaySoftwareList('detail-list-1', detailData.version_breakdown, 'version', 'count');
+            }
+
+            if (detailData.os_distribution && detailData.os_distribution.length > 0) {
+                createPieChart('detailChart2',
+                    detailData.os_distribution.map(function(o) { return o.os; }),
+                    detailData.os_distribution.map(function(o) { return o.count; }),
+                    'Operating Systems');
+                displaySoftwareList('detail-list-2', detailData.os_distribution, 'os', 'count');
+            }
+        } else if (config.detailLayout !== 'dual') {
+            // IFCICO-style: filter from main data's version_breakdown
+            var dominantSoftware = null;
+            if (data.software_types && data.software_types.length > 0) {
+                dominantSoftware = data.software_types.find(function(s) {
+                    return s.software === config.detailSoftwareFilter;
+                });
+            }
+
+            if (dominantSoftware && dominantSoftware.percentage > config.detailShowThreshold) {
+                document.getElementById('detail-section').style.display = 'block';
+            }
+
+            if (data.version_breakdown && data.version_breakdown.length > 0) {
+                var detailSection = document.getElementById('detail-section');
+                if (detailSection && detailSection.style.display !== 'none') {
+                    var filteredVersions = data.version_breakdown.filter(function(v) {
+                        return v.software === config.detailSoftwareFilter;
+                    });
+                    if (filteredVersions.length > 0) {
+                        var chartFn = config.detailChartType === 'bar' ? createBarChart : createPieChart;
+                        chartFn('detailChart1',
+                            filteredVersions.map(function(v) { return v.version; }),
+                            filteredVersions.map(function(v) { return v.count; }),
+                            'Versions');
+                        displaySoftwareList('detail-list-1', filteredVersions, 'version', 'count');
+                    }
+                }
+            }
+        }
+    }
+
+    loadData();
+})();
+</script>
+{{end}}

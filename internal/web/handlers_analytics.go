@@ -465,40 +465,71 @@ func (s *Server) IfcicoAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	s.renderProtocolAnalytics(w, r, config, s.storage.GetIfcicoEnabledNodes)
 }
 
-// BinkPSoftwareHandler shows BinkP software distribution analytics
-func (s *Server) BinkPSoftwareHandler(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Title      string
-		ActivePage string
-		Version    string
-	}{
-		Title:      "BinkP Software Distribution",
+// softwareAnalyticsData holds template data for software analytics pages
+type softwareAnalyticsData struct {
+	Title      string
+	ActivePage string
+	Version    string
+	Config     SoftwarePageConfig
+}
+
+// renderSoftwareAnalytics is a generic handler for software analytics pages
+func (s *Server) renderSoftwareAnalytics(w http.ResponseWriter, config SoftwarePageConfig) {
+	data := softwareAnalyticsData{
+		Title:      config.PageTitle,
 		ActivePage: "analytics",
 		Version:    version.GetVersionInfo(),
+		Config:     config,
 	}
 
-	if err := s.templates["binkp_software"].Execute(w, data); err != nil {
-		log.Printf("Error executing BinkP software template: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	tmpl, exists := s.templates["software_analytics"]
+	if !exists {
+		log.Printf("[ERROR] %s: Template 'software_analytics' not found", config.PageTitle)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		log.Printf("[ERROR] %s: Error executing template: %v", config.PageTitle, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+// BinkPSoftwareHandler shows BinkP software distribution analytics
+func (s *Server) BinkPSoftwareHandler(w http.ResponseWriter, r *http.Request) {
+	s.renderSoftwareAnalytics(w, SoftwarePageConfig{
+		PageTitle:           "BinkP Software Distribution",
+		PageSubtitle:        "Analysis of BinkP protocol implementations across the FidoNet network",
+		APIEndpoint:         "/api/software/binkp",
+		HasDetailSection:    true,
+		DetailSectionTitle:  "Binkd Detailed Analysis",
+		DetailLayout:        "dual",
+		DetailAPIEndpoint:   "/api/software/binkd",
+		DetailChartTitle:    "Binkd Version Distribution",
+		DetailListTitle:     "Binkd Versions",
+		DetailChart2Title:   "Binkd Operating Systems",
+		DetailList2Title:    "Operating Systems",
+		DetailShowThreshold: 0,
+	})
 }
 
 // IfcicoSoftwareHandler shows IFCICO software distribution analytics
 func (s *Server) IfcicoSoftwareHandler(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Title      string
-		ActivePage string
-		Version    string
-	}{
-		Title:      "IFCICO Software Distribution",
-		ActivePage: "analytics",
-		Version:    version.GetVersionInfo(),
-	}
-
-	if err := s.templates["ifcico_software"].Execute(w, data); err != nil {
-		log.Printf("Error executing IFCICO software template: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.renderSoftwareAnalytics(w, SoftwarePageConfig{
+		PageTitle:            "IFCICO/EMSI Software Distribution",
+		PageSubtitle:         "Analysis of IFCICO/EMSI protocol implementations across the FidoNet network",
+		APIEndpoint:          "/api/software/ifcico",
+		InfoNote:             "IFCICO (Internet FidoNet Compatible Interface COmmunication) is a traditional FidoNet protocol that uses EMSI (Electronic Mail Standard Identification) for handshaking. This page shows the distribution of mailer software supporting these protocols.",
+		HasDetailSection:     true,
+		DetailSectionTitle:   "mbcico Detailed Analysis",
+		DetailSectionDesc:    "mbcico is the most widely used IFCICO implementation in the network.",
+		DetailLayout:         "single",
+		DetailChartTitle:     "mbcico Version Distribution",
+		DetailListTitle:      "mbcico Versions in Use",
+		DetailChartType:      "bar",
+		DetailSoftwareFilter: "mbcico",
+		DetailShowThreshold:  50,
+	})
 }
 
 // TelnetAnalyticsHandler shows Telnet enabled nodes analytics
@@ -837,7 +868,7 @@ func computePSTNStats(nodes []storage.PSTNNode) PSTNSummaryStats {
 
 // PSTNCMAnalyticsHandler shows all nodes with valid phone numbers from the latest nodelist
 func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse limit parameter
+	// Parse limit parameter (PSTN page needs higher limit than standard analytics)
 	query := r.URL.Query()
 	limit := 5000 // Default limit - high to capture all PSTN nodes
 	if limitStr := query.Get("limit"); limitStr != "" {
@@ -846,7 +877,7 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Fetch ALL PSTN nodes (CM and non-CM)
+	// Fetch ALL PSTN nodes (CM and non-CM) from latest nodelist
 	pstnNodes, err := s.storage.GetPSTNNodes(limit, 0)
 	var displayError error
 	if err != nil {

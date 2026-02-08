@@ -95,6 +95,28 @@ func (c *OtherNetworksPageConfig) processInfoText(days int) []template.HTML {
 	return result
 }
 
+// SoftwarePageConfig holds page-specific configuration for software analytics pages.
+// Used for BinkP and IFCICO software distribution pages.
+// This enables configuration-driven rendering with a single unified template.
+type SoftwarePageConfig struct {
+	PageTitle          string // e.g., "BinkP Software Distribution"
+	PageSubtitle       string // Plain text subtitle
+	APIEndpoint        string // e.g., "/api/software/binkp"
+	InfoNote           string // Optional info note shown above stats
+	HasDetailSection   bool   // Whether to show detail breakdown section
+	DetailSectionTitle string // e.g., "Binkd Detailed Analysis"
+	DetailSectionDesc  string // Optional description below detail section title
+	DetailLayout       string // "dual" (version+OS side by side) or "single" (version only)
+	DetailAPIEndpoint  string // Separate API for detail data (e.g., "/api/software/binkd")
+	DetailChartTitle   string // e.g., "Binkd Version Distribution"
+	DetailListTitle    string // e.g., "Binkd Versions"
+	DetailChart2Title  string // e.g., "Binkd Operating Systems" (dual layout only)
+	DetailList2Title   string // e.g., "Operating Systems" (dual layout only)
+	DetailChartType    string // "pie" or "bar" (for single layout)
+	DetailSoftwareFilter string // Software name to filter version_breakdown (single layout)
+	DetailShowThreshold  float64 // Show detail section if software percentage > this (single layout)
+}
+
 // GeoPageConfig holds page-specific configuration for geo-hosting analytics pages.
 // Used for country and provider node listing pages.
 // This enables configuration-driven rendering with a single unified template.

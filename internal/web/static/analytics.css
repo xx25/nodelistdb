@@ -250,3 +250,82 @@ table td:last-child {
     color: #6c757d;
     font-size: 0.875rem;
 }
+
+/* Software analytics chart styles */
+.software-chart-container {
+    position: relative;
+    margin: 20px auto;
+    max-width: 600px;
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.software-detail-grid .software-chart-container {
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.software-detail-grid .software-chart-container canvas {
+    flex: 1;
+}
+
+.software-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+}
+
+@media (max-width: 1200px) {
+    .software-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.software-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.software-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid #ecf0f1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.software-list li:last-child {
+    border-bottom: none;
+}
+
+.percentage {
+    font-weight: bold;
+    color: #3498db;
+}
+
+.version-badge {
+    background: #ecf0f1;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    margin-left: 10px;
+}
+
+.software-loading {
+    text-align: center;
+    padding: 40px;
+    color: #7f8c8d;
+}
+
+.software-error {
+    background: #fee;
+    color: #c33;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
