@@ -196,7 +196,7 @@ func main() {
 		defer f.Close()
 		// Write to both stderr (with colors) and file (without colors)
 		log.SetOutput(io.MultiWriter(os.Stderr, NewStripANSIWriter(f)))
-		fmt.Fprintf(os.Stderr, "Logging to: %s\n", *logFile)
+		fmt.Fprintf(log.GetOutput(), "Logging to: %s\n", *logFile)
 	}
 
 	// Initialize CDR service for VoIP quality metrics (optional)
@@ -271,25 +271,25 @@ func main() {
 
 	// Validate -cm-only usage
 	if *cmOnly && pfx == "" && !*allNodes {
-		fmt.Fprintf(os.Stderr, "WARNING: -cm-only has no effect without -prefix or -all\n")
+		fmt.Fprintf(log.GetOutput(), "WARNING: -cm-only has no effect without -prefix or -all\n")
 	}
 
 	// Handle different test modes
 	if *nodeAddr != "" {
 		// Mode 1: Single node test
 		if cfg.NodelistDB.URL == "" {
-			fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.url is required for -node mode\n")
+			fmt.Fprintf(log.GetOutput(), "ERROR: nodelistdb.url is required for -node mode\n")
 			os.Exit(1)
 		}
 		zone, net, node, err := ParseNodeAddress(*nodeAddr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: Invalid node address %q: %v\n", *nodeAddr, err)
+			fmt.Fprintf(log.GetOutput(), "ERROR: Invalid node address %q: %v\n", *nodeAddr, err)
 			os.Exit(1)
 		}
 		log.Info("Fetching node %d:%d/%d from %s...", zone, net, node, cfg.NodelistDB.URL)
 		target, err := FetchNodeByAddress(cfg.NodelistDB.URL, zone, net, node, 30*time.Second)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch node: %v\n", err)
+			fmt.Fprintf(log.GetOutput(), "ERROR: Failed to fetch node: %v\n", err)
 			os.Exit(1)
 		}
 		// Phone override takes precedence
@@ -297,7 +297,7 @@ func main() {
 			target.Phone = *phone
 		}
 		if target.Phone == "" || target.Phone == "-Unpublished-" {
-			fmt.Fprintf(os.Stderr, "ERROR: Node %s has no phone number. Use -phone to specify one.\n", *nodeAddr)
+			fmt.Fprintf(log.GetOutput(), "ERROR: Node %s has no phone number. Use -phone to specify one.\n", *nodeAddr)
 			os.Exit(1)
 		}
 		// Strip leading + from phone for modem dialing
@@ -310,13 +310,13 @@ func main() {
 	} else if pfx != "" {
 		// Mode 3: Prefix test
 		if cfg.NodelistDB.URL == "" {
-			fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.url is required when using -prefix\n")
+			fmt.Fprintf(log.GetOutput(), "ERROR: nodelistdb.url is required when using -prefix\n")
 			os.Exit(1)
 		}
 		log.Info("Fetching PSTN nodes from %s...", cfg.NodelistDB.URL)
 		allNodesList, totalCount, err := FetchPSTNNodesWithCount(cfg.NodelistDB.URL, 30*time.Second, log)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch PSTN nodes: %v\n", err)
+			fmt.Fprintf(log.GetOutput(), "ERROR: Failed to fetch PSTN nodes: %v\n", err)
 			os.Exit(1)
 		}
 		log.Info("Fetched %d PSTN nodes total", len(allNodesList))
@@ -329,7 +329,7 @@ func main() {
 			filtered = filterCMOnly(filtered, log)
 		}
 		if len(filtered) == 0 {
-			fmt.Fprintf(os.Stderr, "ERROR: No PSTN nodes found matching prefix %q\n", pfx)
+			fmt.Fprintf(log.GetOutput(), "ERROR: No PSTN nodes found matching prefix %q\n", pfx)
 			os.Exit(1)
 		}
 		stripPhonePlus(filtered)
@@ -341,13 +341,13 @@ func main() {
 	} else if *allNodes {
 		// Mode 4: All nodes with exceptions
 		if cfg.NodelistDB.URL == "" {
-			fmt.Fprintf(os.Stderr, "ERROR: nodelistdb.url is required for -all mode\n")
+			fmt.Fprintf(log.GetOutput(), "ERROR: nodelistdb.url is required for -all mode\n")
 			os.Exit(1)
 		}
 		log.Info("Fetching all PSTN nodes from %s...", cfg.NodelistDB.URL)
 		allNodesList, totalCount, err := FetchPSTNNodesWithCount(cfg.NodelistDB.URL, 30*time.Second, log)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch PSTN nodes: %v\n", err)
+			fmt.Fprintf(log.GetOutput(), "ERROR: Failed to fetch PSTN nodes: %v\n", err)
 			os.Exit(1)
 		}
 		log.Info("Fetched %d PSTN nodes total", len(allNodesList))
@@ -364,7 +364,7 @@ func main() {
 			filtered = filterCMOnly(filtered, log)
 		}
 		if len(filtered) == 0 {
-			fmt.Fprintf(os.Stderr, "ERROR: No PSTN nodes found after applying filters\n")
+			fmt.Fprintf(log.GetOutput(), "ERROR: No PSTN nodes found after applying filters\n")
 			os.Exit(1)
 		}
 		stripPhonePlus(filtered)
@@ -471,7 +471,7 @@ func main() {
 	// Create modem
 	m, err := modem.New(modemCfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: Failed to create modem: %v\n", err)
+		fmt.Fprintf(log.GetOutput(), "ERROR: Failed to create modem: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -480,11 +480,11 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Fprintln(os.Stderr, "\nReceived interrupt, cleaning up...")
+		fmt.Fprintln(log.GetOutput(), "\nReceived interrupt, cleaning up...")
 		if m.InDataMode() {
-			fmt.Fprintln(os.Stderr, "Hanging up...")
+			fmt.Fprintln(log.GetOutput(), "Hanging up...")
 			if err := m.Hangup(); err != nil {
-				fmt.Fprintf(os.Stderr, "Hangup error: %v\n", err)
+				fmt.Fprintf(log.GetOutput(), "Hangup error: %v\n", err)
 			}
 		}
 		m.Close()
@@ -539,21 +539,22 @@ func stripPhonePlus(nodes []NodeTarget) {
 }
 
 func runInfoMode(m *modem.Modem, log *TestLogger) {
-	fmt.Fprintln(os.Stderr, "\n--- Modem Info ---")
+	out := log.GetOutput()
+	fmt.Fprintln(out, "\n--- Modem Info ---")
 	info, err := m.GetInfo()
 	if err != nil {
 		log.Fail("Failed to get modem info: %v", err)
 	} else {
 		if info.Manufacturer != "" {
-			fmt.Fprintf(os.Stderr, "Manufacturer: %s\n", info.Manufacturer)
+			fmt.Fprintf(out, "Manufacturer: %s\n", info.Manufacturer)
 		}
 		if info.Model != "" {
-			fmt.Fprintf(os.Stderr, "Model: %s\n", info.Model)
+			fmt.Fprintf(out, "Model: %s\n", info.Model)
 		}
 		if info.Firmware != "" {
-			fmt.Fprintf(os.Stderr, "Firmware: %s\n", info.Firmware)
+			fmt.Fprintf(out, "Firmware: %s\n", info.Firmware)
 		}
-		fmt.Fprintf(os.Stderr, "Raw response:\n%s\n", info.RawResponse)
+		fmt.Fprintf(out, "Raw response:\n%s\n", info.RawResponse)
 	}
 
 	// Get modem status
@@ -561,19 +562,20 @@ func runInfoMode(m *modem.Modem, log *TestLogger) {
 	if err != nil {
 		log.Fail("Failed to get modem status: %v", err)
 	} else {
-		fmt.Fprintln(os.Stderr, "\n--- Modem Status ---")
-		fmt.Fprintf(os.Stderr, "DCD (Carrier): %v\n", status.DCD)
-		fmt.Fprintf(os.Stderr, "DSR (Ready):   %v\n", status.DSR)
-		fmt.Fprintf(os.Stderr, "CTS (Clear):   %v\n", status.CTS)
-		fmt.Fprintf(os.Stderr, "RI (Ring):     %v\n", status.RI)
+		fmt.Fprintln(out, "\n--- Modem Status ---")
+		fmt.Fprintf(out, "DCD (Carrier): %v\n", status.DCD)
+		fmt.Fprintf(out, "DSR (Ready):   %v\n", status.DSR)
+		fmt.Fprintf(out, "CTS (Clear):   %v\n", status.CTS)
+		fmt.Fprintf(out, "RI (Ring):     %v\n", status.RI)
 	}
 
-	fmt.Fprintln(os.Stderr, "\nUse -interactive for AT command mode or -batch -phone <number> for batch testing.")
+	fmt.Fprintln(out, "\nUse -interactive for AT command mode or -batch -phone <number> for batch testing.")
 }
 
 func runInteractiveMode(m *modem.Modem, log *TestLogger) {
-	fmt.Fprintln(os.Stderr, "\n=== Interactive AT Command Mode ===")
-	fmt.Fprintln(os.Stderr, "Enter AT commands (type 'quit' to exit)")
+	out := log.GetOutput()
+	fmt.Fprintln(out, "\n=== Interactive AT Command Mode ===")
+	fmt.Fprintln(out, "Enter AT commands (type 'quit' to exit)")
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -597,7 +599,7 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 			log.Fail("Error: %v", err)
 		} else {
 			log.RXString(response)
-			fmt.Fprintf(os.Stderr, "%s\n", response)
+			fmt.Fprintf(out, "%s\n", response)
 		}
 	}
 }
@@ -615,7 +617,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 	cancelled := false
 	go func() {
 		<-sigChan
-		fmt.Fprintln(os.Stderr, "\nReceived interrupt, stopping...")
+		fmt.Fprintln(log.GetOutput(), "\nReceived interrupt, stopping...")
 		cancelled = true
 		cancel()
 	}()

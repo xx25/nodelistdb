@@ -310,7 +310,7 @@ func (l *TestLogger) PrintHeader(configPath, device string, phones []string, tes
 	}
 	fmt.Fprintf(l.output, "Started:   %s\n", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Fprintln(l.output, strings.Repeat("=", 80))
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(l.output)
 }
 
 // PrintTestHeader prints a test section header
@@ -400,7 +400,7 @@ func (l *TestLogger) PrintSummary(total, success, failed int, totalDuration time
 
 // PrintSummaryWithPhoneStats prints the final test summary with per-phone statistics
 func (l *TestLogger) PrintSummaryWithPhoneStats(total, success, failed int, totalDuration time.Duration, avgDialTime, avgEmsiTime time.Duration, results []string, phoneStats map[string]*PhoneStats) {
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(l.output)
 	fmt.Fprintln(l.output, strings.Repeat("=", 80))
 	fmt.Fprintln(l.output, "                           SUMMARY")
 	fmt.Fprintln(l.output, strings.Repeat("=", 80))
@@ -417,12 +417,12 @@ func (l *TestLogger) PrintSummaryWithPhoneStats(total, success, failed int, tota
 	fmt.Fprintf(l.output, "Success:   %d (%.1f%%)\n", success, successPct)
 	fmt.Fprintf(l.output, "Failed:    %d (%.1f%%)\n", failed, failedPct)
 	fmt.Fprintf(l.output, "Duration:  %s\n", formatDuration(totalDuration))
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(l.output)
 
 	if success > 0 {
 		fmt.Fprintf(l.output, "Avg dial time:  %.1fs\n", avgDialTime.Seconds())
 		fmt.Fprintf(l.output, "Avg EMSI time:  %.1fs\n", avgEmsiTime.Seconds())
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(l.output)
 	}
 
 	// Print per-phone statistics if multiple phones were tested
@@ -449,7 +449,7 @@ func (l *TestLogger) PrintSummaryWithPhoneStats(total, success, failed int, tota
 			fmt.Fprintf(l.output, "  %-12s %6d %6d %6d %10s %10s  (%.0f%%)\n",
 				stats.Phone, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, stats.SuccessRate())
 		}
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(l.output)
 	}
 
 	fmt.Fprintln(l.output, "RESULTS:")
@@ -472,7 +472,7 @@ func sortStrings(s []string) {
 
 // PrintSummaryWithStats prints the final test summary with per-phone and per-operator statistics
 func (l *TestLogger) PrintSummaryWithStats(total, success, failed int, totalDuration time.Duration, avgDialTime, avgEmsiTime time.Duration, results []string, phoneStats map[string]*PhoneStats, operatorStats map[string]*OperatorStats) {
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(l.output)
 	fmt.Fprintln(l.output, strings.Repeat("=", 80))
 	fmt.Fprintln(l.output, "                           SUMMARY")
 	fmt.Fprintln(l.output, strings.Repeat("=", 80))
@@ -489,12 +489,12 @@ func (l *TestLogger) PrintSummaryWithStats(total, success, failed int, totalDura
 	fmt.Fprintf(l.output, "Success:   %d (%.1f%%)\n", success, successPct)
 	fmt.Fprintf(l.output, "Failed:    %d (%.1f%%)\n", failed, failedPct)
 	fmt.Fprintf(l.output, "Duration:  %s\n", formatDuration(totalDuration))
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(l.output)
 
 	if success > 0 {
 		fmt.Fprintf(l.output, "Avg dial time:  %.1fs\n", avgDialTime.Seconds())
 		fmt.Fprintf(l.output, "Avg EMSI time:  %.1fs\n", avgEmsiTime.Seconds())
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(l.output)
 	}
 
 	// Print per-operator statistics if multiple operators were configured
@@ -529,7 +529,7 @@ func (l *TestLogger) PrintSummaryWithStats(total, success, failed int, totalDura
 			fmt.Fprintf(l.output, "  %-16s %-8s %6d %6d %6d %10s %10s  (%.0f%%)\n",
 				displayName, prefix, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, stats.SuccessRate())
 		}
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(l.output)
 	}
 
 	// Print per-phone statistics if multiple phones were tested
@@ -556,7 +556,7 @@ func (l *TestLogger) PrintSummaryWithStats(total, success, failed int, totalDura
 			fmt.Fprintf(l.output, "  %-12s %6d %6d %6d %10s %10s  (%.0f%%)\n",
 				stats.Phone, stats.Total, stats.Success, stats.Failed, avgDial, avgEmsi, stats.SuccessRate())
 		}
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(l.output)
 	}
 
 	fmt.Fprintln(l.output, "RESULTS:")

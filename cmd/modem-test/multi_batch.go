@@ -46,7 +46,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Fprintln(os.Stderr, "\nReceived interrupt, stopping workers...")
+		fmt.Fprintln(log.GetOutput(), "\nReceived interrupt, stopping workers...")
 		cancel()
 		pool.Cancel() // Also cancel the pool to unblock any waiting operations
 	}()
