@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -63,13 +62,13 @@ type apiNode struct {
 }
 
 // FetchPSTNNodes fetches PSTN nodes from the NodelistDB API.
-func FetchPSTNNodes(apiURL string, timeout time.Duration) ([]NodeTarget, error) {
-	nodes, _, err := FetchPSTNNodesWithCount(apiURL, timeout)
+func FetchPSTNNodes(apiURL string, timeout time.Duration, log *TestLogger) ([]NodeTarget, error) {
+	nodes, _, err := FetchPSTNNodesWithCount(apiURL, timeout, log)
 	return nodes, err
 }
 
 // FetchPSTNNodesWithCount fetches PSTN nodes and returns total count for truncation detection.
-func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration) ([]NodeTarget, int, error) {
+func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration, log *TestLogger) ([]NodeTarget, int, error) {
 	url := strings.TrimRight(apiURL, "/") + "/api/nodes/pstn?limit=10000"
 
 	client := &http.Client{Timeout: timeout}
@@ -122,7 +121,7 @@ func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration) ([]NodeTarget
 	}
 
 	if deadSkipped > 0 {
-		log.Printf("Skipped %d PSTN-dead nodes", deadSkipped)
+		log.Info("Skipped %d PSTN-dead nodes", deadSkipped)
 	}
 
 	return nodes, apiResp.Count, nil

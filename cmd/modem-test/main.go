@@ -314,7 +314,7 @@ func main() {
 			os.Exit(1)
 		}
 		log.Info("Fetching PSTN nodes from %s...", cfg.NodelistDB.URL)
-		allNodesList, totalCount, err := FetchPSTNNodesWithCount(cfg.NodelistDB.URL, 30*time.Second)
+		allNodesList, totalCount, err := FetchPSTNNodesWithCount(cfg.NodelistDB.URL, 30*time.Second, log)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch PSTN nodes: %v\n", err)
 			os.Exit(1)
@@ -345,7 +345,7 @@ func main() {
 			os.Exit(1)
 		}
 		log.Info("Fetching all PSTN nodes from %s...", cfg.NodelistDB.URL)
-		allNodesList, totalCount, err := FetchPSTNNodesWithCount(cfg.NodelistDB.URL, 30*time.Second)
+		allNodesList, totalCount, err := FetchPSTNNodesWithCount(cfg.NodelistDB.URL, 30*time.Second, log)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: Failed to fetch PSTN nodes: %v\n", err)
 			os.Exit(1)
