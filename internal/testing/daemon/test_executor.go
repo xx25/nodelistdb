@@ -11,12 +11,16 @@ import (
 
 // TestExecutor handles test orchestration and execution
 type TestExecutor struct {
-	daemon *Daemon
+	daemon     *Daemon
+	aggregator *TestAggregator
 }
 
 // NewTestExecutor creates a new test executor
 func NewTestExecutor(d *Daemon) *TestExecutor {
-	return &TestExecutor{daemon: d}
+	return &TestExecutor{
+		daemon:     d,
+		aggregator: NewTestAggregator(),
+	}
 }
 
 // TestNode tests a node based on whether it has single or multiple hostnames
@@ -90,7 +94,7 @@ func (te *TestExecutor) testMultipleHostnameNode(ctx context.Context, node *mode
 
 	// Create an aggregated result
 	// Always return a non-nil result to prevent crashes in scheduler
-	aggregated := NewTestAggregator().CreateAggregatedResult(node, results)
+	aggregated := te.aggregator.CreateAggregatedResult(node, results)
 
 	// Storage is handled by the caller (daemon or CLI), not here
 	return aggregated

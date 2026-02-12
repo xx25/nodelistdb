@@ -387,6 +387,10 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 }
 
 func (s *Scheduler) UpdateTestResult(ctx context.Context, node *models.Node, result *models.TestResult) {
+	if result == nil {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

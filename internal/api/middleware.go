@@ -72,37 +72,6 @@ func WriteJSONSuccess(w http.ResponseWriter, data interface{}) {
 	WriteJSON(w, data, http.StatusOK)
 }
 
-// LoggingMiddleware logs HTTP requests with structured fields
-func (s *Server) LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		// Wrap response writer to capture status
-		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-		next.ServeHTTP(wrapped, r)
-
-		logging.Info("HTTP request",
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
-			slog.Int("status", wrapped.statusCode),
-			slog.Duration("duration", time.Since(start)),
-			slog.String("remote_addr", r.RemoteAddr),
-		)
-	})
-}
-
-// responseWriter wraps http.ResponseWriter to capture status code
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
 // CORSMiddleware handles CORS (if needed)
 func (s *Server) CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

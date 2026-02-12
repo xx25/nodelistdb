@@ -434,13 +434,9 @@ func (h *ModemHandler) SubmitResultsDirect(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// storeModemTestResultDirect stores a modem test result from CLI submissions
-func (h *ModemHandler) storeModemTestResultDirect(ctx context.Context, callerID string, result ModemTestResultRequest) error {
-	if h.resultOps == nil {
-		return nil // Result storage not configured
-	}
-
-	// Parse test time
+// baseModemResultInput creates a ModemTestResultInput with common fields shared
+// between daemon and CLI submissions.
+func baseModemResultInput(callerID, testSource string, result ModemTestResultRequest) *storage.ModemTestResultInput {
 	var testTime time.Time
 	if result.TestTime != "" {
 		var err error
@@ -452,14 +448,14 @@ func (h *ModemHandler) storeModemTestResultDirect(ctx context.Context, callerID 
 		testTime = time.Now()
 	}
 
-	input := &storage.ModemTestResultInput{
+	return &storage.ModemTestResultInput{
 		Zone:             result.Zone,
 		Net:              result.Net,
 		Node:             result.Node,
 		ConflictSequence: result.ConflictSequence,
 		TestTime:         testTime,
 		CallerID:         callerID,
-		TestSource:       "cli", // Mark as CLI submission
+		TestSource:       testSource,
 		Success:          result.Success,
 		ResponseMs:       result.ResponseMs,
 		SystemName:       result.SystemName,
@@ -477,14 +473,25 @@ func (h *ModemHandler) storeModemTestResultDirect(ctx context.Context, callerID 
 		ModemUsed:        result.ModemUsed,
 		MatchReason:      result.MatchReason,
 		ModemLineStats:   result.ModemLineStats,
-		OperatorName:     result.OperatorName,
-		OperatorPrefix:   result.OperatorPrefix,
-		DialTimeMs:       result.DialTimeMs,
-		EMSITimeMs:       result.EMSITimeMs,
-		ConnectString:    result.ConnectString,
-		RemoteLocation:   result.RemoteLocation,
-		RemoteSysop:      result.RemoteSysop,
 	}
+}
+
+// storeModemTestResultDirect stores a modem test result from CLI submissions
+func (h *ModemHandler) storeModemTestResultDirect(ctx context.Context, callerID string, result ModemTestResultRequest) error {
+	if h.resultOps == nil {
+		return nil // Result storage not configured
+	}
+
+	input := baseModemResultInput(callerID, "cli", result)
+
+	// CLI-specific extended fields
+	input.OperatorName = result.OperatorName
+	input.OperatorPrefix = result.OperatorPrefix
+	input.DialTimeMs = result.DialTimeMs
+	input.EMSITimeMs = result.EMSITimeMs
+	input.ConnectString = result.ConnectString
+	input.RemoteLocation = result.RemoteLocation
+	input.RemoteSysop = result.RemoteSysop
 
 	// Map line stats if provided
 	if result.LineStats != nil {
@@ -539,44 +546,5 @@ func (h *ModemHandler) storeModemTestResult(ctx context.Context, callerID string
 		return nil // Result storage not configured
 	}
 
-	// Parse test time
-	var testTime time.Time
-	if result.TestTime != "" {
-		var err error
-		testTime, err = time.Parse(time.RFC3339, result.TestTime)
-		if err != nil {
-			testTime = time.Now()
-		}
-	} else {
-		testTime = time.Now()
-	}
-
-	input := &storage.ModemTestResultInput{
-		Zone:             result.Zone,
-		Net:              result.Net,
-		Node:             result.Node,
-		ConflictSequence: result.ConflictSequence,
-		TestTime:         testTime,
-		CallerID:         callerID,
-		TestSource:       "daemon", // Mark as daemon submission
-		Success:          result.Success,
-		ResponseMs:       result.ResponseMs,
-		SystemName:       result.SystemName,
-		MailerInfo:       result.MailerInfo,
-		Addresses:        result.Addresses,
-		AddressValid:     result.AddressValid,
-		ResponseType:     result.ResponseType,
-		SoftwareSource:   result.SoftwareSource,
-		Error:            result.Error,
-		ConnectSpeed:     result.ConnectSpeed,
-		ModemProtocol:    result.ModemProtocol,
-		PhoneDialed:      result.PhoneDialed,
-		RingCount:        result.RingCount,
-		CarrierTimeMs:    result.CarrierTimeMs,
-		ModemUsed:        result.ModemUsed,
-		MatchReason:      result.MatchReason,
-		ModemLineStats:   result.ModemLineStats,
-	}
-
-	return h.resultOps.StoreModemTestResult(ctx, input)
+	return h.resultOps.StoreModemTestResult(ctx, baseModemResultInput(callerID, "daemon", result))
 }

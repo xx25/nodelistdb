@@ -43,6 +43,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Validate mutually exclusive flags
+	if *verbose && *quiet {
+		fmt.Fprintf(os.Stderr, "Error: -verbose and -quiet are mutually exclusive\n")
+		os.Exit(1)
+	}
+
 	if *path == "" && !*rebuildFTSOnly {
 		fmt.Fprintf(os.Stderr, "Error: -path is required (unless using -rebuild-fts)\n")
 		flag.Usage()
@@ -187,8 +193,8 @@ func main() {
 			fmt.Printf("Using concurrent processing with %d workers\n", *workers)
 		}
 		// Wrap storage with adapter for concurrent processing
-		storageAdapter := concurrent.NewStorageAdapter(storageLayer)
-		processor := concurrent.NewMultiProcessor(storageAdapter, nodelistParser, *workers, *batchSize, *verbose, *quiet)
+		storageAdapter := concurrent.NewStorageAdapter(storageLayer.NodeOps(), storageLayer)
+		processor := concurrent.NewMultiProcessor(storageAdapter, *workers, *batchSize, *verbose, *quiet)
 
 		err := processor.ProcessFiles(ctx, files)
 		if err != nil {

@@ -10,8 +10,24 @@ import (
 	"github.com/nodelistdb/internal/parser"
 )
 
+// Job represents a file processing job
+type Job struct {
+	FilePath string
+	JobID    int
+}
+
+// Result represents the result of processing a job
+type Result struct {
+	JobID        int
+	FilePath     string
+	Nodes        []database.Node
+	Error        error
+	Duration     time.Duration
+	NodesCount   int
+	NodelistDate time.Time // Date of the nodelist for flag statistics updates
+}
+
 // StorageInterface defines the interface for storage operations needed by concurrent processing.
-// Provides direct method access without requiring component accessor pattern for simplicity.
 type StorageInterface interface {
 	InsertNodes([]database.Node) error
 	IsNodelistProcessed(time.Time) (bool, error)
@@ -19,57 +35,31 @@ type StorageInterface interface {
 	UpdateFlagStatistics(time.Time) error
 }
 
+// NodeOperations defines the node CRUD operations required by the adapter.
+type NodeOperations interface {
+	InsertNodes([]database.Node) error
+	IsNodelistProcessed(time.Time) (bool, error)
+	FindConflictingNode(int, int, int, time.Time) (bool, error)
+}
+
+// FlagStatisticsUpdater defines the flag statistics update operation.
+type FlagStatisticsUpdater interface {
+	UpdateFlagStatistics(time.Time) error
+}
+
 // StorageAdapter wraps a storage implementation that uses component-based API and adapts it
 // to the simpler StorageInterface for concurrent processing.
 type StorageAdapter struct {
-	nodeOps interface {
-		InsertNodes([]database.Node) error
-		IsNodelistProcessed(time.Time) (bool, error)
-		FindConflictingNode(int, int, int, time.Time) (bool, error)
-	}
-	storage interface {
-		UpdateFlagStatistics(time.Time) error
-	}
+	nodeOps NodeOperations
+	storage FlagStatisticsUpdater
 }
 
-// NewStorageAdapter creates an adapter that wraps storage with component-based API.
-// The storage parameter should have a NodeOps() method that returns a component
-// implementing the required node operations.
-func NewStorageAdapter(storage interface{}) *StorageAdapter {
-	// Use reflection to call NodeOps() method
-	// This avoids type system issues while still using the component API
-	type nodeOpsGetter interface {
-		NodeOps() interface {
-			InsertNodes([]database.Node) error
-			IsNodelistProcessed(time.Time) (bool, error)
-			FindConflictingNode(int, int, int, time.Time) (bool, error)
-		}
+// NewStorageAdapter creates an adapter from separate node operations and flag statistics providers.
+func NewStorageAdapter(nodeOps NodeOperations, flagStats FlagStatisticsUpdater) *StorageAdapter {
+	return &StorageAdapter{
+		nodeOps: nodeOps,
+		storage: flagStats,
 	}
-
-	adapter := &StorageAdapter{}
-
-	if getter, ok := storage.(nodeOpsGetter); ok {
-		adapter.nodeOps = getter.NodeOps()
-	} else if ops, ok := storage.(interface {
-		InsertNodes([]database.Node) error
-		IsNodelistProcessed(time.Time) (bool, error)
-		FindConflictingNode(int, int, int, time.Time) (bool, error)
-	}); ok {
-		adapter.nodeOps = ops
-	} else {
-		panic("storage does not implement required node operations interface")
-	}
-
-	// Storage itself must implement UpdateFlagStatistics
-	if s, ok := storage.(interface {
-		UpdateFlagStatistics(time.Time) error
-	}); ok {
-		adapter.storage = s
-	} else {
-		panic("storage does not implement UpdateFlagStatistics")
-	}
-
-	return adapter
 }
 
 func (sa *StorageAdapter) InsertNodes(nodes []database.Node) error {
@@ -91,7 +81,6 @@ func (sa *StorageAdapter) UpdateFlagStatistics(date time.Time) error {
 // MultiProcessor manages concurrent file processing with generic storage interface
 type MultiProcessor struct {
 	storage    StorageInterface
-	parser     *parser.Parser
 	numWorkers int
 	batchSize  int
 	verbose    bool
@@ -99,10 +88,9 @@ type MultiProcessor struct {
 }
 
 // NewMultiProcessor creates a new concurrent processor with generic storage interface
-func NewMultiProcessor(storage StorageInterface, parser *parser.Parser, numWorkers int, batchSize int, verbose bool, quiet bool) *MultiProcessor {
+func NewMultiProcessor(storage StorageInterface, numWorkers int, batchSize int, verbose bool, quiet bool) *MultiProcessor {
 	return &MultiProcessor{
 		storage:    storage,
-		parser:     parser,
 		numWorkers: numWorkers,
 		batchSize:  batchSize,
 		verbose:    verbose,

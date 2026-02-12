@@ -3,12 +3,13 @@ package web
 import (
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/nodelistdb/internal/flags"
+	"github.com/nodelistdb/internal/logging"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 )
@@ -90,7 +91,7 @@ func (s *Server) renderProtocolAnalytics(
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] %s: Error fetching nodes: %v", config.PageTitle, err)
+		logging.Errorf("%s: Error fetching nodes: %v", config.PageTitle, err)
 		protocolNodes = []storage.NodeTestResult{}
 		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
@@ -114,14 +115,14 @@ func (s *Server) renderProtocolAnalytics(
 	// Use unified template
 	tmpl, exists := s.templates["unified_analytics"]
 	if !exists {
-		log.Printf("[ERROR] %s: Template 'unified_analytics' not found", config.PageTitle)
+		logging.Errorf("%s: Template 'unified_analytics' not found", config.PageTitle)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] %s: Error executing template: %v", config.PageTitle, err)
+		logging.Errorf("%s: Error executing template: %v", config.PageTitle, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -313,7 +314,7 @@ func (s *Server) renderIPv6Analytics(
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] %s: Error fetching nodes: %v", config.PageTitle, err)
+		logging.Errorf("%s: Error fetching nodes: %v", config.PageTitle, err)
 		ipv6Nodes = []storage.NodeTestResult{}
 		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
@@ -337,14 +338,14 @@ func (s *Server) renderIPv6Analytics(
 	// Check template exists before rendering
 	tmpl, exists := s.templates[templateName]
 	if !exists {
-		log.Printf("[ERROR] %s: Template '%s' not found", config.PageTitle, templateName)
+		logging.Errorf("%s: Template '%s' not found", config.PageTitle, templateName)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] %s: Error executing template: %v", config.PageTitle, err)
+		logging.Errorf("%s: Error executing template: %v", config.PageTitle, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -484,13 +485,13 @@ func (s *Server) renderSoftwareAnalytics(w http.ResponseWriter, config SoftwareP
 
 	tmpl, exists := s.templates["software_analytics"]
 	if !exists {
-		log.Printf("[ERROR] %s: Template 'software_analytics' not found", config.PageTitle)
+		logging.Errorf("%s: Template 'software_analytics' not found", config.PageTitle)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] %s: Error executing template: %v", config.PageTitle, err)
+		logging.Errorf("%s: Error executing template: %v", config.PageTitle, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -620,7 +621,7 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] AKA Mismatch Analytics: Error fetching nodes: %v", err)
+		logging.Errorf("AKA Mismatch Analytics: Error fetching nodes: %v", err)
 		mismatchNodes = []storage.NodeTestResult{}
 		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
@@ -632,13 +633,13 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	var ipv4IncorrectNodes []storage.AKAIPVersionMismatchNode
 
 	if ipv6Inc, err := s.storage.GetIPv6IncorrectIPv4CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes); err != nil {
-		log.Printf("[ERROR] AKA Mismatch Analytics: Error fetching IPv6 incorrect nodes: %v", err)
+		logging.Errorf("AKA Mismatch Analytics: Error fetching IPv6 incorrect nodes: %v", err)
 	} else {
 		ipv6IncorrectNodes = ipv6Inc
 	}
 
 	if ipv4Inc, err := s.storage.GetIPv4IncorrectIPv6CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes); err != nil {
-		log.Printf("[ERROR] AKA Mismatch Analytics: Error fetching IPv4 incorrect nodes: %v", err)
+		logging.Errorf("AKA Mismatch Analytics: Error fetching IPv4 incorrect nodes: %v", err)
 	} else {
 		ipv4IncorrectNodes = ipv4Inc
 	}
@@ -662,13 +663,13 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	// Use AKA mismatch analytics template
 	tmpl, exists := s.templates["aka_mismatch_analytics"]
 	if !exists {
-		log.Printf("[ERROR] AKA Mismatch Analytics: Template 'aka_mismatch_analytics' not found")
+		logging.Errorf("AKA Mismatch Analytics: Template 'aka_mismatch_analytics' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] AKA Mismatch Analytics: Error executing template: %v", err)
+		logging.Errorf("AKA Mismatch Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -710,7 +711,7 @@ func (s *Server) OtherNetworksAnalyticsHandler(w http.ResponseWriter, r *http.Re
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] Other Networks Analytics: Error fetching networks: %v", err)
+		logging.Errorf("Other Networks Analytics: Error fetching networks: %v", err)
 		networks = []storage.OtherNetworkSummary{}
 		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
@@ -734,13 +735,13 @@ func (s *Server) OtherNetworksAnalyticsHandler(w http.ResponseWriter, r *http.Re
 	// Use other networks analytics template
 	tmpl, exists := s.templates["other_networks_analytics"]
 	if !exists {
-		log.Printf("[ERROR] Other Networks Analytics: Template 'other_networks_analytics' not found")
+		logging.Errorf("Other Networks Analytics: Template 'other_networks_analytics' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Other Networks Analytics: Error executing template: %v", err)
+		logging.Errorf("Other Networks Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -788,7 +789,7 @@ func (s *Server) OtherNetworkNodesHandler(w http.ResponseWriter, r *http.Request
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] Other Network Nodes: Error fetching nodes for %s: %v", networkName, err)
+		logging.Errorf("Other Network Nodes: Error fetching nodes for %s: %v", networkName, err)
 		nodes = []storage.OtherNetworkNode{}
 		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
@@ -813,13 +814,13 @@ func (s *Server) OtherNetworkNodesHandler(w http.ResponseWriter, r *http.Request
 	// Use other network nodes template
 	tmpl, exists := s.templates["other_network_nodes"]
 	if !exists {
-		log.Printf("[ERROR] Other Network Nodes: Template 'other_network_nodes' not found")
+		logging.Errorf("Other Network Nodes: Template 'other_network_nodes' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Other Network Nodes: Error executing template: %v", err)
+		logging.Errorf("Other Network Nodes: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -868,20 +869,13 @@ func computePSTNStats(nodes []storage.PSTNNode) PSTNSummaryStats {
 
 // PSTNCMAnalyticsHandler shows all nodes with valid phone numbers from the latest nodelist
 func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse limit parameter (PSTN page needs higher limit than standard analytics)
-	query := r.URL.Query()
-	limit := 5000 // Default limit - high to capture all PSTN nodes
-	if limitStr := query.Get("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 10000 {
-			limit = parsed
-		}
-	}
+	limit := parseLimit(r, 5000, 10000)
 
 	// Fetch ALL PSTN nodes (CM and non-CM) from latest nodelist
 	pstnNodes, err := s.storage.GetPSTNNodes(limit, 0)
 	var displayError error
 	if err != nil {
-		log.Printf("[ERROR] PSTN Analytics: Error fetching nodes: %v", err)
+		logging.Errorf("PSTN Analytics: Error fetching nodes: %v", err)
 		pstnNodes = []storage.PSTNNode{}
 		displayError = fmt.Errorf("Failed to fetch PSTN analytics data. Please try again later")
 	}
@@ -911,13 +905,13 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	// Use PSTN analytics template
 	tmpl, exists := s.templates["pstn_analytics"]
 	if !exists {
-		log.Printf("[ERROR] PSTN Analytics: Template 'pstn_analytics' not found")
+		logging.Errorf("PSTN Analytics: Template 'pstn_analytics' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] PSTN Analytics: Error executing template: %v", err)
+		logging.Errorf("PSTN Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1027,13 +1021,7 @@ func sortedProtocolCounts(m map[string]int) []ModemAccessibleProtocolCount {
 	for proto, count := range m {
 		result = append(result, ModemAccessibleProtocolCount{Protocol: proto, Count: count})
 	}
-	for i := 0; i < len(result); i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[j].Count > result[i].Count {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Count > result[j].Count })
 	return result
 }
 
@@ -1043,13 +1031,7 @@ func sortedOperatorCounts(m map[string]int) []ModemAccessibleOperatorCount {
 	for oper, count := range m {
 		result = append(result, ModemAccessibleOperatorCount{Operator: oper, Count: count})
 	}
-	for i := 0; i < len(result); i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[j].Count > result[i].Count {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Count > result[j].Count })
 	return result
 }
 
@@ -1059,13 +1041,7 @@ func sortedModemZoneCounts(m map[int]int) []ModemAccessibleZoneCount {
 	for zone, count := range m {
 		result = append(result, ModemAccessibleZoneCount{Zone: zone, Count: count})
 	}
-	for i := 0; i < len(result); i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[j].Zone < result[i].Zone {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Zone < result[j].Zone })
 	return result
 }
 
@@ -1076,7 +1052,7 @@ func (s *Server) ModemAccessibleAnalyticsHandler(w http.ResponseWriter, r *http.
 	nodes, err := s.storage.GetModemAccessibleNodes(params.Limit, params.Days, params.IncludeZeroNodes)
 	var displayError error
 	if err != nil {
-		log.Printf("[ERROR] Modem Accessible Analytics: Error fetching nodes: %v", err)
+		logging.Errorf("Modem Accessible Analytics: Error fetching nodes: %v", err)
 		nodes = []storage.ModemAccessibleNode{}
 		displayError = fmt.Errorf("Failed to fetch modem accessible analytics data. Please try again later")
 	} else if params.ValidationError != "" {
@@ -1109,13 +1085,13 @@ func (s *Server) ModemAccessibleAnalyticsHandler(w http.ResponseWriter, r *http.
 
 	tmpl, exists := s.templates["pstn_accessible_analytics"]
 	if !exists {
-		log.Printf("[ERROR] Modem Accessible Analytics: Template 'pstn_accessible_analytics' not found")
+		logging.Errorf("Modem Accessible Analytics: Template 'pstn_accessible_analytics' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Modem Accessible Analytics: Error executing template: %v", err)
+		logging.Errorf("Modem Accessible Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1168,13 +1144,9 @@ func computeModemNoAnswerStats(nodes []storage.ModemNoAnswerNode) ModemNoAnswerS
 	for disp, count := range dispMap {
 		stats.DispositionCounts = append(stats.DispositionCounts, ModemNoAnswerDispositionCount{Disposition: disp, Count: count})
 	}
-	for i := 0; i < len(stats.DispositionCounts); i++ {
-		for j := i + 1; j < len(stats.DispositionCounts); j++ {
-			if stats.DispositionCounts[j].Count > stats.DispositionCounts[i].Count {
-				stats.DispositionCounts[i], stats.DispositionCounts[j] = stats.DispositionCounts[j], stats.DispositionCounts[i]
-			}
-		}
-	}
+	sort.Slice(stats.DispositionCounts, func(i, j int) bool {
+		return stats.DispositionCounts[i].Count > stats.DispositionCounts[j].Count
+	})
 
 	stats.OperatorCounts = sortedOperatorCounts(operMap)
 	stats.ZoneCounts = sortedModemZoneCounts(zoneMap)
@@ -1189,7 +1161,7 @@ func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Re
 	nodes, err := s.storage.GetModemNoAnswerNodes(params.Limit, params.Days, params.IncludeZeroNodes)
 	var displayError error
 	if err != nil {
-		log.Printf("[ERROR] Modem No Answer Analytics: Error fetching nodes: %v", err)
+		logging.Errorf("Modem No Answer Analytics: Error fetching nodes: %v", err)
 		nodes = []storage.ModemNoAnswerNode{}
 		displayError = fmt.Errorf("Failed to fetch modem no-answer analytics data. Please try again later")
 	} else if params.ValidationError != "" {
@@ -1237,13 +1209,13 @@ func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Re
 
 	tmpl, exists := s.templates["pstn_no_answer_analytics"]
 	if !exists {
-		log.Printf("[ERROR] Modem No Answer Analytics: Template 'pstn_no_answer_analytics' not found")
+		logging.Errorf("Modem No Answer Analytics: Template 'pstn_no_answer_analytics' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Modem No Answer Analytics: Error executing template: %v", err)
+		logging.Errorf("Modem No Answer Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1317,12 +1289,7 @@ func computeFileRequestStats(nodes []storage.FileRequestNode) FileRequestSummary
 	for zone := range zoneCountMap {
 		zones = append(zones, zone)
 	}
-	// Sort zones (simple insertion sort for small number of zones)
-	for i := 1; i < len(zones); i++ {
-		for j := i; j > 0 && zones[j] < zones[j-1]; j-- {
-			zones[j], zones[j-1] = zones[j-1], zones[j]
-		}
-	}
+	sort.Ints(zones)
 	for _, zone := range zones {
 		stats.ZoneCounts = append(stats.ZoneCounts, FileRequestZoneCount{Zone: zone, Count: zoneCountMap[zone]})
 	}
@@ -1339,20 +1306,13 @@ func getFileRequestCapabilities(flag string) flags.FileRequestCapabilities {
 
 // FileRequestAnalyticsHandler shows nodes with file request capabilities (XA-XX)
 func (s *Server) FileRequestAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse limit parameter
-	query := r.URL.Query()
-	limit := 5000 // Default limit - high to capture all file request nodes
-	if limitStr := query.Get("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 10000 {
-			limit = parsed
-		}
-	}
+	limit := parseLimit(r, 5000, 10000)
 
 	// Fetch file request nodes
 	fileRequestNodes, err := s.storage.GetFileRequestNodes(limit)
 	var displayError error
 	if err != nil {
-		log.Printf("[ERROR] File Request Analytics: Error fetching nodes: %v", err)
+		logging.Errorf("File Request Analytics: Error fetching nodes: %v", err)
 		fileRequestNodes = []storage.FileRequestNode{}
 		displayError = fmt.Errorf("Failed to fetch file request analytics data. Please try again later")
 	}
@@ -1386,13 +1346,13 @@ func (s *Server) FileRequestAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	// Use file request analytics template
 	tmpl, exists := s.templates["filerequest_analytics"]
 	if !exists {
-		log.Printf("[ERROR] File Request Analytics: Template 'filerequest_analytics' not found")
+		logging.Errorf("File Request Analytics: Template 'filerequest_analytics' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] File Request Analytics: Error executing template: %v", err)
+		logging.Errorf("File Request Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1421,7 +1381,7 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] IPv6 Weekly News: Error fetching data: %v", err)
+		logging.Errorf("IPv6 Weekly News: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch weekly IPv6 news. Please try again later")
 	} else if validationError != "" {
 		displayError = fmt.Errorf("%s", validationError)
@@ -1462,14 +1422,14 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 	// Check template exists before rendering
 	tmpl, exists := s.templates["ipv6_weekly_news"]
 	if !exists {
-		log.Printf("[ERROR] IPv6 Weekly News: Template 'ipv6_weekly_news' not found")
+		logging.Errorf("IPv6 Weekly News: Template 'ipv6_weekly_news' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] IPv6 Weekly News: Error executing template: %v", err)
+		logging.Errorf("IPv6 Weekly News: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1488,7 +1448,7 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] Geo Hosting Analytics: Error fetching data: %v", err)
+		logging.Errorf("Geo Hosting Analytics: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch geo hosting distribution. Please try again later")
 	}
 
@@ -1517,14 +1477,14 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 	// Check template exists before rendering
 	tmpl, exists := s.templates["geo_analytics"]
 	if !exists {
-		log.Printf("[ERROR] Geo Hosting Analytics: Template 'geo_analytics' not found")
+		logging.Errorf("Geo Hosting Analytics: Template 'geo_analytics' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Geo Hosting Analytics: Error executing template: %v", err)
+		logging.Errorf("Geo Hosting Analytics: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1550,7 +1510,7 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] Geo Country Nodes: Error fetching data: %v", err)
+		logging.Errorf("Geo Country Nodes: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch nodes for country. Please try again later")
 		nodes = []storage.NodeTestResult{}
 	}
@@ -1599,14 +1559,14 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 	// Check template exists before rendering
 	tmpl, exists := s.templates["geo_unified"]
 	if !exists {
-		log.Printf("[ERROR] Geo Country Nodes: Template 'geo_unified' not found")
+		logging.Errorf("Geo Country Nodes: Template 'geo_unified' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Geo Country Nodes: Error executing template: %v", err)
+		logging.Errorf("Geo Country Nodes: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1632,7 +1592,7 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] Geo Provider Nodes: Error fetching data: %v", err)
+		logging.Errorf("Geo Provider Nodes: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch nodes for provider. Please try again later")
 		nodes = []storage.NodeTestResult{}
 	}
@@ -1674,14 +1634,14 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	// Check template exists before rendering
 	tmpl, exists := s.templates["geo_unified"]
 	if !exists {
-		log.Printf("[ERROR] Geo Provider Nodes: Template 'geo_unified' not found")
+		logging.Errorf("Geo Provider Nodes: Template 'geo_unified' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Geo Provider Nodes: Error executing template: %v", err)
+		logging.Errorf("Geo Provider Nodes: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1714,7 +1674,7 @@ func (s *Server) OnThisDayHandler(w http.ResponseWriter, r *http.Request) {
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] On This Day: Error fetching data: %v", err)
+		logging.Errorf("On This Day: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch On This Day data. Please try again later")
 		nodes = []storage.OnThisDayNode{}
 	}
@@ -1731,13 +1691,7 @@ func (s *Server) OnThisDayHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Sort years in descending order (most recent first)
-	for i := 0; i < len(years)-1; i++ {
-		for j := i + 1; j < len(years); j++ {
-			if years[j] > years[i] {
-				years[i], years[j] = years[j], years[i]
-			}
-		}
-	}
+	sort.Sort(sort.Reverse(sort.IntSlice(years)))
 
 	// Build template data
 	data := struct {
@@ -1773,14 +1727,14 @@ func (s *Server) OnThisDayHandler(w http.ResponseWriter, r *http.Request) {
 	// Check template exists before rendering
 	tmpl, exists := s.templates["on_this_day"]
 	if !exists {
-		log.Printf("[ERROR] On This Day: Template 'on_this_day' not found")
+		logging.Errorf("On This Day: Template 'on_this_day' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] On This Day: Error executing template: %v", err)
+		logging.Errorf("On This Day: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1809,7 +1763,7 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 
 	var displayError error
 	if err != nil {
-		log.Printf("[ERROR] Pioneers: Error fetching data: %v", err)
+		logging.Errorf("Pioneers: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch pioneer data. Please try again later")
 		pioneers = []storage.PioneerNode{}
 	}
@@ -1836,14 +1790,14 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 	// Check template exists before rendering
 	tmpl, exists := s.templates["pioneers"]
 	if !exists {
-		log.Printf("[ERROR] Pioneers: Template 'pioneers' not found")
+		logging.Errorf("Pioneers: Template 'pioneers' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Pioneers: Error executing template: %v", err)
+		logging.Errorf("Pioneers: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1869,7 +1823,7 @@ func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 
 	var displayError error
 	if err != nil {
-		log.Printf("[ERROR] IPv6 Node List: Error fetching nodes: %v", err)
+		logging.Errorf("IPv6 Node List: Error fetching nodes: %v", err)
 		nodes = []storage.IPv6NodeListEntry{}
 		displayError = fmt.Errorf("Failed to fetch IPv6 node list. Please try again later")
 	} else if params.ValidationError != "" {
@@ -1898,13 +1852,13 @@ func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 
 	tmpl, exists := s.templates["ipv6_node_list"]
 	if !exists {
-		log.Printf("[ERROR] IPv6 Node List: Template 'ipv6_node_list' not found")
+		logging.Errorf("IPv6 Node List: Template 'ipv6_node_list' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] IPv6 Node List: Error executing template: %v", err)
+		logging.Errorf("IPv6 Node List: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1915,7 +1869,7 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] Domain Expiration: Error fetching data: %v", err)
+		logging.Errorf("Domain Expiration: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch domain expiration data. Please try again later")
 		results = []storage.DomainWhoisResult{}
 	}
@@ -1967,13 +1921,13 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 
 	tmpl, exists := s.templates["domain_expiration"]
 	if !exists {
-		log.Printf("[ERROR] Domain Expiration: Template 'domain_expiration' not found")
+		logging.Errorf("Domain Expiration: Template 'domain_expiration' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Domain Expiration: Error executing template: %v", err)
+		logging.Errorf("Domain Expiration: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -1991,7 +1945,7 @@ func (s *Server) DomainNodesHandler(w http.ResponseWriter, r *http.Request) {
 	var displayError error
 
 	if err != nil {
-		log.Printf("[ERROR] Domain Nodes: Error fetching data for %s: %v", domainName, err)
+		logging.Errorf("Domain Nodes: Error fetching data for %s: %v", domainName, err)
 		displayError = fmt.Errorf("Failed to fetch nodes for domain. Please try again later")
 		nodes = []storage.NodeTestResult{}
 	}
@@ -2033,14 +1987,14 @@ func (s *Server) DomainNodesHandler(w http.ResponseWriter, r *http.Request) {
 	// Check template exists before rendering
 	tmpl, exists := s.templates["geo_unified"]
 	if !exists {
-		log.Printf("[ERROR] Domain Nodes: Template 'geo_unified' not found")
+		logging.Errorf("Domain Nodes: Template 'geo_unified' not found")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Render template
 	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("[ERROR] Domain Nodes: Error executing template: %v", err)
+		logging.Errorf("Domain Nodes: Error executing template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -2091,4 +2045,20 @@ func renderIPv6NodeListText(w http.ResponseWriter, nodes []storage.IPv6NodeListE
 	fmt.Fprintf(w, "\n")
 	fmt.Fprintf(w, "Note: This list is automatically generated by NodelistDB.\n")
 	fmt.Fprintf(w, "Only nodes with verified IPv6 AKA (address validation) are included.\n")
+}
+
+// parseLimit parses the "limit" query parameter with defaults and bounds.
+func parseLimit(r *http.Request, defaultLimit, maxLimit int) int {
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr == "" {
+		return defaultLimit
+	}
+	parsed, err := strconv.Atoi(limitStr)
+	if err != nil || parsed <= 0 {
+		return defaultLimit
+	}
+	if maxLimit > 0 && parsed > maxLimit {
+		return maxLimit
+	}
+	return parsed
 }

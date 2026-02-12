@@ -66,6 +66,16 @@ func (s *Server) SetupRouter() http.Handler {
 	// Nodelist routes
 	r.Get("/api/nodelist/latest", s.LatestNodelistAPIHandler)
 
+	// Cache stats endpoint (if configured)
+	if s.cacheStatsHandler != nil {
+		r.Get("/api/cache/stats", s.cacheStatsHandler)
+	}
+
+	// FTP stats endpoint (if configured)
+	if s.ftpStatsHandler != nil {
+		r.Get("/api/ftp/stats", s.ftpStatsHandler)
+	}
+
 	// Modem testing API routes (authenticated with size limits)
 	if s.modemHandler != nil {
 		r.Route("/api/modem", func(r chi.Router) {

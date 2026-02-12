@@ -262,6 +262,7 @@ func (p *Parser) parseFileContent(reader io.Reader, filePath string, estimatedNo
 	// Pre-allocate nodes slice with estimated capacity for better performance
 	nodes := make([]database.Node, 0, estimatedNodes)
 	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // Allow lines up to 1 MiB
 	lineNum := 0
 	var nodelistDate time.Time
 	var dayNumber int

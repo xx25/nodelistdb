@@ -80,6 +80,9 @@ func (d *Daemon) TestNodeDirect(ctx context.Context, zone, net, node uint16, hos
 	}
 
 	result := d.testExecutor.TestNode(ctx, testNode)
+	if result == nil {
+		return nil, fmt.Errorf("test returned no result for node %d:%d/%d", zone, net, node)
+	}
 
 	// Store result if not in dry-run mode
 	if !d.config.Daemon.DryRun {

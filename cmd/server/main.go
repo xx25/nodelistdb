@@ -298,6 +298,32 @@ func main() {
 	if modemHandler != nil {
 		apiServer.SetModemHandler(modemHandler)
 	}
+
+	// Register cache stats endpoint handler if cache is enabled
+	if cfg.Cache.Enabled && cacheImpl != nil {
+		apiServer.SetCacheStatsHandler(func(w http.ResponseWriter, r *http.Request) {
+			metrics := cacheImpl.GetMetrics()
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"hits":%d,"misses":%d,"sets":%d,"deletes":%d,"size":%d,"keys":%d,"hit_rate":%.2f}`,
+				metrics.Hits, metrics.Misses, metrics.Sets, metrics.Deletes,
+				metrics.Size, metrics.Keys,
+				float64(metrics.Hits)/float64(metrics.Hits+metrics.Misses+1)*100)
+		})
+	}
+
+	// Register FTP stats endpoint handler if FTP is enabled
+	if ftpServer != nil {
+		apiServer.SetFTPStatsHandler(func(w http.ResponseWriter, r *http.Request) {
+			stats := ftpServer.GetStats()
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"enabled":%t,"host":"%s","port":%d,"max_connections":%d}`,
+				stats["enabled"].(bool),
+				stats["host"].(string),
+				stats["port"].(int),
+				stats["max_connections"].(int))
+		})
+	}
+
 	webServer := web.New(finalStorage, web.TemplatesFS, web.StaticFS)
 
 	// Initialize links loader for hot-reloadable links (if configured)
@@ -320,38 +346,17 @@ func main() {
 	// Web routes (keep existing setup)
 	webServer.SetupRoutes(mux)
 
-	// Cache stats endpoint if cache is enabled
-	if cfg.Cache.Enabled && cacheImpl != nil {
-		mux.HandleFunc("/api/cache/stats", func(w http.ResponseWriter, r *http.Request) {
-			metrics := cacheImpl.GetMetrics()
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"hits":%d,"misses":%d,"sets":%d,"deletes":%d,"size":%d,"keys":%d,"hit_rate":%.2f}`,
-				metrics.Hits, metrics.Misses, metrics.Sets, metrics.Deletes,
-				metrics.Size, metrics.Keys,
-				float64(metrics.Hits)/float64(metrics.Hits+metrics.Misses+1)*100)
-		})
-	}
-
-	// FTP stats endpoint if FTP is enabled
-	if ftpServer != nil {
-		mux.HandleFunc("/api/ftp/stats", func(w http.ResponseWriter, r *http.Request) {
-			stats := ftpServer.GetStats()
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"enabled":%t,"host":"%s","port":%d,"max_connections":%d}`,
-				stats["enabled"].(bool),
-				stats["host"].(string),
-				stats["port"].(int),
-				stats["max_connections"].(int))
-		})
-	}
-
 	// Wrap entire mux with logging middleware to capture all requests (API + Web)
 	loggingHandler := loggingMiddleware(mux)
 
 	// Server configuration
 	server := &http.Server{
-		Addr:    fmt.Sprintf("%s:%s", *host, *port),
-		Handler: loggingHandler,
+		Addr:              fmt.Sprintf("%s:%s", *host, *port),
+		Handler:           loggingHandler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Start FTP server if enabled
@@ -430,9 +435,14 @@ func main() {
 		}
 	}
 
-	// Stop HTTP server
-	if err := server.Close(); err != nil {
-		logging.Error("Server shutdown error", slog.Any("error", err))
+	// Graceful HTTP server shutdown with 15s deadline
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer shutdownCancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logging.Error("Graceful shutdown timed out, forcing close", slog.Any("error", err))
+		if err := server.Close(); err != nil {
+			logging.Error("Server force close error", slog.Any("error", err))
+		}
 	}
 
 	logging.Info("Server stopped")

@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"fmt"
+	stdnet "net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -83,6 +85,11 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		batch := nodes[i:end]
 		logging.Infof("Processing batch %d-%d of %d nodes", i+1, end, len(nodes))
 
+		// Track results for this batch separately to avoid slicing issues
+		// when nil results are skipped (allResults can have fewer entries than batch).
+		var batchResults []*models.TestResult
+		var batchMu sync.Mutex
+
 		// Create test requests for batch
 		var wg sync.WaitGroup
 		for _, node := range batch {
@@ -96,15 +103,18 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 				defer wg.Done()
 
 				result := d.testExecutor.TestNode(ctx, nodeToTest)
+				if result == nil {
+					return
+				}
 
 				// Update scheduler immediately with correct pairing
 				if d.scheduler != nil {
 					d.scheduler.UpdateTestResult(ctx, nodeToTest, result)
 				}
 
-				mu.Lock()
-				allResults = append(allResults, result)
-				mu.Unlock()
+				batchMu.Lock()
+				batchResults = append(batchResults, result)
+				batchMu.Unlock()
 			})
 		}
 
@@ -112,11 +122,15 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		wg.Wait()
 
 		// Store batch results if not in dry-run mode
-		if !d.config.Daemon.DryRun && len(allResults) > 0 {
-			if err := d.storage.StoreTestResults(ctx, allResults[len(allResults)-len(batch):]); err != nil {
+		if !d.config.Daemon.DryRun && len(batchResults) > 0 {
+			if err := d.storage.StoreTestResults(ctx, batchResults); err != nil {
 				logging.Errorf("Failed to store batch results: %v", err)
 			}
 		}
+
+		mu.Lock()
+		allResults = append(allResults, batchResults...)
+		mu.Unlock()
 	}
 
 	// Calculate and store statistics
@@ -184,14 +198,15 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 			return fmt.Errorf("node %s has no internet hostname or valid system name", nodeSpec)
 		}
 	} else {
-		// Try to parse as host:port or just host
-		var parsedHost string
-		if n, err := fmt.Sscanf(nodeSpec, "%[^:]:%d", &parsedHost, &port); n == 2 && err == nil {
-			// Successfully parsed host:port
-			hostname = parsedHost
+		// Try to parse as host:port or just host (bracket-aware for IPv6)
+		if h, p, err := stdnet.SplitHostPort(nodeSpec); err == nil {
+			hostname = h
+			if pv, err := strconv.Atoi(p); err == nil {
+				port = pv
+			}
 		} else {
-			// Just a hostname (no port specified)
-			hostname = nodeSpec
+			// Just a hostname or bare IPv6 literal (no port specified)
+			hostname = strings.Trim(nodeSpec, "[]")
 			port = 0
 		}
 		// We'll need to create a synthetic node for testing
@@ -216,7 +231,7 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 
 	// Build hostname with port only if hostname doesn't already include port
 	if port != 0 && hostname != "" && !containsPort(hostname) {
-		hostname = fmt.Sprintf("%s:%d", hostname, port)
+		hostname = stdnet.JoinHostPort(hostname, strconv.Itoa(port))
 	}
 
 	logging.Infof("Testing node %s via %s protocol at %s", nodeSpec, protocol, hostname)
@@ -247,38 +262,29 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	// The testNode function expects to do DNS resolution, but we may have an IP directly
 	result := models.NewTestResult(testNode)
 
-	// Extract hostname and port for DNS resolution
-	// hostname might be "host:port" format
+	// Extract hostname without port for DNS resolution (bracket-aware for IPv6)
 	hostOnly := hostname
-	if parts := strings.Split(hostname, ":"); len(parts) > 1 {
-		hostOnly = parts[0]  // Strip port for DNS resolution
+	if h, _, err := stdnet.SplitHostPort(hostname); err == nil {
+		hostOnly = h
+	} else {
+		// No port — strip brackets from bare IPv6 literals
+		hostOnly = strings.Trim(hostname, "[]")
 	}
 
-	// Check if hostname is already an IP address
-	isIP := false
-	if len(hostOnly) > 0 {
-		// Simple check for IP address (contains dots and all parts are numeric)
-		if strings.Count(hostOnly, ".") == 3 {
-			ipParts := strings.Split(hostOnly, ".")
-			isIP = true
-			for _, part := range ipParts {
-				if part == "" {
-					isIP = false
-					break
-				}
-				for _, ch := range part {
-					if ch < '0' || ch > '9' {
-						isIP = false
-						break
-					}
-				}
-			}
-		}
+	// Check if hostname is already an IP address (zone IDs like %eth0 are valid IPv6 but ParseIP rejects them)
+	hostForParse := hostOnly
+	if idx := strings.Index(hostForParse, "%"); idx != -1 {
+		hostForParse = hostForParse[:idx]
 	}
+	isIP := stdnet.ParseIP(hostForParse) != nil
 
 	// If it's an IP, skip DNS resolution and set it directly
 	if isIP {
-		result.ResolvedIPv4 = []string{hostOnly}
+		if stdnet.ParseIP(hostForParse).To4() != nil {
+			result.ResolvedIPv4 = []string{hostOnly}
+		} else {
+			result.ResolvedIPv6 = []string{hostOnly}
+		}
 		result.Hostname = hostname
 
 		// Get geolocation for the IP
@@ -381,17 +387,9 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	return nil
 }
 
-// containsPort checks if a hostname string already contains a port
+// containsPort checks if a hostname string already contains a port.
+// Uses net.SplitHostPort for correct IPv6 handling.
 func containsPort(hostname string) bool {
-	// Check if the hostname contains a colon followed by digits (port number)
-	// But be careful with IPv6 addresses which also contain colons
-	if strings.Contains(hostname, "[") && strings.Contains(hostname, "]") {
-		// IPv6 address format like [::1]:8080
-		lastColon := strings.LastIndex(hostname, ":")
-		lastBracket := strings.LastIndex(hostname, "]")
-		return lastColon > lastBracket
-	}
-	// For regular hostnames/IPv4, check if there's a colon followed by port
-	parts := strings.Split(hostname, ":")
-	return len(parts) == 2 && parts[1] != ""
+	_, _, err := stdnet.SplitHostPort(hostname)
+	return err == nil
 }

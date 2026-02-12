@@ -261,8 +261,9 @@ func (nf *NodeFilter) FilterByCapabilities(nodes []*models.Node, capabilities []
 		for _, cap := range capabilities {
 			switch strings.ToLower(cap) {
 			case "ipv6":
-				// Check if node has IPv6 capability - would need DNS resolution
-				hasAllCapabilities = hasAllCapabilities && false // TODO: Implement IPv6 check
+				// IPv6 detection requires DNS resolution, not available at filter time
+				logging.Debugf("Skipping unsupported capability filter: %s", cap)
+				continue
 			case "secure":
 				// Check if node supports secure protocols
 				hasAllCapabilities = hasAllCapabilities && (node.HasProtocol("IBN") || node.HasProtocol("IFC"))
