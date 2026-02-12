@@ -143,6 +143,7 @@ func New(cfg *Config) (*Daemon, error) {
 			NumGoroutines:     4,
 			GCInterval:        10 * time.Minute,
 			GCDiscardRatio:    0.5,
+			MaxDiskMB:         512,
 		})
 		if err != nil {
 			logging.Warnf("Failed to initialize persistent cache: %v", err)

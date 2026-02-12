@@ -28,6 +28,7 @@ type BadgerConfig struct {
 	NumGoroutines     int
 	GCInterval        time.Duration
 	GCDiscardRatio    float64
+	MaxDiskMB         int
 }
 
 func NewBadgerCache(config *BadgerConfig) (*BadgerCache, error) {
@@ -313,6 +314,25 @@ func (bc *BadgerCache) performGC() {
 			break
 		}
 		cycles++
+	}
+
+	// Enforce disk size limit after GC
+	if bc.config.MaxDiskMB > 0 {
+		lsm, vlog := bc.db.Size()
+		totalMB := (lsm + vlog) / (1 << 20)
+		limitMB := int64(bc.config.MaxDiskMB)
+		if totalMB > limitMB {
+			log.Printf("Badger cache size %dMB exceeds limit %dMB, dropping all entries", totalMB, limitMB)
+			if err := bc.db.DropAll(); err != nil {
+				log.Printf("Badger DropAll error: %v", err)
+			} else {
+				// Run GC again to reclaim space from dropped data
+				for bc.db.RunValueLogGC(0.5) == nil {
+				}
+				lsm, vlog = bc.db.Size()
+				log.Printf("Badger cache cleared, new size: %dMB", (lsm+vlog)/(1<<20))
+			}
+		}
 	}
 }
 

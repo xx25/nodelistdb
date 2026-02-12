@@ -19,6 +19,7 @@ type Config struct {
 	BadgerNumGoroutines  int
 	BadgerGCInterval     time.Duration
 	BadgerGCDiscardRatio float64
+	BadgerMaxDiskMB      int
 }
 
 // DefaultConfig returns a default cache configuration for BadgerCache
@@ -61,6 +62,7 @@ func New(config *Config) (Cache, error) {
 		NumGoroutines:     config.BadgerNumGoroutines,
 		GCInterval:        config.BadgerGCInterval,
 		GCDiscardRatio:    config.BadgerGCDiscardRatio,
+		MaxDiskMB:         config.BadgerMaxDiskMB,
 	})
 }
 
@@ -81,5 +83,6 @@ func NewBadgerCacheFromConfig(config *Config) (Cache, error) {
 		NumGoroutines:     config.BadgerNumGoroutines,
 		GCInterval:        config.BadgerGCInterval,
 		GCDiscardRatio:    config.BadgerGCDiscardRatio,
+		MaxDiskMB:         config.BadgerMaxDiskMB,
 	})
 }

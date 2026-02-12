@@ -191,6 +191,7 @@ func main() {
 			NumGoroutines:     4,
 			GCInterval:        cfg.Cache.GCInterval,
 			GCDiscardRatio:    cfg.Cache.GCDiscardRatio,
+			MaxDiskMB:         cfg.Cache.MaxDiskMB,
 		}
 		cacheImpl, err = cache.NewBadgerCache(badgerConfig)
 		if err != nil {

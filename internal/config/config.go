@@ -71,6 +71,7 @@ type CacheConfig struct {
 	ClearAllOnImport  bool          `yaml:"clear_all_on_import"`
 	GCInterval        time.Duration `yaml:"gc_interval"`
 	GCDiscardRatio    float64       `yaml:"gc_discard_ratio"`
+	MaxDiskMB         int           `yaml:"max_disk_mb"`
 }
 
 // FTPMount represents a virtual path mount in the FTP server
