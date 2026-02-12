@@ -263,7 +263,7 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	result := models.NewTestResult(testNode)
 
 	// Extract hostname without port for DNS resolution (bracket-aware for IPv6)
-	hostOnly := hostname
+	var hostOnly string
 	if h, _, err := stdnet.SplitHostPort(hostname); err == nil {
 		hostOnly = h
 	} else {
