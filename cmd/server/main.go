@@ -19,8 +19,7 @@ import (
 	"github.com/nodelistdb/internal/ftp"
 	"github.com/nodelistdb/internal/links"
 	"github.com/nodelistdb/internal/logging"
-	"github.com/nodelistdb/internal/modem"
-	"github.com/nodelistdb/internal/storage"
+"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 	"github.com/nodelistdb/internal/web"
 )
@@ -259,32 +258,15 @@ func main() {
 	}
 
 	// Initialize Modem API components if enabled
-	var queueManager *modem.QueueManager
 	var modemHandler *api.ModemHandler
 	if cfg.ModemAPI.Enabled {
 		logging.Info("Initializing modem testing API")
 
-		// Create modem storage operations
-		modemQueueOps := storage.NewModemQueueOperations(db)
-		modemCallerOps := storage.NewModemCallerOperations(db)
 		modemResultOps := storage.NewModemResultOperations(db)
-
-		// Create modem assigner
-		assigner := modem.NewModemAssigner(&cfg.ModemAPI, modemQueueOps, modemCallerOps)
-
-		// Create queue populator
-		populator := modem.NewQueuePopulator(db, modemQueueOps, assigner)
-
-		// Create modem API handler
-		modemHandler = api.NewModemHandler(&cfg.ModemAPI, modemQueueOps, modemCallerOps, assigner, modemResultOps)
-
-		// Create queue manager for background tasks
-		queueManager = modem.NewQueueManager(assigner, populator, &cfg.ModemAPI)
+		modemHandler = api.NewModemHandler(&cfg.ModemAPI, modemResultOps)
 
 		logging.Info("Modem API initialized",
-			slog.Int("callers", len(cfg.ModemAPI.Callers)),
-			slog.Duration("orphan_check_interval", cfg.ModemAPI.OrphanCheckInterval),
-			slog.Duration("stale_threshold", cfg.ModemAPI.StaleInProgressThreshold))
+			slog.Int("callers", len(cfg.ModemAPI.Callers)))
 	}
 
 	// Initialize API and Web servers
@@ -369,14 +351,6 @@ func main() {
 		}()
 	}
 
-	// Start modem queue manager if enabled
-	if queueManager != nil {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		queueManager.Start(ctx)
-		logging.Info("Modem queue manager started")
-	}
-
 	// Start server in a goroutine
 	go func() {
 		logging.Info("Server starting", slog.String("address", fmt.Sprintf("http://%s:%s", *host, *port)))
@@ -403,12 +377,8 @@ func main() {
 		}
 		if modemHandler != nil {
 			logging.Info("  Modem Testing API (authenticated):")
-			logging.Infof("    http://%s:%s/api/modem/nodes     - Get assigned nodes", *host, *port)
-			logging.Infof("    http://%s:%s/api/modem/in-progress - Mark nodes in progress", *host, *port)
-			logging.Infof("    http://%s:%s/api/modem/results   - Submit test results", *host, *port)
-			logging.Infof("    http://%s:%s/api/modem/heartbeat - Daemon heartbeat", *host, *port)
-			logging.Infof("    http://%s:%s/api/modem/release   - Release nodes", *host, *port)
-			logging.Infof("    http://%s:%s/api/modem/stats     - Queue statistics", *host, *port)
+			logging.Infof("    http://%s:%s/api/modem/results/direct - Submit test results", *host, *port)
+			logging.Infof("    http://%s:%s/api/modem/pstn-dead      - Manage PSTN dead list", *host, *port)
 		}
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -422,12 +392,6 @@ func main() {
 	<-quit
 
 	logging.Info("Server shutting down")
-
-	// Stop modem queue manager first (graceful stop)
-	if queueManager != nil {
-		queueManager.Stop()
-		logging.Info("Modem queue manager stopped")
-	}
 
 	// Stop FTP server
 	if ftpServer != nil {

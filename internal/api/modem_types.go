@@ -1,58 +1,6 @@
 package api
 
-import (
-	"time"
-)
-
-// GetNodesResponse is the response for GET /api/modem/nodes
-type GetNodesResponse struct {
-	Nodes     []ModemNodeResponse `json:"nodes"`
-	Remaining int                 `json:"remaining"`
-}
-
-// ModemNodeResponse represents a node in the API response
-type ModemNodeResponse struct {
-	Zone             uint16           `json:"zone"`
-	Net              uint16           `json:"net"`
-	Node             uint16           `json:"node"`
-	ConflictSequence uint8            `json:"conflict_sequence"`
-	Phone            string           `json:"phone"`
-	PhoneNormalized  string           `json:"phone_normalized"`
-	Address          string           `json:"address"`
-	ModemFlags       []string         `json:"modem_flags"`
-	Flags            []string         `json:"flags"`
-	Priority         uint8            `json:"priority"`
-	RetryCount       uint8            `json:"retry_count"`
-	IsCallableNow    bool             `json:"is_callable_now"`
-	NextCallWindow   *CallWindowResponse `json:"next_call_window,omitempty"`
-}
-
-// CallWindowResponse represents a time window when a node is callable
-type CallWindowResponse struct {
-	StartUTC string `json:"start_utc"`
-	EndUTC   string `json:"end_utc"`
-	Source   string `json:"source"`
-}
-
-// InProgressRequest is the request body for POST /api/modem/in-progress
-type InProgressRequest struct {
-	Nodes []NodeIdentifierRequest `json:"nodes"`
-}
-
-// NodeIdentifierRequest identifies a specific node
-type NodeIdentifierRequest struct {
-	Zone             uint16 `json:"zone"`
-	Net              uint16 `json:"net"`
-	Node             uint16 `json:"node"`
-	ConflictSequence uint8  `json:"conflict_sequence"`
-}
-
-// InProgressResponse is the response for POST /api/modem/in-progress
-type InProgressResponse struct {
-	Marked int `json:"marked"`
-}
-
-// SubmitResultsRequest is the request body for POST /api/modem/results
+// SubmitResultsRequest is the request body for POST /api/modem/results/direct
 type SubmitResultsRequest struct {
 	Results []ModemTestResultRequest `json:"results"`
 }
@@ -147,60 +95,8 @@ type AsteriskCDRRequest struct {
 	EarlyMedia   bool   `json:"early_media,omitempty"`
 }
 
-// SubmitResultsResponse is the response for POST /api/modem/results
+// SubmitResultsResponse is the response for POST /api/modem/results/direct
 type SubmitResultsResponse struct {
 	Accepted int `json:"accepted"`
 	Stored   int `json:"stored"`
-}
-
-// HeartbeatRequest is the request body for POST /api/modem/heartbeat
-type HeartbeatRequest struct {
-	Status          string `json:"status"` // active, inactive, maintenance
-	ModemsAvailable uint8  `json:"modems_available"`
-	ModemsInUse     uint8  `json:"modems_in_use"`
-	TestsCompleted  uint32 `json:"tests_completed"`
-	TestsFailed     uint32 `json:"tests_failed"`
-	LastTestTime    string `json:"last_test_time,omitempty"` // RFC3339 format
-}
-
-// HeartbeatResponse is the response for POST /api/modem/heartbeat
-type HeartbeatResponse struct {
-	Ack           bool `json:"ack"`
-	AssignedNodes int  `json:"assigned_nodes"`
-}
-
-// ReleaseRequest is the request body for POST /api/modem/release
-type ReleaseRequest struct {
-	Nodes  []NodeIdentifierRequest `json:"nodes"`
-	Reason string                  `json:"reason,omitempty"`
-}
-
-// ReleaseResponse is the response for POST /api/modem/release
-type ReleaseResponse struct {
-	Released     int    `json:"released"`
-	ReassignedTo string `json:"reassigned_to,omitempty"`
-}
-
-// QueueStatsResponse is the response for GET /api/modem/stats
-type QueueStatsResponse struct {
-	TotalNodes      int            `json:"total_nodes"`
-	PendingNodes    int            `json:"pending_nodes"`
-	InProgressNodes int            `json:"in_progress_nodes"`
-	CompletedNodes  int            `json:"completed_nodes"`
-	FailedNodes     int            `json:"failed_nodes"`
-	ByDaemon        map[string]int `json:"by_daemon"`
-}
-
-// CallerStatusResponse represents status information for a modem daemon
-type CallerStatusResponse struct {
-	CallerID        string    `json:"caller_id"`
-	Name            string    `json:"name"`
-	Location        string    `json:"location"`
-	Status          string    `json:"status"`
-	LastHeartbeat   time.Time `json:"last_heartbeat"`
-	ModemsAvailable uint8     `json:"modems_available"`
-	ModemsInUse     uint8     `json:"modems_in_use"`
-	TestsCompleted  uint32    `json:"tests_completed"`
-	TestsFailed     uint32    `json:"tests_failed"`
-	AssignedNodes   int       `json:"assigned_nodes"`
 }

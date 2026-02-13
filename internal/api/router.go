@@ -81,13 +81,7 @@ func (s *Server) SetupRouter() http.Handler {
 		r.Route("/api/modem", func(r chi.Router) {
 			r.Use(s.modemHandler.SizeLimitMiddleware())
 			r.Use(s.modemHandler.AuthMiddleware())
-			r.Get("/nodes", s.modemHandler.GetAssignedNodes)
-			r.Post("/in-progress", s.modemHandler.MarkInProgress)
-			r.Post("/results", s.modemHandler.SubmitResults)
 			r.Post("/results/direct", s.modemHandler.SubmitResultsDirect)
-			r.Post("/heartbeat", s.modemHandler.Heartbeat)
-			r.Post("/release", s.modemHandler.ReleaseNodes)
-			r.Get("/stats", s.modemHandler.GetQueueStats) // Admin endpoint
 			r.Post("/pstn-dead", s.MarkPSTNDeadHandler)
 			r.Delete("/pstn-dead", s.UnmarkPSTNDeadHandler)
 		})
