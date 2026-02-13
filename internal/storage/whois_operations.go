@@ -96,7 +96,7 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 		d := domain.ExtractRegistrableDomain(hn.hostname)
 		if d == targetDomain {
 			nk := nodeKey{}
-			fmt.Sscanf(hn.nodeKey, "%d:%d/%d", &nk.zone, &nk.net, &nk.node)
+			_, _ = fmt.Sscanf(hn.nodeKey, "%d:%d/%d", &nk.zone, &nk.net, &nk.node)
 			if _, exists := matchedNodes[nk]; !exists {
 				matchedNodes[nk] = hn.hostname
 			}
