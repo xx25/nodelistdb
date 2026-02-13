@@ -48,7 +48,7 @@
                 <th data-sortable data-type="date">Creation Date</th>
                 <th data-sortable data-type="string">Registrar</th>
                 <th data-sortable data-type="number">Nodes</th>
-                <th data-sortable data-type="string">Status</th>
+                <th data-sortable data-type="number" data-default-sort="asc">Status</th>
                 <th data-sortable data-type="date">Last Checked</th>
             </tr>
         </thead>
@@ -78,25 +78,25 @@
 
                 <td>{{if gt .NodeCount 0}}<a href="/analytics/domain-expiration/nodes?domain={{.Domain}}">{{.NodeCount}}</a>{{else}}{{.NodeCount}}{{end}}</td>
 
-                <td>
-                    {{if eq .CheckError "domain not found"}}
-                        <span class="badge badge-danger" title="Domain is no longer registered">Not Registered</span>
-                    {{else if .CheckError}}
-                        <span class="badge badge-secondary" title="{{.CheckError}}">Error</span>
-                    {{else if not .ExpirationDate}}
-                        {{if .WhoisStatus}}
-                            <span class="badge badge-success" title="No expiration date published by registry">{{.WhoisStatus}}</span>
-                        {{else}}
-                            <span class="badge badge-secondary">Unknown</span>
-                        {{end}}
-                    {{else if .ExpirationDate.Before $.Now}}
-                        <span class="badge badge-danger">Expired</span>
-                    {{else if .ExpirationDate.Before ($.Now.AddDate 0 0 30)}}
-                        <span class="badge badge-warning">Expiring Soon</span>
+                {{if eq .CheckError "domain not found"}}
+                <td data-value="1"><span class="badge badge-danger" title="Domain is no longer registered">Not Registered</span></td>
+                {{else if .CheckError}}
+                <td data-value="2"><span class="badge badge-secondary" title="{{.CheckError}}">Error</span></td>
+                {{else if not .ExpirationDate}}
+                    {{if and .Registrar (not .WhoisStatus)}}
+                <td data-value="5"><span class="badge badge-success" title="No expiration date published by registry">Active</span></td>
+                    {{else if .WhoisStatus}}
+                <td data-value="5"><span class="badge badge-success" title="No expiration date published by registry">{{.WhoisStatus}}</span></td>
                     {{else}}
-                        <span class="badge badge-success">Active</span>
+                <td data-value="3"><span class="badge badge-secondary">Unknown</span></td>
                     {{end}}
-                </td>
+                {{else if .ExpirationDate.Before $.Now}}
+                <td data-value="1"><span class="badge badge-danger">Expired</span></td>
+                {{else if .ExpirationDate.Before ($.Now.AddDate 0 0 30)}}
+                <td data-value="2"><span class="badge badge-warning">Expiring Soon</span></td>
+                {{else}}
+                <td data-value="5"><span class="badge badge-success">Active</span></td>
+                {{end}}
 
                 <td data-value="{{.CheckTime.Unix}}">
                     <span class="text-muted">{{.CheckTime.Format "2006-01-02 15:04"}}</span>

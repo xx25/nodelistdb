@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nodelistdb/internal/flags"
@@ -1872,6 +1873,22 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 		logging.Errorf("Domain Expiration: Error fetching data: %v", err)
 		displayError = fmt.Errorf("Failed to fetch domain expiration data. Please try again later")
 		results = []storage.DomainWhoisResult{}
+	}
+
+	// Normalize WHOIS statuses to user-friendly display values.
+	// Registry-specific codes like "connect" (.de), "ok", "clientTransferProhibited"
+	// all mean the domain is active. Only preserve statuses containing inactive keywords.
+	for i := range results {
+		if results[i].WhoisStatus != "" {
+			lower := strings.ToLower(results[i].WhoisStatus)
+			if strings.Contains(lower, "hold") ||
+				strings.Contains(lower, "expired") ||
+				strings.Contains(lower, "redemption") ||
+				strings.Contains(lower, "pending") {
+				continue
+			}
+			results[i].WhoisStatus = "Active"
+		}
 	}
 
 	now := time.Now()
