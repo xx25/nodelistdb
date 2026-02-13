@@ -149,10 +149,7 @@ func (w *WhoisWorker) processQueue(ctx context.Context) {
 				shouldMarkSeen = true
 			case result.Error == "":
 				shouldMarkSeen = true
-				// Only persist if we actually parsed an expiration date
-				if result.ExpirationDate != nil {
-					shouldPersist = true
-				}
+				shouldPersist = true
 			// Transient errors: don't persist, don't mark seen (allow retry)
 			}
 
