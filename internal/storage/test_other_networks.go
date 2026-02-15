@@ -90,7 +90,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNet
 			network_name,
 			count(DISTINCT (zone, net, node)) as node_count
 		FROM network_addresses
-		WHERE network_name != ''
+		WHERE network_name != '' AND network_name != 'fidonet'
 		GROUP BY network_name
 		ORDER BY node_count DESC, network_name ASC
 	`
