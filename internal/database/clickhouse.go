@@ -29,6 +29,7 @@ type ClickHouseConfig struct {
 	Username     string
 	Password     string
 	UseSSL       bool
+	Protocol     string // "native" (default) or "http"
 	MaxOpenConns int
 	MaxIdleConns int
 	DialTimeout  time.Duration
@@ -39,6 +40,8 @@ type ClickHouseConfig struct {
 
 // NewClickHouse creates a new ClickHouse connection
 func NewClickHouse(config *ClickHouseConfig) (*ClickHouseDB, error) {
+	useHTTP := strings.EqualFold(config.Protocol, "http")
+
 	// Create ClickHouse options
 	// IMPORTANT: Do NOT set MaxOpenConns/MaxIdleConns in Options due to driver bug
 	// They must be set on the sql.DB after OpenDB
@@ -50,9 +53,14 @@ func NewClickHouse(config *ClickHouseConfig) (*ClickHouseDB, error) {
 			Password: config.Password,
 		},
 		DialTimeout: config.DialTimeout,
-		Compression: &clickhouse.Compression{
+	}
+
+	if useHTTP {
+		options.Protocol = clickhouse.HTTP
+	} else {
+		options.Compression = &clickhouse.Compression{
 			Method: clickhouse.CompressionLZ4,
-		},
+		}
 	}
 
 	// Configure TLS if enabled
@@ -60,22 +68,30 @@ func NewClickHouse(config *ClickHouseConfig) (*ClickHouseDB, error) {
 		options.TLS = &tls.Config{}
 	}
 
-	// Create native connection
-	conn, err := clickhouse.Open(options)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open ClickHouse connection: %w", err)
+	db := &ClickHouseDB{
+		config: config,
 	}
 
-	// Test connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	if !useHTTP {
+		// Create native connection
+		conn, err := clickhouse.Open(options)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open ClickHouse connection: %w", err)
+		}
 
-	if err := conn.Ping(ctx); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to ping ClickHouse: %w", err)
+		// Test connection
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := conn.Ping(ctx); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to ping ClickHouse: %w", err)
+		}
+
+		db.conn = conn
 	}
 
-	// Create SQL DB for compatibility
+	// Create SQL DB (works for both native and HTTP protocols)
 	sqlDB := clickhouse.OpenDB(options)
 
 	// CRITICAL: Set pool settings AFTER OpenDB due to driver bug
@@ -84,11 +100,17 @@ func NewClickHouse(config *ClickHouseConfig) (*ClickHouseDB, error) {
 	sqlDB.SetMaxIdleConns(config.MaxIdleConns)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	db := &ClickHouseDB{
-		conn:   conn,
-		sqlDB:  sqlDB,
-		config: config,
+	// Test SQL DB connection
+	// For HTTP with readonly users, avoid context deadline — the driver converts
+	// it to max_execution_time which readonly users cannot set.
+	if useHTTP {
+		if err := sqlDB.Ping(); err != nil {
+			sqlDB.Close()
+			return nil, fmt.Errorf("failed to ping ClickHouse (HTTP): %w", err)
+		}
 	}
+
+	db.sqlDB = sqlDB
 
 	// Register this database type
 	RegisterDatabase("clickhouse", func(config interface{}) (DatabaseInterface, error) {
@@ -144,6 +166,15 @@ func (db *ClickHouseDB) NativeConn() driver.Conn {
 	return db.conn
 }
 
+// execSQL executes a SQL statement using native conn if available, otherwise sql.DB
+func (db *ClickHouseDB) execSQL(ctx context.Context, query string) error {
+	if db.conn != nil {
+		return db.conn.Exec(ctx, query)
+	}
+	_, err := db.sqlDB.ExecContext(ctx, query)
+	return err
+}
+
 // CreateSchema creates the ClickHouse database schema
 func (db *ClickHouseDB) CreateSchema() error {
 	db.mu.Lock()
@@ -152,6 +183,8 @@ func (db *ClickHouseDB) CreateSchema() error {
 	ctx := context.Background()
 
 	// Create nodes table optimized for ClickHouse
+	// Partitioned by zone (7 partitions) for fast point lookups by zone/net/node.
+	// Date-only queries are handled by the idx_nodelist_date set index for granule skipping.
 	createSQL := `
 	CREATE TABLE IF NOT EXISTS nodes (
 		zone Int32,
@@ -197,19 +230,23 @@ func (db *ClickHouseDB) CreateSchema() error {
 		INDEX idx_year year TYPE minmax GRANULARITY 1,
 		INDEX idx_flags_bloom flags TYPE bloom_filter GRANULARITY 1,
 		INDEX idx_modem_flags_bloom modem_flags TYPE bloom_filter GRANULARITY 1,
-		INDEX idx_json_protocols_bloom json_protocols TYPE bloom_filter GRANULARITY 1
+		INDEX idx_json_protocols_bloom json_protocols TYPE bloom_filter GRANULARITY 1,
+
+		-- Data-skipping index for date-only queries (compensates for zone partitioning)
+		INDEX idx_nodelist_date nodelist_date TYPE set(100) GRANULARITY 4
 	) ENGINE = MergeTree()
 	ORDER BY (zone, net, node, nodelist_date, conflict_sequence)
-	PARTITION BY toYYYYMM(nodelist_date)
+	PARTITION BY zone
 	SETTINGS index_granularity = 8192`
 
-	if err := db.conn.Exec(ctx, createSQL); err != nil {
+	if err := db.execSQL(ctx, createSQL); err != nil {
 		return fmt.Errorf("failed to create nodes table: %w", err)
 	}
 
 	// Create optimized indexes for ClickHouse
 	indexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_nodes_date ON nodes(nodelist_date) TYPE minmax GRANULARITY 1",
+		"CREATE INDEX IF NOT EXISTS idx_nodes_date_set ON nodes(nodelist_date) TYPE set(100) GRANULARITY 4",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_system ON nodes(system_name) TYPE bloom_filter GRANULARITY 1",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_location ON nodes(location) TYPE bloom_filter GRANULARITY 1",
 		"CREATE INDEX IF NOT EXISTS idx_nodes_sysop ON nodes(sysop_name) TYPE bloom_filter GRANULARITY 1",
@@ -218,7 +255,7 @@ func (db *ClickHouseDB) CreateSchema() error {
 	}
 
 	for _, indexSQL := range indexes {
-		if err := db.conn.Exec(ctx, indexSQL); err != nil {
+		if err := db.execSQL(ctx, indexSQL); err != nil {
 			// ClickHouse may not support all index types, so we log but continue
 			fmt.Printf("Warning: Could not create index: %v\n", err)
 		}
@@ -255,7 +292,7 @@ func (db *ClickHouseDB) CreateSchema() error {
 	PARTITION BY year
 	SETTINGS index_granularity = 8192`
 
-	if err := db.conn.Exec(ctx, flagStatsSQL); err != nil {
+	if err := db.execSQL(ctx, flagStatsSQL); err != nil {
 		return fmt.Errorf("failed to create flag_statistics table: %w", err)
 	}
 
@@ -267,11 +304,8 @@ func (db *ClickHouseDB) GetVersion() (string, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
-	ctx := context.Background()
 	var version string
-
-	row := db.conn.QueryRow(ctx, "SELECT version()")
-	if err := row.Scan(&version); err != nil {
+	if err := db.sqlDB.QueryRow("SELECT version()").Scan(&version); err != nil {
 		return "", fmt.Errorf("failed to get ClickHouse version: %w", err)
 	}
 
@@ -283,14 +317,13 @@ func (db *ClickHouseDB) Ping() error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
-	if db.conn == nil {
-		return fmt.Errorf("database connection is nil")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return db.conn.Ping(ctx)
+	if db.conn != nil {
+		return db.conn.Ping(ctx)
+	}
+	return db.sqlDB.PingContext(ctx)
 }
 
 // CreateFTSIndexes creates Full-Text Search capabilities
@@ -309,7 +342,7 @@ func (db *ClickHouseDB) CreateFTSIndexes() error {
 	}
 
 	for _, indexSQL := range ftsIndexes {
-		if err := db.conn.Exec(ctx, indexSQL); err != nil {
+		if err := db.execSQL(ctx, indexSQL); err != nil {
 			// If index already exists or is not supported, continue
 			if !strings.Contains(err.Error(), "already exists") {
 				fmt.Printf("Warning: Could not create FTS index: %v\n", err)
@@ -335,7 +368,7 @@ func (db *ClickHouseDB) DropFTSIndexes() error {
 	}
 
 	for _, dropSQL := range dropIndexes {
-		if err := db.conn.Exec(ctx, dropSQL); err != nil {
+		if err := db.execSQL(ctx, dropSQL); err != nil {
 			fmt.Printf("Warning: Could not drop FTS index: %v\n", err)
 		}
 	}

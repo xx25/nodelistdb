@@ -18,6 +18,7 @@ type ClickHouseConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	UseSSL   bool   `yaml:"use_ssl,omitempty"`
+	Protocol string `yaml:"protocol,omitempty"` // "native" (default) or "http"
 
 	// Connection settings
 	MaxOpenConns int    `yaml:"max_open_conns,omitempty"`
@@ -415,6 +416,7 @@ func (c *ClickHouseConfig) ToClickHouseDatabaseConfig() (*database.ClickHouseCon
 		Username:     c.Username,
 		Password:     c.Password,
 		UseSSL:       c.UseSSL,
+		Protocol:     c.Protocol,
 		MaxOpenConns: c.MaxOpenConns,
 		MaxIdleConns: c.MaxIdleConns,
 		DialTimeout:  dialTimeout,
