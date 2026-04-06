@@ -190,6 +190,10 @@ func (s *Storage) GetNearestAvailableDate(requestedDate time.Time) (time.Time, e
 	return s.statsOperations.GetNearestAvailableDate(requestedDate)
 }
 
+func (s *Storage) GetNodeCountHistory() ([]NodeCountByDate, error) {
+	return s.statsOperations.GetNodeCountHistory()
+}
+
 // Test Operations delegated methods
 func (s *Storage) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
 	return s.testOperations.GetNodeTestHistory(zone, net, node, days)

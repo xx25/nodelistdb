@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 )
 
@@ -161,6 +162,9 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	// Get stats for the actual date
 	stats, err := s.storage.GetStats(actualDate)
 
+	// Get historical node count for chart
+	nodeHistory, _ := s.storage.GetNodeCountHistory()
+
 	data := struct {
 		Title          string
 		ActivePage     string
@@ -172,6 +176,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		ActualDate     string
 		DateAdjusted   bool
 		Version        string
+		NodeHistory    []storage.NodeCountByDate
 	}{
 		Title:          "Network Statistics",
 		ActivePage:     "stats",
@@ -183,6 +188,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		ActualDate:     actualDate.Format("2006-01-02"),
 		DateAdjusted:   dateAdjusted,
 		Version:        version.GetVersionInfo(),
+		NodeHistory:    nodeHistory,
 	}
 
 	if data.NoData && err == nil {

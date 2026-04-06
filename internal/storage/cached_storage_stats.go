@@ -143,6 +143,39 @@ func (cs *CachedStorage) GetNearestAvailableDate(targetDate time.Time) (time.Tim
 	return date, nil
 }
 
+// GetNodeCountHistory returns total node count per nodelist date (cached)
+func (cs *CachedStorage) GetNodeCountHistory() ([]NodeCountByDate, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetNodeCountHistory()
+	}
+
+	key := cs.keyGen.StatsKey(time.Time{}) // use zero time as "history" key
+	cacheKey := key + ":history"
+
+	if data, err := cs.cache.Get(context.Background(), cacheKey); err == nil {
+		var results []NodeCountByDate
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetNodeCountHistory()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), cacheKey, data, cs.config.StatsTTL)
+		}
+	}
+
+	return results, nil
+}
+
 // Pass-through methods (not cached)
 
 // IsNodelistProcessed checks if a nodelist for a specific date has been processed

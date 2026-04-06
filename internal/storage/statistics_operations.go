@@ -335,6 +335,41 @@ func (so *StatisticsOperations) GetZoneStats(zone int) (map[time.Time]int, error
 	return zoneStats, nil
 }
 
+// NodeCountByDate holds a single data point for the node count history chart.
+type NodeCountByDate struct {
+	Date       time.Time
+	TotalNodes int
+}
+
+// GetNodeCountHistory returns total node count per nodelist date for charting.
+func (so *StatisticsOperations) GetNodeCountHistory() ([]NodeCountByDate, error) {
+	so.mu.RLock()
+	defer so.mu.RUnlock()
+
+	conn := so.db.Conn()
+
+	rows, err := conn.Query(`
+		SELECT nodelist_date, count(*) AS total_nodes
+		FROM nodes
+		GROUP BY nodelist_date
+		ORDER BY nodelist_date ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query node count history: %w", err)
+	}
+	defer rows.Close()
+
+	var result []NodeCountByDate
+	for rows.Next() {
+		var d NodeCountByDate
+		if err := rows.Scan(&d.Date, &d.TotalNodes); err != nil {
+			return nil, fmt.Errorf("failed to scan node count: %w", err)
+		}
+		result = append(result, d)
+	}
+	return result, nil
+}
+
 // GetNodeTypeDistribution returns the distribution of node types for a given date
 func (so *StatisticsOperations) GetNodeTypeDistribution(date time.Time) (map[string]int, error) {
 	so.mu.RLock()

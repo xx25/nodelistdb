@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/static/datepicker.js"></script>
 </head>
 <body>
@@ -17,6 +18,53 @@
         {{template "nav" .}}
         
         <div class="content">
+            {{if .NodeHistory}}
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1rem;">Total Nodes in Nodelist Over Time</h2>
+                <div style="height: 250px;">
+                    <canvas id="nodeHistoryChart"></canvas>
+                </div>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const ctx = document.getElementById('nodeHistoryChart').getContext('2d');
+                        new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: [{{range $i, $h := .NodeHistory}}{{if $i}},{{end}}'{{$h.Date.Format "2006-01-02"}}'{{end}}],
+                                datasets: [{
+                                    label: 'Total Nodes',
+                                    data: [{{range $i, $h := .NodeHistory}}{{if $i}},{{end}}{{$h.TotalNodes}}{{end}}],
+                                    borderColor: 'rgba(0, 123, 255, 1)',
+                                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                                    borderWidth: 1.5,
+                                    pointRadius: 0,
+                                    fill: true,
+                                    tension: 0.1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { display: false }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: false,
+                                        title: { display: true, text: 'Nodes' }
+                                    },
+                                    x: {
+                                        title: { display: true, text: 'Date' },
+                                        ticks: { maxTicksLimit: 20 }
+                                    }
+                                }
+                            }
+                        });
+                    });
+                </script>
+            </div>
+            {{end}}
+
             <!-- Date Selection Widget -->
             {{if .AvailableDates}}
             <div class="card">

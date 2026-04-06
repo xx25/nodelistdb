@@ -314,6 +314,7 @@ type Operations interface {
 	GetLatestStatsDate() (time.Time, error)
 	GetAvailableDates() ([]time.Time, error)
 	GetNearestAvailableDate(requestedDate time.Time) (time.Time, error)
+	GetNodeCountHistory() ([]NodeCountByDate, error)
 
 	// Test operations (delegated to TestOps())
 	GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error)
