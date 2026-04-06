@@ -179,22 +179,27 @@ func main() {
 	var finalStorage storage.Operations = storageLayer
 	var cacheImpl cache.Cache
 	if cfg.Cache.Enabled {
-		logging.Info("Initializing BadgerCache")
-
-		// Create BadgerCache
-		badgerConfig := &cache.BadgerConfig{
-			Path:              cfg.Cache.Path,
-			MaxMemoryMB:       cfg.Cache.MaxMemoryMB,
-			ValueLogMaxMB:     cfg.Cache.ValueLogMaxMB,
-			CompactL0OnClose:  cfg.Cache.CompactOnClose,
-			NumGoroutines:     4,
-			GCInterval:        cfg.Cache.GCInterval,
-			GCDiscardRatio:    cfg.Cache.GCDiscardRatio,
-			MaxDiskMB:         cfg.Cache.MaxDiskMB,
+		cacheType := cfg.Cache.Type
+		if cacheType == "" {
+			cacheType = "badger"
 		}
-		cacheImpl, err = cache.NewBadgerCache(badgerConfig)
+		logging.Info("Initializing cache", slog.String("type", cacheType))
+
+		cacheConfig := &cache.Config{
+			Enabled:              true,
+			Type:                 cacheType,
+			BadgerPath:           cfg.Cache.Path,
+			BadgerMaxMemoryMB:    cfg.Cache.MaxMemoryMB,
+			BadgerValueLogMaxMB:  cfg.Cache.ValueLogMaxMB,
+			BadgerCompactL0:      cfg.Cache.CompactOnClose,
+			BadgerNumGoroutines:  4,
+			BadgerGCInterval:     cfg.Cache.GCInterval,
+			BadgerGCDiscardRatio: cfg.Cache.GCDiscardRatio,
+			BadgerMaxDiskMB:      cfg.Cache.MaxDiskMB,
+		}
+		cacheImpl, err = cache.New(cacheConfig)
 		if err != nil {
-			logging.Fatalf("Failed to initialize BadgerCache: %v", err)
+			logging.Fatalf("Failed to initialize cache: %v", err)
 		}
 		defer cacheImpl.Close()
 
@@ -211,9 +216,8 @@ func main() {
 		cachedStorage := storage.NewCachedStorage(storageLayer, cacheImpl, cacheStorageConfig)
 		finalStorage = cachedStorage
 
-		logging.Info("BadgerCache initialized successfully",
-			slog.String("path", cfg.Cache.Path),
-			slog.Int("memory_mb", cfg.Cache.MaxMemoryMB),
+		logging.Info("Cache initialized successfully",
+			slog.String("type", cacheType),
 			slog.Duration("node_ttl", cfg.Cache.NodeTTL),
 			slog.Duration("stats_ttl", cfg.Cache.StatsTTL),
 			slog.Duration("search_ttl", cfg.Cache.SearchTTL))

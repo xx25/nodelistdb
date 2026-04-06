@@ -56,9 +56,10 @@ type LoggingConfig struct {
 }
 
 // CacheConfig holds cache configuration
-// Note: Only BadgerCache is supported. MemoryCache and NoOpCache have been removed.
+// Supported types: "badger" (disk-based) and "memory" (in-process).
 type CacheConfig struct {
 	Enabled           bool          `yaml:"enabled"`
+	Type              string        `yaml:"type"` // "badger" or "memory" (default: "badger")
 	Path              string        `yaml:"path"`
 	MaxMemoryMB       int           `yaml:"max_memory_mb"`
 	ValueLogMaxMB     int           `yaml:"value_log_max_mb"`

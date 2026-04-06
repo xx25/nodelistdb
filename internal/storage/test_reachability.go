@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"database/sql"
 	"fmt"
 	"sync"
 
@@ -76,12 +77,38 @@ func (r *ReachabilityOperations) GetNodeReachabilityStats(zone, net, node int, d
 	return &stats, nil
 }
 
+// GetReachabilityTrendsAllTime returns trends from the first test date to now.
+// Uses the same correct CROSS JOIN + lookback query as GetReachabilityTrends
+// but computes the day range dynamically from the earliest test result.
+func (r *ReachabilityOperations) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	conn := r.db.Conn()
+
+	// Find how many days back the earliest test is
+	var days int
+	err := conn.QueryRow(`
+		SELECT toUInt32(dateDiff('day', min(test_date), today()))
+		FROM node_test_results
+		WHERE test_date >= '2025-09-18'
+	`).Scan(&days)
+	if err != nil || days == 0 {
+		days = 90 // fallback
+	}
+
+	return r.queryTrends(conn, days)
+}
+
 // GetReachabilityTrends gets daily reachability trends
 func (r *ReachabilityOperations) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	conn := r.db.Conn()
+	return r.queryTrends(r.db.Conn(), days)
+}
+
+func (r *ReachabilityOperations) queryTrends(conn *sql.DB, days int) ([]ReachabilityTrend, error) {
 	query := r.queryBuilder.BuildReachabilityTrendsQuery()
 
 	rows, err := conn.Query(query, days)

@@ -1107,6 +1107,38 @@ func (cs *CachedStorage) GetReachabilityTrends(days int) ([]ReachabilityTrend, e
 	return results, nil
 }
 
+// GetReachabilityTrendsAllTime returns all-time reachability trend data (cached)
+func (cs *CachedStorage) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetReachabilityTrendsAllTime()
+	}
+
+	key := cs.keyGen.ReachabilityTrendsKey(0)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []ReachabilityTrend
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetReachabilityTrendsAllTime()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
 // SearchNodesByReachability returns nodes filtered by reachability status (cached)
 func (cs *CachedStorage) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {

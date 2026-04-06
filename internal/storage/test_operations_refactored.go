@@ -61,6 +61,11 @@ func (to *TestOperationsRefactored) GetNodeReachabilityStats(zone, net, node int
 	return to.reachabilityOps.GetNodeReachabilityStats(zone, net, node, days)
 }
 
+// GetReachabilityTrendsAllTime gets all-time daily reachability trends from pre-aggregated stats
+func (to *TestOperationsRefactored) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
+	return to.reachabilityOps.GetReachabilityTrendsAllTime()
+}
+
 // GetReachabilityTrends gets daily reachability trends
 func (to *TestOperationsRefactored) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
 	return to.reachabilityOps.GetReachabilityTrends(days)

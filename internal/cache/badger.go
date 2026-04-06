@@ -40,9 +40,26 @@ func NewBadgerCache(config *BadgerConfig) (*BadgerCache, error) {
 	}
 
 	opts := badger.DefaultOptions(config.Path)
-	
+
+	// Memory budgeting: MaxMemoryMB is the TOTAL memory budget for Badger.
+	// Badger uses NumMemtables * MemTableSize for in-memory tables,
+	// so we divide the budget across tables to stay within limits.
+	// Default: 2 memtables * (budget/4) each = budget/2 for memtables,
+	// leaving room for block cache, index, and overhead.
+	const numMemtables = 2
 	if config.MaxMemoryMB > 0 {
-		opts = opts.WithMemTableSize(int64(config.MaxMemoryMB) << 20)
+		memTableSize := int64(config.MaxMemoryMB) << 20 / 4 // 1/4 of budget per memtable
+		if memTableSize < 4<<20 {
+			memTableSize = 4 << 20 // minimum 4MB per memtable
+		}
+		opts = opts.WithMemTableSize(memTableSize)
+		opts = opts.WithNumMemtables(numMemtables)
+
+		// Limit block cache and index cache to fit within budget
+		blockCacheSize := int64(config.MaxMemoryMB) << 20 / 4
+		indexCacheSize := int64(config.MaxMemoryMB) << 20 / 8
+		opts = opts.WithBlockCacheSize(blockCacheSize)
+		opts = opts.WithIndexCacheSize(indexCacheSize)
 	}
 	if config.ValueLogMaxMB > 0 {
 		opts = opts.WithValueLogFileSize(int64(config.ValueLogMaxMB) << 20)
@@ -51,12 +68,12 @@ func NewBadgerCache(config *BadgerConfig) (*BadgerCache, error) {
 	if config.NumGoroutines > 0 {
 		opts = opts.WithNumGoroutines(config.NumGoroutines)
 	}
-	
+
 	// Performance optimizations
 	opts = opts.WithNumVersionsToKeep(1)
-	opts = opts.WithNumLevelZeroTables(5)
-	opts = opts.WithNumLevelZeroTablesStall(10)
-	opts = opts.WithLoggingLevel(badger.WARNING)
+	opts = opts.WithNumLevelZeroTables(3)
+	opts = opts.WithNumLevelZeroTablesStall(5)
+	opts = opts.WithLoggingLevel(badger.ERROR)
 	
 	db, err := badger.Open(opts)
 	if err != nil {

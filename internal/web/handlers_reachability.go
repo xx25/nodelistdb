@@ -22,11 +22,11 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	statusFilter := query.Get("status")
 	protocolFilter := query.Get("protocol")
 
-	// Parse period filter (default to 1 day for nodes, 90 days for trends)
-	trendsPeriodFilter := 90 // For trends chart (3 months)
-	nodesPeriodFilter := 1   // Default to 1 day for recently tested nodes
+	// Parse period filter (default to 1 day for nodes, 0=all time for trends)
+	trendsPeriodFilter := 0 // 0 means all time (from first test date)
+	nodesPeriodFilter := 1  // Default to 1 day for recently tested nodes
 	if p := query.Get("trends_period"); p != "" {
-		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 && parsed <= 365 {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
 			trendsPeriodFilter = parsed
 		}
 	}
@@ -45,7 +45,13 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get overall trends
-	trends, err := s.storage.GetReachabilityTrends(trendsPeriodFilter)
+	var trends []storage.ReachabilityTrend
+	var err error
+	if trendsPeriodFilter == 0 {
+		trends, err = s.storage.GetReachabilityTrendsAllTime()
+	} else {
+		trends, err = s.storage.GetReachabilityTrends(trendsPeriodFilter)
+	}
 	if err != nil {
 		log.Printf("Error getting reachability trends: %v", err)
 		trends = []storage.ReachabilityTrend{}

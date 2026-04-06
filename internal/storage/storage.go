@@ -203,6 +203,10 @@ func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int) (*Node
 	return s.testOperations.GetNodeReachabilityStats(zone, net, node, days)
 }
 
+func (s *Storage) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
+	return s.testOperations.GetReachabilityTrendsAllTime()
+}
+
 func (s *Storage) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
 	return s.testOperations.GetReachabilityTrends(days)
 }

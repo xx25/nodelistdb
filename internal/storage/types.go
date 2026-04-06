@@ -320,6 +320,7 @@ type Operations interface {
 	GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error)
 	GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error)
 	GetReachabilityTrends(days int) ([]ReachabilityTrend, error)
+	GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error)
 	SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error)
 	GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)
 	GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error)

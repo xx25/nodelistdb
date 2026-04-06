@@ -6,10 +6,12 @@ import (
 )
 
 // Config holds configuration for cache creation
-// Note: Only BadgerCache is supported. MemoryCache and NoOpCache have been removed.
 type Config struct {
 	// Enabled determines if caching is enabled
 	Enabled bool
+
+	// Type selects the cache backend: "badger" or "memory" (default: "badger")
+	Type string
 
 	// Badger cache configuration
 	BadgerPath           string
@@ -20,12 +22,16 @@ type Config struct {
 	BadgerGCInterval     time.Duration
 	BadgerGCDiscardRatio float64
 	BadgerMaxDiskMB      int
+
+	// Memory cache configuration
+	MemoryGCInterval time.Duration
 }
 
 // DefaultConfig returns a default cache configuration for BadgerCache
 func DefaultConfig() *Config {
 	return &Config{
 		Enabled:              true,
+		Type:                 "badger",
 		BadgerPath:           "./cache/badger",
 		BadgerMaxMemoryMB:    64,
 		BadgerValueLogMaxMB:  256,
@@ -36,34 +42,41 @@ func DefaultConfig() *Config {
 	}
 }
 
-// New creates a new BadgerCache based on the configuration
-// Returns nil if caching is disabled
+// New creates a cache based on the configuration.
+// Returns nil if caching is disabled.
 func New(config *Config) (Cache, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
 
-	// Return nil if cache is disabled
 	if !config.Enabled {
 		return nil, nil
 	}
 
-	// Validate path
-	if config.BadgerPath == "" {
-		return nil, fmt.Errorf("BadgerPath is required when cache is enabled")
-	}
+	switch config.Type {
+	case "memory":
+		return NewMemoryCache(&MemoryConfig{
+			GCInterval: config.MemoryGCInterval,
+		}), nil
 
-	// Create BadgerCache
-	return NewBadgerCache(&BadgerConfig{
-		Path:              config.BadgerPath,
-		MaxMemoryMB:       config.BadgerMaxMemoryMB,
-		ValueLogMaxMB:     config.BadgerValueLogMaxMB,
-		CompactL0OnClose:  config.BadgerCompactL0,
-		NumGoroutines:     config.BadgerNumGoroutines,
-		GCInterval:        config.BadgerGCInterval,
-		GCDiscardRatio:    config.BadgerGCDiscardRatio,
-		MaxDiskMB:         config.BadgerMaxDiskMB,
-	})
+	case "badger", "":
+		if config.BadgerPath == "" {
+			return nil, fmt.Errorf("BadgerPath is required when cache type is badger")
+		}
+		return NewBadgerCache(&BadgerConfig{
+			Path:              config.BadgerPath,
+			MaxMemoryMB:       config.BadgerMaxMemoryMB,
+			ValueLogMaxMB:     config.BadgerValueLogMaxMB,
+			CompactL0OnClose:  config.BadgerCompactL0,
+			NumGoroutines:     config.BadgerNumGoroutines,
+			GCInterval:        config.BadgerGCInterval,
+			GCDiscardRatio:    config.BadgerGCDiscardRatio,
+			MaxDiskMB:         config.BadgerMaxDiskMB,
+		})
+
+	default:
+		return nil, fmt.Errorf("unsupported cache type: %q (supported: badger, memory)", config.Type)
+	}
 }
 
 // NewBadgerCacheFromConfig creates a badger cache from config

@@ -160,7 +160,7 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 			FROM numbers(?)
 		),
 		-- For each date, find the last known status of each node up to that date
-		-- Look back up to 3 days since operational nodes are tested every 72 hours
+		-- A node keeps its last known status until explicitly retested.
 		daily_status AS (
 			SELECT
 				d.report_date,
@@ -175,7 +175,6 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 			FROM date_series d
 			CROSS JOIN node_test_results r
 			WHERE r.test_time <= d.report_date + INTERVAL 1 DAY
-				AND r.test_time >= d.report_date - INTERVAL 3 DAY
 			GROUP BY d.report_date, r.zone, r.net, r.node
 		)
 		SELECT
@@ -188,6 +187,27 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 		FROM daily_status
 		GROUP BY report_date
 		ORDER BY report_date ASC`
+}
+
+// BuildReachabilityTrendsFromDailyStatsQuery reads pre-aggregated data from node_test_daily_stats.
+// Much faster than the CROSS JOIN approach — suitable for long date ranges (all time).
+func (tqb *TestQueryBuilder) BuildReachabilityTrendsFromDailyStatsQuery() string {
+	return `
+		SELECT
+			date AS test_date,
+			max(total_nodes_tested) AS total_nodes,
+			max(nodes_operational) AS operational_nodes,
+			max(total_nodes_tested) - max(nodes_operational) AS failed_nodes,
+			if(max(total_nodes_tested) > 0,
+				max(nodes_operational) / max(total_nodes_tested) * 100, 0) AS success_rate,
+			least(
+				if(max(avg_binkp_response_ms) > 0, max(avg_binkp_response_ms), 999999),
+				if(max(avg_ifcico_response_ms) > 0, max(avg_ifcico_response_ms), 999999)
+			) AS avg_response_ms
+		FROM node_test_daily_stats
+		WHERE date >= '2025-09-01'
+		GROUP BY date
+		ORDER BY date ASC`
 }
 
 // BuildProtocolEnabledQuery builds a query for nodes with a specific protocol enabled (ClickHouse)
