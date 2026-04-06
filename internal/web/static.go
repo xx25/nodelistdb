@@ -43,6 +43,12 @@ func (s *Server) StaticHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
 	case ".svg":
 		w.Header().Set("Content-Type", "image/svg+xml")
+	case ".woff2":
+		w.Header().Set("Content-Type", "font/woff2")
+	case ".woff":
+		w.Header().Set("Content-Type", "font/woff")
+	case ".ttf":
+		w.Header().Set("Content-Type", "font/ttf")
 	default:
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	}

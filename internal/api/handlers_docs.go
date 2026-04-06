@@ -124,7 +124,7 @@ func (s *Server) SwaggerUIHandler(w http.ResponseWriter, r *http.Request) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NodelistDB API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui.css" />
+    <link rel="stylesheet" type="text/css" href="/static/vendor/swagger-ui.css" />
     <style>
         html {
             box-sizing: border-box;
@@ -148,8 +148,8 @@ func (s *Server) SwaggerUIHandler(w http.ResponseWriter, r *http.Request) {
 </head>
 <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-bundle.js"></script>
-    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-standalone-preset.js"></script>
+    <script src="/static/vendor/swagger-ui-bundle.js"></script>
+    <script src="/static/vendor/swagger-ui-standalone-preset.js"></script>
     <script>
     window.onload = function() {
         const ui = SwaggerUIBundle({
