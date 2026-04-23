@@ -1,23 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}} - {{.Address}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/tooltip.js"></script>
-    
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}} - {{.Address}}</h1>
-            <p class="subtitle">Historical data and changes for FidoNet node</p>
-        </header>
-        
-        {{template "nav" .}}
-        
-        <div class="content">
+{{template "base" .}}
+
+{{define "title"}}{{.Title}} - {{.Address}}{{end}}
+
+{{define "page_title"}}{{.Title}} - {{.Address}}{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Historical data and changes for FidoNet node</p>
+{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/tooltip.js"></script>
+{{end}}
+
+{{define "content"}}
             <div class="card">
                 <h2>Node Information</h2>
                 <p><strong>Address:</strong> {{.Address}}</p>
@@ -197,9 +192,4 @@
                     <p>No raw nodelist lines available.</p>
                 {{end}}
             </div>
-        </div>
-
-        {{template "footer" .}}
-    </div>
-</body>
-</html>
+{{end}}

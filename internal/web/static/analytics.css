@@ -319,3 +319,81 @@ table td:last-child {
     border-radius: 8px;
     margin: 20px 0;
 }
+
+/* 2026 redesign overrides */
+.stats-box,
+.protocol-info,
+.news-section,
+.info-box,
+.software-chart-container {
+    border-radius: 24px;
+    border: 1px solid rgba(216, 207, 189, 0.95);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 242, 232, 0.9));
+    box-shadow: 0 18px 34px rgba(19, 38, 44, 0.08);
+}
+
+.stats-box,
+.protocol-info,
+.news-section,
+.info-box {
+    padding: 1.2rem 1.3rem;
+}
+
+.software-chart-container {
+    padding: 1.4rem;
+}
+
+.capability-badge {
+    background: rgba(15, 118, 110, 0.12);
+    color: #0d625c;
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+.address-badge {
+    background: rgba(16, 35, 43, 0.1);
+    color: #29474f;
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+.news-section.new-working {
+    border-left: 5px solid #1f8f60;
+}
+
+.news-section.new-nonworking {
+    border-left: 5px solid #d97706;
+}
+
+.news-section.lost-ipv6 {
+    border-left: 5px solid #b42318;
+}
+
+.news-section.gained-ipv6 {
+    border-left: 5px solid #0f766e;
+}
+
+.software-list li {
+    border-bottom: 1px solid rgba(216, 207, 189, 0.75);
+}
+
+.percentage {
+    color: #0f766e;
+}
+
+.version-badge {
+    background: rgba(16, 35, 43, 0.08);
+    color: #10232b;
+    border-radius: 999px;
+}
+
+.software-loading {
+    color: #586d73;
+    padding: 2rem 0;
+}
+
+.software-error {
+    border-radius: 18px;
+    background: rgba(180, 35, 24, 0.08);
+    color: #842019;
+}

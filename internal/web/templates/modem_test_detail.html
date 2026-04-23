@@ -1,11 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Address}} - Modem Test Details - NodelistDB</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <style>
+{{template "base" .}}
+
+{{define "title"}}{{.Address}} - Modem Test Details{{end}}
+
+{{define "page_title"}}Modem Test Details{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">PSTN test information for {{.Address}}</p>
+{{end}}
+
+{{define "extra_css"}}
+<style>
         .detail-section {
             background: #f9f9f9;
             border-radius: 8px;
@@ -100,17 +104,9 @@
             margin-top: 5px;
         }
     </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Modem Test Details</h1>
-            <p class="subtitle">PSTN test information for {{.Address}}</p>
-        </header>
+{{end}}
 
-        {{template "nav" .}}
-
-        <div class="content">
+{{define "content"}}
             <a href="/analytics/pstn-accessible" class="back-link">&larr; Back to PSTN Accessible Nodes</a>
 
             {{if .NodeInfo}}
@@ -384,9 +380,4 @@
                     {{end}}
                 </div>
             </div>
-        </div>
-
-        {{template "footer" .}}
-    </div>
-</body>
-</html>
+{{end}}

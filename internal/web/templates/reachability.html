@@ -1,13 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{if .Address}}Node {{.Address}} - {{end}}Reachability History - NodelistDB</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/vendor/chart.min.js"></script>
-    <script src="/static/sortable-table.js"></script>
-    <style>
+{{template "base" .}}
+
+{{define "title"}}{{if .Address}}Node {{.Address}} - {{end}}Reachability History{{end}}
+
+{{define "page_title"}}{{if .Address}}Node {{.Address}} - {{end}}Reachability History{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Node connectivity testing and reachability analysis</p>
+{{end}}
+
+{{define "extra_css"}}
+<style>
         .reachability-section {
             background: #f9f9f9;
             border-radius: 8px;
@@ -223,17 +225,14 @@
             font-size: 14px;
         }
     </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{if .Address}}Node {{.Address}} - {{end}}Reachability History</h1>
-            <p class="subtitle">Node connectivity testing and reachability analysis</p>
-        </header>
-        
-        {{template "nav" .}}
-        
-        <div class="content">
+{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/vendor/chart.min.js"></script>
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
             {{if not .Address}}
             <!-- Main reachability page with trends -->
             <div class="reachability-section">
@@ -852,9 +851,4 @@
             </div>
             {{end}}
             {{end}}
-        </div>
-        
-        {{template "footer" .}}
-    </div>
-</body>
-</html>
+{{end}}

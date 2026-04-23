@@ -1,21 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">First nodes to appear in FidoNet regions - the pioneers</p>
-        </header>
+{{template "base" .}}
 
-        {{template "nav" .}}
+{{define "title"}}{{.Title}}{{end}}
 
-        <div class="content">
+{{define "page_title"}}{{.Title}}{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">First nodes to appear in FidoNet regions - the pioneers</p>
+{{end}}
+
+{{define "content"}}
             <!-- Region Search Form -->
             <div class="card">
                 <h2>Search Region Pioneers</h2>
@@ -110,10 +103,8 @@
                     </p>
                 </div>
             {{end}}
-        </div>
+{{end}}
 
-        {{template "footer" .}}
-    </div>
-    <script src="/static/app.js"></script>
-</body>
-</html>
+{{define "footer_scripts"}}
+<script src="/static/app.js"></script>
+{{end}}

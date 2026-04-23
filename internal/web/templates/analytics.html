@@ -1,511 +1,344 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analytics - NodelistDB</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/vendor/chart.min.js"></script>
-    <style>
-        .analytics-section {
-            background: #f9f9f9;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .flag-search-form {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .flag-search-form input[type="text"] {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        .flag-search-form button {
-            padding: 10px 20px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        .flag-search-form button:hover {
-            background: #0056b3;
-        }
-        .first-appearance {
-            background: #e8f4f8;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .first-appearance h3 {
-            margin-top: 0;
-            color: #2c3e50;
-        }
-        .node-info {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .node-info dt {
-            font-weight: bold;
-            color: #555;
-        }
-        .node-info dd {
-            margin: 0;
-        }
-        .chart-container {
-            position: relative;
-            height: 400px;
-            margin-top: 20px;
-        }
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-        .no-results {
-            text-align: center;
-            color: #666;
-            padding: 40px;
-            background: #f5f5f5;
-            border-radius: 8px;
-        }
-        .loading {
-            text-align: center;
-            color: #666;
-            padding: 20px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Analytics</h1>
-            <p class="subtitle">Data insights and trend analysis</p>
-        </header>
-        
-        {{template "nav" .}}
-        
-        <div class="content">
-            <div class="analytics-section">
-            <h2>Flag Analysis</h2>
-            <p>Search for a flag to see its first appearance and usage statistics over time.</p>
-            
-            <form class="flag-search-form" method="post" action="/analytics/flag">
-                <input type="text" name="flag" placeholder="Enter flag (e.g., IBN, IFC, ITN)" value="{{.Flag}}" required>
-                <button type="submit">Analyze Flag</button>
-            </form>
-            
-            {{if .Error}}
-                <div class="error-message">{{.Error}}</div>
-            {{end}}
-            
-            {{if .Flag}}
-                {{if .FirstAppearance}}
-                    <div class="first-appearance">
-                        <h3>First Appearance of Flag "{{.Flag}}"</h3>
-                        <dl class="node-info">
-                            <dt>Node:</dt>
-                            <dd>{{.FirstAppearance.Zone}}:{{.FirstAppearance.Net}}/{{.FirstAppearance.Node}}</dd>
-                            
-                            <dt>Date:</dt>
-                            <dd>{{.FirstAppearance.NodelistDate.Format "2006-01-02"}}</dd>
-                            
-                            <dt>System Name:</dt>
-                            <dd>{{.FirstAppearance.SystemName}}</dd>
-                            
-                            <dt>Location:</dt>
-                            <dd>{{.FirstAppearance.Location}}</dd>
-                            
-                            <dt>Sysop:</dt>
-                            <dd>{{.FirstAppearance.SysopName}}</dd>
-                        </dl>
-                    </div>
-                {{else}}
-                    <div class="no-results">
-                        <p>No nodes found with flag "{{.Flag}}"</p>
-                    </div>
-                {{end}}
-                
-                {{if .YearlyUsage}}
-                    <div class="chart-container">
-                        <canvas id="flagUsageChart"></canvas>
-                    </div>
-                    
-                    <script>
-                        const ctx = document.getElementById('flagUsageChart').getContext('2d');
-                        const chartData = {
-                            labels: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}'{{$y.Year}}'{{end}}],
-                            datasets: [{
-                                label: 'Nodes with Flag',
-                                data: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}{{if gt $y.NodeCount 0}}{{$y.NodeCount}}{{else}}null{{end}}{{end}}],
-                                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                                borderColor: 'rgba(54, 162, 235, 1)',
-                                borderWidth: 2,
-                                tension: 0.1,
-                                spanGaps: false,
-                                yAxisID: 'y'
-                            }, {
-                                label: 'Percentage of Total Nodes',
-                                data: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}{{$y.Percentage}}{{end}}],
-                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                                borderColor: 'rgba(75, 192, 192, 1)',
-                                borderWidth: 2,
-                                tension: 0.1,
-                                yAxisID: 'y1'
-                            }]
-                        };
-                        
-                        new Chart(ctx, {
-                            type: 'line',
-                            data: chartData,
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    title: {
-                                        display: true,
-                                        text: 'Flag "{{.Flag}}" Usage Over Time',
-                                        font: {
-                                            size: 16
-                                        }
-                                    },
-                                    legend: {
-                                        display: true,
-                                        position: 'top'
-                                    }
-                                },
-                                scales: {
-                                    y: {
-                                        type: 'linear',
-                                        display: true,
-                                        position: 'left',
-                                        beginAtZero: true,
-                                        title: {
-                                            display: true,
-                                            text: 'Number of Nodes',
-                                            color: 'rgba(54, 162, 235, 1)'
-                                        },
-                                        ticks: {
-                                            color: 'rgba(54, 162, 235, 1)'
-                                        }
-                                    },
-                                    y1: {
-                                        type: 'linear',
-                                        display: true,
-                                        position: 'right',
-                                        beginAtZero: true,
-                                        max: 100,
-                                        title: {
-                                            display: true,
-                                            text: 'Percentage (%)',
-                                            color: 'rgba(75, 192, 192, 1)'
-                                        },
-                                        ticks: {
-                                            color: 'rgba(75, 192, 192, 1)',
-                                            callback: function(value) {
-                                                return value + '%';
-                                            }
-                                        },
-                                        grid: {
-                                            drawOnChartArea: false
-                                        }
-                                    },
-                                    x: {
-                                        title: {
-                                            display: true,
-                                            text: 'Year'
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    </script>
-                {{end}}
-            {{end}}
-        </div>
-        
-        <div class="analytics-section">
-            <h2>Protocol Analytics</h2>
-            <p>View nodes that have been successfully tested with various FidoNet protocols.</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
-                <a href="/analytics/binkp" class="button" style="background: #17a2b8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    BinkP Nodes
-                </a>
-                <a href="/analytics/ifcico" class="button" style="background: #6c757d; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    IFCICO Nodes
-                </a>
-                <a href="/analytics/telnet" class="button" style="background: #fd7e14; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    Telnet Nodes
-                </a>
-                <a href="/analytics/vmodem" class="button" style="background: #6610f2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    VModem Nodes
-                </a>
-                <a href="/analytics/ftp" class="button" style="background: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    FTP Nodes
-                </a>
-            </div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-                <a href="/analytics/aka-mismatch" class="button" style="background: #e83e8c; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    AKA Mismatch Nodes
-                </a>
-                <a href="/analytics/other-networks" class="button" style="background: #0d6efd; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    Other Networks
-                </a>
-                <a href="/analytics/file-request" class="button" style="background: #8b5a2b; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    File Request Nodes
-                </a>
-            </div>
+{{template "base" .}}
+
+{{define "title"}}Analytics{{end}}
+
+{{define "page_title"}}Analytics{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Protocol, IPv6, geographic, software, and historical reports.</p>
+{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/vendor/chart.min.js"></script>
+{{end}}
+
+{{define "content"}}
+<section class="dual-panel-grid">
+    <article class="card analyzer-card">
+        <div class="section-heading">
+            <p class="section-tag">Flag analysis</p>
+            <h2>When did a flag first appear?</h2>
+            <p class="muted">Search a flag such as <code>IBN</code>, <code>IFC</code>, or <code>ITN</code> to see its earliest appearance and long-term usage curve.</p>
         </div>
 
-        <div class="analytics-section">
-            <h2>IPv6 Analytics</h2>
-            <p>View nodes with IPv6 addresses and their connectivity status.</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
-                <a href="/analytics/ipv6" class="button" style="background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    IPv6 Working Nodes
-                </a>
-                <a href="/analytics/ipv6-nonworking" class="button" style="background: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    IPv6 Non-Working Nodes
-                </a>
-                <a href="/analytics/ipv6-advertised-ipv4-only" class="button" style="background: #ffc107; color: #212529; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    IPv6 Advertised, IPv4 Only
-                </a>
+        <form class="analyzer-form" method="post" action="/analytics/flag">
+            <input type="text" name="flag" placeholder="Enter flag" value="{{.Flag}}" required>
+            <button type="submit" class="btn">Analyze Flag</button>
+        </form>
+
+        {{if and .Error .Flag}}
+        <div class="alert alert-error">{{.Error}}</div>
+        {{end}}
+
+        {{if .Flag}}
+            {{if .FirstAppearance}}
+            <div class="analyzer-result">
+                <div class="results-header">
+                    <div>
+                        <p class="section-tag">First appearance</p>
+                        <h3>Flag "{{.Flag}}"</h3>
+                    </div>
+                </div>
+                <dl class="detail-grid">
+                    <dt>Node</dt>
+                    <dd>{{.FirstAppearance.Zone}}:{{.FirstAppearance.Net}}/{{.FirstAppearance.Node}}</dd>
+                    <dt>Date</dt>
+                    <dd>{{.FirstAppearance.NodelistDate.Format "2006-01-02"}}</dd>
+                    <dt>System Name</dt>
+                    <dd>{{if .FirstAppearance.SystemName}}{{replaceUnderscores .FirstAppearance.SystemName}}{{else}}-{{end}}</dd>
+                    <dt>Location</dt>
+                    <dd>{{if .FirstAppearance.Location}}{{replaceUnderscores .FirstAppearance.Location}}{{else}}-{{end}}</dd>
+                    <dt>Sysop</dt>
+                    <dd>{{if .FirstAppearance.SysopName}}{{replaceUnderscores .FirstAppearance.SysopName}}{{else}}-{{end}}</dd>
+                </dl>
             </div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-                <a href="/analytics/ipv6-only" class="button" style="background: #17a2b8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    IPv6 Only (Non-Working IPv4)
-                </a>
-                <a href="/analytics/pure-ipv6-only" class="button" style="background: #6610f2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    Pure IPv6 Only (No IPv4)
-                </a>
-                <a href="/analytics/ipv6-weekly-news" class="button" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    📰 Weekly IPv6 News
-                </a>
-                <a href="/analytics/ipv6-node-list" class="button" style="background: #20c997; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    Michiel van der Vlist's IPv6 Node List
-                </a>
+            {{else if not .Error}}
+            <div class="alert alert-warning">No nodes found with flag "{{.Flag}}".</div>
+            {{end}}
+
+            {{if .YearlyUsage}}
+            <div class="chart-frame chart-frame--tall">
+                <canvas id="flagUsageChart"></canvas>
             </div>
+            {{end}}
+        {{end}}
+    </article>
+
+    <article class="card analyzer-card">
+        <div class="section-heading">
+            <p class="section-tag">Network lifecycle</p>
+            <h2>Track when a net appeared and disappeared</h2>
+            <p class="muted">Enter a network in <code>zone:net</code> format to inspect the full appearance history across archived nodelists.</p>
         </div>
 
-        <div class="analytics-section">
-            <h2>Network Analysis</h2>
-            <p>Track when networks appeared and disappeared in FidoNet nodelists over time.</p>
-            
-            <form class="flag-search-form" method="post" action="/analytics/network">
-                <input type="text" name="network" placeholder="Enter network (e.g., 2:5000)" value="{{.Network}}" required>
-                <button type="submit">Analyze Network</button>
-            </form>
-            
-            {{if .Network}}
-                {{if .NetworkHistory}}
-                    <div class="first-appearance">
-                        <h3>Network {{.NetworkHistory.Zone}}:{{.NetworkHistory.Net}} - {{.NetworkHistory.NetworkName}}</h3>
-                        <dl class="node-info">
-                            <dt>First Seen:</dt>
-                            <dd>{{.NetworkHistory.FirstSeen.Format "2006-01-02"}} (Day {{with $first := index .NetworkHistory.Appearances 0}}{{$first.StartDayNum}}{{end}})</dd>
-                            
-                            <dt>Last Seen:</dt>
-                            <dd>{{.NetworkHistory.LastSeen.Format "2006-01-02"}} (Day {{with $last := index .NetworkHistory.Appearances (len .NetworkHistory.Appearances | add -1)}}{{$last.EndDayNum}}{{end}})</dd>
-                            
-                            <dt>Total Time Span:</dt>
-                            <dd>{{.NetworkHistory.TotalDays}} days</dd>
-                            
-                            <dt>Active Days:</dt>
-                            <dd>{{.NetworkHistory.ActiveDays}} nodelists</dd>
-                            
-                            <dt>Appearance Periods:</dt>
-                            <dd>{{len .NetworkHistory.Appearances}} period(s)</dd>
-                        </dl>
+        <form class="analyzer-form" method="post" action="/analytics/network">
+            <input type="text" name="network" placeholder="e.g. 2:5000" value="{{.Network}}" required>
+            <button type="submit" class="btn">Analyze Network</button>
+        </form>
+
+        {{if and .Error .Network}}
+        <div class="alert alert-error">{{.Error}}</div>
+        {{end}}
+
+        {{if .Network}}
+            {{if .NetworkHistory}}
+            <div class="analyzer-result">
+                <div class="results-header">
+                    <div>
+                        <p class="section-tag">Network summary</p>
+                        <h3>{{.NetworkHistory.Zone}}:{{.NetworkHistory.Net}}{{if .NetworkHistory.NetworkName}} - {{.NetworkHistory.NetworkName}}{{end}}</h3>
                     </div>
-                    
-                    <div style="margin-top: 20px;">
-                        <h4>Appearance History</h4>
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <thead>
-                                <tr style="background: #f0f0f0;">
-                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Period</th>
-                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Start Date</th>
-                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">End Date</th>
-                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Duration</th>
-                                    <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Nodelists</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {{range $i, $app := .NetworkHistory.Appearances}}
-                                <tr>
-                                    <td style="padding: 10px; border: 1px solid #ddd;">{{add $i 1}}</td>
-                                    <td style="padding: 10px; border: 1px solid #ddd;">{{$app.StartDate.Format "2006-01-02"}} (Day {{$app.StartDayNum}})</td>
-                                    <td style="padding: 10px; border: 1px solid #ddd;">{{$app.EndDate.Format "2006-01-02"}} (Day {{$app.EndDayNum}})</td>
-                                    <td style="padding: 10px; border: 1px solid #ddd;">{{$app.DurationDays}} days</td>
-                                    <td style="padding: 10px; border: 1px solid #ddd;">{{$app.NodelistCount}}</td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    {{if gt (len .NetworkHistory.Appearances) 1}}
-                    <div class="chart-container">
-                        <canvas id="networkTimelineChart"></canvas>
-                    </div>
-                    
-                    <script>
-                        const ctx2 = document.getElementById('networkTimelineChart').getContext('2d');
-                        const appearances = [
-                            {{range $i, $app := .NetworkHistory.Appearances}}
-                            {
-                                start: '{{$app.StartDate.Format "2006-01-02"}}',
-                                end: '{{$app.EndDate.Format "2006-01-02"}}',
-                                duration: {{$app.DurationDays}}
-                            }{{if ne $i (add (len $.NetworkHistory.Appearances) -1)}},{{end}}
-                            {{end}}
-                        ];
-                        
-                        // Create data for timeline chart
-                        const labels = [];
-                        const data = [];
-                        
+                </div>
+                <dl class="detail-grid">
+                    <dt>First Seen</dt>
+                    <dd>{{.NetworkHistory.FirstSeen.Format "2006-01-02"}} (Day {{with $first := index .NetworkHistory.Appearances 0}}{{$first.StartDayNum}}{{end}})</dd>
+                    <dt>Last Seen</dt>
+                    <dd>{{.NetworkHistory.LastSeen.Format "2006-01-02"}} (Day {{with $last := index .NetworkHistory.Appearances (add (len .NetworkHistory.Appearances) -1)}}{{$last.EndDayNum}}{{end}})</dd>
+                    <dt>Total Time Span</dt>
+                    <dd>{{.NetworkHistory.TotalDays}} days</dd>
+                    <dt>Active Days</dt>
+                    <dd>{{.NetworkHistory.ActiveDays}} nodelists</dd>
+                    <dt>Appearance Periods</dt>
+                    <dd>{{len .NetworkHistory.Appearances}} period(s)</dd>
+                </dl>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Duration</th>
+                            <th>Nodelists</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                         {{range $i, $app := .NetworkHistory.Appearances}}
-                        labels.push('Period {{add $i 1}}');
-                        data.push({
-                            x: ['{{$app.StartDate.Format "2006-01-02"}}', '{{$app.EndDate.Format "2006-01-02"}}'],
-                            y: {{add $i 1}}
-                        });
+                        <tr>
+                            <td>Period {{add $i 1}}</td>
+                            <td>{{$app.StartDate.Format "2006-01-02"}} (Day {{$app.StartDayNum}})</td>
+                            <td>{{$app.EndDate.Format "2006-01-02"}} (Day {{$app.EndDayNum}})</td>
+                            <td>{{$app.DurationDays}} days</td>
+                            <td>{{$app.NodelistCount}}</td>
+                        </tr>
                         {{end}}
-                        
-                        new Chart(ctx2, {
-                            type: 'bar',
-                            data: {
-                                labels: labels,
-                                datasets: [{
-                                    label: 'Active Periods',
-                                    data: data.map(d => d.x[1]),
-                                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                                    borderColor: 'rgba(54, 162, 235, 1)',
-                                    borderWidth: 1
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                indexAxis: 'y',
-                                plugins: {
-                                    title: {
-                                        display: true,
-                                        text: 'Network Appearance Timeline',
-                                        font: {
-                                            size: 16
-                                        }
-                                    },
-                                    legend: {
-                                        display: false
-                                    }
-                                },
-                                scales: {
-                                    x: {
-                                        type: 'time',
-                                        time: {
-                                            unit: 'year'
-                                        },
-                                        title: {
-                                            display: true,
-                                            text: 'Date'
-                                        }
-                                    },
-                                    y: {
-                                        title: {
-                                            display: true,
-                                            text: 'Period'
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    </script>
-                    {{end}}
-                {{else}}
-                    <div class="no-results">
-                        <p>Network "{{.Network}}" not found</p>
-                    </div>
-                {{end}}
+                    </tbody>
+                </table>
+            </div>
+
+            {{if gt (len .NetworkHistory.Appearances) 0}}
+            <div class="chart-frame">
+                <canvas id="networkTimelineChart"></canvas>
+            </div>
             {{end}}
-        </div>
-        
-        <div class="analytics-section">
-            <h2>Software Distribution Analytics</h2>
-            <p>Analyze the distribution of FidoNet mailer software across the network.</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-                <a href="/analytics/software/binkp" class="button" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    BinkP Software Distribution
-                </a>
-                <a href="/analytics/software/ifcico" class="button" style="background: #6f42c1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    IFCICO Software Distribution
-                </a>
-            </div>
-        </div>
+            {{else if not .Error}}
+            <div class="alert alert-warning">Network "{{.Network}}" was not found.</div>
+            {{end}}
+        {{end}}
+    </article>
+</section>
 
-        <div class="analytics-section">
-            <h2>Geographic Analytics</h2>
-            <p>View where FidoNet nodes are hosted around the world.</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-                <a href="/analytics/geo-hosting" class="button" style="background: #20c997; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    🌍 Geographic Hosting Distribution
-                </a>
-            </div>
+<section class="analytics-category-grid">
+    <article class="card analytics-category">
+        <p class="section-tag">Protocol analytics</p>
+        <h3>Recent protocol success reports</h3>
+        <p>Browse nodes that were recently reachable over core FidoNet transports and related capabilities.</p>
+        <div class="link-pills">
+            <a href="/analytics/binkp" class="pill-link">BinkP</a>
+            <a href="/analytics/ifcico" class="pill-link">IFCICO</a>
+            <a href="/analytics/telnet" class="pill-link">Telnet</a>
+            <a href="/analytics/vmodem" class="pill-link">VModem</a>
+            <a href="/analytics/ftp" class="pill-link">FTP</a>
+            <a href="/analytics/aka-mismatch" class="pill-link">AKA Mismatch</a>
+            <a href="/analytics/other-networks" class="pill-link">Other Networks</a>
+            <a href="/analytics/file-request" class="pill-link">File Request</a>
         </div>
+    </article>
 
-        <div class="analytics-section">
-            <h2>Historical Analytics</h2>
-            <p>Explore the pioneers who were first in FidoNet regions and see what happened on this day in FidoNet history.</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-                <a href="/analytics/pioneers" class="button" style="background: #8b5cf6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    🏆 Region Pioneers
-                </a>
-                <a href="/analytics/on-this-day" class="button" style="background: #f59e0b; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    📅 On This Day
-                </a>
-            </div>
+    <article class="card analytics-category">
+        <p class="section-tag">IPv6</p>
+        <h3>Adoption and failure modes</h3>
+        <p>Split working, non-working, advertised-only, and pure-IPv6 nodes into separate operational views.</p>
+        <div class="link-pills">
+            <a href="/analytics/ipv6" class="pill-link">Working IPv6</a>
+            <a href="/analytics/ipv6-nonworking" class="pill-link">Non-Working IPv6</a>
+            <a href="/analytics/ipv6-advertised-ipv4-only" class="pill-link">Advertised, IPv4 Only</a>
+            <a href="/analytics/ipv6-only" class="pill-link">IPv6 Only</a>
+            <a href="/analytics/pure-ipv6-only" class="pill-link">Pure IPv6</a>
+            <a href="/analytics/ipv6-weekly-news" class="pill-link">Weekly IPv6 News</a>
+            <a href="/analytics/ipv6-node-list" class="pill-link">IPv6 Node List</a>
         </div>
+    </article>
 
-        <div class="analytics-section">
-            <h2>Domain Health</h2>
-            <p>Monitor the registration status of domains used by FidoNet nodes via WHOIS lookups.</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-                <a href="/analytics/domain-expiration" class="button" style="background: #e11d48; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    Domain Expiration Report
-                </a>
-            </div>
+    <article class="card analytics-category">
+        <p class="section-tag">Software</p>
+        <h3>Mailer distribution</h3>
+        <p>Compare software families, major version clusters, and operating-system fingerprints for tested nodes.</p>
+        <div class="link-pills">
+            <a href="/analytics/software/binkp" class="pill-link">BinkP Software</a>
+            <a href="/analytics/software/ifcico" class="pill-link">IFCICO Software</a>
         </div>
+    </article>
 
-        <div class="analytics-section">
-            <h2>PSTN Analytics</h2>
-            <p>View all nodes with PSTN (Public Switched Telephone Network) phone access from the nodelist, including modem flags and calling availability.</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
-                <a href="/analytics/pstn" class="button" style="background: #059669; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    All PSTN Nodes
-                </a>
-                <a href="/analytics/pstn-accessible" class="button" style="background: #d97706; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    PSTN Accessible (Verified)
-                </a>
-                <a href="/analytics/pstn-no-answer" class="button" style="background: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                    PSTN No Answer
-                </a>
-            </div>
+    <article class="card analytics-category">
+        <p class="section-tag">Hosting geography</p>
+        <h3>Where nodes are actually hosted</h3>
+        <p>View geographic hosting distribution based on observed IP locations rather than nodelist text alone.</p>
+        <div class="link-pills">
+            <a href="/analytics/geo-hosting" class="pill-link">Geographic Hosting</a>
         </div>
+    </article>
 
+    <article class="card analytics-category">
+        <p class="section-tag">Historical views</p>
+        <h3>Firsts, milestones, and anniversaries</h3>
+        <p>Explore regional pioneers and see what happened on this day in FidoNet history.</p>
+        <div class="link-pills">
+            <a href="/analytics/pioneers" class="pill-link">Region Pioneers</a>
+            <a href="/analytics/on-this-day" class="pill-link">On This Day</a>
         </div>
-        
-        {{template "footer" .}}
-    </div>
-</body>
-</html>
+    </article>
+
+    <article class="card analytics-category">
+        <p class="section-tag">Domain health</p>
+        <h3>Registration status of node domains</h3>
+        <p>Monitor expiry and registration state for domains referenced by nodes and mailers.</p>
+        <div class="link-pills">
+            <a href="/analytics/domain-expiration" class="pill-link">Domain Expiration</a>
+        </div>
+    </article>
+
+    <article class="card analytics-category">
+        <p class="section-tag">PSTN</p>
+        <h3>Telephone-era node visibility</h3>
+        <p>Audit PSTN availability, verified modem accessibility, and non-answer outcomes from direct testing.</p>
+        <div class="link-pills">
+            <a href="/analytics/pstn" class="pill-link">All PSTN Nodes</a>
+            <a href="/analytics/pstn-accessible" class="pill-link">Verified PSTN</a>
+            <a href="/analytics/pstn-no-answer" class="pill-link">No Answer</a>
+        </div>
+    </article>
+
+    <article class="card analytics-category">
+        <p class="section-tag">Need raw HTTP?</p>
+        <h3>Pair analytics with the API</h3>
+        <p>The dashboard is for browsing; the API is for automation, exports, and your own external analysis workflows.</p>
+        <div class="link-pills">
+            <a href="/api/help" class="pill-link">API Help</a>
+        </div>
+    </article>
+</section>
+{{end}}
+
+{{define "footer_scripts"}}
+<script>
+(function() {
+    const flagCanvas = document.getElementById("flagUsageChart");
+    if (flagCanvas) {
+        const flagCtx = flagCanvas.getContext("2d");
+        new Chart(flagCtx, {
+            type: "line",
+            data: {
+                labels: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}"{{$y.Year}}"{{end}}],
+                datasets: [{
+                    label: "Nodes with Flag",
+                    data: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}{{if gt $y.NodeCount 0}}{{$y.NodeCount}}{{else}}null{{end}}{{end}}],
+                    backgroundColor: "rgba(15, 118, 110, 0.16)",
+                    borderColor: "rgba(15, 118, 110, 1)",
+                    borderWidth: 2,
+                    tension: 0.25,
+                    spanGaps: false,
+                    yAxisID: "y"
+                }, {
+                    label: "Percentage of Total Nodes",
+                    data: [{{range $i, $y := .YearlyUsage}}{{if $i}},{{end}}{{$y.Percentage}}{{end}}],
+                    backgroundColor: "rgba(217, 119, 6, 0.16)",
+                    borderColor: "rgba(217, 119, 6, 1)",
+                    borderWidth: 2,
+                    tension: 0.25,
+                    yAxisID: "y1"
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: "top" }
+                },
+                scales: {
+                    y: {
+                        type: "linear",
+                        display: true,
+                        position: "left",
+                        beginAtZero: true,
+                        title: { display: true, text: "Number of Nodes" }
+                    },
+                    y1: {
+                        type: "linear",
+                        display: true,
+                        position: "right",
+                        beginAtZero: true,
+                        max: 100,
+                        title: { display: true, text: "Percentage (%)" },
+                        ticks: {
+                            callback: function(value) {
+                                return value + "%";
+                            }
+                        },
+                        grid: { drawOnChartArea: false }
+                    },
+                    x: {
+                        title: { display: true, text: "Year" }
+                    }
+                }
+            }
+        });
+    }
+
+    {{if .NetworkHistory}}
+    const networkCanvas = document.getElementById("networkTimelineChart");
+    if (networkCanvas) {
+        const networkCtx = networkCanvas.getContext("2d");
+        new Chart(networkCtx, {
+            type: "bar",
+            data: {
+                labels: [{{range $i, $app := .NetworkHistory.Appearances}}{{if $i}},{{end}}"Period {{add $i 1}}"{{end}}],
+                datasets: [{
+                    label: "Duration (days)",
+                    data: [{{range $i, $app := .NetworkHistory.Appearances}}{{if $i}},{{end}}{{$app.DurationDays}}{{end}}],
+                    backgroundColor: "rgba(15, 118, 110, 0.72)",
+                    borderRadius: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: function(items) {
+                                const index = items[0].dataIndex;
+                                const detailLines = [
+                                    {{range $i, $app := .NetworkHistory.Appearances}}{{if $i}},{{end}}"{{$app.StartDate.Format "2006-01-02"}} -> {{$app.EndDate.Format "2006-01-02"}}"{{end}}
+                                ];
+                                return detailLines[index];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: "Days Active" }
+                    }
+                }
+            }
+        });
+    }
+    {{end}}
+})();
+</script>
+{{end}}

@@ -93,21 +93,9 @@ func (s *Server) SetLinksLoader(loader *links.Loader) {
 	s.linksLoader = loader
 }
 
-// IndexHandler handles the home page
+// IndexHandler handles the root page by serving search
 func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Title      string
-		ActivePage string
-		Version    string
-	}{
-		Title:      "FidoNet Nodelist Database",
-		ActivePage: "home",
-		Version:    version.GetVersionInfo(),
-	}
-
-	if err := s.templates["index"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.SearchHandler(w, r)
 }
 
 // APIHelpHandler shows API documentation

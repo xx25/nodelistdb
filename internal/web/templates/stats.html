@@ -1,299 +1,265 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/vendor/chart.min.js"></script>
-    <script src="/static/datepicker.js"></script>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">FidoNet network statistics and metrics</p>
-        </header>
-        
-        {{template "nav" .}}
-        
-        <div class="content">
-            {{if .NodeHistory}}
-            <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1rem;">Total Nodes in Nodelist Over Time</h2>
-                <div style="height: 250px;">
-                    <canvas id="nodeHistoryChart"></canvas>
-                </div>
-                <script>
-                    document.addEventListener('DOMContentLoaded', function() {
-                        const ctx = document.getElementById('nodeHistoryChart').getContext('2d');
-                        new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                labels: [{{range $i, $h := .NodeHistory}}{{if $i}},{{end}}'{{$h.Date.Format "2006-01-02"}}'{{end}}],
-                                datasets: [{
-                                    label: 'Total Nodes',
-                                    data: [{{range $i, $h := .NodeHistory}}{{if $i}},{{end}}{{$h.TotalNodes}}{{end}}],
-                                    borderColor: 'rgba(0, 123, 255, 1)',
-                                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
-                                    borderWidth: 1.5,
-                                    pointRadius: 0,
-                                    fill: true,
-                                    tension: 0.1
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    legend: { display: false }
-                                },
-                                scales: {
-                                    y: {
-                                        beginAtZero: false,
-                                        title: { display: true, text: 'Nodes' }
-                                    },
-                                    x: {
-                                        title: { display: true, text: 'Date' },
-                                        ticks: { maxTicksLimit: 20 }
-                                    }
-                                }
-                            }
-                        });
-                    });
-                </script>
-            </div>
-            {{end}}
+{{template "base" .}}
 
-            {{if .NoData}}
-                <div class="card">
-                    <div class="alert alert-error">
-                        <strong>📊 No Data Available</strong><br>
-                        {{.Error}}
-                    </div>
-                    <p style="margin-top: 1rem; color: var(--text-secondary);">
-                        To populate statistics, please import nodelist files using the parser tool:<br>
-                        <code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem;">./bin/parser -config config.yaml -path /path/to/nodelists</code>
-                    </p>
-                </div>
-            {{else if .Error}}
-                <div class="alert alert-error">
-                    <strong>Error:</strong> {{.Error}}
-                </div>
-            {{else if .Stats}}
-                <div class="card">
-                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem;">
-                        <h2 style="color: var(--text-primary); margin: 0;">
-                            Network Statistics for {{.Stats.Date.Format "January 2, 2006"}}
-                            {{if .DateAdjusted}}<span style="font-size: 0.8em; color: var(--warning-color); font-weight: normal;">(adjusted)</span>{{end}}
-                        </h2>
-                        {{if .AvailableDates}}
-                        <div id="date-picker-container" style="flex-shrink: 0;"></div>
-                        <script>
-                            document.addEventListener('DOMContentLoaded', function() {
-                                const availableDates = [
-                                    {{range .AvailableDates}}
-                                    "{{.Format "2006-01-02"}}",
-                                    {{end}}
-                                ];
-                                const currentDate = "{{.ActualDate}}";
-                                new NodelistDatePicker('date-picker-container', availableDates, currentDate);
-                            });
-                        </script>
-                        {{end}}
-                    </div>
-                    {{if .DateAdjusted}}
-                    <div class="alert" style="margin-bottom: 1rem; padding: 0.5rem 0.75rem; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.375rem; color: #92400e; font-size: 0.9em;">
-                        Data for the requested date was not available. Showing nearest: <strong>{{.ActualDate}}</strong>
-                    </div>
-                    {{end}}
-                    
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>{{.Stats.TotalNodes}}</h3>
-                            <p>Total Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.ActiveNodes}}</h3>
-                            <p>Active Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.CMNodes}}</h3>
-                            <p>CM Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.BinkpNodes}}</h3>
-                            <p>Binkp Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.InternetNodes}}</h3>
-                            <p>Internet Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.DownNodes}}</h3>
-                            <p>Down Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.HoldNodes}}</h3>
-                            <p>Hold Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.PvtNodes}}</h3>
-                            <p>Private Nodes</p>
-                        </div>
-                    </div>
+{{define "title"}}Statistics{{end}}
 
-                    <h3 style="color: var(--text-primary); margin-top: 1.5rem; margin-bottom: 1rem;">🏛️ Node Types</h3>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>{{.Stats.ZoneNodes}}</h3>
-                            <p>Zone Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.RegionNodes}}</h3>
-                            <p>Region Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.HostNodes}}</h3>
-                            <p>Host Nodes</p>
-                        </div>
-                        
-                        <div class="stat-card">
-                            <h3>{{.Stats.HubNodes}}</h3>
-                            <p>Hub Nodes</p>
-                        </div>
-                    </div>
-                </div>
-                
-                {{if .Stats.ZoneDistribution}}
-                    <div class="card">
-                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🌍 Zone Distribution</h3>
-                        
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Zone</th>
-                                        <th>Description</th>
-                                        <th>Node Count</th>
-                                        <th>Percentage</th>
-                                        <th>Representation</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {{range $zone, $count := .Stats.ZoneDistribution}}
-                                    <tr>
-                                        <td><strong>Zone {{$zone}}</strong></td>
-                                        <td style="color: var(--text-secondary);">
-                                            {{if eq $zone 1}}United States and Canada
-                                            {{else if eq $zone 2}}Europe, Former Soviet Union, and Israel
-                                            {{else if eq $zone 3}}Australasia (includes former Zone 6 nodes)
-                                            {{else if eq $zone 4}}Latin America (except Puerto Rico)
-                                            {{else if eq $zone 5}}Africa
-                                            {{else if eq $zone 6}}Asia (removed July 2007, nodes moved to Zone 3)
-                                            {{else}}Unknown{{end}}
-                                        </td>
-                                        <td>{{$count}} nodes</td>
-                                        <td style="color: var(--text-secondary);">
-                                            {{printf "%.1f%%" (div (mul $count 100) $.Stats.TotalNodes)}}
-                                        </td>
-                                        <td>
-                                            <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
-                                                <div style="background: var(--primary-color); height: 100%; width: {{printf "%.1f%%" (div (mul $count 100) $.Stats.TotalNodes)}}; transition: width 0.3s ease;"></div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {{end}}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                {{end}}
-                
-                {{if .Stats.LargestRegions}}
-                    <div class="card">
-                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🏛️ Largest Regions</h3>
-                        
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Region</th>
-                                        <th>Description</th>
-                                        <th>Zone</th>
-                                        <th>Node Count</th>
-                                        <th>Representation</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {{range .Stats.LargestRegions}}
-                                    <tr>
-                                        <td><strong>Region {{.Region}}</strong></td>
-                                        <td style="color: var(--text-secondary);">{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
-                                        <td>Zone {{.Zone}}</td>
-                                        <td>{{.NodeCount}} nodes</td>
-                                        <td>
-                                            <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
-                                                <div style="background: var(--primary-color); height: 100%; width: {{printf "%.1f%%" (div (mul .NodeCount 100) $.Stats.TotalNodes)}}; transition: width 0.3s ease;"></div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {{end}}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                {{end}}
-                
-                {{if .Stats.LargestNets}}
-                    <div class="card">
-                        <h3 style="color: var(--text-primary); margin-bottom: 1.5rem;">🌐 Largest Networks</h3>
-                        
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Network</th>
-                                        <th>Description</th>
-                                        <th>Node Count</th>
-                                        <th>Representation</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {{range .Stats.LargestNets}}
-                                    <tr>
-                                        <td><strong>{{.Zone}}:{{.Net}}</strong></td>
-                                        <td>{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
-                                        <td>{{.NodeCount}} nodes</td>
-                                        <td>
-                                            <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
-                                                <div style="background: var(--success-color); height: 100%; width: {{printf "%.1f%%" (div (mul .NodeCount 100) $.Stats.TotalNodes)}}; transition: width 0.3s ease;"></div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {{end}}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                {{end}}
-                
-                <div class="alert alert-success">
-                    <strong>💡 Did you know?</strong> This data represents the current state of the FidoNet network. Use the historical node search to explore how individual nodes have changed over time!
-                </div>
-            {{end}}
-        </div>
-        
-        {{template "footer" .}}
+{{define "page_title"}}{{.Title}}{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Track how the nodelist changes over time, then drill into the current snapshot by zone, region, and network.</p>
+{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/vendor/chart.min.js"></script>
+<script src="/static/datepicker.js"></script>
+{{end}}
+
+{{define "content"}}
+{{if .NodeHistory}}
+<section class="card chart-card">
+    <div class="section-heading">
+        <p class="section-tag">Long view</p>
+        <h2>Total nodes over time</h2>
     </div>
-</body>
-</html>
+    <div class="chart-frame">
+        <canvas id="nodeHistoryChart"></canvas>
+    </div>
+</section>
+{{end}}
+
+{{if .NoData}}
+<section class="card">
+    <div class="alert alert-error">
+        <strong>No data available:</strong> {{.Error}}
+    </div>
+    <p class="muted">Populate the database first with the parser tool.</p>
+    <pre class="command-block"><code>./bin/parser -config config.yaml -path /path/to/nodelists</code></pre>
+</section>
+{{else if .Error}}
+<div class="alert alert-error">
+    <strong>Error:</strong> {{.Error}}
+</div>
+{{else if .Stats}}
+<section class="card">
+    <div class="panel-header">
+        <div class="section-heading">
+            <p class="section-tag">Snapshot</p>
+            <h2>Network statistics for {{.Stats.Date.Format "January 2, 2006"}}</h2>
+            <p class="muted">Use the date picker to jump between available nodelists.</p>
+        </div>
+        {{if .AvailableDates}}
+        <div id="date-picker-container" class="date-picker-shell"></div>
+        {{end}}
+    </div>
+
+    {{if .DateAdjusted}}
+    <div class="alert alert-warning">
+        Requested data was not available. Showing nearest snapshot: <strong>{{.ActualDate}}</strong>
+    </div>
+    {{end}}
+
+    <div class="stats-grid stats-grid--compact">
+        <div class="stat-card"><h3>{{.Stats.TotalNodes}}</h3><p>Total Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.ActiveNodes}}</h3><p>Active Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.CMNodes}}</h3><p>CM Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.BinkpNodes}}</h3><p>BinkP Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.InternetNodes}}</h3><p>Internet Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.DownNodes}}</h3><p>Down Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.HoldNodes}}</h3><p>Hold Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.PvtNodes}}</h3><p>Private Nodes</p></div>
+    </div>
+</section>
+
+<section class="card">
+    <div class="section-heading">
+        <p class="section-tag">Topology</p>
+        <h2>Node types</h2>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-card"><h3>{{.Stats.ZoneNodes}}</h3><p>Zone Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.RegionNodes}}</h3><p>Region Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.HostNodes}}</h3><p>Host Nodes</p></div>
+        <div class="stat-card"><h3>{{.Stats.HubNodes}}</h3><p>Hub Nodes</p></div>
+    </div>
+</section>
+
+{{if .Stats.ZoneDistribution}}
+<section class="card">
+    <div class="section-heading">
+        <p class="section-tag">Geography</p>
+        <h2>Zone distribution</h2>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Zone</th>
+                    <th>Description</th>
+                    <th>Node Count</th>
+                    <th>Percentage</th>
+                    <th>Representation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $zone, $count := .Stats.ZoneDistribution}}
+                <tr>
+                    <td><strong>Zone {{$zone}}</strong></td>
+                    <td class="text-muted">
+                        {{if eq $zone 1}}United States and Canada
+                        {{else if eq $zone 2}}Europe, Former Soviet Union, and Israel
+                        {{else if eq $zone 3}}Australasia (includes former Zone 6 nodes)
+                        {{else if eq $zone 4}}Latin America (except Puerto Rico)
+                        {{else if eq $zone 5}}Africa
+                        {{else if eq $zone 6}}Asia (removed July 2007, nodes moved to Zone 3)
+                        {{else}}Unknown{{end}}
+                    </td>
+                    <td>{{$count}} nodes</td>
+                    <td class="text-muted">{{printf "%.1f%%" (div (mul $count 100) $.Stats.TotalNodes)}}</td>
+                    <td>
+                        <div class="progress-track">
+                            <div class="progress-fill" style="width: {{printf "%.1f%%" (div (mul $count 100) $.Stats.TotalNodes)}};"></div>
+                        </div>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</section>
+{{end}}
+
+{{if .Stats.LargestRegions}}
+<section class="card">
+    <div class="section-heading">
+        <p class="section-tag">Hierarchy</p>
+        <h2>Largest regions</h2>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Region</th>
+                    <th>Description</th>
+                    <th>Zone</th>
+                    <th>Node Count</th>
+                    <th>Representation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Stats.LargestRegions}}
+                <tr>
+                    <td><strong>Region {{.Region}}</strong></td>
+                    <td class="text-muted">{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
+                    <td>Zone {{.Zone}}</td>
+                    <td>{{.NodeCount}} nodes</td>
+                    <td>
+                        <div class="progress-track">
+                            <div class="progress-fill" style="width: {{printf "%.1f%%" (div (mul .NodeCount 100) $.Stats.TotalNodes)}};"></div>
+                        </div>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</section>
+{{end}}
+
+{{if .Stats.LargestNets}}
+<section class="card">
+    <div class="section-heading">
+        <p class="section-tag">Networks</p>
+        <h2>Largest nets</h2>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Network</th>
+                    <th>Description</th>
+                    <th>Node Count</th>
+                    <th>Representation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Stats.LargestNets}}
+                <tr>
+                    <td><strong>{{.Zone}}:{{.Net}}</strong></td>
+                    <td>{{if .Name}}{{.Name}}{{else}}<em>-</em>{{end}}</td>
+                    <td>{{.NodeCount}} nodes</td>
+                    <td>
+                        <div class="progress-track">
+                            <div class="progress-fill" style="width: {{printf "%.1f%%" (div (mul .NodeCount 100) $.Stats.TotalNodes)}};"></div>
+                        </div>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</section>
+{{end}}
+
+<div class="alert alert-success">
+    <strong>Use this with search:</strong> statistics show the current network shape; search and node history show how individual systems changed to create it.
+</div>
+{{end}}
+{{end}}
+
+{{define "footer_scripts"}}
+<script>
+(function() {
+    {{if .AvailableDates}}
+    const datePickerTarget = document.getElementById("date-picker-container");
+    if (datePickerTarget) {
+        const availableDates = [
+            {{range .AvailableDates}}
+            "{{.Format "2006-01-02"}}",
+            {{end}}
+        ];
+        const currentDate = "{{.ActualDate}}";
+        new NodelistDatePicker("date-picker-container", availableDates, currentDate);
+    }
+    {{end}}
+
+    {{if .NodeHistory}}
+    const chartCanvas = document.getElementById("nodeHistoryChart");
+    if (chartCanvas) {
+        const ctx = chartCanvas.getContext("2d");
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: [{{range $i, $h := .NodeHistory}}{{if $i}},{{end}}"{{$h.Date.Format "2006-01-02"}}"{{end}}],
+                datasets: [{
+                    label: "Total Nodes",
+                    data: [{{range $i, $h := .NodeHistory}}{{if $i}},{{end}}{{$h.TotalNodes}}{{end}}],
+                    borderColor: "rgba(15, 118, 110, 1)",
+                    backgroundColor: "rgba(15, 118, 110, 0.16)",
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: true,
+                    tension: 0.25
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: { display: true, text: "Nodes" }
+                    },
+                    x: {
+                        title: { display: true, text: "Date" },
+                        ticks: { maxTicksLimit: 20 }
+                    }
+                }
+            }
+        });
+    }
+    {{end}}
+})();
+</script>
+{{end}}

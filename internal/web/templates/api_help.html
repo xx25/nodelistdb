@@ -1,20 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">REST API endpoints for programmatic access to nodelist data</p>
-        </header>
+{{template "base" .}}
 
-        {{template "nav" .}}
+{{define "title"}}{{.Title}}{{end}}
 
+{{define "page_title"}}{{.Title}}{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">REST API endpoints for programmatic access to nodelist data</p>
+{{end}}
+
+{{define "content"}}
         <div style="margin-top: 1.5rem; text-align: center;">
             <a href="/api/docs" class="btn" style="text-decoration: none; margin-right: 1rem;">
                 📋 Interactive API Documentation (Swagger UI)
@@ -24,7 +18,6 @@
             </a>
         </div>
         
-        <div class="content">
             <div class="card">
                 <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🚀 Getting Started</h2>
                 <p style="color: var(--text-secondary); margin-bottom: 2rem;">
@@ -323,9 +316,4 @@ curl "{{.BaseURL}}api/stats/dates"
             <div class="alert alert-success">
                 <strong>💡 Pro Tip:</strong> Use the <code>limit</code> and <code>offset</code> parameters for efficient pagination when dealing with large result sets. The API performs well with limits up to 200 records per request.
             </div>
-        </div>
-        
-        {{template "footer" .}}
-    </div>
-</body>
-</html>
+{{end}}

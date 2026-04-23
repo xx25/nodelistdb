@@ -1,14 +1,34 @@
 {{define "nav"}}
-<nav>
+<nav class="site-nav" aria-label="Primary">
     <div class="nav-container">
-        <a href="/" {{if eq .ActivePage "home"}}class="active"{{end}}>🏠 Home</a>
-        <a href="/search" {{if eq .ActivePage "search"}}class="active"{{end}}>🔍 Search</a>
-        <a href="/stats" {{if eq .ActivePage "stats"}}class="active"{{end}}>📊 Statistics</a>
-        <a href="/analytics" {{if eq .ActivePage "analytics"}}class="active"{{end}}>📈 Analytics</a>
-        <a href="/reachability" {{if eq .ActivePage "reachability"}}class="active"{{end}}>🌐 Reachability</a>
-        <a href="/nodelists" {{if eq .ActivePage "nodelists"}}class="active"{{end}}>📥 Download Nodelists</a>
-        <a href="/links" {{if eq .ActivePage "links"}}class="active"{{end}}>🔗 Links</a>
-        <a href="/api/help" {{if eq .ActivePage "api"}}class="active"{{end}}>📖 API Help</a>
+        <a href="/" {{if eq .ActivePage "search"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
+            <span class="nav-label">Search</span>
+            <span class="nav-meta">Nodes and SysOps</span>
+        </a>
+        <a href="/stats" {{if eq .ActivePage "stats"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
+            <span class="nav-label">Statistics</span>
+            <span class="nav-meta">Current network view</span>
+        </a>
+        <a href="/analytics" {{if eq .ActivePage "analytics"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
+            <span class="nav-label">Analytics</span>
+            <span class="nav-meta">Protocol and trend reports</span>
+        </a>
+        <a href="/reachability" {{if eq .ActivePage "reachability"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
+            <span class="nav-label">Reachability</span>
+            <span class="nav-meta">Operational history</span>
+        </a>
+        <a href="/nodelists" {{if eq .ActivePage "nodelists"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
+            <span class="nav-label">Downloads</span>
+            <span class="nav-meta">Nodelist archive</span>
+        </a>
+        <a href="/links" {{if eq .ActivePage "links"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
+            <span class="nav-label">Links</span>
+            <span class="nav-meta">Community references</span>
+        </a>
+        <a href="/api/help" {{if eq .ActivePage "api"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
+            <span class="nav-label">API</span>
+            <span class="nav-meta">HTTP endpoints</span>
+        </a>
     </div>
 </nav>
 {{end}}

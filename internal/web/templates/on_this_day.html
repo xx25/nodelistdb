@@ -1,11 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}} - NodelistDB</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <style>
+{{template "base" .}}
+
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "page_title"}}On This Day in FidoNet History{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Nodes that joined FidoNet on {{.MonthName}} {{.Day}} in previous years</p>
+{{end}}
+
+{{define "extra_css"}}
+<style>
         .year-section {
             margin-bottom: 2rem;
         }
@@ -118,9 +122,9 @@
             color: var(--text-primary);
         }
         .btn-limit.active {
-            background: var(--primary);
+            background: var(--primary-color);
             color: white;
-            border-color: var(--primary);
+            border-color: var(--primary-color);
         }
         .filters {
             display: flex;
@@ -141,17 +145,9 @@
             color: #92400e;
         }
     </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>On This Day in FidoNet History</h1>
-            <p class="subtitle">Nodes that joined FidoNet on {{.MonthName}} {{.Day}} in previous years</p>
-        </header>
+{{end}}
 
-        {{template "nav" .}}
-
-        <div class="content">
+{{define "content"}}
             <div class="filters">
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                     <span style="color: var(--text-secondary);">Show:</span>
@@ -215,10 +211,8 @@
                     </p>
                 </div>
             {{end}}
-        </div>
+{{end}}
 
-        {{template "footer" .}}
-    </div>
-    <script src="/static/app.js"></script>
-</body>
-</html>
+{{define "footer_scripts"}}
+<script src="/static/app.js"></script>
+{{end}}

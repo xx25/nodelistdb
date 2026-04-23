@@ -1,21 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">Historical FidoNet nodelist files available for download</p>
-        </header>
-        
-        {{template "nav" .}}
-        
-        <div class="content">
+{{template "base" .}}
+
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "page_title"}}{{.Title}}{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Historical FidoNet nodelist files available for download</p>
+{{end}}
+
+{{define "content"}}
             {{if .Error}}
             <div class="alert alert-danger">
                 <strong>Error:</strong> {{.Error}}
@@ -171,9 +164,4 @@
                     curl -O {{.BaseURL}}/download/nodelist/2024/nodelist.365
                 </div>
             </div>
-        </div>
-        
-        {{template "footer" .}}
-    </div>
-</body>
-</html>
+{{end}}

@@ -1,8 +1,8 @@
 {{define "analytics_filters"}}
 <div class="search-container">
-    <form method="get" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem;">
+    <form method="get" class="filter-toolbar">
         <div class="form-group">
-            <label for="days">Period:</label>
+            <label for="days">Period</label>
             <select name="days" id="days" class="form-control">
                 <option value="7" {{if eq .Days 7}}selected{{end}}>Last 7 days</option>
                 <option value="30" {{if eq .Days 30}}selected{{end}}>Last 30 days</option>
@@ -13,7 +13,7 @@
         </div>
 
         <div class="form-group">
-            <label for="limit">Limit:</label>
+            <label for="limit">Limit</label>
             <select name="limit" id="limit" class="form-control">
                 <option value="50" {{if eq .Limit 50}}selected{{end}}>50</option>
                 <option value="100" {{if eq .Limit 100}}selected{{end}}>100</option>
@@ -23,12 +23,17 @@
             </select>
         </div>
 
-        <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
-            <input type="checkbox" name="includeZero" id="includeZero" value="true" {{if .IncludeZeroNodes}}checked{{end}}>
-            <label for="includeZero" style="margin: 0;">Include /0 nodes</label>
+        <div class="form-group form-group--checkbox">
+            <label class="checkbox-field checkbox-field--compact" for="includeZero">
+                <input type="checkbox" name="includeZero" id="includeZero" value="true" {{if .IncludeZeroNodes}}checked{{end}}>
+                <span>
+                    <strong>Include /0 nodes</strong>
+                    <small>Keep host-level records in the result set.</small>
+                </span>
+            </label>
         </div>
 
-        <button type="submit" class="btn btn-primary">Apply Filters</button>
+        <button type="submit" class="btn">Apply Filters</button>
     </form>
 </div>
 {{end}}

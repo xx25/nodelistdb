@@ -1,11 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <style>
+{{template "base" .}}
+
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "page_title"}}{{.Title}}{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">External resources related to FidoNet</p>
+{{end}}
+
+{{define "extra_css"}}
+<style>
         .links-category {
             margin-bottom: 2rem;
         }
@@ -13,7 +17,7 @@
             color: var(--text-primary);
             margin-bottom: 0.5rem;
             padding-bottom: 0.5rem;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid var(--border-color);
         }
         .links-category .category-description {
             color: var(--text-secondary);
@@ -25,10 +29,10 @@
             margin-bottom: 0.5rem;
             background: var(--card-bg);
             border-radius: 6px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--border-color);
         }
         .link-item:hover {
-            border-color: var(--primary);
+            border-color: var(--primary-color);
         }
         .link-item a {
             font-weight: 500;
@@ -55,17 +59,9 @@
             margin-bottom: 1rem;
         }
     </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>{{.Title}}</h1>
-            <p class="subtitle">External resources related to FidoNet</p>
-        </header>
+{{end}}
 
-        {{template "nav" .}}
-
-        <div class="content">
+{{define "content"}}
             <div class="card">
                 {{if .Categories}}
                     {{range .Categories}}
@@ -93,9 +89,4 @@
                     </div>
                 {{end}}
             </div>
-        </div>
-
-        {{template "footer" .}}
-    </div>
-</body>
-</html>
+{{end}}

@@ -1,13 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weekly IPv6 News - NodelistDB</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/tooltip.js"></script>
-    <script src="/static/sortable-table.js"></script>
-    <style>
+{{template "base" .}}
+
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "page_title"}}{{.Title}}{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">IPv6 connectivity changes during the last 7 days</p>
+{{end}}
+
+{{define "extra_css"}}
+<style>
         .news-section {
             background: #f9f9f9;
             border-radius: 8px;
@@ -107,17 +109,14 @@
             border-top: 4px solid #17a2b8;
         }
     </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Weekly IPv6 News</h1>
-            <p class="subtitle">IPv6 connectivity changes during the last 7 days</p>
-        </header>
+{{end}}
 
-        {{template "nav" .}}
+{{define "head_scripts"}}
+<script src="/static/tooltip.js"></script>
+<script src="/static/sortable-table.js"></script>
+{{end}}
 
-        <div class="content">
+{{define "content"}}
             <div class="search-container">
                 <form method="get" action="/analytics/ipv6-weekly-news" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 2rem;">
                     <div class="form-group">
@@ -419,9 +418,4 @@
                     <li><strong>Location:</strong> The "Location" column shows the geographic location determined from the node's IP address (via GeoIP lookup), not the location specified in the nodelist. This represents the actual physical location where the node's server is hosted.</li>
                 </ul>
             </div>
-        </div>
-    </div>
-
-    {{template "footer" .}}
-</body>
-</html>
+{{end}}

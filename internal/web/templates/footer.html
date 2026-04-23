@@ -1,5 +1,14 @@
 {{define "footer"}}
-<footer style="text-align: center; padding: 2rem; border-top: 1px solid var(--border-color); margin-top: 3rem; color: var(--text-secondary); font-size: 0.9rem;">
-    NodelistDB v{{.Version}} | <a href="https://github.com/xx25/nodelistdb" style="color: var(--text-secondary);">GitHub</a>
+<footer class="site-footer">
+    <div class="site-footer__inner">
+        <div>
+            <p class="site-footer__title">NodelistDB</p>
+            <p class="site-footer__meta">Historical FidoNet archive, analytics, and operational tooling.</p>
+        </div>
+        <div class="site-footer__links">
+            <span>v{{.Version}}</span>
+            <a href="https://github.com/xx25/nodelistdb">GitHub</a>
+        </div>
+    </div>
 </footer>
 {{end}}

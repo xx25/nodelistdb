@@ -12,19 +12,20 @@
 </head>
 <body>
     <div class="container">
-        <header>
+        <header class="page-header">
+            <p class="page-kicker">NodelistDB</p>
             <h1>{{block "page_title" .}}NodelistDB{{end}}</h1>
             {{block "page_subtitle" .}}{{end}}
         </header>
 
         {{template "nav" .}}
 
-        <div class="content">
+        <main class="content">
             {{block "content" .}}{{end}}
-        </div>
-    </div>
+        </main>
 
-    {{template "footer" .}}
+        {{template "footer" .}}
+    </div>
     {{block "footer_scripts" .}}{{end}}
 </body>
 </html>
