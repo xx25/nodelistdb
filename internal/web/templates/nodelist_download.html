@@ -100,8 +100,6 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
                     <th data-sortable data-type="date" data-default-sort="desc">Date</th>
                     <th data-sortable data-type="number">Year</th>
                     <th data-sortable data-type="number">Day</th>
-                    <th data-sortable data-type="number">Stored Size</th>
-                    <th data-sortable data-type="string">Source</th>
                     <th>Action</th>
                 </tr>
             </thead>
@@ -117,14 +115,6 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
                     <td data-value="{{.Date.Unix}}">{{.Date.Format "2006-01-02"}}</td>
                     <td data-value="{{.Year}}">{{.Year}}</td>
                     <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
-                    <td data-value="{{.Size}}">{{formatFileSize .Size}}</td>
-                    <td data-value="{{if .IsCompressed}}gzip{{else}}plain{{end}}">
-                        {{if .IsCompressed}}
-                        <span class="badge badge-secondary">Gzip Source</span>
-                        {{else}}
-                        <span class="badge badge-info">Plain File</span>
-                        {{end}}
-                    </td>
                     <td class="downloads-table-actions">
                         <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
                     </td>
@@ -138,23 +128,59 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
 <section class="card">
     <div class="results-header">
         <div>
-            <p class="section-tag">Browse by year</p>
-            <h2>{{.SelectedYear}} archive</h2>
-            <p class="muted">Pick a year, then sort that year’s daily nodelists by file name, date, day number, or stored size.</p>
+            <p class="section-tag">Archive years</p>
+            <h2>Open a year directly</h2>
+            <p class="muted">Each year shows its newest and oldest file, plus quick links for browsing or downloading the full archive.</p>
+        </div>
+    </div>
+
+    <div class="downloads-year-grid" aria-label="Available years">
+        {{range .Years}}
+        <article class="archive-year-card{{if eq $.SelectedYear .Year}} is-active{{end}}">
+            <div class="archive-year-head">
+                <div>
+                    <p class="section-tag">Year</p>
+                    <h3>{{.Year}}</h3>
+                </div>
+                <span class="badge badge-info">{{.Count}} files</span>
+            </div>
+
+            <dl class="detail-grid archive-year-meta">
+                <dt>Newest</dt>
+                <dd>{{.NewestFile.Name}} on {{.NewestFile.Date.Format "2006-01-02"}}</dd>
+                <dt>Oldest</dt>
+                <dd>{{.OldestFile.Name}} on {{.OldestFile.Date.Format "2006-01-02"}}</dd>
+            </dl>
+
+            <div class="button-row">
+                <a href="/nodelists?year={{.Year}}#year-files" class="btn btn-secondary btn-sm">{{if eq $.SelectedYear .Year}}Viewing files{{else}}Browse files{{end}}</a>
+                <a href="/download/year/{{.Year}}.tar.gz" class="btn btn-secondary btn-sm">tar.gz</a>
+            </div>
+
+            <ul class="archive-preview-list">
+                {{range .PreviewFiles}}
+                <li>
+                    <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="download-file-link">{{.Name}}</a>
+                    <span class="download-file-note">{{.Date.Format "2006-01-02"}}</span>
+                </li>
+                {{end}}
+            </ul>
+        </article>
+        {{end}}
+    </div>
+</section>
+
+<section class="card" id="year-files">
+    <div class="results-header">
+        <div>
+            <p class="section-tag">Year file list</p>
+            <h2>{{.SelectedYear}}</h2>
+            <p class="muted">Daily nodelists for {{.SelectedYear}}, newest first.</p>
         </div>
         <div class="downloads-year-actions">
             <span class="badge badge-info">{{.SelectedYearData.Count}} files</span>
             <a href="/download/year/{{.SelectedYear}}.tar.gz" class="btn btn-secondary btn-sm">Download {{.SelectedYear}} as tar.gz</a>
         </div>
-    </div>
-
-    <div class="downloads-year-filter" aria-label="Available years">
-        {{range .Years}}
-        <a href="/nodelists?year={{.Year}}" class="pill-link{{if eq $.SelectedYear .Year}} is-active{{end}}">
-            {{.Year}}
-            <span class="downloads-pill-count">{{.Count}}</span>
-        </a>
-        {{end}}
     </div>
 
     <div class="table-container">
@@ -164,8 +190,6 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
                     <th data-sortable data-type="string">File</th>
                     <th data-sortable data-type="date" data-default-sort="desc">Date</th>
                     <th data-sortable data-type="number">Day</th>
-                    <th data-sortable data-type="number">Stored Size</th>
-                    <th data-sortable data-type="string">Source</th>
                     <th>Action</th>
                 </tr>
             </thead>
@@ -180,14 +204,6 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
                     </td>
                     <td data-value="{{.Date.Unix}}">{{.Date.Format "2006-01-02"}}</td>
                     <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
-                    <td data-value="{{.Size}}">{{formatFileSize .Size}}</td>
-                    <td data-value="{{if .IsCompressed}}gzip{{else}}plain{{end}}">
-                        {{if .IsCompressed}}
-                        <span class="badge badge-secondary">Gzip Source</span>
-                        {{else}}
-                        <span class="badge badge-info">Plain File</span>
-                        {{end}}
-                    </td>
                     <td class="downloads-table-actions">
                         <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
                     </td>

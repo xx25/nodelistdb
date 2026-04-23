@@ -2204,17 +2204,59 @@ code {
     flex-wrap: wrap;
 }
 
-.downloads-year-filter {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem;
-    margin: 0 0 1.35rem;
+.downloads-year-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
 }
 
-.downloads-year-filter .pill-link.is-active {
-    background: #10232b;
-    color: #f8fafc;
-    border-color: #10232b;
+.archive-year-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1.2rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 22px;
+    background: #fbfdff;
+}
+
+.archive-year-card.is-active {
+    border-color: rgba(15, 118, 110, 0.35);
+    background: #f4faf9;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+}
+
+.archive-year-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.8rem;
+}
+
+.archive-year-head h3 {
+    margin: 0;
+    font-size: 1.65rem;
+    color: #0f172a;
+}
+
+.archive-year-meta {
+    margin: 0;
+}
+
+.archive-preview-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.7rem;
+}
+
+.archive-preview-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid #e8edf3;
 }
 
 .downloads-pill-count {

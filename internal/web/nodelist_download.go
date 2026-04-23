@@ -29,9 +29,12 @@ type NodelistFile struct {
 
 // NodelistYear represents a year's worth of nodelist files
 type NodelistYear struct {
-	Year  string
-	Files []NodelistFile
-	Count int
+	Year         string
+	Files        []NodelistFile
+	PreviewFiles []NodelistFile
+	NewestFile   NodelistFile
+	OldestFile   NodelistFile
+	Count        int
 }
 
 const recentNodelistLimit = 40
@@ -148,9 +151,12 @@ func scanNodelistDirectory() ([]NodelistYear, error) {
 			})
 
 			years = append(years, NodelistYear{
-				Year:  yearName,
-				Files: nodelistFiles,
-				Count: len(nodelistFiles),
+				Year:         yearName,
+				Files:        nodelistFiles,
+				PreviewFiles: append([]NodelistFile(nil), nodelistFiles[:min(3, len(nodelistFiles))]...),
+				NewestFile:   nodelistFiles[0],
+				OldestFile:   nodelistFiles[len(nodelistFiles)-1],
+				Count:        len(nodelistFiles),
 			})
 		}
 	}
