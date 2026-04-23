@@ -17,6 +17,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	var count int
 	var searchErr error
 	var sysopName string
+	isRootPage := r.URL.Path == "/"
 
 	// Only perform search on POST
 	if r.Method == "POST" {
@@ -44,6 +45,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		Count      int
 		Error      error
 		SysopName  string
+		IsRootPage bool
 		Version    string
 	}{
 		Title:      "Search",
@@ -52,7 +54,12 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		Count:      count,
 		Error:      searchErr,
 		SysopName:  sysopName,
+		IsRootPage: isRootPage,
 		Version:    version.GetVersionInfo(),
+	}
+
+	if isRootPage {
+		data.Title = "NodelistDB"
 	}
 
 	if err := s.templates["search"].Execute(w, data); err != nil {

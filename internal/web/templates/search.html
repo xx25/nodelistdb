@@ -1,20 +1,30 @@
 {{template "base" .}}
 
-{{define "title"}}Search{{end}}
+{{define "title"}}{{.Title}}{{end}}
 
 {{define "page_title"}}{{.Title}}{{end}}
 
 {{define "page_subtitle"}}
+{{if .IsRootPage}}
+<p class="subtitle">Archive and search FidoNet nodelists, node history, reachability results, analytics, and downloads.</p>
+{{else}}
 <p class="subtitle">Find FidoNet nodes by address, system name, location, or SysOp.</p>
+{{end}}
 {{end}}
 
 {{define "content"}}
 <section class="search-layout">
     <div class="card search-card">
         <div class="section-heading">
+            {{if .IsRootPage}}
+            <p class="section-tag">Start here</p>
+            <h2>Search the FidoNet archive</h2>
+            <p class="muted">Look up nodes and SysOps, then move into history, reachability, analytics, and downloadable nodelists.</p>
+            {{else}}
             <p class="section-tag">Targeted lookup</p>
             <h2>Search by address or descriptive fields</h2>
             <p class="muted">Use a full address when you know it. Otherwise combine zone, location, system name, or SysOp to search the archive more broadly.</p>
+            {{end}}
         </div>
 
         <form method="post" class="search-form search-form--wide">
