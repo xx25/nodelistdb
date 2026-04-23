@@ -34,6 +34,8 @@ type NodelistYear struct {
 	Count int
 }
 
+const recentNodelistLimit = 40
+
 // getNodelistPath returns the base path for nodelist files
 func getNodelistPath() string {
 	// Check if NODELIST_PATH environment variable is set
@@ -180,6 +182,44 @@ func findLatestNodelist() (*NodelistFile, error) {
 	return nil, fmt.Errorf("no nodelist files found")
 }
 
+func flattenNodelistFiles(years []NodelistYear) []NodelistFile {
+	total := 0
+	for _, year := range years {
+		total += len(year.Files)
+	}
+
+	files := make([]NodelistFile, 0, total)
+	for _, year := range years {
+		files = append(files, year.Files...)
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].Date.Equal(files[j].Date) {
+			return files[i].DayNumber > files[j].DayNumber
+		}
+		return files[i].Date.After(files[j].Date)
+	})
+
+	return files
+}
+
+func totalNodelistFiles(years []NodelistYear) int {
+	total := 0
+	for _, year := range years {
+		total += year.Count
+	}
+	return total
+}
+
+func selectNodelistYear(years []NodelistYear, selectedYear string) (NodelistYear, bool) {
+	for _, year := range years {
+		if year.Year == selectedYear {
+			return year, true
+		}
+	}
+	return NodelistYear{}, false
+}
+
 // NodelistHandler shows the nodelist download page
 func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	years, err := scanNodelistDirectory()
@@ -189,29 +229,63 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	}
+	host := r.Host
+	if host == "" {
+		host = "localhost:8080"
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, host)
+
+	selectedYear := r.URL.Query().Get("year")
+	selectedYearData := NodelistYear{}
+	allFiles := flattenNodelistFiles(years)
+	recentFiles := allFiles
+	if len(recentFiles) > recentNodelistLimit {
+		recentFiles = recentFiles[:recentNodelistLimit]
+	}
+
+	if len(years) > 0 {
+		if selectedYear == "" {
+			selectedYear = years[0].Year
+		}
+		if yearData, ok := selectNodelistYear(years, selectedYear); ok {
+			selectedYearData = yearData
+		} else {
+			selectedYear = years[0].Year
+			selectedYearData = years[0]
+		}
+	}
 
 	data := struct {
-		Title      string
-		ActivePage string
-		Years      []NodelistYear
-		Error      error
-		Latest     *NodelistFile
-		BaseURL    string
-		Version    string
+		Title            string
+		ActivePage       string
+		Years            []NodelistYear
+		RecentFiles      []NodelistFile
+		SelectedYear     string
+		SelectedYearData NodelistYear
+		TotalFiles       int
+		Error            error
+		Latest           *NodelistFile
+		BaseURL          string
+		Version          string
 	}{
-		Title:      "Download Nodelists",
-		ActivePage: "nodelists",
-		Years:      years,
-		Error:      err,
-		BaseURL:    baseURL,
-		Version:    version.GetVersionInfo(),
+		Title:            "Downloads",
+		ActivePage:       "nodelists",
+		Years:            years,
+		RecentFiles:      recentFiles,
+		SelectedYear:     selectedYear,
+		SelectedYearData: selectedYearData,
+		TotalFiles:       totalNodelistFiles(years),
+		Error:            err,
+		BaseURL:          baseURL,
+		Version:          version.GetVersionInfo(),
 	}
 
 	// Find latest nodelist
 	if err == nil && len(years) > 0 {
-		latest, _ := findLatestNodelist()
-		data.Latest = latest
+		data.Latest = &years[0].Files[0]
 	}
 
 	if err := s.templates["nodelist_download"].Execute(w, data); err != nil {

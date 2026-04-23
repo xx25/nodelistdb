@@ -2123,6 +2123,105 @@ code {
     background: rgba(255, 255, 255, 1);
 }
 
+.downloads-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.downloads-overview .card {
+    margin-bottom: 0;
+}
+
+.downloads-feature-card,
+.downloads-utility-card {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+}
+
+.downloads-meta-grid {
+    margin: 0;
+}
+
+.downloads-utility-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.downloads-utility-list li {
+    display: grid;
+    gap: 0.45rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid #e8edf3;
+}
+
+.downloads-utility-list li:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.downloads-utility-list strong {
+    color: #10232b;
+}
+
+.downloads-utility-list p {
+    margin: 0.2rem 0 0;
+}
+
+.downloads-utility-list code {
+    width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.downloads-table .download-file {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.download-file-link {
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+    font-weight: 700;
+}
+
+.download-file-note {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.downloads-table-actions {
+    white-space: nowrap;
+}
+
+.downloads-year-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.downloads-year-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin: 0 0 1.35rem;
+}
+
+.downloads-year-filter .pill-link.is-active {
+    background: #10232b;
+    color: #f8fafc;
+    border-color: #10232b;
+}
+
+.downloads-pill-count {
+    font-size: 0.84em;
+    opacity: 0.75;
+}
+
 .search-container {
     margin-bottom: 1.1rem;
 }
@@ -2201,6 +2300,7 @@ code {
 
 @media (max-width: 1080px) {
     .hero-grid,
+    .downloads-overview,
     .search-layout,
     .dual-panel-grid,
     .feature-grid,

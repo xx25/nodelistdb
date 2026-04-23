@@ -5,163 +5,201 @@
 {{define "page_title"}}{{.Title}}{{end}}
 
 {{define "page_subtitle"}}
-<p class="subtitle">Historical FidoNet nodelist files available for download</p>
+<p class="subtitle">Direct downloads, recent files, and year archives for the FidoNet nodelist collection.</p>
 {{end}}
 
 {{define "content"}}
-            {{if .Error}}
-            <div class="alert alert-danger">
-                <strong>Error:</strong> {{.Error}}
-            </div>
-            {{end}}
-            
-            {{if .Latest}}
-            <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📥 Latest Nodelist</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Download the most recent nodelist file from our collection.
-                </p>
-                
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                        <div>
-                            <strong style="color: var(--text-primary); font-size: 1.1rem;">{{.Latest.Name}}</strong><br>
-                            <span style="color: var(--text-secondary);">
-                                Date: {{.Latest.Date.Format "January 2, 2006"}} (Day {{.Latest.DayNumber}})
-                            </span>
+{{if .Error}}
+<div class="alert alert-error">
+    <strong>Error:</strong> {{.Error}}
+</div>
+{{else if not .Years}}
+<div class="alert alert-warning">
+    No nodelist files were found in the configured archive directory.
+</div>
+{{else}}
+<section class="downloads-overview">
+    {{if .Latest}}
+    <article class="card downloads-feature-card">
+        <div class="section-heading">
+            <p class="section-tag">Latest download</p>
+            <h2>{{.Latest.Name}}</h2>
+            <p class="muted">Start here for the newest archived nodelist, then move into recent files or a specific year.</p>
+        </div>
+
+        <dl class="detail-grid downloads-meta-grid">
+            <dt>Date</dt>
+            <dd>{{.Latest.Date.Format "2006-01-02"}} (day {{.Latest.DayNumber}})</dd>
+            <dt>Year</dt>
+            <dd>{{.Latest.Year}}</dd>
+            <dt>Stored size</dt>
+            <dd>{{formatFileSize .Latest.Size}}</dd>
+            <dt>Archive</dt>
+            <dd>{{.TotalFiles}} files across {{len .Years}} years</dd>
+        </dl>
+
+        <div class="button-row">
+            <a href="/download/latest" class="btn">Download Latest</a>
+            <a href="/download/year/{{.Latest.Year}}.tar.gz" class="btn btn-secondary">Archive {{.Latest.Year}}</a>
+            <a href="/download/urls.txt" class="btn btn-secondary">URL List</a>
+        </div>
+    </article>
+    {{end}}
+
+    <aside class="card downloads-utility-card">
+        <div class="section-heading">
+            <p class="section-tag">Automation</p>
+            <h2>Mirror or script downloads</h2>
+            <p class="muted">Use the stable endpoints below when you want bulk syncs or command-line access instead of browsing tables.</p>
+        </div>
+
+        <ul class="downloads-utility-list">
+            <li>
+                <div>
+                    <strong>Latest URL</strong>
+                    <p class="muted">Stable endpoint for the newest nodelist.</p>
+                </div>
+                <code>{{.BaseURL}}/download/latest</code>
+            </li>
+            <li>
+                <div>
+                    <strong>Direct file pattern</strong>
+                    <p class="muted">Download a specific file by year and name.</p>
+                </div>
+                <code>{{.BaseURL}}/download/nodelist/{year}/{filename}</code>
+            </li>
+            <li>
+                <div>
+                    <strong>Bulk list</strong>
+                    <p class="muted">Machine-friendly URL inventory for `wget -i`.</p>
+                </div>
+                <code>{{.BaseURL}}/download/urls.txt</code>
+            </li>
+        </ul>
+
+        <pre class="command-block"><code>wget -nc -i {{.BaseURL}}/download/urls.txt
+curl -O {{.BaseURL}}/download/latest</code></pre>
+    </aside>
+</section>
+
+<section class="card">
+    <div class="results-header">
+        <div>
+            <p class="section-tag">Recent files</p>
+            <h2>Newest nodelists across the archive</h2>
+            <p class="muted">Fast access to the latest files without opening year-by-year panels.</p>
+        </div>
+        <span class="badge badge-info">{{len .RecentFiles}} shown</span>
+    </div>
+
+    <div class="table-container">
+        <table class="sortable-table downloads-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="string">File</th>
+                    <th data-sortable data-type="date" data-default-sort="desc">Date</th>
+                    <th data-sortable data-type="number">Year</th>
+                    <th data-sortable data-type="number">Day</th>
+                    <th data-sortable data-type="number">Stored Size</th>
+                    <th data-sortable data-type="string">Source</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .RecentFiles}}
+                <tr>
+                    <td data-value="{{.Name}}">
+                        <div class="download-file">
+                            <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="download-file-link">{{.Name}}</a>
+                            <span class="download-file-note">{{.Year}} archive</span>
                         </div>
-                        <div>
-                            <a href="/download/latest" class="btn" style="text-decoration: none;">
-                                📥 Download Latest
-                            </a>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="alert alert-success" style="margin-top: 1.5rem;">
-                    <strong>Direct Download URL:</strong> <code>{{.BaseURL}}/download/latest</code><br>
-                    <strong>Browse all nodelists:</strong> <code>{{.BaseURL}}/nodelists</code>
-                </div>
-            </div>
-            {{end}}
-            
-            <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📁 Browse by Year</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Select a year to view available nodelist files.
-                </p>
-                
-                {{if not .Years}}
-                <div class="alert alert-danger">
-                    No nodelist files found in the configured directory.
-                </div>
-                {{else}}
-                <div style="display: grid; gap: 1rem;">
-                    {{range .Years}}
-                    <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border: 1px solid #e2e8f0;">
-                        <h3 style="color: var(--text-primary); margin-bottom: 1rem;">📅 {{.Year}}</h3>
-                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                            {{.Count}} nodelist{{if ne .Count 1}}s{{end}} available
-                        </p>
-                        
-                        <details>
-                            <summary style="cursor: pointer; color: var(--primary-color); font-weight: 600; margin-bottom: 1rem;">
-                                View Files
-                            </summary>
-                            
-                            <div style="max-height: 300px; overflow-y: auto; margin-top: 1rem;">
-                                <table style="width: 100%; border-collapse: collapse;">
-                                    <thead>
-                                        <tr style="border-bottom: 2px solid #e2e8f0;">
-                                            <th style="text-align: left; padding: 0.5rem; color: var(--text-primary);">File</th>
-                                            <th style="text-align: left; padding: 0.5rem; color: var(--text-primary);">Date</th>
-                                            <th style="text-align: left; padding: 0.5rem; color: var(--text-primary);">Day</th>
-                                            <th style="text-align: center; padding: 0.5rem; color: var(--text-primary);">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {{range .Files}}
-                                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                                            <td style="padding: 0.5rem; font-family: monospace;">
-                                                {{.Name}}
-                                            </td>
-                                            <td style="padding: 0.5rem; color: var(--text-secondary);">
-                                                {{.Date.Format "Jan 02"}}
-                                            </td>
-                                            <td style="padding: 0.5rem; color: var(--text-secondary);">
-                                                {{.DayNumber}}
-                                            </td>
-                                            <td style="padding: 0.5rem; text-align: center;">
-                                                <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="btn btn-sm" style="text-decoration: none; padding: 0.25rem 0.5rem; font-size: 0.875rem;">
-                                                    📥 Download
-                                                </a>
-                                            </td>
-                                        </tr>
-                                        {{end}}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </details>
-                    </div>
-                    {{end}}
-                </div>
+                    </td>
+                    <td data-value="{{.Date.Unix}}">{{.Date.Format "2006-01-02"}}</td>
+                    <td data-value="{{.Year}}">{{.Year}}</td>
+                    <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
+                    <td data-value="{{.Size}}">{{formatFileSize .Size}}</td>
+                    <td data-value="{{if .IsCompressed}}gzip{{else}}plain{{end}}">
+                        {{if .IsCompressed}}
+                        <span class="badge badge-secondary">Gzip Source</span>
+                        {{else}}
+                        <span class="badge badge-info">Plain File</span>
+                        {{end}}
+                    </td>
+                    <td class="downloads-table-actions">
+                        <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
+                    </td>
+                </tr>
                 {{end}}
-            </div>
-            
-            <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📦 Bulk Download Options</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Download multiple nodelists at once for archival or mirroring purposes.
-                </p>
-                
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <h3>📋</h3>
-                        <p style="color: var(--text-primary); font-size: 1rem; margin-top: 1rem;">
-                            <a href="/download/urls.txt" class="btn" style="text-decoration: none; display: inline-block; margin-top: 0.5rem;">URL List</a>
-                        </p>
-                        <small style="color: var(--text-secondary);">Text file with all download URLs for use with wget -i</small>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <h3>📅</h3>
-                        <p style="color: var(--text-primary); font-size: 1rem; margin-top: 1rem;">
-                            Download by Year
-                        </p>
-                        <small style="color: var(--text-secondary);">Get all nodelists from a specific year as tar.gz archive</small>
-                        <div style="margin-top: 1rem;">
-                            {{range .Years}}
-                            <a href="/download/year/{{.Year}}.tar.gz" class="btn btn-sm" style="text-decoration: none; margin: 0.25rem;">{{.Year}}</a>
-                            {{end}}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card">
+    <div class="results-header">
+        <div>
+            <p class="section-tag">Browse by year</p>
+            <h2>{{.SelectedYear}} archive</h2>
+            <p class="muted">Pick a year, then sort that year’s daily nodelists by file name, date, day number, or stored size.</p>
+        </div>
+        <div class="downloads-year-actions">
+            <span class="badge badge-info">{{.SelectedYearData.Count}} files</span>
+            <a href="/download/year/{{.SelectedYear}}.tar.gz" class="btn btn-secondary btn-sm">Download {{.SelectedYear}} as tar.gz</a>
+        </div>
+    </div>
+
+    <div class="downloads-year-filter" aria-label="Available years">
+        {{range .Years}}
+        <a href="/nodelists?year={{.Year}}" class="pill-link{{if eq $.SelectedYear .Year}} is-active{{end}}">
+            {{.Year}}
+            <span class="downloads-pill-count">{{.Count}}</span>
+        </a>
+        {{end}}
+    </div>
+
+    <div class="table-container">
+        <table class="sortable-table downloads-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="string">File</th>
+                    <th data-sortable data-type="date" data-default-sort="desc">Date</th>
+                    <th data-sortable data-type="number">Day</th>
+                    <th data-sortable data-type="number">Stored Size</th>
+                    <th data-sortable data-type="string">Source</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .SelectedYearData.Files}}
+                <tr>
+                    <td data-value="{{.Name}}">
+                        <div class="download-file">
+                            <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="download-file-link">{{.Name}}</a>
+                            <span class="download-file-note">Direct daily download</span>
                         </div>
-                    </div>
-                </div>
-                
-                <div class="alert alert-success" style="margin-top: 1.5rem;">
-                    <strong>💡 Pro Tip:</strong> Use <code>wget -i nodelist-urls.txt</code> to download all files, or <code>wget -nc -i nodelist-urls.txt</code> to skip existing files.
-                </div>
-            </div>
-            
-            <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">💡 Usage Information</h2>
-                
-                <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">Direct Downloads</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    All nodelist files can be downloaded directly using the URL pattern:
-                </p>
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1.5rem; font-family: monospace;">
-                    /download/nodelist/{year}/{filename}
-                </div>
-                
-                <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">Command Line Examples</h3>
-                <div style="background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: var(--radius); font-family: monospace;">
-                    # Download latest nodelist<br>
-                    wget {{.BaseURL}}/download/latest<br>
-                    curl -O {{.BaseURL}}/download/latest<br><br>
-                    
-                    # Download specific nodelist<br>
-                    wget {{.BaseURL}}/download/nodelist/2024/nodelist.365<br>
-                    curl -O {{.BaseURL}}/download/nodelist/2024/nodelist.365
-                </div>
-            </div>
+                    </td>
+                    <td data-value="{{.Date.Unix}}">{{.Date.Format "2006-01-02"}}</td>
+                    <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
+                    <td data-value="{{.Size}}">{{formatFileSize .Size}}</td>
+                    <td data-value="{{if .IsCompressed}}gzip{{else}}plain{{end}}">
+                        {{if .IsCompressed}}
+                        <span class="badge badge-secondary">Gzip Source</span>
+                        {{else}}
+                        <span class="badge badge-info">Plain File</span>
+                        {{end}}
+                    </td>
+                    <td class="downloads-table-actions">
+                        <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</section>
+{{end}}
+{{end}}
+
+{{define "footer_scripts"}}
+<script src="/static/sortable-table.js"></script>
 {{end}}
