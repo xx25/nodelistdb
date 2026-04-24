@@ -244,49 +244,31 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	baseURL := fmt.Sprintf("%s://%s", scheme, host)
 
-	selectedYear := r.URL.Query().Get("year")
-	selectedYearData := NodelistYear{}
 	allFiles := flattenNodelistFiles(years)
 	recentFiles := allFiles
 	if len(recentFiles) > recentNodelistLimit {
 		recentFiles = recentFiles[:recentNodelistLimit]
 	}
 
-	if len(years) > 0 {
-		if selectedYear == "" {
-			selectedYear = years[0].Year
-		}
-		if yearData, ok := selectNodelistYear(years, selectedYear); ok {
-			selectedYearData = yearData
-		} else {
-			selectedYear = years[0].Year
-			selectedYearData = years[0]
-		}
-	}
-
 	data := struct {
-		Title            string
-		ActivePage       string
-		Years            []NodelistYear
-		RecentFiles      []NodelistFile
-		SelectedYear     string
-		SelectedYearData NodelistYear
-		TotalFiles       int
-		Error            error
-		Latest           *NodelistFile
-		BaseURL          string
-		Version          string
+		Title       string
+		ActivePage  string
+		Years       []NodelistYear
+		RecentFiles []NodelistFile
+		TotalFiles  int
+		Error       error
+		Latest      *NodelistFile
+		BaseURL     string
+		Version     string
 	}{
-		Title:            "Downloads",
-		ActivePage:       "nodelists",
-		Years:            years,
-		RecentFiles:      recentFiles,
-		SelectedYear:     selectedYear,
-		SelectedYearData: selectedYearData,
-		TotalFiles:       totalNodelistFiles(years),
-		Error:            err,
-		BaseURL:          baseURL,
-		Version:          version.GetVersionInfo(),
+		Title:       "Downloads",
+		ActivePage:  "nodelists",
+		Years:       years,
+		RecentFiles: recentFiles,
+		TotalFiles:  totalNodelistFiles(years),
+		Error:       err,
+		BaseURL:     baseURL,
+		Version:     version.GetVersionInfo(),
 	}
 
 	// Find latest nodelist
@@ -295,6 +277,47 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.templates["nodelist_download"].Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// NodelistYearHandler shows all nodelist files for a specific year.
+func (s *Server) NodelistYearHandler(w http.ResponseWriter, r *http.Request) {
+	year := strings.TrimPrefix(r.URL.Path, "/nodelists/")
+	if year == "" || len(year) != 4 {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := strconv.Atoi(year); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	years, err := scanNodelistDirectory()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	yearData, ok := selectNodelistYear(years, year)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	data := struct {
+		Title    string
+		ActivePage string
+		Year     NodelistYear
+		Version  string
+	}{
+		Title:    "Nodelists — " + year,
+		ActivePage: "nodelists",
+		Year:     yearData,
+		Version:  version.GetVersionInfo(),
+	}
+
+	if err := s.templates["nodelist_year"].Execute(w, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

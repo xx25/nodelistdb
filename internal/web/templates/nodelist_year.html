@@ -1,0 +1,59 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "page_title"}}{{.Year.Year}} nodelist archive{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">{{.Year.Count}} daily nodelists from {{.Year.OldestFile.Date.Format "2006-01-02"}} to {{.Year.NewestFile.Date.Format "2006-01-02"}}.</p>
+{{end}}
+
+{{define "content"}}
+<section class="card">
+    <div class="results-header">
+        <div>
+            <p class="section-tag">{{.Year.Year}}</p>
+            <h2>Daily files</h2>
+            <p class="muted">Sorted newest first. Click any column header to re-sort.</p>
+        </div>
+        <div class="button-row">
+            <span class="badge badge-info">{{.Year.Count}} files</span>
+            <a href="/download/year/{{.Year.Year}}.tar.gz" class="btn btn-secondary btn-sm">Download year archive</a>
+            <a href="/nodelists" class="btn btn-secondary btn-sm">← All years</a>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table class="sortable-table downloads-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="string">File</th>
+                    <th data-sortable data-type="date" data-default-sort="desc">Date</th>
+                    <th data-sortable data-type="number">Day</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Year.Files}}
+                <tr>
+                    <td data-value="{{.Name}}">
+                        <div class="download-file">
+                            <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="download-file-link">{{.Name}}</a>
+                        </div>
+                    </td>
+                    <td data-value="{{.Date.Unix}}">{{.Date.Format "2006-01-02"}}</td>
+                    <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
+                    <td class="downloads-table-actions">
+                        <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</section>
+{{end}}
+
+{{define "footer_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}

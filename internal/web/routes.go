@@ -8,6 +8,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/search", s.SearchHandler)
 	mux.HandleFunc("/stats", s.StatsHandler)
 	mux.HandleFunc("/nodelists", s.NodelistHandler)
+	mux.HandleFunc("/nodelists/", s.NodelistYearHandler)
 	mux.HandleFunc("/download/nodelist/", s.NodelistDownloadHandler)
 	mux.HandleFunc("/download/latest", s.LatestNodelistHandler)
 	mux.HandleFunc("/download/year/", s.YearArchiveHandler)

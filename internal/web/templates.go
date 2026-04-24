@@ -18,7 +18,7 @@ import (
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
-	templates := []string{"search", "stats", "node_history", "api_help", "nodelist_download", "analytics", "reachability", "test_detail", "modem_test_detail", "ipv6_analytics_generic", "ipv6_weekly_news", "ipv6_node_list", "unified_analytics", "software_analytics", "geo_analytics", "geo_unified", "pioneers", "on_this_day", "links", "pstn_analytics", "pstn_accessible_analytics", "pstn_no_answer_analytics", "filerequest_analytics", "aka_mismatch_analytics", "other_networks_analytics", "other_network_nodes", "domain_expiration"}
+	templates := []string{"search", "stats", "node_history", "api_help", "nodelist_download", "nodelist_year", "analytics", "reachability", "test_detail", "modem_test_detail", "ipv6_analytics_generic", "ipv6_weekly_news", "ipv6_node_list", "unified_analytics", "software_analytics", "geo_analytics", "geo_unified", "pioneers", "on_this_day", "links", "pstn_analytics", "pstn_accessible_analytics", "pstn_no_answer_analytics", "filerequest_analytics", "aka_mismatch_analytics", "other_networks_analytics", "other_network_nodes", "domain_expiration"}
 
 	// Create function map for template functions
 	funcMap := template.FuncMap{

@@ -136,7 +136,7 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
 
     <div class="downloads-year-grid" aria-label="Available years">
         {{range .Years}}
-        <article class="archive-year-card{{if eq $.SelectedYear .Year}} is-active{{end}}">
+        <article class="archive-year-card">
             <div class="archive-year-head">
                 <div>
                     <p class="section-tag">Year</p>
@@ -153,7 +153,7 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
             </dl>
 
             <div class="button-row">
-                <a href="/nodelists?year={{.Year}}#year-files" class="btn btn-secondary btn-sm">{{if eq $.SelectedYear .Year}}Viewing files{{else}}Browse files{{end}}</a>
+                <a href="/nodelists/{{.Year}}" class="btn btn-secondary btn-sm">Browse files</a>
                 <a href="/download/year/{{.Year}}.tar.gz" class="btn btn-secondary btn-sm">Download year archive</a>
             </div>
 
@@ -167,50 +167,6 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
             </ul>
         </article>
         {{end}}
-    </div>
-</section>
-
-<section class="card" id="year-files">
-    <div class="results-header">
-        <div>
-            <p class="section-tag">Year file list</p>
-            <h2>{{.SelectedYear}}</h2>
-            <p class="muted">Daily nodelists for {{.SelectedYear}}, newest first.</p>
-        </div>
-        <div class="downloads-year-actions">
-            <span class="badge badge-info">{{.SelectedYearData.Count}} files</span>
-            <a href="/download/year/{{.SelectedYear}}.tar.gz" class="btn btn-secondary btn-sm">Download {{.SelectedYear}} as tar.gz</a>
-        </div>
-    </div>
-
-    <div class="table-container">
-        <table class="sortable-table downloads-table">
-            <thead>
-                <tr>
-                    <th data-sortable data-type="string">File</th>
-                    <th data-sortable data-type="date" data-default-sort="desc">Date</th>
-                    <th data-sortable data-type="number">Day</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .SelectedYearData.Files}}
-                <tr>
-                    <td data-value="{{.Name}}">
-                        <div class="download-file">
-                            <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="download-file-link">{{.Name}}</a>
-                            <span class="download-file-note">Direct daily download</span>
-                        </div>
-                    </td>
-                    <td data-value="{{.Date.Unix}}">{{.Date.Format "2006-01-02"}}</td>
-                    <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
-                    <td class="downloads-table-actions">
-                        <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
-                    </td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
     </div>
 </section>
 {{end}}
