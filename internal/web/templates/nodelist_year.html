@@ -5,7 +5,7 @@
 {{define "page_title"}}{{.Year.Year}} nodelist archive{{end}}
 
 {{define "page_subtitle"}}
-<p class="subtitle">{{.Year.Count}} daily nodelists from {{.Year.OldestFile.Date.Format "2006-01-02"}} to {{.Year.NewestFile.Date.Format "2006-01-02"}}.</p>
+<p class="subtitle">{{.Year.Count}} nodelists from {{.Year.OldestFile.Date.Format "2006-01-02"}} to {{.Year.NewestFile.Date.Format "2006-01-02"}}.</p>
 {{end}}
 
 {{define "content"}}
@@ -13,7 +13,7 @@
     <div class="results-header">
         <div>
             <p class="section-tag">{{.Year.Year}}</p>
-            <h2>Daily files</h2>
+            <h2>Nodelist files</h2>
             <p class="muted">Sorted newest first. Click any column header to re-sort.</p>
         </div>
         <div class="button-row">
@@ -29,7 +29,7 @@
                 <tr>
                     <th data-sortable data-type="string">File</th>
                     <th data-sortable data-type="date" data-default-sort="desc">Date</th>
-                    <th data-sortable data-type="number">Day</th>
+                    <th data-sortable data-type="number">Day #</th>
                     <th>Action</th>
                 </tr>
             </thead>
