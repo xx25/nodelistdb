@@ -176,15 +176,18 @@ func (qb *QueryBuilder) BrowseZonesSQL() string {
 // count and region-coordinator name/location. Nodes with no region are grouped
 // under region 0. Used by the hierarchy browser.
 func (qb *QueryBuilder) BrowseRegionsSQL() string {
+	// The select alias must not be named "region": ClickHouse's analyzer would
+	// resolve the column reference inside GROUP BY/ORDER BY to the alias instead
+	// of the real nodes.region column, raising NOT_AN_AGGREGATE.
 	return `
 	SELECT
-		ifNull(region, 0) as region,
+		ifNull(region, 0) as region_num,
 		COUNT(*) as node_count,
 		anyIf(system_name, node_type = 'Region') as region_name,
 		anyIf(location, node_type = 'Region') as region_location
 	FROM nodes
 	WHERE nodelist_date = ? AND zone = ?
-	GROUP BY ifNull(region, 0)
+	GROUP BY region
 	ORDER BY ifNull(region, 0)`
 }
 
