@@ -1,0 +1,212 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "page_title"}}Browse Nodelist{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Walk the FidoNet hierarchy &mdash; zones, regions, nets, and nodes &mdash; for a single nodelist.</p>
+{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+
+<div class="breadcrumb" style="margin-bottom: 1rem;">
+    {{if eq .Level "zones"}}
+        <strong>Zones</strong>
+    {{else}}
+        <a href="/browse{{.DateQuery}}">Zones</a> &raquo;
+        {{if eq .Level "regions"}}
+            <strong>Zone {{.Zone}}</strong>
+        {{else}}
+            <a href="/browse/zone/{{.Zone}}{{.DateQuery}}">Zone {{.Zone}}</a> &raquo;
+            {{if eq .Level "nets"}}
+                {{if .HasRegion}}<strong>Region {{.Region}}{{if .RegionName}} &mdash; {{replaceUnderscores .RegionName}}{{end}}</strong>
+                {{else}}<strong>Direct nets (no region)</strong>{{end}}
+            {{else}}
+                {{if .HasRegion}}<a href="/browse/region/{{.Zone}}/{{.Region}}{{.DateQuery}}">Region {{.Region}}</a> &raquo;
+                {{else}}<a href="/browse/region/{{.Zone}}/0{{.DateQuery}}">Direct nets</a> &raquo;{{end}}
+                <strong>Net {{.Zone}}:{{.Net}}{{if .NetName}} &mdash; {{replaceUnderscores .NetName}}{{end}}</strong>
+            {{end}}
+        {{end}}
+    {{end}}
+</div>
+
+{{if .AvailableDates}}
+<form method="get" class="search-form" style="margin-bottom: 1rem;">
+    <div class="form-group">
+        <label for="date">Nodelist date</label>
+        <select id="date" name="date" onchange="this.form.submit()">
+            {{$sel := .ActualDate}}
+            {{range .AvailableDates}}
+            <option value="{{.Format "2006-01-02"}}"{{if eq (.Format "2006-01-02") $sel}} selected{{end}}>{{.Format "2006-01-02"}}</option>
+            {{end}}
+        </select>
+        <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
+    </div>
+</form>
+{{end}}
+
+{{if .DateAdjusted}}
+<div class="alert alert-warning">
+    Requested date was not available. Showing nearest nodelist: <strong>{{.ActualDate}}</strong>
+</div>
+{{end}}
+
+{{if .Error}}
+<div class="alert alert-error">
+    <strong>Error:</strong> {{.Error}}
+</div>
+{{else}}
+
+{{/* ---------- ZONES ---------- */}}
+{{if eq .Level "zones"}}
+<section class="card">
+    <div class="stats-box">
+        <h3>{{len .Zones}} zone{{if ne (len .Zones) 1}}s{{end}} in the {{.ActualDate}} nodelist</h3>
+    </div>
+    {{if .Zones}}
+    <div class="table-responsive">
+        <table class="data-table sortable-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="number">Zone</th>
+                    <th data-sortable data-type="string">Coordinator</th>
+                    <th data-sortable data-type="number" data-default-sort="desc">Entries</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Zones}}
+                <tr>
+                    <td data-value="{{.Zone}}"><strong><a href="/browse/zone/{{.Zone}}{{$.DateQuery}}">Zone {{.Zone}}</a></strong></td>
+                    <td>{{if .Name}}{{replaceUnderscores .Name}}{{else}}<em>-</em>{{end}}</td>
+                    <td data-value="{{.NodeCount}}">{{.NodeCount}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="muted">No zones found for this nodelist date.</p>
+    {{end}}
+</section>
+{{end}}
+
+{{/* ---------- REGIONS ---------- */}}
+{{if eq .Level "regions"}}
+<section class="card">
+    <div class="stats-box">
+        <h3>{{len .Regions}} region group{{if ne (len .Regions) 1}}s{{end}} in Zone {{.Zone}}</h3>
+        <p class="muted">A region marked &ldquo;No region&rdquo; holds nets that the nodelist lists directly under the zone.</p>
+    </div>
+    {{if .Regions}}
+    <div class="table-responsive">
+        <table class="data-table sortable-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="number">Region</th>
+                    <th data-sortable data-type="string">Coordinator</th>
+                    <th data-sortable data-type="string">Location</th>
+                    <th data-sortable data-type="number" data-default-sort="desc">Entries</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Regions}}
+                <tr>
+                    <td data-value="{{.Region}}"><strong><a href="/browse/region/{{$.Zone}}/{{.Region}}{{$.DateQuery}}">{{if eq .Region 0}}No region{{else}}Region {{.Region}}{{end}}</a></strong></td>
+                    <td>{{if .Name}}{{replaceUnderscores .Name}}{{else}}<em>-</em>{{end}}</td>
+                    <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
+                    <td data-value="{{.NodeCount}}">{{.NodeCount}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="muted">No regions found in Zone {{.Zone}} for this nodelist date.</p>
+    {{end}}
+</section>
+{{end}}
+
+{{/* ---------- NETS ---------- */}}
+{{if eq .Level "nets"}}
+<section class="card">
+    <div class="stats-box">
+        <h3>{{len .Nets}} net{{if ne (len .Nets) 1}}s{{end}} in
+            {{if .HasRegion}}Zone {{.Zone}}, Region {{.Region}}{{else}}Zone {{.Zone}} (direct, no region){{end}}
+        </h3>
+    </div>
+    {{if .Nets}}
+    <div class="table-responsive">
+        <table class="data-table sortable-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="address">Net</th>
+                    <th data-sortable data-type="string">Host</th>
+                    <th data-sortable data-type="string">Location</th>
+                    <th data-sortable data-type="number" data-default-sort="desc">Entries</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Nets}}
+                <tr>
+                    <td data-value="{{$.Zone}}:{{.Net}}/0"><strong><a href="/browse/net/{{$.Zone}}/{{.Net}}{{$.DateQuery}}">{{$.Zone}}:{{.Net}}</a></strong></td>
+                    <td>{{if .Name}}{{replaceUnderscores .Name}}{{else}}<em>-</em>{{end}}</td>
+                    <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
+                    <td data-value="{{.NodeCount}}">{{.NodeCount}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="muted">No nets found here for this nodelist date.</p>
+    {{end}}
+</section>
+{{end}}
+
+{{/* ---------- NODES ---------- */}}
+{{if eq .Level "nodes"}}
+<section class="card">
+    <div class="stats-box">
+        <h3>{{len .Nodes}} entr{{if ne (len .Nodes) 1}}ies{{else}}y{{end}} in Net {{.Zone}}:{{.Net}} on {{.ActualDate}}</h3>
+    </div>
+    {{if .Nodes}}
+    <div class="table-responsive">
+        <table class="data-table sortable-table">
+            <thead>
+                <tr>
+                    <th data-sortable data-type="address">Address</th>
+                    <th data-sortable data-type="string">Type</th>
+                    <th data-sortable data-type="string">System Name</th>
+                    <th data-sortable data-type="string">Location</th>
+                    <th data-sortable data-type="string">SysOp</th>
+                    <th data-sortable data-type="string">Flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Nodes}}
+                <tr>
+                    <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}"><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
+                    <td>{{.NodeType}}</td>
+                    <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
+                    <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
+                    <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
+                    <td class="mono">{{if .Flags}}{{join .Flags " "}}{{else}}<em>-</em>{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="muted">No entries found in Net {{.Zone}}:{{.Net}} for this nodelist date.</p>
+    {{end}}
+</section>
+{{end}}
+
+{{end}}{{/* end if .Error */}}
+
+{{end}}

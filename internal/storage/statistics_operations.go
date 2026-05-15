@@ -602,3 +602,120 @@ type GrowthStats struct {
 	BinkpGrowthPercent    float64               `json:"binkp_growth_percent"`
 	InternetGrowthPercent float64               `json:"internet_growth_percent"`
 }
+
+// BrowseZone is one row of the hierarchy browser's zone listing.
+type BrowseZone struct {
+	Zone      int
+	NodeCount int
+	Name      string // zone-coordinator system name, if present
+}
+
+// BrowseRegion is one row of the hierarchy browser's region listing.
+// Region 0 represents nodes within the zone that have no region assigned.
+type BrowseRegion struct {
+	Region    int
+	NodeCount int
+	Name      string // region-coordinator system name, if present
+	Location  string // region-coordinator location, if present
+}
+
+// BrowseNet is one row of the hierarchy browser's net listing.
+type BrowseNet struct {
+	Net       int
+	NodeCount int
+	Name      string // host-coordinator system name, if present
+	Location  string // host-coordinator location, if present
+}
+
+// GetBrowseZones lists every zone present in the nodelist for the given date.
+func (so *StatisticsOperations) GetBrowseZones(date time.Time) ([]BrowseZone, error) {
+	so.mu.RLock()
+	defer so.mu.RUnlock()
+
+	conn := so.db.Conn()
+	rows, err := conn.Query(so.queryBuilder.BrowseZonesSQL(), date)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query browse zones: %w", err)
+	}
+	defer rows.Close()
+
+	var result []BrowseZone
+	for rows.Next() {
+		var z BrowseZone
+		if err := rows.Scan(&z.Zone, &z.NodeCount, &z.Name); err != nil {
+			return nil, fmt.Errorf("failed to scan browse zone: %w", err)
+		}
+		result = append(result, z)
+	}
+	return result, rows.Err()
+}
+
+// GetBrowseRegions lists every region within a zone for the given date.
+func (so *StatisticsOperations) GetBrowseRegions(date time.Time, zone int) ([]BrowseRegion, error) {
+	so.mu.RLock()
+	defer so.mu.RUnlock()
+
+	conn := so.db.Conn()
+	rows, err := conn.Query(so.queryBuilder.BrowseRegionsSQL(), date, zone)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query browse regions: %w", err)
+	}
+	defer rows.Close()
+
+	var result []BrowseRegion
+	for rows.Next() {
+		var r BrowseRegion
+		if err := rows.Scan(&r.Region, &r.NodeCount, &r.Name, &r.Location); err != nil {
+			return nil, fmt.Errorf("failed to scan browse region: %w", err)
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
+// GetBrowseNets lists every net within a zone+region for the given date.
+// Pass region 0 to list nets that have no region assigned.
+func (so *StatisticsOperations) GetBrowseNets(date time.Time, zone, region int) ([]BrowseNet, error) {
+	so.mu.RLock()
+	defer so.mu.RUnlock()
+
+	conn := so.db.Conn()
+	rows, err := conn.Query(so.queryBuilder.BrowseNetsSQL(), date, zone, region)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query browse nets: %w", err)
+	}
+	defer rows.Close()
+
+	var result []BrowseNet
+	for rows.Next() {
+		var n BrowseNet
+		if err := rows.Scan(&n.Net, &n.NodeCount, &n.Name, &n.Location); err != nil {
+			return nil, fmt.Errorf("failed to scan browse net: %w", err)
+		}
+		result = append(result, n)
+	}
+	return result, rows.Err()
+}
+
+// GetBrowseNodes lists every entry within a zone+net for a single nodelist date.
+func (so *StatisticsOperations) GetBrowseNodes(date time.Time, zone, net int) ([]database.Node, error) {
+	so.mu.RLock()
+	defer so.mu.RUnlock()
+
+	conn := so.db.Conn()
+	rows, err := conn.Query(so.queryBuilder.BrowseNodesSQL(), date, zone, net)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query browse nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var result []database.Node
+	for rows.Next() {
+		node, err := so.resultParser.ParseNodeRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse browse node row: %w", err)
+		}
+		result = append(result, node)
+	}
+	return result, rows.Err()
+}

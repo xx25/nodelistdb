@@ -9,6 +9,10 @@
             <span class="nav-label">Statistics</span>
             <span class="nav-meta">Current network view</span>
         </a>
+        <a href="/browse" {{if eq .ActivePage "browse"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
+            <span class="nav-label">Browse</span>
+            <span class="nav-meta">Zones, regions and nets</span>
+        </a>
         <a href="/analytics" {{if eq .ActivePage "analytics"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
             <span class="nav-label">Analytics</span>
             <span class="nav-meta">Protocol and trend reports</span>

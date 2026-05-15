@@ -194,6 +194,22 @@ func (s *Storage) GetNodeCountHistory() ([]NodeCountByDate, error) {
 	return s.statsOperations.GetNodeCountHistory()
 }
 
+func (s *Storage) GetBrowseZones(date time.Time) ([]BrowseZone, error) {
+	return s.statsOperations.GetBrowseZones(date)
+}
+
+func (s *Storage) GetBrowseRegions(date time.Time, zone int) ([]BrowseRegion, error) {
+	return s.statsOperations.GetBrowseRegions(date, zone)
+}
+
+func (s *Storage) GetBrowseNets(date time.Time, zone, region int) ([]BrowseNet, error) {
+	return s.statsOperations.GetBrowseNets(date, zone, region)
+}
+
+func (s *Storage) GetBrowseNodes(date time.Time, zone, net int) ([]database.Node, error) {
+	return s.statsOperations.GetBrowseNodes(date, zone, net)
+}
+
 // Test Operations delegated methods
 func (s *Storage) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
 	return s.testOperations.GetNodeTestHistory(zone, net, node, days)

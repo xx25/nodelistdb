@@ -316,6 +316,12 @@ type Operations interface {
 	GetNearestAvailableDate(requestedDate time.Time) (time.Time, error)
 	GetNodeCountHistory() ([]NodeCountByDate, error)
 
+	// Hierarchy browser operations (delegated to StatsOps())
+	GetBrowseZones(date time.Time) ([]BrowseZone, error)
+	GetBrowseRegions(date time.Time, zone int) ([]BrowseRegion, error)
+	GetBrowseNets(date time.Time, zone, region int) ([]BrowseNet, error)
+	GetBrowseNodes(date time.Time, zone, net int) ([]database.Node, error)
+
 	// Test operations (delegated to TestOps())
 	GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error)
 	GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error)
@@ -392,6 +398,11 @@ type QueryBuilderInterface interface {
 	// Optimized statistics queries for better performance
 	OptimizedLargestRegionsSQL() string
 	OptimizedLargestNetsSQL() string
+	// Hierarchy browser queries
+	BrowseZonesSQL() string
+	BrowseRegionsSQL() string
+	BrowseNetsSQL() string
+	BrowseNodesSQL() string
 
 	// Node-specific queries
 	NodeHistorySQL() string

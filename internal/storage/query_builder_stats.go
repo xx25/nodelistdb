@@ -35,6 +35,26 @@ func (sqb *StatsQueryBuilder) OptimizedLargestNets() string {
 	return sqb.base.OptimizedLargestNetsSQL()
 }
 
+// BrowseZones returns SQL for the hierarchy browser zone listing
+func (sqb *StatsQueryBuilder) BrowseZones() string {
+	return sqb.base.BrowseZonesSQL()
+}
+
+// BrowseRegions returns SQL for the hierarchy browser region listing
+func (sqb *StatsQueryBuilder) BrowseRegions() string {
+	return sqb.base.BrowseRegionsSQL()
+}
+
+// BrowseNets returns SQL for the hierarchy browser net listing
+func (sqb *StatsQueryBuilder) BrowseNets() string {
+	return sqb.base.BrowseNetsSQL()
+}
+
+// BrowseNodes returns SQL for the hierarchy browser node listing
+func (sqb *StatsQueryBuilder) BrowseNodes() string {
+	return sqb.base.BrowseNodesSQL()
+}
+
 // LEGACY METHODS - Statistics-related SQL query methods (kept for backward compatibility)
 
 // StatsSQL returns SQL for network statistics
@@ -136,4 +156,66 @@ func (qb *QueryBuilder) OptimizedLargestNetsSQL() string {
 		WHERE nodelist_date = ? AND node_type = 'Host'
 	) hn ON nc.zone = hn.zone AND nc.net = hn.net
 	ORDER BY nc.count DESC`
+}
+
+// BrowseZonesSQL returns SQL listing every zone present in a nodelist with its
+// node count and zone-coordinator name. Used by the hierarchy browser.
+func (qb *QueryBuilder) BrowseZonesSQL() string {
+	return `
+	SELECT
+		zone,
+		COUNT(*) as node_count,
+		anyIf(system_name, node_type = 'Zone') as zone_name
+	FROM nodes
+	WHERE nodelist_date = ?
+	GROUP BY zone
+	ORDER BY zone`
+}
+
+// BrowseRegionsSQL returns SQL listing every region within a zone with its node
+// count and region-coordinator name/location. Nodes with no region are grouped
+// under region 0. Used by the hierarchy browser.
+func (qb *QueryBuilder) BrowseRegionsSQL() string {
+	return `
+	SELECT
+		ifNull(region, 0) as region,
+		COUNT(*) as node_count,
+		anyIf(system_name, node_type = 'Region') as region_name,
+		anyIf(location, node_type = 'Region') as region_location
+	FROM nodes
+	WHERE nodelist_date = ? AND zone = ?
+	GROUP BY ifNull(region, 0)
+	ORDER BY region`
+}
+
+// BrowseNetsSQL returns SQL listing every net within a zone+region with its node
+// count and host-coordinator name/location. Region 0 selects nets that have no
+// region assigned. Used by the hierarchy browser.
+func (qb *QueryBuilder) BrowseNetsSQL() string {
+	return `
+	SELECT
+		net,
+		COUNT(*) as node_count,
+		anyIf(system_name, node_type = 'Host') as host_name,
+		anyIf(location, node_type = 'Host') as host_location
+	FROM nodes
+	WHERE nodelist_date = ? AND zone = ? AND ifNull(region, 0) = ?
+	GROUP BY net
+	ORDER BY net`
+}
+
+// BrowseNodesSQL returns SQL listing every entry within a zone+net for a single
+// nodelist date. Column order matches ResultParser.ParseNodeRow. Used by the
+// hierarchy browser.
+func (qb *QueryBuilder) BrowseNodesSQL() string {
+	return `
+	SELECT
+		zone, net, node, nodelist_date, day_number,
+		system_name, location, sysop_name, phone, node_type, region, max_speed,
+		is_cm, is_mo,
+		flags, modem_flags,
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+	FROM nodes
+	WHERE nodelist_date = ? AND zone = ? AND net = ?
+	ORDER BY node, conflict_sequence`
 }
