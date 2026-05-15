@@ -173,6 +173,7 @@
 <section class="card">
     <div class="stats-box">
         <h3>{{len .Nodes}} entr{{if ne (len .Nodes) 1}}ies{{else}}y{{end}} in Net {{.Zone}}:{{.Net}} on {{.ActualDate}}</h3>
+        <p class="muted">Each row is the verbatim nodelist line for that entry &mdash; every field and every flag, exactly as published.</p>
     </div>
     {{if .Nodes}}
     <div class="table-responsive">
@@ -180,22 +181,14 @@
             <thead>
                 <tr>
                     <th data-sortable data-type="address">Address</th>
-                    <th data-sortable data-type="string">Type</th>
-                    <th data-sortable data-type="string">System Name</th>
-                    <th data-sortable data-type="string">Location</th>
-                    <th data-sortable data-type="string">SysOp</th>
-                    <th data-sortable data-type="string">Flags</th>
+                    <th>Nodelist entry</th>
                 </tr>
             </thead>
             <tbody>
                 {{range .Nodes}}
                 <tr>
-                    <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}"><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
-                    <td>{{.NodeType}}</td>
-                    <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
-                    <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
-                    <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
-                    <td class="mono">{{if .Flags}}{{join .Flags " "}}{{else}}<em>-</em>{{end}}</td>
+                    <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}" style="vertical-align: top; white-space: nowrap;"><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
+                    <td class="mono" style="white-space: pre-wrap; word-break: break-word;">{{if .RawLine}}{{.RawLine}}{{else}}<em class="muted">(raw line not stored)</em>{{end}}</td>
                 </tr>
                 {{end}}
             </tbody>

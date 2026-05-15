@@ -59,10 +59,11 @@ func TestBrowseTemplateRenders(t *testing.T) {
 				Level: "nodes", Zone: 2, Net: 250, Region: 25, HasRegion: true, ActualDate: "2026-05-01",
 				Nodes: []database.Node{{
 					Zone: 2, Net: 250, Node: 1, NodeType: "Node",
-					SystemName: "Test BBS", Flags: []string{"CM", "IBN"}, Region: &region,
+					SystemName: "Test_BBS", Flags: []string{"CM", "IBN"}, Region: &region,
+					RawLine: ",1,Test_BBS,London,John_Doe,-Unpublished-,300,CM,XA,IBN,V34,V90C",
 				}},
 			},
-			want: "/node/2/250/1",
+			want: ",Test_BBS,London,John_Doe,-Unpublished-,300,CM,XA,IBN,V34,V90C",
 		},
 	}
 
