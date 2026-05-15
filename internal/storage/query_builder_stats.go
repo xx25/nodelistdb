@@ -185,7 +185,7 @@ func (qb *QueryBuilder) BrowseRegionsSQL() string {
 	FROM nodes
 	WHERE nodelist_date = ? AND zone = ?
 	GROUP BY ifNull(region, 0)
-	ORDER BY region`
+	ORDER BY ifNull(region, 0)`
 }
 
 // BrowseNetsSQL returns SQL listing every net within a zone+region with its node
