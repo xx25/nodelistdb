@@ -177,18 +177,21 @@
     </div>
     {{if .Nodes}}
     <div class="table-responsive">
-        <table class="data-table sortable-table">
+        {{/* Inline widths override the global `table td:last-child { width: 145px }`
+             rule (intended for analytics Actions columns). Address shrinks to fit,
+             entry takes the rest. */}}
+        <table class="data-table sortable-table" style="table-layout: auto;">
             <thead>
                 <tr>
-                    <th data-sortable data-type="address">Address</th>
-                    <th>Nodelist entry</th>
+                    <th data-sortable data-type="address" style="width: 1%; white-space: nowrap;">Address</th>
+                    <th style="width: auto; min-width: 0;">Nodelist entry</th>
                 </tr>
             </thead>
             <tbody>
                 {{range .Nodes}}
                 <tr>
-                    <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}" style="vertical-align: top; white-space: nowrap;"><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
-                    <td class="mono" style="white-space: pre-wrap; word-break: break-word;">{{if .RawLine}}{{.RawLine}}{{else}}<em class="muted">(raw line not stored)</em>{{end}}</td>
+                    <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}" style="width: 1%; white-space: nowrap; vertical-align: top;"><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
+                    <td class="mono" style="width: auto; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere;">{{if .RawLine}}{{.RawLine}}{{else}}<em class="muted">(raw line not stored)</em>{{end}}</td>
                 </tr>
                 {{end}}
             </tbody>
