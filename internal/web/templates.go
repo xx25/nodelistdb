@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"path/filepath"
+	"path"
 	"reflect"
 	"strings"
 	"time"
@@ -416,7 +416,9 @@ func (s *Server) loadTemplates() {
 
 // loadTemplateFromFile loads a template from embedded filesystem
 func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*template.Template, error) {
-	templateFile := filepath.Join("templates", name+".html")
+	// embed.FS keys always use forward slashes; filepath.Join would use the
+	// OS separator and break on Windows.
+	templateFile := path.Join("templates", name+".html")
 
 	// Read template from embedded filesystem
 	content, err := s.templatesFS.ReadFile(templateFile)
@@ -476,7 +478,7 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 	}
 
 	for _, partialFile := range partialFiles {
-		partialPath := filepath.Join("templates", "partials", partialFile)
+		partialPath := path.Join("templates", "partials", partialFile)
 		partialContent, err := s.templatesFS.ReadFile(partialPath)
 		if err == nil {
 			tmpl, err = tmpl.Parse(string(partialContent))
