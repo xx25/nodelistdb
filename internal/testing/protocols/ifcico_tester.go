@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/testing/logging"
-	"github.com/nodelistdb/internal/testing/protocols/emsi"
+	"github.com/xx25/fidomail/pkg/emsi"
 )
 
 // IfcicoTester implements IFCICO/EMSI protocol testing

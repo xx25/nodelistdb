@@ -5,7 +5,7 @@ import (
 
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/protocols"
-	"github.com/nodelistdb/internal/testing/protocols/emsi"
+	"github.com/xx25/fidomail/pkg/emsi"
 	"github.com/nodelistdb/internal/testing/services"
 	"github.com/nodelistdb/internal/testing/storage"
 )

@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nodelistdb/internal/modemd/modem"
-	"github.com/nodelistdb/internal/testing/protocols/emsi"
+	"github.com/xx25/fidomail/pkg/modem"
+	"github.com/xx25/fidomail/pkg/emsi"
 	"github.com/nodelistdb/internal/testing/timeavail"
 	"github.com/nodelistdb/internal/version"
 )

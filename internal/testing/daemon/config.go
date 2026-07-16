@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/nodelistdb/internal/testing/protocols/emsi"
+	"github.com/xx25/fidomail/pkg/emsi"
 	"gopkg.in/yaml.v3"
 )
 
