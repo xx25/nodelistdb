@@ -10,12 +10,13 @@ import (
 	"syscall"
 
 	"github.com/nodelistdb/internal/testing/daemon"
+	versionpkg "github.com/nodelistdb/internal/version"
 )
 
 var (
-	version = "1.0.0"
-	commit  = "unknown"
-	date    = "unknown"
+	version = versionpkg.GetVersionInfo()
+	commit  = versionpkg.GitCommit
+	date    = versionpkg.BuildTime
 )
 
 func main() {

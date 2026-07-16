@@ -1191,6 +1191,11 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 	if cfg.EMSI.InitialStrategy != "" {
 		emsiCfg.InitialStrategy = cfg.EMSI.InitialStrategy
 	}
+	// Advertise our identity in the outbound EMSI_DAT.
+	// NewSessionWithInfoAndConfig has neutral defaults, so without this
+	// the mailer name/version fields go out empty.
+	emsiCfg.MailerName = "NodelistDB"
+	emsiCfg.MailerVersion = version.GetVersionInfo()
 	session := emsi.NewSessionWithInfoAndConfig(
 		conn,
 		cfg.EMSI.OurAddress,

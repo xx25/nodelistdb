@@ -8,8 +8,13 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/testing/logging"
+	"github.com/nodelistdb/internal/version"
 	"github.com/xx25/fidomail/pkg/emsi"
 )
+
+// mailerVersion is resolved once: ldflags-injected in release builds,
+// git-derived in dev builds.
+var mailerVersion = version.GetVersionInfo()
 
 // IfcicoTester implements IFCICO/EMSI protocol testing
 type IfcicoTester struct {
@@ -128,7 +133,14 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 			logging.Debugf("IFCICO: Using per-node config for %s: strategy=%s, masterTimeout=%v",
 				expectedAddress, emsiCfg.InitialStrategy, emsiCfg.MasterTimeout)
 		}
+	} else {
+		emsiCfg = emsi.DefaultConfig()
 	}
+	// Advertise our identity in the outbound EMSI_DAT.
+	// NewSessionWithInfoAndConfig has neutral defaults, so without this
+	// the mailer name/version fields go out empty.
+	emsiCfg.MailerName = "NodelistDB"
+	emsiCfg.MailerVersion = mailerVersion
 
 	// Create EMSI session with custom system info and per-node config
 	if t.debug {
