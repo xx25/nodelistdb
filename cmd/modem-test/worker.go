@@ -104,8 +104,12 @@ func newModemWorker(
 ) (*ModemWorker, error) {
 	// Create modem configuration
 	modemCfg := modem.Config{
-		Device:           config.Device,
-		BaudRate:         config.BaudRate,
+		Device:   config.Device,
+		BaudRate: config.BaudRate,
+		// Explicit: pkg/modem defaults unset FlowControl to FlowHardware
+		// (RTS/CTS), but this rig always ran without flow control — the
+		// pre-migration modem code never enabled CTS/RTS.
+		FlowControl:      modem.FlowNone,
 		InitString:       getFirstInitCommand(config.InitCommands),
 		InitCommands:     config.InitCommands,
 		DialPrefix:       config.DialPrefix,
@@ -662,6 +666,7 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 	if w.emsiConfig.InitialStrategy != "" {
 		emsiCfg.InitialStrategy = w.emsiConfig.InitialStrategy
 	}
+	stampEMSIIdentity(emsiCfg)
 	session := emsi.NewSessionWithInfoAndConfig(
 		conn,
 		w.emsiConfig.OurAddress,

@@ -445,8 +445,12 @@ func main() {
 
 	// Single modem mode - create modem configuration
 	modemCfg := modem.Config{
-		Device:           cfg.Modem.Device,
-		BaudRate:         cfg.Modem.BaudRate,
+		Device:   cfg.Modem.Device,
+		BaudRate: cfg.Modem.BaudRate,
+		// Explicit: pkg/modem defaults unset FlowControl to FlowHardware
+		// (RTS/CTS), but this rig always ran without flow control — the
+		// pre-migration modem code never enabled CTS/RTS.
+		FlowControl:      modem.FlowNone,
 		InitString:       getFirstInitCommand(cfg.Modem.InitCommands),
 		InitCommands:     cfg.Modem.InitCommands,
 		DialPrefix:       cfg.Modem.DialPrefix,
@@ -1191,11 +1195,7 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 	if cfg.EMSI.InitialStrategy != "" {
 		emsiCfg.InitialStrategy = cfg.EMSI.InitialStrategy
 	}
-	// Advertise our identity in the outbound EMSI_DAT.
-	// NewSessionWithInfoAndConfig has neutral defaults, so without this
-	// the mailer name/version fields go out empty.
-	emsiCfg.MailerName = "NodelistDB"
-	emsiCfg.MailerVersion = version.GetVersionInfo()
+	stampEMSIIdentity(emsiCfg)
 	session := emsi.NewSessionWithInfoAndConfig(
 		conn,
 		cfg.EMSI.OurAddress,
