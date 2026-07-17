@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
-	
+
 	"github.com/google/uuid"
 	"github.com/nodelistdb/internal/testing/models"
 )
@@ -57,22 +57,22 @@ func (a *DaemonAdapter) TestNode(ctx context.Context, zone, net, node uint16, ho
 	if a.testNode == nil {
 		return nil, fmt.Errorf("test node function not configured")
 	}
-	
+
 	testNode := &models.Node{
 		Zone: int(zone),
 		Net:  int(net),
 		Node: int(node),
 	}
-	
+
 	if hostname == "" {
 		return nil, fmt.Errorf("hostname is required for testing")
 	}
-	
+
 	modelResult, err := a.testNode(ctx, testNode, hostname)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return a.convertTestResult(modelResult), nil
 }
 
@@ -138,7 +138,7 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 	if r == nil {
 		return nil
 	}
-	
+
 	result := &TestResult{
 		TestID:                uuid.New().String(),
 		Address:               r.Address,
@@ -150,7 +150,7 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 		HasConnectivityIssues: r.HasConnectivityIssues,
 		AddressValidated:      r.AddressValidated,
 	}
-	
+
 	if r.Country != "" {
 		result.Geolocation = &GeolocationInfo{
 			Country:     r.Country,
@@ -163,7 +163,7 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 			Longitude:   float64(r.Longitude),
 		}
 	}
-	
+
 	if r.BinkPResult != nil && r.BinkPResult.Tested {
 		result.BinkPResult = &ProtocolResult{
 			Tested:       true,
@@ -171,7 +171,7 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 			ResponseTime: int(r.BinkPResult.ResponseMs),
 			Error:        r.BinkPResult.Error,
 		}
-		
+
 		// Extract BinkP details if present
 		if r.BinkPResult.Details != nil {
 			if sysName, ok := r.BinkPResult.Details["system_name"].(string); ok {
@@ -194,7 +194,7 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 			}
 		}
 	}
-	
+
 	if r.IfcicoResult != nil && r.IfcicoResult.Tested {
 		result.IFCICOResult = &ProtocolResult{
 			Tested:       true,
@@ -202,7 +202,7 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 			ResponseTime: int(r.IfcicoResult.ResponseMs),
 			Error:        r.IfcicoResult.Error,
 		}
-		
+
 		// Extract IFCICO details if present
 		if r.IfcicoResult.Details != nil {
 			if mailerInfo, ok := r.IfcicoResult.Details["mailer_info"].(string); ok {
@@ -210,7 +210,7 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 			}
 		}
 	}
-	
+
 	if r.TelnetResult != nil && r.TelnetResult.Tested {
 		result.TelnetResult = &ProtocolResult{
 			Tested:       true,
@@ -219,8 +219,32 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 			Error:        r.TelnetResult.Error,
 		}
 	}
-	
+
+	if r.VModemResult != nil && r.VModemResult.Tested {
+		result.VModemResult = &ProtocolResult{
+			Tested:       true,
+			Success:      r.VModemResult.Success,
+			ResponseTime: int(r.VModemResult.ResponseMs),
+			Error:        r.VModemResult.Error,
+		}
+		// Details are stored per IP version (IPv6 preferred) by the live tester.
+		if d, ok := r.VModemResult.Details["ipv6"].(*models.VModemTestDetails); ok {
+			applyVModemDetails(result.VModemResult, d)
+		} else if d, ok := r.VModemResult.Details["ipv4"].(*models.VModemTestDetails); ok {
+			applyVModemDetails(result.VModemResult, d)
+		}
+	}
+
 	return result
+}
+
+// applyVModemDetails copies identified protocol details into the CLI result.
+func applyVModemDetails(pr *ProtocolResult, d *models.VModemTestDetails) {
+	pr.Variant = d.Variant
+	pr.Conformant = d.Conformant
+	pr.Version = d.Software
+	pr.SystemName = d.SystemName
+	pr.Addresses = d.Addresses
 }
 
 type RealDaemon interface {

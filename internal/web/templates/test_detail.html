@@ -360,20 +360,52 @@
             </div>
             {{end}}
 
-            <!-- VModem Protocol -->
+            <!-- VModem (IVM) Protocol -->
             {{if .TestResult.VModemTested}}
             <div class="protocol-section">
-                <div class="protocol-header">VModem Protocol</div>
+                <div class="protocol-header">VModem (IVM) Protocol</div>
                 <div class="detail-grid">
                     <span class="detail-label">Tested:</span>
                     <span class="detail-value">Yes</span>
                     <span class="detail-label">Result:</span>
                     <span class="detail-value {{if .TestResult.VModemSuccess}}success{{else}}failed{{end}}">
-                        {{if .TestResult.VModemSuccess}}Success{{else}}Failed{{end}}
+                        {{if .TestResult.VModemSuccess}}Reachable{{else}}Failed{{end}}
                         {{if .TestResult.VModemSuccess}}
                         <span class="response-time">({{.TestResult.VModemResponseMs}}ms)</span>
                         {{end}}
                     </span>
+                    {{if .TestResult.VModemSuccess}}
+                    <span class="detail-label">Conformance:</span>
+                    <span class="detail-value {{if .TestResult.VModemConformant}}success{{else}}failed{{end}}">
+                        {{if .TestResult.VModemConformant}}
+                        &#10003; Genuine VMODEM (VMP)
+                        {{else}}
+                        &#9888; Not VMODEM &mdash; actual protocol: {{if .TestResult.VModemVariant}}{{.TestResult.VModemVariant}}{{else}}unknown{{end}}
+                        {{end}}
+                    </span>
+                    {{if .TestResult.VModemVariant}}
+                    <span class="detail-label">Protocol Detected:</span>
+                    <span class="detail-value">{{.TestResult.VModemVariant}}</span>
+                    {{end}}
+                    {{if .TestResult.VModemSoftware}}
+                    <span class="detail-label">Software:</span>
+                    <span class="detail-value">{{.TestResult.VModemSoftware}}</span>
+                    {{end}}
+                    {{if .TestResult.VModemSystemName}}
+                    <span class="detail-label">System Name:</span>
+                    <span class="detail-value">{{.TestResult.VModemSystemName}}</span>
+                    {{end}}
+                    {{if .TestResult.VModemAddresses}}
+                    <span class="detail-label">Addresses:</span>
+                    <span class="detail-value">
+                        <div class="array-list">
+                            {{range .TestResult.VModemAddresses}}
+                            <span class="array-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </span>
+                    {{end}}
+                    {{end}}
                     {{if .TestResult.VModemError}}
                     <span class="detail-label">Error:</span>
                     <span class="detail-value">

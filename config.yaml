@@ -174,9 +174,17 @@ protocols:
     timeout: 10s
 
   # Virtual Modem (IVM flag) - Virtual modem over IP
+  # The tester identifies what protocol actually runs on the announced IVM port
+  # and reports it: vmodem_conformant is true only for a genuine VMODEM (VMP)
+  # responder; otherwise vmodem_variant names the actual protocol (emsi-telnet,
+  # emsi-raw, binkp, telnet-login, ...) and vmodem_software the mailer.
+  # NOTE: vmodem_success now means "reachable and speaks a recognized protocol",
+  # NOT "TCP port open". Enabling this after a period disabled will cause a
+  # step-change in vmodem_success trend queries (whois_operations argMax,
+  # test_aka_mismatch, test_ipv6_queries). Record the enable date.
   vmodem:
     enabled: false
-    port: 3141                 # No standard port
+    port: 3141                 # Default IVM port; per-node IVM:<port> overrides honored
     timeout: 10s
 
 # External Services

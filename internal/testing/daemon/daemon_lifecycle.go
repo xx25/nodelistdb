@@ -100,8 +100,15 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 	}
 
 	if newCfg.Protocols.VModem.Enabled {
-		d.vmodemTester = protocols.NewVModemTester(
+		// Reuse the IFCICO identity for the EMSI fall-through when VModem's own
+		// identity fields are unset, so a mailer handshake still advertises us.
+		vmOurAddr := firstNonEmpty(newCfg.Protocols.VModem.OurAddress, newCfg.Protocols.Ifcico.OurAddress)
+		vmSystem := firstNonEmpty(newCfg.Protocols.VModem.SystemName, newCfg.Protocols.Ifcico.SystemName)
+		vmSysop := firstNonEmpty(newCfg.Protocols.VModem.Sysop, newCfg.Protocols.Ifcico.Sysop)
+		vmLocation := firstNonEmpty(newCfg.Protocols.VModem.Location, newCfg.Protocols.Ifcico.Location)
+		d.vmodemTester = protocols.NewVModemTesterWithInfo(
 			newCfg.Protocols.VModem.Timeout,
+			vmOurAddr, vmSystem, vmSysop, vmLocation,
 		)
 	} else {
 		d.vmodemTester = nil
@@ -125,9 +132,15 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 		}
 		logging.Infof("Reloaded EMSI ConfigManager with %d per-node overrides", len(newCfg.Testing.EMSI.Overrides))
 
-		// Wire ConfigManager to IFCICO tester if it supports it
+		// Wire ConfigManager to testers that support it (IFCICO and VModem's
+		// EMSI fall-through).
 		if d.ifcicoTester != nil {
 			if setter, ok := d.ifcicoTester.(protocols.EMSIConfigSetter); ok {
+				setter.SetEMSIConfigManager(d.emsiConfigManager)
+			}
+		}
+		if d.vmodemTester != nil {
+			if setter, ok := d.vmodemTester.(protocols.EMSIConfigSetter); ok {
 				setter.SetEMSIConfigManager(d.emsiConfigManager)
 			}
 		}
@@ -136,6 +149,11 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 		d.emsiConfigManager = nil
 		if d.ifcicoTester != nil {
 			if setter, ok := d.ifcicoTester.(protocols.EMSIConfigSetter); ok {
+				setter.SetEMSIConfigManager(nil)
+			}
+		}
+		if d.vmodemTester != nil {
+			if setter, ok := d.vmodemTester.(protocols.EMSIConfigSetter); ok {
 				setter.SetEMSIConfigManager(nil)
 			}
 		}
@@ -241,4 +259,14 @@ func (d *Daemon) GetDebugMode() bool {
 	d.debugMu.RLock()
 	defer d.debugMu.RUnlock()
 	return d.debug
+}
+
+// firstNonEmpty returns the first non-empty string among its arguments.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

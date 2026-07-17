@@ -416,8 +416,12 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 		return
 	}
 
-	// Get port from config
-	port := d.config.Protocols.VModem.Port
+	// Honor a per-node IVM port override (e.g. IVM:60177), falling back to the
+	// configured default. Mirrors how every other protocol resolves its port.
+	port := node.GetProtocolPort("IVM")
+	if port == 0 {
+		port = d.config.Protocols.VModem.Port
+	}
 
 	// Initialize VModem result
 	if result.VModemResult == nil {
@@ -442,7 +446,9 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 
 				// Log success or failure
 				if vmodemResult.Success {
-					logging.Debugf("[%s]     VModem IPv6 success (%dms)", node.Address(), vmodemResult.ResponseMs)
+					result.VModemResult.Details["ipv6"] = vmodemDetails(vmodemResult)
+					logging.Debugf("[%s]     VModem IPv6 success: variant=%s conformant=%v %s (%dms)",
+						node.Address(), vmodemResult.Variant, vmodemResult.Conformant, vmodemResult.Software, vmodemResult.ResponseMs)
 					break // First successful IPv6 is enough
 				} else if vmodemResult.Error != "" {
 					logging.Debugf("[%s]     VModem IPv6 failed: %s", node.Address(), vmodemResult.Error)
@@ -469,7 +475,9 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 
 				// Log success or failure
 				if vmodemResult.Success {
-					logging.Debugf("[%s]     VModem IPv4 success (%dms)", node.Address(), vmodemResult.ResponseMs)
+					result.VModemResult.Details["ipv4"] = vmodemDetails(vmodemResult)
+					logging.Debugf("[%s]     VModem IPv4 success: variant=%s conformant=%v %s (%dms)",
+						node.Address(), vmodemResult.Variant, vmodemResult.Conformant, vmodemResult.Software, vmodemResult.ResponseMs)
 					break // First successful IPv4 is enough
 				} else if vmodemResult.Error != "" {
 					logging.Debugf("[%s]     VModem IPv4 failed: %s", node.Address(), vmodemResult.Error)
@@ -485,5 +493,18 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 	// Update operational status if either IPv4 or IPv6 succeeded
 	if result.VModemResult.Success && !result.IsOperational {
 		result.IsOperational = true
+	}
+}
+
+// vmodemDetails converts a protocol-level VModem result into the storage detail
+// struct carried in ProtocolTestResult.Details.
+func vmodemDetails(r *protocols.VModemTestResult) *models.VModemTestDetails {
+	return &models.VModemTestDetails{
+		Variant:      r.Variant,
+		Conformant:   r.Conformant,
+		Software:     r.Software,
+		SystemName:   r.SystemName,
+		Addresses:    r.Addresses,
+		AddressValid: r.AddressValid,
 	}
 }

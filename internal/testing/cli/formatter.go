@@ -73,12 +73,12 @@ func (f *Formatter) WriteTimestamp(text string) {
 
 func (f *Formatter) FormatTestResult(result *TestResult) {
 	f.WriteSubHeader("Test Results")
-	
+
 	f.WriteKeyValue("Node", result.Address)
 	f.WriteKeyValue("Test ID", result.TestID)
 	f.WriteKeyValue("Started", result.StartTime.Format("2006-01-02 15:04:05"))
 	f.WriteKeyValue("Duration", fmt.Sprintf("%dms", result.Duration.Milliseconds()))
-	
+
 	// DNS Information
 	if result.Hostname != "" {
 		f.WriteSubHeader("DNS Resolution")
@@ -91,7 +91,7 @@ func (f *Formatter) FormatTestResult(result *TestResult) {
 	} else {
 		f.WriteWarning("No hostname available for testing")
 	}
-	
+
 	if result.Geolocation != nil {
 		f.WriteSubHeader("Geolocation")
 		f.WriteKeyValue("Country", fmt.Sprintf("%s (%s)", result.Geolocation.Country, result.Geolocation.CountryCode))
@@ -101,36 +101,36 @@ func (f *Formatter) FormatTestResult(result *TestResult) {
 			f.WriteKeyValue("ASN", result.Geolocation.ASN)
 		}
 	}
-	
+
 	// Show protocol test results
 	f.WriteSubHeader("Protocol Tests")
-	
+
 	if result.BinkPResult != nil {
 		f.formatProtocolResult("BinkP (IBN)", result.BinkPResult)
 	}
-	
+
 	if result.IFCICOResult != nil {
 		f.formatProtocolResult("IFCICO (IFC)", result.IFCICOResult)
 	}
-	
+
 	if result.TelnetResult != nil {
 		f.formatProtocolResult("Telnet (ITN)", result.TelnetResult)
 	}
-	
+
 	if result.FTPResult != nil {
 		f.formatProtocolResult("FTP (IFT)", result.FTPResult)
 	}
-	
+
 	if result.VModemResult != nil {
 		f.formatProtocolResult("VModem (IVM)", result.VModemResult)
 	}
-	
+
 	f.WriteSubHeader("Summary")
-	
+
 	// Count what was tested
 	protocolsTested := 0
 	protocolsSucceeded := 0
-	
+
 	if result.BinkPResult != nil && result.BinkPResult.Tested {
 		protocolsTested++
 		if result.BinkPResult.Success {
@@ -161,10 +161,10 @@ func (f *Formatter) FormatTestResult(result *TestResult) {
 			protocolsSucceeded++
 		}
 	}
-	
+
 	f.WriteKeyValue("Protocols Tested", fmt.Sprintf("%d", protocolsTested))
 	f.WriteKeyValue("Protocols Succeeded", fmt.Sprintf("%d", protocolsSucceeded))
-	
+
 	if result.IsOperational {
 		f.WriteSuccess("Node is OPERATIONAL")
 	} else {
@@ -176,11 +176,11 @@ func (f *Formatter) FormatTestResult(result *TestResult) {
 			f.WriteError(fmt.Sprintf("Node is NOT OPERATIONAL (%d/%d protocols failed)", protocolsTested-protocolsSucceeded, protocolsTested))
 		}
 	}
-	
+
 	if result.HasConnectivityIssues {
 		f.WriteWarning("Connectivity issues detected")
 	}
-	
+
 	if result.AddressValidated {
 		f.WriteSuccess("Address validated successfully")
 	} else if result.ExpectedAddress != "" {
@@ -190,16 +190,16 @@ func (f *Formatter) FormatTestResult(result *TestResult) {
 
 func (f *Formatter) formatProtocolResult(name string, result *ProtocolResult) {
 	f.WriteSubHeader(fmt.Sprintf("%s Test", name))
-	
+
 	if !result.Tested {
 		f.WriteInfo("Not tested (protocol not enabled or not supported by node)")
 		return
 	}
-	
+
 	if result.Port > 0 {
 		f.WriteKeyValue("Port", fmt.Sprintf("%d", result.Port))
 	}
-	
+
 	if result.Success {
 		f.WriteSuccess(fmt.Sprintf("Connection successful (%dms)", result.ResponseTime))
 	} else {
@@ -210,7 +210,18 @@ func (f *Formatter) formatProtocolResult(name string, result *ProtocolResult) {
 		}
 		return
 	}
-	
+
+	// VModem/IVM: report the protocol actually detected and whether it is a
+	// genuine VMODEM (VMP) responder.
+	if result.Variant != "" {
+		f.WriteKeyValue("Protocol Detected", result.Variant)
+		if result.Conformant {
+			f.WriteSuccess("Conformance: genuine VMODEM (VMP)")
+		} else {
+			f.WriteError(fmt.Sprintf("Conformance: NOT VMODEM - actual protocol is %s", result.Variant))
+		}
+	}
+
 	if result.SystemName != "" {
 		f.WriteKeyValue("System Name", result.SystemName)
 	}
@@ -273,9 +284,9 @@ func (f *Formatter) FormatNodeInfo(info *NodeInfo) {
 		}
 		return
 	}
-	
+
 	f.WriteHeader(fmt.Sprintf("Node Information: %s", info.Address))
-	
+
 	f.WriteSubHeader("Basic Information")
 	f.WriteKeyValue("System Name", info.SystemName)
 	f.WriteKeyValue("Sysop", info.SysopName)
@@ -283,7 +294,7 @@ func (f *Formatter) FormatNodeInfo(info *NodeInfo) {
 	if info.NodeType != "" {
 		f.WriteKeyValue("Node Type", info.NodeType)
 	}
-	
+
 	f.WriteSubHeader("Internet Configuration")
 	if info.HasInternet {
 		f.WriteSuccess("Internet connectivity enabled")
@@ -300,16 +311,16 @@ func (f *Formatter) FormatNodeInfo(info *NodeInfo) {
 	} else {
 		f.WriteInfo("No internet connectivity")
 	}
-	
+
 	if len(info.Flags) > 0 {
 		f.WriteSubHeader("Node Flags")
 		f.WriteKeyValue("Flags", strings.Join(info.Flags, ", "))
 	}
-	
+
 	if len(info.ModemFlags) > 0 {
 		f.WriteKeyValue("Modem Flags", strings.Join(info.ModemFlags, ", "))
 	}
-	
+
 	if !info.LastSeen.IsZero() {
 		f.WriteSubHeader("Last Activity")
 		f.WriteKeyValue("Last Seen", info.LastSeen.Format("2006-01-02"))

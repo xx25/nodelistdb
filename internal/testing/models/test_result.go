@@ -111,6 +111,18 @@ type IfcicoTestDetails struct {
 	ResponseType string // REQ/ACK/NAK/CLI/HBT
 }
 
+// VModemTestDetails contains VModem/IVM-specific test details. Variant is the
+// protocol actually observed on the announced IVM port; Conformant is true only
+// when a genuine VMODEM (VMP) responder was confirmed.
+type VModemTestDetails struct {
+	Variant      string
+	Conformant   bool
+	Software     string
+	SystemName   string
+	Addresses    []string
+	AddressValid bool
+}
+
 // AnnouncedAKARecord holds the AKA list one node identity announced during
 // recent handshakes. Used to seed the AKA equivalence index.
 type AnnouncedAKARecord struct {

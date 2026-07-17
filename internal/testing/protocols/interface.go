@@ -11,7 +11,7 @@ import (
 type Tester interface {
 	// Test performs a connectivity test
 	Test(ctx context.Context, host string, port int, expectedAddress string) TestResult
-	
+
 	// GetProtocolName returns the protocol name
 	GetProtocolName() string
 }
@@ -92,8 +92,20 @@ type FTPTestResult struct {
 	AnonLogin  bool // Whether anonymous login succeeded
 }
 
-// VModemTestResult contains VModem-specific test results
+// VModemTestResult contains VModem-specific test results.
+//
+// The IVM nodelist flag announces Ray Gwinn's binary Virtual Modem Protocol
+// (VMP), but in practice IVM ports run one of several protocols. The tester
+// identifies which and reports it: Conformant is true only when a genuine VMP
+// responder is confirmed; otherwise Variant names what is actually there.
 type VModemTestResult struct {
 	BaseTestResult
-	Banner string
+	Variant      string   // vmp | emsi-telnet | emsi-raw | binkp | telnet-login | <named> | unknown
+	Conformant   bool     // true iff a genuine VMODEM (VMP) responder was confirmed
+	Software     string   // detected mailer/software, when identifiable
+	SystemName   string   // remote system name (EMSI), when identifiable
+	Addresses    []string // remote FTN addresses (EMSI), when identifiable
+	AddressValid bool     // expected address present in the remote's addresses
+	Detail       string   // human-readable note (e.g. "IVM announced, actual: emsi-telnet")
+	Banner       string   // raw banner text for unknown/named variants
 }

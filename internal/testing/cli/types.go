@@ -12,22 +12,22 @@ type TestOptions struct {
 }
 
 type TestResult struct {
-	TestID       string
-	Address      string
-	Hostname     string
-	StartTime    time.Time
-	Duration     time.Duration
-	ResolvedIPs  []string
+	TestID          string
+	Address         string
+	Hostname        string
+	StartTime       time.Time
+	Duration        time.Duration
+	ResolvedIPs     []string
 	ExpectedAddress string
-	
+
 	Geolocation *GeolocationInfo
-	
+
 	BinkPResult  *ProtocolResult
 	IFCICOResult *ProtocolResult
 	TelnetResult *ProtocolResult
 	FTPResult    *ProtocolResult
 	VModemResult *ProtocolResult
-	
+
 	IsOperational         bool
 	HasConnectivityIssues bool
 	AddressValidated      bool
@@ -39,13 +39,18 @@ type ProtocolResult struct {
 	ResponseTime int
 	Port         int
 	Error        string
-	
+
 	SystemName   string
 	Sysop        string
 	Location     string
 	Version      string
 	Addresses    []string
 	Capabilities []string
+
+	// VModem/IVM-specific: the protocol actually observed and whether it is a
+	// genuine VMODEM (VMP) responder.
+	Variant    string
+	Conformant bool
 }
 
 type GeolocationInfo struct {
