@@ -1172,12 +1172,12 @@ func (cs *CachedStorage) SearchNodesByReachability(operational bool, limit int, 
 }
 
 // GetNodeTestHistory returns test history for a specific node (cached)
-func (cs *CachedStorage) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodeTestHistory(zone, net, node, days)
+		return cs.Storage.GetNodeTestHistory(zone, net, node, days, domain)
 	}
 
-	key := cs.keyGen.NodeTestHistoryKey(zone, net, node, days)
+	key := cs.keyGen.NodeTestHistoryKey(zone, net, node, days) + ":" + domain
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []NodeTestResult
@@ -1189,7 +1189,7 @@ func (cs *CachedStorage) GetNodeTestHistory(zone, net, node int, days int) ([]No
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetNodeTestHistory(zone, net, node, days)
+	results, err := cs.Storage.GetNodeTestHistory(zone, net, node, days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -1204,12 +1204,12 @@ func (cs *CachedStorage) GetNodeTestHistory(zone, net, node int, days int) ([]No
 }
 
 // GetNodeReachabilityStats returns reachability statistics for a specific node (cached)
-func (cs *CachedStorage) GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error) {
+func (cs *CachedStorage) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodeReachabilityStats(zone, net, node, days)
+		return cs.Storage.GetNodeReachabilityStats(zone, net, node, days, domain)
 	}
 
-	key := cs.keyGen.NodeReachabilityStatsKey(zone, net, node, days)
+	key := cs.keyGen.NodeReachabilityStatsKey(zone, net, node, days) + ":" + domain
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var result NodeReachabilityStats
@@ -1221,7 +1221,7 @@ func (cs *CachedStorage) GetNodeReachabilityStats(zone, net, node int, days int)
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	result, err := cs.Storage.GetNodeReachabilityStats(zone, net, node, days)
+	result, err := cs.Storage.GetNodeReachabilityStats(zone, net, node, days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -1236,12 +1236,12 @@ func (cs *CachedStorage) GetNodeReachabilityStats(zone, net, node int, days int)
 }
 
 // GetDetailedTestResult returns detailed test result for a specific test (cached)
-func (cs *CachedStorage) GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error) {
+func (cs *CachedStorage) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetDetailedTestResult(zone, net, node, testTime)
+		return cs.Storage.GetDetailedTestResult(zone, net, node, testTime, domain)
 	}
 
-	key := cs.keyGen.DetailedTestResultKey(zone, net, node, testTime)
+	key := cs.keyGen.DetailedTestResultKey(zone, net, node, testTime) + ":" + domain
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var result NodeTestResult
@@ -1253,7 +1253,7 @@ func (cs *CachedStorage) GetDetailedTestResult(zone, net, node int, testTime str
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	result, err := cs.Storage.GetDetailedTestResult(zone, net, node, testTime)
+	result, err := cs.Storage.GetDetailedTestResult(zone, net, node, testTime, domain)
 	if err != nil {
 		return nil, err
 	}

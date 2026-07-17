@@ -147,6 +147,20 @@ func (p *Parser) extractDateFromFile(filePath string) (time.Time, int, error) {
 				return date, dayNum, nil
 			},
 		},
+		// Generic <basename>.ddd day-number extension used by other FTN
+		// networks' nodelists (FSXNET.191, TQWNET.123, ...)
+		{
+			regexp.MustCompile(`(?i)\.(\d{3})(?:\.gz)?$`),
+			func(matches []string, path string) (time.Time, int, error) {
+				dayNum, _ := strconv.Atoi(matches[1])
+				year := p.extractYearFromPath(path)
+				if year == 0 {
+					year = time.Now().UTC().Year()
+				}
+				date := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, dayNum-1)
+				return date, dayNum, nil
+			},
+		},
 	}
 
 	for _, pattern := range patterns {

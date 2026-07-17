@@ -15,6 +15,7 @@ type Storage interface {
 	GetNodesByProtocol(ctx context.Context, protocol string, limit int) ([]*models.Node, error)
 	GetStatistics(ctx context.Context) (map[string]int, error)
 	GetLatestNodelistDate(ctx context.Context) (time.Time, error)
+	GetNodelistFingerprint(ctx context.Context) (string, error)
 	
 	// Test result storage operations
 	StoreTestResult(ctx context.Context, result *models.TestResult) error
@@ -23,7 +24,8 @@ type Storage interface {
 	
 	// Query operations
 	GetLatestTestResults(ctx context.Context, limit int) ([]*models.TestResult, error)
-	GetNodeTestHistory(ctx context.Context, zone, net, node int, days int) ([]*models.TestResult, error)
+	GetNodeTestHistory(ctx context.Context, zone, net, node int, domain string, days int) ([]*models.TestResult, error)
+	GetRecentAnnouncedAKAs(ctx context.Context, days int) ([]models.AnnouncedAKARecord, error)
 
 	// WHOIS operations
 	StoreWhoisResult(ctx context.Context, result *models.WhoisResult) error

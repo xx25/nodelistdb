@@ -56,12 +56,12 @@ func (cs *CachedStorage) GetNodes(filter database.NodeFilter) ([]database.Node, 
 }
 
 // GetNodeHistory with caching
-func (cs *CachedStorage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
+func (cs *CachedStorage) GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.NodeOps().GetNodeHistory(zone, net, node)
+		return cs.Storage.NodeOps().GetNodeHistory(zone, net, node, domain)
 	}
 
-	key := cs.keyGen.NodeHistoryKey(zone, net, node)
+	key := cs.keyGen.NodeHistoryKey(zone, net, node) + ":" + domain
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -75,7 +75,7 @@ func (cs *CachedStorage) GetNodeHistory(zone, net, node int) ([]database.Node, e
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	history, err := cs.Storage.NodeOps().GetNodeHistory(zone, net, node)
+	history, err := cs.Storage.NodeOps().GetNodeHistory(zone, net, node, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +89,12 @@ func (cs *CachedStorage) GetNodeHistory(zone, net, node int) ([]database.Node, e
 }
 
 // GetNodeChanges with caching
-func (cs *CachedStorage) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
+func (cs *CachedStorage) GetNodeChanges(zone, net, node int, domain string) ([]database.NodeChange, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.SearchOps().GetNodeChanges(zone, net, node)
+		return cs.Storage.SearchOps().GetNodeChanges(zone, net, node, domain)
 	}
 
-	key := cs.keyGen.NodeChangesKey(zone, net, node, "")
+	key := cs.keyGen.NodeChangesKey(zone, net, node, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -108,7 +108,7 @@ func (cs *CachedStorage) GetNodeChanges(zone, net, node int) ([]database.NodeCha
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	changes, err := cs.Storage.SearchOps().GetNodeChanges(zone, net, node)
+	changes, err := cs.Storage.SearchOps().GetNodeChanges(zone, net, node, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -190,15 +190,15 @@ func (cs *CachedStorage) GetNodesBySysop(sysopName string, limit int) ([]databas
 // Pass-through methods (not cached)
 
 // GetNodeDateRange returns the first and last date a node appears in nodelists
-func (cs *CachedStorage) GetNodeDateRange(zone, net, node int) (firstDate, lastDate time.Time, err error) {
+func (cs *CachedStorage) GetNodeDateRange(zone, net, node int, domain string) (firstDate, lastDate time.Time, err error) {
 	// Not cached as this is rarely called
-	return cs.Storage.NodeOps().GetNodeDateRange(zone, net, node)
+	return cs.Storage.NodeOps().GetNodeDateRange(zone, net, node, domain)
 }
 
 // SearchNodesBySysop searches for nodes by sysop name
-func (cs *CachedStorage) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error) {
+func (cs *CachedStorage) SearchNodesBySysop(sysopName string, limit int, domain string) ([]NodeSummary, error) {
 	// Not cached as this overlaps with GetNodesBySysop
-	return cs.Storage.SearchOps().SearchNodesBySysop(sysopName, limit)
+	return cs.Storage.SearchOps().SearchNodesBySysop(sysopName, limit, domain)
 }
 
 // SearchNodesWithLifetime searches for nodes with lifetime information

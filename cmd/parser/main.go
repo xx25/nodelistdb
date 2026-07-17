@@ -24,6 +24,7 @@ func main() {
 	// Command line flags
 	var (
 		configPath       = flag.String("config", "config.yaml", "Path to configuration file")
+		network          = flag.String("network", "fidonet", "FTN network the nodelists belong to (must exist in config 'networks' section)")
 		path             = flag.String("path", "", "Path to nodelist file or directory (required)")
 		recursive        = flag.Bool("recursive", false, "Scan directories recursively")
 		verbose          = flag.Bool("verbose", false, "Verbose output")
@@ -62,6 +63,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Resolve the selected FTN network
+	networkCfg := cfg.Network(*network)
+	if networkCfg == nil {
+		fmt.Fprintf(os.Stderr, "Error: network %q is not defined in the configuration\n", *network)
+		os.Exit(1)
+	}
+
 	// Initialize logging from config (using parser-specific logging config)
 	// Allow command line flags to override
 	logConfig := logging.FromStruct(&cfg.ParserLogging)
@@ -90,6 +98,7 @@ func main() {
 		if *rebuildFTSOnly {
 			fmt.Println("Mode: FTS Index Rebuild")
 		} else {
+			fmt.Printf("Network: %s\n", networkCfg.Name)
 			fmt.Printf("Path: %s\n", *path)
 			fmt.Printf("Batch size: %d\n", *batchSize)
 			fmt.Printf("Workers: %d\n", *workers)
@@ -156,9 +165,10 @@ func main() {
 
 	// Initialize advanced parser
 	nodelistParser := parser.NewAdvanced(*verbose)
+	nodelistParser.SetDomain(networkCfg.Name)
 
 	// Find nodelist files
-	files, err := findNodelistFiles(*path, *recursive)
+	files, err := findNodelistFiles(*path, *recursive, networkCfg.Pattern())
 	if err != nil {
 		logging.Fatalf("Failed to find nodelist files: %v", err)
 	}
@@ -195,6 +205,7 @@ func main() {
 		// Wrap storage with adapter for concurrent processing
 		storageAdapter := concurrent.NewStorageAdapter(storageLayer.NodeOps(), storageLayer)
 		processor := concurrent.NewMultiProcessor(storageAdapter, *workers, *batchSize, *verbose, *quiet)
+		processor.SetDomain(networkCfg.Name)
 
 		err := processor.ProcessFiles(ctx, files)
 		if err != nil {
@@ -244,7 +255,7 @@ func main() {
 					fmt.Printf("  Checking if nodelist already processed: date=%s (year %d, day %d)\n",
 						nodelistDate.Format("2006-01-02"), nodelistDate.Year(), nodes[0].DayNumber)
 				}
-				isProcessed, err := storageLayer.IsNodelistProcessed(nodelistDate)
+				isProcessed, err := storageLayer.IsNodelistProcessed(nodelistDate, networkCfg.Name)
 				if err != nil {
 					fmt.Printf("  ERROR checking if nodelist processed: %v\n", err)
 					continue
@@ -287,7 +298,7 @@ func main() {
 				if *verbose {
 					fmt.Printf("  Updating flag analytics for %s...\n", parseResult.NodelistDate.Format("2006-01-02"))
 				}
-				if err := storageLayer.UpdateFlagStatistics(parseResult.NodelistDate); err != nil {
+				if err := storageLayer.UpdateFlagStatistics(parseResult.NodelistDate, networkCfg.Name); err != nil {
 					fmt.Printf("  Warning: Failed to update flag statistics: %v\n", err)
 					// Non-fatal error - continue processing
 				} else if *verbose {
@@ -337,8 +348,9 @@ func main() {
 	}
 }
 
-// findNodelistFiles finds all nodelist files in the specified path
-func findNodelistFiles(path string, recursive bool) ([]string, error) {
+// findNodelistFiles finds all nodelist files in the specified path that match
+// the selected network's filename pattern
+func findNodelistFiles(path string, recursive bool, pattern *regexp.Regexp) ([]string, error) {
 	var files []string
 
 	// Check if path is a file or directory
@@ -348,10 +360,9 @@ func findNodelistFiles(path string, recursive bool) ([]string, error) {
 	}
 
 	if !info.IsDir() {
-		// Single file
-		if isNodelistFile(path) {
-			files = append(files, path)
-		}
+		// Single file: trust the user's explicit path even if it doesn't match
+		// the network's pattern (renamed downloads, temp files, ...)
+		files = append(files, path)
 		return files, nil
 	}
 
@@ -369,8 +380,8 @@ func findNodelistFiles(path string, recursive bool) ([]string, error) {
 			return nil
 		}
 
-		// Check if it's a nodelist file
-		if isNodelistFile(filePath) {
+		// Check if it's a nodelist file of the selected network
+		if isNodelistFile(filePath, pattern) {
 			files = append(files, filePath)
 		}
 
@@ -384,26 +395,15 @@ func findNodelistFiles(path string, recursive bool) ([]string, error) {
 	return files, nil
 }
 
-// isNodelistFile checks if a file is a nodelist file based on naming patterns
-func isNodelistFile(filePath string) bool {
+// isNodelistFile checks if a file matches the selected network's nodelist
+// filename pattern (the .gz extension is stripped before matching)
+func isNodelistFile(filePath string, pattern *regexp.Regexp) bool {
 	filename := strings.ToLower(filepath.Base(filePath))
 
 	// Remove .gz extension for pattern matching
 	filename = strings.TrimSuffix(filename, ".gz")
 
-	// Common nodelist filename patterns
-	patterns := []string{
-		"nodelist",
-		"nodelist.",
-	}
-
-	for _, pattern := range patterns {
-		if strings.HasPrefix(filename, pattern) {
-			return true
-		}
-	}
-
-	return false
+	return pattern.MatchString(filename)
 }
 
 // parseConflictKey extracts zone, net, node, date from duplicate key error
@@ -439,7 +439,7 @@ func parseConflictKey(errorMsg string) (int, int, int, string, bool) {
 // insertBatch inserts a batch of nodes into storage
 func insertBatch(storageLayer interface {
 	InsertNodes([]database.Node) error
-	FindConflictingNode(int, int, int, time.Time) (bool, error)
+	FindConflictingNode(int, int, int, time.Time, string) (bool, error)
 }, batch []database.Node, verbose bool, quiet bool) error {
 	if verbose {
 		fmt.Printf("  Inserting batch of %d nodes...\n", len(batch))
@@ -457,7 +457,11 @@ func insertBatch(storageLayer interface {
 				// Parse the date
 				conflictDate, parseErr := time.Parse("2006-01-02", dateStr)
 				if parseErr == nil {
-					conflictExists, checkErr := storageLayer.FindConflictingNode(zone, net, node, conflictDate)
+					domain := database.DefaultDomain
+					if len(batch) > 0 && batch[0].Domain != "" {
+						domain = batch[0].Domain
+					}
+					conflictExists, checkErr := storageLayer.FindConflictingNode(zone, net, node, conflictDate, domain)
 					if checkErr == nil && conflictExists {
 						fmt.Printf("    CONFLICT ANALYSIS for node %d:%d/%d on %s:\n",
 							zone, net, node, dateStr)

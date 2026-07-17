@@ -262,7 +262,8 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get test history
-	history, err := s.storage.GetNodeTestHistory(zone, net, node, days)
+	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
+	history, err := s.storage.GetNodeTestHistory(zone, net, node, days, domain)
 	if err != nil {
 		log.Printf("Error getting node test history: %v", err)
 		history = []storage.NodeTestResult{}
@@ -333,13 +334,13 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get statistics
-	stats, err := s.storage.GetNodeReachabilityStats(zone, net, node, days)
+	stats, err := s.storage.GetNodeReachabilityStats(zone, net, node, days, domain)
 	if err != nil {
 		log.Printf("Error getting node reachability stats: %v", err)
 	}
 
 	// Get node info from main database
-	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node)
+	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))))
 	var nodeInfo *database.Node
 	if err == nil && len(nodeHistory) > 0 {
 		// Get the most recent entry
@@ -400,7 +401,8 @@ func (s *Server) TestResultDetailHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get detailed test result
-	testResult, err := s.storage.GetDetailedTestResult(zone, net, node, testTime)
+	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
+	testResult, err := s.storage.GetDetailedTestResult(zone, net, node, testTime, domain)
 	if err != nil {
 		log.Printf("Error getting detailed test result: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -413,7 +415,7 @@ func (s *Server) TestResultDetailHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get node info from main database for context
-	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node)
+	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))))
 	var nodeInfo *database.Node
 	if err == nil && len(nodeHistory) > 0 {
 		// Get the most recent entry
@@ -477,7 +479,7 @@ func (s *Server) ModemTestDetailHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get node info from main database for context
-	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node)
+	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))))
 	var nodeInfo *database.Node
 	if err == nil && len(nodeHistory) > 0 {
 		nodeInfo = &nodeHistory[len(nodeHistory)-1]

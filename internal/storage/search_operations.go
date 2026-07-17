@@ -198,6 +198,13 @@ func (so *SearchOperations) buildNodeSummaryArgs(filter database.NodeFilter) []i
 		args = append(args, nil, nil)
 	}
 
+	// Domain filter uses the (? = '' OR domain = ?) pattern
+	if filter.Domain != nil && *filter.Domain != "" {
+		args = append(args, *filter.Domain, *filter.Domain)
+	} else {
+		args = append(args, "", "")
+	}
+
 	// Add LIMIT argument
 	args = append(args, filter.Limit)
 

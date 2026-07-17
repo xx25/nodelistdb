@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -29,12 +31,27 @@ type ClickHouseConfig struct {
 	Compression  string `yaml:"compression,omitempty"` // none, zstd, lz4, gzip
 }
 
+// NetworkConfig describes one FTN network the system knows about
+type NetworkConfig struct {
+	Name            string `yaml:"name"`             // Lowercase network name (fidonet, fsxnet, ...)
+	NodelistPattern string `yaml:"nodelist_pattern"` // Regex matched against nodelist filenames (.gz stripped first)
+	Path            string `yaml:"path,omitempty"`   // Optional default nodelist directory for this network
+
+	compiledPattern *regexp.Regexp
+}
+
+// Pattern returns the compiled nodelist filename pattern.
+func (nc *NetworkConfig) Pattern() *regexp.Regexp {
+	return nc.compiledPattern
+}
+
 // Config represents the complete application configuration
 type Config struct {
 	ClickHouse        ClickHouseConfig `yaml:"clickhouse"`
 	Cache             CacheConfig      `yaml:"cache"`
 	FTP               FTPConfig        `yaml:"ftp"`
 	ModemAPI          ModemAPIConfig   `yaml:"modem_api"`
+	Networks          []NetworkConfig  `yaml:"networks,omitempty"` // FTN networks (defaults to fidonet if absent)
 	LinksFile         string           `yaml:"links_file"` // Path to links.yaml for external FidoNet links
 	ServerLogging     LoggingConfig    `yaml:"server_logging"`
 	ParserLogging     LoggingConfig    `yaml:"parser_logging"`
@@ -42,6 +59,16 @@ type Config struct {
 
 	// Deprecated: Use component-specific logging configs instead
 	Logging LoggingConfig `yaml:"logging,omitempty"`
+}
+
+// Network returns the configuration for a network by name, or nil if unknown.
+func (c *Config) Network(name string) *NetworkConfig {
+	for i := range c.Networks {
+		if c.Networks[i].Name == name {
+			return &c.Networks[i]
+		}
+	}
+	return nil
 }
 
 // LoggingConfig holds logging configuration
@@ -164,9 +191,13 @@ func DefaultLoggingConfig() *LoggingConfig {
 func LoadConfig(configPath string) (*Config, error) {
 	// If config file doesn't exist, return default database config
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return &Config{
+		cfg := &Config{
 			ClickHouse: DefaultClickHouseConfig(),
-		}, nil
+		}
+		if err := cfg.validateNetworks(); err != nil {
+			return nil, err
+		}
+		return cfg, nil
 	}
 
 	data, err := os.ReadFile(configPath)
@@ -369,6 +400,62 @@ func (c *Config) validate() error {
 	// Validate modem API configuration
 	if err := c.validateModemAPI(); err != nil {
 		return err
+	}
+
+	// Validate networks configuration; inject the default fidonet entry when
+	// the section is absent so single-network installs keep working unchanged
+	if err := c.validateNetworks(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// DefaultNetworkConfigs returns the built-in network list used when the
+// `networks:` section is absent from the configuration file.
+func DefaultNetworkConfigs() []NetworkConfig {
+	return []NetworkConfig{
+		{Name: database.DefaultDomain, NodelistPattern: `(?i)^nodelist`},
+	}
+}
+
+// validateNetworks checks the networks section and compiles filename patterns.
+func (c *Config) validateNetworks() error {
+	if len(c.Networks) == 0 {
+		c.Networks = DefaultNetworkConfigs()
+	}
+
+	seen := make(map[string]bool)
+	for i := range c.Networks {
+		n := &c.Networks[i]
+		if n.Name == "" {
+			return fmt.Errorf("networks[%d]: name is required", i)
+		}
+		if n.Name != strings.ToLower(n.Name) {
+			return fmt.Errorf("networks[%d]: name %q must be lowercase", i, n.Name)
+		}
+		if seen[n.Name] {
+			return fmt.Errorf("networks[%d]: duplicate network name %q", i, n.Name)
+		}
+		seen[n.Name] = true
+
+		if n.NodelistPattern == "" {
+			// Default pattern: <name>.ddd (e.g. fsxnet.191); fidonet keeps its
+			// traditional nodelist.* naming
+			if n.Name == database.DefaultDomain {
+				// Prefix match keeps historical fidonet behavior
+				// (nodelist.216, nodelist_2024_001, ...)
+				n.NodelistPattern = `(?i)^nodelist`
+			} else {
+				n.NodelistPattern = `(?i)^` + regexp.QuoteMeta(n.Name) + `\.\d{3}$`
+			}
+		}
+
+		compiled, err := regexp.Compile(n.NodelistPattern)
+		if err != nil {
+			return fmt.Errorf("networks[%d] (%s): invalid nodelist_pattern: %w", i, n.Name, err)
+		}
+		n.compiledPattern = compiled
 	}
 
 	return nil

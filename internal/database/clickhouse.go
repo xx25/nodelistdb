@@ -192,6 +192,9 @@ func (db *ClickHouseDB) CreateSchema() error {
 		node Int32,
 		nodelist_date Date,
 		day_number Int32,
+
+		-- FTN network this row was parsed from (fidonet, fsxnet, ...)
+		domain LowCardinality(String) DEFAULT 'fidonet',
 		system_name String,
 		location String,
 		sysop_name String,
@@ -267,6 +270,7 @@ func (db *ClickHouseDB) CreateSchema() error {
 		flag String,
 		year UInt16,
 		nodelist_date Date,
+		domain LowCardinality(String) DEFAULT 'fidonet',
 		unique_nodes UInt32,
 		total_nodes_in_year UInt32,
 
@@ -288,7 +292,7 @@ func (db *ClickHouseDB) CreateSchema() error {
 		first_has_inet Bool,
 		first_raw_line String
 	) ENGINE = ReplacingMergeTree(nodelist_date)
-	ORDER BY (flag, year, nodelist_date)
+	ORDER BY (flag, year, nodelist_date, domain)
 	PARTITION BY year
 	SETTINGS index_granularity = 8192`
 

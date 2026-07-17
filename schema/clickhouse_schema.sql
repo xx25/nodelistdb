@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS nodelistdb.nodes
     `node` Int32,
     `nodelist_date` Date,
     `day_number` Int32,
+    `domain` LowCardinality(String) DEFAULT 'fidonet',
     `system_name` String,
     `location` String,
     `sysop_name` String,
@@ -47,7 +48,7 @@ CREATE TABLE IF NOT EXISTS nodelistdb.nodes
     INDEX idx_json_protocols_bloom json_protocols TYPE bloom_filter GRANULARITY 1
 )
 ENGINE = MergeTree
-PARTITION BY toYYYYMM(nodelist_date)
+PARTITION BY zone
 ORDER BY (zone, net, node, nodelist_date, conflict_sequence)
 SETTINGS index_granularity = 8192;
 
@@ -60,6 +61,8 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `net` UInt16,
     `node` UInt16,
     `address` String,
+    `domain` LowCardinality(String) DEFAULT 'fidonet',
+    `derived_from_address` String DEFAULT '',
     `hostname` String,
     `resolved_ipv4` Array(String),
     `resolved_ipv6` Array(String),
@@ -144,6 +147,12 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `hostnames_tested` Int32 DEFAULT 1,
     `hostnames_operational` Int32 DEFAULT 0,
     `ipv4_skipped` Bool DEFAULT false,
+    `binkp_ipv4_addresses` Array(String) DEFAULT [],
+    `binkp_ipv6_addresses` Array(String) DEFAULT [],
+    `ifcico_ipv4_addresses` Array(String) DEFAULT [],
+    `ifcico_ipv6_addresses` Array(String) DEFAULT [],
+    `address_validated_ipv4` Bool DEFAULT false,
+    `address_validated_ipv6` Bool DEFAULT false,
     `ftp_ipv4_tested` Bool DEFAULT false,
     `ftp_ipv4_success` Bool DEFAULT false,
     `ftp_ipv4_response_ms` UInt32 DEFAULT 0,
@@ -276,6 +285,7 @@ CREATE TABLE IF NOT EXISTS nodelistdb.flag_statistics
     `flag` String,
     `year` UInt16,
     `nodelist_date` Date,
+    `domain` LowCardinality(String) DEFAULT 'fidonet',
     `unique_nodes` UInt32,
     `first_zone` Int32,
     `first_net` Int32,
@@ -297,7 +307,7 @@ CREATE TABLE IF NOT EXISTS nodelistdb.flag_statistics
 )
 ENGINE = ReplacingMergeTree(nodelist_date)
 PARTITION BY year
-ORDER BY (flag, year, nodelist_date)
+ORDER BY (flag, year, nodelist_date, domain)
 SETTINGS index_granularity = 8192;
 
 -- NOTE: modem_caller_status and modem_test_queue tables have been removed.

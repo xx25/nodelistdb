@@ -41,7 +41,7 @@ func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
 			first_location as location,
 			first_sysop_name as sysop_name
 		FROM flag_statistics
-		WHERE flag = ?
+		WHERE flag = ? AND (? = '' OR domain = ?)
 		ORDER BY first_nodelist_date ASC
 		LIMIT 1
 	`
@@ -59,6 +59,7 @@ func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 				year,
 				any(total_nodes_in_year) as total_nodes
 			FROM flag_statistics
+			WHERE (? = '' OR domain = ?)
 			GROUP BY year
 		),
 		-- Get nodes with specific flag per year
@@ -67,7 +68,7 @@ func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 				year,
 				unique_nodes as node_count
 			FROM flag_statistics
-			WHERE flag = ?
+			WHERE flag = ? AND (? = '' OR domain = ?)
 		)
 		SELECT
 			t.year,
@@ -90,7 +91,7 @@ func (qb *QueryBuilder) NetworkNameSQL() string {
 	return `
 		SELECT system_name
 		FROM nodes
-		WHERE zone = ? AND net = ? AND node = 0
+		WHERE zone = ? AND net = ? AND node = 0 AND (? = '' OR domain = ?)
 		ORDER BY nodelist_date DESC
 		LIMIT 1
 	`
@@ -106,7 +107,7 @@ func (qb *QueryBuilder) NetworkHistorySQL() string {
 				day_number,
 				lagInFrame(nodelist_date) OVER (ORDER BY nodelist_date) as prev_date
 			FROM nodes
-			WHERE zone = ? AND net = ?
+			WHERE zone = ? AND net = ? AND (? = '' OR domain = ?)
 			ORDER BY nodelist_date
 		),
 		appearance_groups AS (

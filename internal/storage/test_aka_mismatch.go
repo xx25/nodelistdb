@@ -71,7 +71,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string
 		-- Only consider non-aggregated results since aggregated rows don't set address_validated
 		latest_tests AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
@@ -79,20 +79,20 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		),
 		-- Get the best non-aggregated result at the latest test time
 		-- Prioritize rows with address_validated=false (mismatched) first, then by hostname_index
 		-- Only consider operational rows with successful BinkP or IFCICO handshake
 		best_results AS (
 			SELECT
-				r.zone, r.net, r.node, r.test_time,
+				r.domain, r.zone, r.net, r.node, r.test_time,
 				row_number() OVER (
-					PARTITION BY r.zone, r.net, r.node
+					PARTITION BY r.domain, r.zone, r.net, r.node
 					ORDER BY r.address_validated ASC, r.hostname_index ASC
 				) as rn
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			WHERE r.is_aggregated = false
 				AND r.is_operational = true
 				AND (r.binkp_success = true OR r.ifcico_success = true)
@@ -121,9 +121,9 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string
 			r.is_operational, r.has_connectivity_issues, r.address_validated,
 			r.tested_hostname, r.hostname_index, r.is_aggregated,
 			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-			r.ftp_anon_success
+			r.ftp_anon_success, r.domain, r.derived_from_address
 		FROM node_test_results r
-		JOIN best_results br ON r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
+		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
 		WHERE r.address_validated = false
 			AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
 		ORDER BY r.test_time DESC
@@ -229,7 +229,7 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 		WITH
 		latest_tests AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
@@ -237,17 +237,17 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		),
 		best_results AS (
 			SELECT
-				r.zone, r.net, r.node, r.test_time, r.hostname_index,
+				r.domain, r.zone, r.net, r.node, r.test_time, r.hostname_index,
 				row_number() OVER (
-					PARTITION BY r.zone, r.net, r.node
+					PARTITION BY r.domain, r.zone, r.net, r.node
 					ORDER BY r.hostname_index ASC
 				) as rn
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			WHERE r.is_aggregated = false
 				AND r.is_operational = true
 				AND (r.binkp_success = true OR r.ifcico_success = true)
@@ -283,7 +283,7 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 			r.ifcico_ipv4_addresses, r.ifcico_ipv6_addresses,
 			r.address_validated_ipv4, r.address_validated_ipv6
 		FROM node_test_results r
-		JOIN best_results br ON r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
+		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
 		ORDER BY r.test_time DESC
 		LIMIT ?`, nodeFilter, validationFilter, protocolFilter)
 }

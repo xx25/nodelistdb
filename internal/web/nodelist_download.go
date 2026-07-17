@@ -8,13 +8,24 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/version"
 )
+
+// networkNameRe validates network path segments (also blocks path traversal)
+var networkNameRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
+
+// NodelistNetwork groups a non-fidonet network's nodelist files
+type NodelistNetwork struct {
+	Name  string
+	Years []NodelistYear
+}
 
 // NodelistFile represents a nodelist file with metadata
 type NodelistFile struct {
@@ -53,9 +64,58 @@ func getNodelistPath() string {
 	return filepath.Join(home, "nodelists")
 }
 
-// scanNodelistDirectory scans the nodelist directory and returns organized files by year
+// scanNodelistDirectory scans the fidonet nodelist directory (year directories
+// directly under the root, for backward compatibility) and returns organized
+// files by year.
 func scanNodelistDirectory() ([]NodelistYear, error) {
-	basePath := getNodelistPath()
+	return scanNetworkDirectory(getNodelistPath(), "nodelist.")
+}
+
+// scanNetworkNodelistDirectory scans a non-fidonet network's nodelists located
+// at <root>/<network>/<year>/<network>.DDD[.gz].
+func scanNetworkNodelistDirectory(network string) ([]NodelistYear, error) {
+	if !networkNameRe.MatchString(network) {
+		return nil, fmt.Errorf("invalid network name")
+	}
+	return scanNetworkDirectory(filepath.Join(getNodelistPath(), network), network+".")
+}
+
+// listNodelistNetworks returns the non-fidonet networks that have nodelist
+// files under <root>/<network>/.
+func listNodelistNetworks() []NodelistNetwork {
+	entries, err := os.ReadDir(getNodelistPath())
+	if err != nil {
+		return nil
+	}
+
+	var networks []NodelistNetwork
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if len(name) == 4 {
+			if _, err := strconv.Atoi(name); err == nil {
+				continue // fidonet year directory
+			}
+		}
+		if !networkNameRe.MatchString(name) || name == database.DefaultDomain {
+			continue
+		}
+		years, err := scanNetworkNodelistDirectory(name)
+		if err != nil || len(years) == 0 {
+			continue
+		}
+		networks = append(networks, NodelistNetwork{Name: name, Years: years})
+	}
+
+	sort.Slice(networks, func(i, j int) bool { return networks[i].Name < networks[j].Name })
+	return networks
+}
+
+// scanNetworkDirectory scans year directories under basePath for files whose
+// lowercase name starts with filePrefix, and returns them organized by year.
+func scanNetworkDirectory(basePath, filePrefix string) ([]NodelistYear, error) {
 
 	// Read year directories
 	yearDirs, err := os.ReadDir(basePath)
@@ -93,8 +153,8 @@ func scanNodelistDirectory() ([]NodelistYear, error) {
 			}
 
 			name := file.Name()
-			// Match nodelist.DDD or nodelist.DDD.gz
-			if !strings.HasPrefix(strings.ToLower(name), "nodelist.") {
+			// Match <prefix>DDD or <prefix>DDD.gz
+			if !strings.HasPrefix(strings.ToLower(name), filePrefix) {
 				continue
 			}
 
@@ -254,6 +314,7 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 		Title       string
 		ActivePage  string
 		Years       []NodelistYear
+		Networks    []NodelistNetwork
 		RecentFiles []NodelistFile
 		TotalFiles  int
 		Error       error
@@ -264,6 +325,7 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 		Title:       "Downloads",
 		ActivePage:  "nodelists",
 		Years:       years,
+		Networks:    listNodelistNetworks(),
 		RecentFiles: recentFiles,
 		TotalFiles:  totalNodelistFiles(years),
 		Error:       err,
@@ -282,9 +344,24 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // NodelistYearHandler shows all nodelist files for a specific year.
+// Paths: /nodelists/{year} (fidonet) or /nodelists/{network}/{year}.
 func (s *Server) NodelistYearHandler(w http.ResponseWriter, r *http.Request) {
-	year := strings.TrimPrefix(r.URL.Path, "/nodelists/")
-	if year == "" || len(year) != 4 {
+	segments := pathSegments(r.URL.Path, "/nodelists/")
+
+	network := ""
+	year := ""
+	switch len(segments) {
+	case 1:
+		year = segments[0]
+	case 2:
+		network = strings.ToLower(segments[0])
+		year = segments[1]
+	default:
+		http.NotFound(w, r)
+		return
+	}
+
+	if len(year) != 4 {
 		http.NotFound(w, r)
 		return
 	}
@@ -293,7 +370,13 @@ func (s *Server) NodelistYearHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	years, err := scanNodelistDirectory()
+	var years []NodelistYear
+	var err error
+	if network == "" {
+		years, err = scanNodelistDirectory()
+	} else {
+		years, err = scanNetworkNodelistDirectory(network)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -305,16 +388,23 @@ func (s *Server) NodelistYearHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	title := "Nodelists — " + year
+	if network != "" {
+		title = "Nodelists — " + network + " " + year
+	}
+
 	data := struct {
-		Title    string
+		Title      string
 		ActivePage string
-		Year     NodelistYear
-		Version  string
+		Network    string
+		Year       NodelistYear
+		Version    string
 	}{
-		Title:    "Nodelists — " + year,
+		Title:      title,
 		ActivePage: "nodelists",
-		Year:     yearData,
-		Version:  version.GetVersionInfo(),
+		Network:    network,
+		Year:       yearData,
+		Version:    version.GetVersionInfo(),
 	}
 
 	if err := s.templates["nodelist_year"].Execute(w, data); err != nil {
@@ -325,17 +415,26 @@ func (s *Server) NodelistYearHandler(w http.ResponseWriter, r *http.Request) {
 // NodelistDownloadHandler handles direct nodelist file downloads
 func (s *Server) NodelistDownloadHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract year and filename from URL
-	// Expected format: /download/nodelist/{year}/{filename}
+	// Expected formats: /download/nodelist/{year}/{filename} (fidonet) or
+	// /download/nodelist/{network}/{year}/{filename}
 	path := strings.TrimPrefix(r.URL.Path, "/download/nodelist/")
-	parts := strings.SplitN(path, "/", 2)
+	parts := strings.SplitN(path, "/", 3)
 
-	if len(parts) != 2 {
+	network := ""
+	var year, filename string
+	switch len(parts) {
+	case 2:
+		year, filename = parts[0], parts[1]
+	case 3:
+		network, year, filename = strings.ToLower(parts[0]), parts[1], parts[2]
+		if !networkNameRe.MatchString(network) {
+			http.Error(w, "Invalid network", http.StatusBadRequest)
+			return
+		}
+	default:
 		http.Error(w, "Invalid download path", http.StatusBadRequest)
 		return
 	}
-
-	year := parts[0]
-	filename := parts[1]
 
 	// Validate year
 	if len(year) != 4 {
@@ -347,14 +446,21 @@ func (s *Server) NodelistDownloadHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Validate filename
-	if !strings.HasPrefix(strings.ToLower(filename), "nodelist.") {
+	// Validate filename against the network's naming convention
+	expectedPrefix := "nodelist."
+	if network != "" {
+		expectedPrefix = network + "."
+	}
+	if !strings.HasPrefix(strings.ToLower(filename), expectedPrefix) {
 		http.Error(w, "Invalid filename", http.StatusBadRequest)
 		return
 	}
 
 	// Construct full path - try both with and without .gz extension
 	basePath := getNodelistPath()
+	if network != "" {
+		basePath = filepath.Join(basePath, network)
+	}
 	fullPath := filepath.Join(basePath, year, filename)
 
 	// Check if file exists, if not try with .gz extension
@@ -543,6 +649,15 @@ func (s *Server) URLListHandler(w http.ResponseWriter, r *http.Request) {
 	for _, year := range years {
 		for _, file := range year.Files {
 			fmt.Fprintf(w, "%s/download/nodelist/%s/%s\n", baseURL, year.Year, file.Name)
+		}
+	}
+
+	// Other networks' nodelists
+	for _, network := range listNodelistNetworks() {
+		for _, year := range network.Years {
+			for _, file := range year.Files {
+				fmt.Fprintf(w, "%s/download/nodelist/%s/%s/%s\n", baseURL, network.Name, year.Year, file.Name)
+			}
 		}
 	}
 }

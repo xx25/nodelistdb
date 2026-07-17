@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -28,8 +29,9 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 			sysopName = r.FormValue("sysop_name")
 
 			if sysopName != "" {
-				// Perform sysop search
-				nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 100)
+				// Perform sysop search (scoped to the selected network, if any)
+				searchDomain := strings.ToLower(strings.TrimSpace(r.FormValue("domain")))
+				nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 100, searchDomain)
 				count = len(nodes)
 			} else {
 				// Perform node search
@@ -37,6 +39,8 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	networks, _ := s.storage.GetDomains()
 
 	data := struct {
 		Title      string
@@ -47,6 +51,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		SysopName  string
 		IsRootPage bool
 		Version    string
+		Networks   []storage.DomainInfo
 	}{
 		Title:      "Search",
 		ActivePage: "search",
@@ -56,6 +61,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		SysopName:  sysopName,
 		IsRootPage: isRootPage,
 		Version:    version.GetVersionInfo(),
+		Networks:   networks,
 	}
 
 	if isRootPage {
@@ -86,6 +92,10 @@ func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeS
 		if err != nil {
 			return nil, 0, fmt.Errorf("Invalid address format: %v", err)
 		}
+		// Honor the network selector for full-address searches too
+		if domain := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); domain != "" {
+			filter.Domain = &domain
+		}
 	} else {
 		// Build filter from individual fields
 		filter = buildNodeFilterFromForm(r)
@@ -112,8 +122,27 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get node history
-	history, err := s.storage.GetNodeHistory(zone, net, node)
+	// Resolve the network: explicit ?domain= wins; otherwise use the only
+	// network the address exists in, preferring fidonet when ambiguous
+	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
+	availableDomains, _ := s.storage.NodeOps().GetNodeDomains(zone, net, node)
+	if domain == "" {
+		switch len(availableDomains) {
+		case 0:
+			domain = database.DefaultDomain
+		case 1:
+			domain = availableDomains[0]
+		default:
+			domain = availableDomains[0]
+			for _, d := range availableDomains {
+				if d == database.DefaultDomain {
+					domain = d
+					break
+				}
+			}
+		}
+	}
+	history, err := s.storage.GetNodeHistory(zone, net, node, domain)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error retrieving node history: %v", err), http.StatusInternalServerError)
 		return
@@ -124,8 +153,8 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all node changes without filtering
-	changes, err := s.storage.GetNodeChanges(zone, net, node)
+	// Get all node changes within the requested network
+	changes, err := s.storage.GetNodeChanges(zone, net, node, domain)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error retrieving node changes: %v", err), http.StatusInternalServerError)
 		return
@@ -133,9 +162,16 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 
 	activityInfo := analyzeNodeActivity(history)
 
+	resolvedDomain := domain
+	if len(history) > 0 && history[0].Domain != "" {
+		resolvedDomain = history[0].Domain
+	}
+
 	data := struct {
 		Title            string
 		Address          string
+		Domain           string
+		AvailableDomains []string
 		History          []database.Node
 		Changes          []database.NodeChange
 		FirstDate        time.Time
@@ -147,6 +183,8 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	}{
 		Title:            "Node History",
 		Address:          fmt.Sprintf("%d:%d/%d", zone, net, node),
+		Domain:           resolvedDomain,
+		AvailableDomains: availableDomains,
 		History:          history,
 		Changes:          changes,
 		FirstDate:        activityInfo.FirstDate,

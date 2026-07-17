@@ -181,7 +181,7 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 		data.Error = fmt.Errorf("Flag cannot be empty")
 	} else {
 		// Get first appearance
-		firstAppearance, err := s.storage.GetFlagFirstAppearance(flag)
+		firstAppearance, err := s.storage.GetFlagFirstAppearance(flag, requestDomain(r))
 		if err != nil {
 			data.Error = fmt.Errorf("Failed to get first appearance: %v", err)
 		} else {
@@ -190,7 +190,7 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Get yearly usage
 		if data.Error == nil {
-			yearlyUsage, err := s.storage.GetFlagUsageByYear(flag)
+			yearlyUsage, err := s.storage.GetFlagUsageByYear(flag, requestDomain(r))
 			if err != nil {
 				data.Error = fmt.Errorf("Failed to get yearly usage: %v", err)
 			} else {
@@ -240,7 +240,7 @@ func (s *Server) AnalyticsNetworkHandler(w http.ResponseWriter, r *http.Request)
 			data.Error = fmt.Errorf("Invalid network format. Use zone:net (e.g., 2:5000)")
 		} else {
 			// Get network history
-			history, err := s.storage.GetNetworkHistory(zone, net)
+			history, err := s.storage.GetNetworkHistory(zone, net, requestDomain(r))
 			if err != nil {
 				data.Error = fmt.Errorf("Failed to fetch network history: %v", err)
 			} else if history == nil {
@@ -501,7 +501,7 @@ func (s *Server) renderSoftwareAnalytics(w http.ResponseWriter, config SoftwareP
 func (s *Server) BinkPSoftwareHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderSoftwareAnalytics(w, SoftwarePageConfig{
 		PageTitle:           "BinkP Software Distribution",
-		PageSubtitle:        "Analysis of BinkP protocol implementations across the FidoNet network",
+		PageSubtitle:        "Analysis of BinkP protocol implementations across FTN networks",
 		APIEndpoint:         "/api/software/binkp",
 		HasDetailSection:    true,
 		DetailSectionTitle:  "Binkd Detailed Analysis",
@@ -519,7 +519,7 @@ func (s *Server) BinkPSoftwareHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) IfcicoSoftwareHandler(w http.ResponseWriter, r *http.Request) {
 	s.renderSoftwareAnalytics(w, SoftwarePageConfig{
 		PageTitle:            "IFCICO/EMSI Software Distribution",
-		PageSubtitle:         "Analysis of IFCICO/EMSI protocol implementations across the FidoNet network",
+		PageSubtitle:         "Analysis of IFCICO/EMSI protocol implementations across FTN networks",
 		APIEndpoint:          "/api/software/ifcico",
 		InfoNote:             "IFCICO (Internet FidoNet Compatible Interface COmmunication) is a traditional FidoNet protocol that uses EMSI (Electronic Mail Standard Identification) for handshaking. This page shows the distribution of mailer software supporting these protocols.",
 		HasDetailSection:     true,
@@ -1525,7 +1525,7 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 	// Build page config
 	config := GeoPageConfig{
 		PageTitle:       fmt.Sprintf("Nodes in %s", countryName),
-		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FidoNet nodes in %s (last %d days)</p>`, countryName, days)),
+		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes in %s (last %d days)</p>`, countryName, days)),
 		StatsHeading:    "Nodes",
 		ViewType:        "country",
 		CountryCode:     countryCode,
@@ -1601,7 +1601,7 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	// Build page config
 	config := GeoPageConfig{
 		PageTitle:       provider,
-		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FidoNet nodes hosted by %s (last %d days)</p>`, provider, days)),
+		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes hosted by %s (last %d days)</p>`, provider, days)),
 		StatsHeading:    "Nodes",
 		ViewType:        "provider",
 		ProviderName:    provider,
@@ -1970,7 +1970,7 @@ func (s *Server) DomainNodesHandler(w http.ResponseWriter, r *http.Request) {
 	// Build page config (reuse GeoPageConfig with "domain" ViewType)
 	config := GeoPageConfig{
 		PageTitle:       fmt.Sprintf("Nodes using %s", domainName),
-		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">FidoNet nodes with hostnames under <strong>%s</strong></p>`, template.HTMLEscapeString(domainName))),
+		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">FTN nodes with hostnames under <strong>%s</strong></p>`, template.HTMLEscapeString(domainName))),
 		StatsHeading:    "Nodes",
 		ViewType:        "domain",
 		ProviderName:    domainName, // Reuse ProviderName field for the domain name

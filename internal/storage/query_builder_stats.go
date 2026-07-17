@@ -79,13 +79,13 @@ func (qb *QueryBuilder) StatsSQL() string {
 		countIf(node_type = 'Host') as host_nodes,
 		countIf(has_inet = true) as internet_nodes
 	FROM nodes
-	WHERE nodelist_date = ?
+	WHERE nodelist_date = ? AND (? = '' OR domain = ?)
 	GROUP BY nodelist_date`
 }
 
 // ZoneDistributionSQL returns SQL for zone distribution stats
 func (qb *QueryBuilder) ZoneDistributionSQL() string {
-	return "SELECT zone, COUNT(*) FROM nodes WHERE nodelist_date = ? GROUP BY zone"
+	return "SELECT zone, COUNT(*) FROM nodes WHERE nodelist_date = ? AND (? = '' OR domain = ?) GROUP BY zone"
 }
 
 // LargestRegionsSQL returns SQL for largest regions stats
@@ -95,7 +95,7 @@ func (qb *QueryBuilder) LargestRegionsSQL() string {
 		SELECT zone, region, COUNT(*) as count,
 			   MAX(CASE WHEN node_type = 'Region' THEN system_name ELSE NULL END) as region_name
 		FROM nodes
-		WHERE nodelist_date = ? AND region > 0
+		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND region > 0
 		GROUP BY zone, region
 	)
 	SELECT zone, region, count, region_name
@@ -111,7 +111,7 @@ func (qb *QueryBuilder) OptimizedLargestRegionsSQL() string {
 	SELECT zone, region, COUNT(*) as count,
 		   argMax(system_name, CASE WHEN node_type = 'Region' THEN 1 ELSE 0 END) as region_name
 	FROM nodes
-	WHERE nodelist_date = ? AND region > 0
+	WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND region > 0
 	GROUP BY zone, region
 	ORDER BY count DESC
 	LIMIT 10`
@@ -123,13 +123,13 @@ func (qb *QueryBuilder) LargestNetsSQL() string {
 	WITH NetCounts AS (
 		SELECT zone, net, COUNT(*) as count
 		FROM nodes
-		WHERE nodelist_date = ? AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
+		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
 		GROUP BY zone, net
 	),
 	HostNames AS (
 		SELECT zone, net, system_name as host_name
 		FROM nodes
-		WHERE nodelist_date = ? AND node_type = 'Host'
+		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND node_type = 'Host'
 	)
 	SELECT nc.zone, nc.net, nc.count, hn.host_name
 	FROM NetCounts nc
@@ -145,7 +145,7 @@ func (qb *QueryBuilder) OptimizedLargestNetsSQL() string {
 	FROM (
 		SELECT zone, net, COUNT(*) as count
 		FROM nodes
-		WHERE nodelist_date = ? AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
+		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
 		GROUP BY zone, net
 		ORDER BY count DESC
 		LIMIT 10
@@ -153,7 +153,7 @@ func (qb *QueryBuilder) OptimizedLargestNetsSQL() string {
 	LEFT JOIN (
 		SELECT zone, net, system_name as host_name
 		FROM nodes
-		WHERE nodelist_date = ? AND node_type = 'Host'
+		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND node_type = 'Host'
 	) hn ON nc.zone = hn.zone AND nc.net = hn.net
 	ORDER BY nc.count DESC`
 }
@@ -167,7 +167,7 @@ func (qb *QueryBuilder) BrowseZonesSQL() string {
 		COUNT(*) as node_count,
 		anyIf(system_name, node_type = 'Zone') as zone_name
 	FROM nodes
-	WHERE nodelist_date = ?
+	WHERE nodelist_date = ? AND (? = '' OR domain = ?)
 	GROUP BY zone
 	ORDER BY zone`
 }
@@ -186,7 +186,7 @@ func (qb *QueryBuilder) BrowseRegionsSQL() string {
 		anyIf(system_name, node_type = 'Region') as region_name,
 		anyIf(location, node_type = 'Region') as region_location
 	FROM nodes
-	WHERE nodelist_date = ? AND zone = ?
+	WHERE nodelist_date = ? AND zone = ? AND (? = '' OR domain = ?)
 	GROUP BY region
 	ORDER BY ifNull(region, 0)`
 }
@@ -202,7 +202,7 @@ func (qb *QueryBuilder) BrowseNetsSQL() string {
 		anyIf(system_name, node_type = 'Host') as host_name,
 		anyIf(location, node_type = 'Host') as host_location
 	FROM nodes
-	WHERE nodelist_date = ? AND zone = ? AND ifNull(region, 0) = ?
+	WHERE nodelist_date = ? AND zone = ? AND ifNull(region, 0) = ? AND (? = '' OR domain = ?)
 	GROUP BY net
 	ORDER BY net`
 }
@@ -217,8 +217,8 @@ func (qb *QueryBuilder) BrowseNodesSQL() string {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 	FROM nodes
-	WHERE nodelist_date = ? AND zone = ? AND net = ?
+	WHERE nodelist_date = ? AND zone = ? AND net = ? AND (? = '' OR domain = ?)
 	ORDER BY node, conflict_sequence`
 }

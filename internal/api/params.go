@@ -95,6 +95,12 @@ func parseNodeFilter(r *http.Request) (database.NodeFilter, bool, error) {
 	query := r.URL.Query()
 	hasConstraint := false
 
+	// FTN network filter (does not count as a constraint on its own)
+	if domain, ok := parseStringParam(query, "domain", 1); ok {
+		domain = strings.ToLower(domain)
+		filter.Domain = &domain
+	}
+
 	// Zone, Net, Node
 	if zone, ok := parseIntParam(query, "zone"); ok {
 		filter.Zone = &zone

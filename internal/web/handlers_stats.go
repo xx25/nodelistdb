@@ -18,8 +18,10 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	var dateAdjusted bool
 	var availableDates []time.Time
 
+	domain := requestDomain(r)
+
 	// Get available dates for the dropdown
-	availableDates, err = s.storage.GetAvailableDates()
+	availableDates, err = s.storage.GetAvailableDates(domain)
 	if err != nil {
 		data := struct {
 			Title          string
@@ -57,7 +59,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		selectedDate, err = time.Parse("2006-01-02", dateStr)
 		if err != nil {
 			// Invalid date format, fall back to latest
-			actualDate, err = s.storage.GetLatestStatsDate()
+			actualDate, err = s.storage.GetLatestStatsDate(domain)
 			if err != nil {
 				data := struct {
 					Title          string
@@ -91,7 +93,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			dateAdjusted = true
 		} else {
 			// Find the nearest available date
-			actualDate, err = s.storage.GetNearestAvailableDate(selectedDate)
+			actualDate, err = s.storage.GetNearestAvailableDate(selectedDate, domain)
 			if err != nil {
 				data := struct {
 					Title          string
@@ -126,7 +128,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// No date specified, use latest
-		actualDate, err = s.storage.GetLatestStatsDate()
+		actualDate, err = s.storage.GetLatestStatsDate(domain)
 		if err != nil {
 			data := struct {
 				Title          string
@@ -160,10 +162,13 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get stats for the actual date
-	stats, err := s.storage.GetStats(actualDate)
+	stats, err := s.storage.GetStats(actualDate, domain)
 
 	// Get historical node count for chart
-	nodeHistory, _ := s.storage.GetNodeCountHistory()
+	nodeHistory, _ := s.storage.GetNodeCountHistory(domain)
+
+	// List all networks for the selector
+	networks, _ := s.storage.GetDomains()
 
 	data := struct {
 		Title          string
@@ -177,6 +182,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		DateAdjusted   bool
 		Version        string
 		NodeHistory    []storage.NodeCountByDate
+		Domain         string
+		Networks       []storage.DomainInfo
 	}{
 		Title:          "Network Statistics",
 		ActivePage:     "stats",
@@ -189,6 +196,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		DateAdjusted:   dateAdjusted,
 		Version:        version.GetVersionInfo(),
 		NodeHistory:    nodeHistory,
+		Domain:         domain,
+		Networks:       networks,
 	}
 
 	if data.NoData && err == nil {

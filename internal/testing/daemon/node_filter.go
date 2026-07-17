@@ -28,15 +28,14 @@ func (nf *NodeFilter) FilterByTestLimit(nodes []*models.Node, testLimit string) 
 		return nodes
 	}
 
-	// Special case for specific node address format (e.g., "2:5001/100")
-	var zone, net, node int
-	if _, err := fmt.Sscanf(testLimit, "%d:%d/%d", &zone, &net, &node); err == nil {
-		// Filter nodes to only include the specified one
+	// Special case for specific node address format (e.g., "2:5001/100" or
+	// "21:1/100@fsxnet"); without an @domain suffix all networks match
+	if aka, ok := parseAKA(testLimit); ok {
 		var filtered []*models.Node
 		for _, n := range nodes {
-			if n.Zone == zone && n.Net == net && n.Node == node {
+			if n.Zone == aka.Zone && n.Net == aka.Net && n.Node == aka.Node &&
+				(aka.Domain == "" || aka.Domain == n.EffectiveDomain()) {
 				filtered = append(filtered, n)
-				break // Only need one match
 			}
 		}
 		return filtered

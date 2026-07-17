@@ -10,6 +10,31 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
+// requestDomain returns the FTN network selected via the ?domain= query (or
+// form) parameter, defaulting to fidonet so pre-multi-network URLs are
+// unchanged.
+func requestDomain(r *http.Request) string {
+	if d := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))); d != "" {
+		return d
+	}
+	if d := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); d != "" {
+		return d
+	}
+	return database.DefaultDomain
+}
+
+// domainQuerySuffix returns "" for the default network and "?domain=<name>"
+// (or "&domain=<name>" when appending) otherwise.
+func domainQuerySuffix(domain string, first bool) string {
+	if domain == "" || domain == database.DefaultDomain {
+		return ""
+	}
+	if first {
+		return "?domain=" + domain
+	}
+	return "&domain=" + domain
+}
+
 // parseNodeAddress parses a FidoNet node address like "2:5001/100" or "1:234/56.7"
 func parseNodeAddress(address string) (zone, net, node int, err error) {
 	// Remove any whitespace
@@ -112,6 +137,10 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 			filter.Location = &location
 			hasSpecificConstraint = true
 		}
+	}
+
+	if domain := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); domain != "" {
+		filter.Domain = &domain
 	}
 
 	// Return empty filter for resource-intensive searches to prevent OOM

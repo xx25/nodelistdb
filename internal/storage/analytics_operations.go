@@ -70,8 +70,9 @@ func NewAnalyticsOperations(db database.DatabaseInterface, queryBuilder QueryBui
 	}
 }
 
-// GetFlagFirstAppearance finds the first node that used a specific flag
-func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string) (*FlagFirstAppearance, error) {
+// GetFlagFirstAppearance finds the first node that used a specific flag.
+// An empty domain searches all networks.
+func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string, domain string) (*FlagFirstAppearance, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -83,7 +84,7 @@ func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string) (*FlagFirstAp
 	query := ao.queryBuilder.FlagFirstAppearanceSQL()
 
 	// Query uses pre-aggregated flag_statistics table
-	row := conn.QueryRow(query, flag)
+	row := conn.QueryRow(query, flag, domain, domain)
 
 	var fa FlagFirstAppearance
 	err := row.Scan(
@@ -106,20 +107,25 @@ func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string) (*FlagFirstAp
 	return &fa, nil
 }
 
-// GetFlagUsageByYear returns the usage statistics of a flag by year
-func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string) ([]FlagUsageByYear, error) {
+// GetFlagUsageByYear returns the usage statistics of a flag by year.
+// Pass a concrete domain: totals are stored per network, and mixing
+// networks would make the percentages meaningless.
+func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string, domain string) ([]FlagUsageByYear, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
 	if flag == "" {
 		return nil, fmt.Errorf("flag cannot be empty")
 	}
+	if domain == "" {
+		domain = database.DefaultDomain
+	}
 
 	conn := ao.db.Conn()
 	query := ao.queryBuilder.FlagUsageByYearSQL()
 
 	// Query uses pre-aggregated flag_statistics table
-	rows, err := conn.Query(query, flag)
+	rows, err := conn.Query(query, domain, domain, flag, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query flag usage by year: %w", err)
 	}
@@ -142,8 +148,9 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string) ([]FlagUsageByYea
 	return results, nil
 }
 
-// GetNetworkHistory returns the complete appearance history of a network
-func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
+// GetNetworkHistory returns the complete appearance history of a network.
+// An empty domain searches all FTN networks.
+func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int, domain string) (*NetworkHistory, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -152,7 +159,7 @@ func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int) (*NetworkHistory
 	// First, get the network name from node 0 if it exists
 	nameQuery := ao.queryBuilder.NetworkNameSQL()
 	var networkName string
-	err := conn.QueryRow(nameQuery, zone, net).Scan(&networkName)
+	err := conn.QueryRow(nameQuery, zone, net, domain, domain).Scan(&networkName)
 	if err != nil {
 		// Network might not have a coordinator, use default name
 		networkName = fmt.Sprintf("Network %d:%d", zone, net)
@@ -160,7 +167,7 @@ func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int) (*NetworkHistory
 
 	// Get all appearances of the network
 	historyQuery := ao.queryBuilder.NetworkHistorySQL()
-	rows, err := conn.Query(historyQuery, zone, net)
+	rows, err := conn.Query(historyQuery, zone, net, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query network history: %w", err)
 	}
@@ -217,14 +224,18 @@ func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int) (*NetworkHistory
 	}, nil
 }
 
-// UpdateFlagStatistics updates flag_statistics table for a specific nodelist date.
-// This should be called after inserting new nodes to keep analytics up-to-date.
-func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time) error {
+// UpdateFlagStatistics updates flag_statistics table for a specific nodelist
+// date within one network. All aggregates (first appearance, totals per year)
+// are computed per domain so networks never mix.
+func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time, domain string) error {
 	ao.mu.Lock()
 	defer ao.mu.Unlock()
 
 	if nodelistDate.IsZero() {
 		return fmt.Errorf("nodelist date cannot be zero")
+	}
+	if domain == "" {
+		domain = database.DefaultDomain
 	}
 
 	conn := ao.db.Conn()
@@ -235,6 +246,7 @@ func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time) erro
 		flag,
 		year,
 		nodelist_date,
+		domain,
 		unique_nodes,
 		total_nodes_in_year,
 		first_zone,
@@ -281,7 +293,7 @@ func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time) erro
 				extractAll(toString(internet_config), '"([A-Z]{3})"')
 			)) AS flag
 		FROM nodes
-		WHERE nodelist_date = ?
+		WHERE nodelist_date = ? AND domain = ?
 		  AND (length(flags) > 0 OR length(modem_flags) > 0 OR length(extractAll(toString(internet_config), '"([A-Z]{3})"')) > 0)
 	),
 	-- Get unique flags from new nodelist
@@ -318,6 +330,7 @@ func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time) erro
 					extractAll(toString(internet_config), '"([A-Z]{3})"')
 				)) AS flag
 			FROM nodes
+			WHERE domain = ?
 		) AS n
 		INNER JOIN new_flags nf ON n.flag = nf.flag
 		GROUP BY n.flag
@@ -339,12 +352,14 @@ func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time) erro
 			uniqExact((zone, net, node)) AS total_nodes
 		FROM nodes
 		WHERE toYear(nodelist_date) IN (SELECT DISTINCT year FROM flag_year_stats)
+		  AND domain = ?
 		GROUP BY year
 	)
 	SELECT
 		s.flag,
 		s.year,
 		s.nodelist_date,
+		? AS domain,
 		s.unique_nodes,
 		t.total_nodes AS total_nodes_in_year,
 		tupleElement(f.first_node, 1) AS first_zone,
@@ -368,7 +383,10 @@ func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time) erro
 	LEFT JOIN total_nodes_per_year t ON s.year = t.year
 	`
 
-	_, err := conn.Exec(updateSQL, nodelistDate)
+	// Placeholder order follows the SQL text: new_node_flags (date, domain),
+	// flag_first_appearance (domain), total_nodes_per_year (domain),
+	// final select (domain literal column)
+	_, err := conn.Exec(updateSQL, nodelistDate, domain, domain, domain, domain)
 	if err != nil {
 		return fmt.Errorf("failed to update flag_statistics for date %s: %w", nodelistDate.Format("2006-01-02"), err)
 	}
@@ -404,13 +422,14 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 	// 4. Calculate years active from first to last appearance
 	query := fmt.Sprintf(`
 		WITH
-		-- Get the maximum nodelist date to determine if node is still active
+		-- Latest nodelist date per network, to determine if a node is still active
 		max_date AS (
-			SELECT max(nodelist_date) as latest_date FROM nodes
+			SELECT domain, max(nodelist_date) as latest_date FROM nodes GROUP BY domain
 		),
-		-- Get first and last appearance for each (zone, net, node, sysop_name) combination
+		-- Get first and last appearance for each (domain, zone, net, node, sysop_name) combination
 		node_lifetimes AS (
 			SELECT
+				domain,
 				zone,
 				net,
 				node,
@@ -435,7 +454,7 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 					nodelist_date
 				) as raw_line
 			FROM nodes
-			GROUP BY zone, net, node, sysop_name
+			GROUP BY domain, zone, net, node, sysop_name
 		)
 		SELECT
 			nl.zone,
@@ -450,7 +469,7 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 			nl.last_seen >= md.latest_date as still_active,
 			nl.raw_line
 		FROM node_lifetimes nl
-		CROSS JOIN max_date md
+		INNER JOIN max_date md ON nl.domain = md.domain
 		WHERE toMonth(nl.first_appeared) = ?
 		  AND toDayOfMonth(nl.first_appeared) = ?
 		  AND toYear(nl.first_appeared) < toYear(today())
@@ -540,7 +559,7 @@ func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 
 	query := `
 		WITH latest_date AS (
-			SELECT MAX(nodelist_date) as max_date FROM nodes
+			SELECT MAX(nodelist_date) as max_date FROM nodes WHERE domain = 'fidonet'
 		)
 		SELECT
 			zone,
@@ -557,7 +576,8 @@ func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 			flags,
 			modem_flags
 		FROM nodes
-		WHERE nodelist_date = (SELECT max_date FROM latest_date)
+		WHERE domain = 'fidonet'
+		  AND nodelist_date = (SELECT max_date FROM latest_date)
 		  AND conflict_sequence = 0
 		  AND is_cm = true
 		  AND phone != ''
@@ -629,7 +649,7 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, er
 
 	query := `
 		WITH latest_date AS (
-			SELECT MAX(nodelist_date) as max_date FROM nodes
+			SELECT MAX(nodelist_date) as max_date FROM nodes WHERE domain = 'fidonet'
 		)
 		SELECT
 			zone,
@@ -646,7 +666,8 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, er
 			flags,
 			modem_flags
 		FROM nodes
-		WHERE nodelist_date = (SELECT max_date FROM latest_date)
+		WHERE domain = 'fidonet'
+		  AND nodelist_date = (SELECT max_date FROM latest_date)
 		  AND conflict_sequence = 0
 		  AND phone != ''
 		  AND phone != '-Unpublished-'
@@ -734,9 +755,6 @@ func (ao *AnalyticsOperations) GetFileRequestNodes(limit int) ([]FileRequestNode
 	conn := ao.db.Conn()
 
 	query := `
-		WITH latest_date AS (
-			SELECT MAX(nodelist_date) as max_date FROM nodes
-		)
 		SELECT
 			zone,
 			net,
@@ -749,7 +767,7 @@ func (ao *AnalyticsOperations) GetFileRequestNodes(limit int) ([]FileRequestNode
 			node_type,
 			flags
 		FROM nodes
-		WHERE nodelist_date = (SELECT max_date FROM latest_date)
+		WHERE (domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes GROUP BY domain)
 		  AND conflict_sequence = 0
 		  AND hasAny(flags, ['XA', 'XB', 'XC', 'XP', 'XR', 'XW', 'XX'])
 		  AND node != 0

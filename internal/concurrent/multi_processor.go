@@ -30,21 +30,21 @@ type Result struct {
 // StorageInterface defines the interface for storage operations needed by concurrent processing.
 type StorageInterface interface {
 	InsertNodes([]database.Node) error
-	IsNodelistProcessed(time.Time) (bool, error)
-	FindConflictingNode(int, int, int, time.Time) (bool, error)
-	UpdateFlagStatistics(time.Time) error
+	IsNodelistProcessed(time.Time, string) (bool, error)
+	FindConflictingNode(int, int, int, time.Time, string) (bool, error)
+	UpdateFlagStatistics(time.Time, string) error
 }
 
 // NodeOperations defines the node CRUD operations required by the adapter.
 type NodeOperations interface {
 	InsertNodes([]database.Node) error
-	IsNodelistProcessed(time.Time) (bool, error)
-	FindConflictingNode(int, int, int, time.Time) (bool, error)
+	IsNodelistProcessed(time.Time, string) (bool, error)
+	FindConflictingNode(int, int, int, time.Time, string) (bool, error)
 }
 
 // FlagStatisticsUpdater defines the flag statistics update operation.
 type FlagStatisticsUpdater interface {
-	UpdateFlagStatistics(time.Time) error
+	UpdateFlagStatistics(time.Time, string) error
 }
 
 // StorageAdapter wraps a storage implementation that uses component-based API and adapts it
@@ -66,16 +66,16 @@ func (sa *StorageAdapter) InsertNodes(nodes []database.Node) error {
 	return sa.nodeOps.InsertNodes(nodes)
 }
 
-func (sa *StorageAdapter) IsNodelistProcessed(date time.Time) (bool, error) {
-	return sa.nodeOps.IsNodelistProcessed(date)
+func (sa *StorageAdapter) IsNodelistProcessed(date time.Time, domain string) (bool, error) {
+	return sa.nodeOps.IsNodelistProcessed(date, domain)
 }
 
-func (sa *StorageAdapter) FindConflictingNode(zone, net, node int, date time.Time) (bool, error) {
-	return sa.nodeOps.FindConflictingNode(zone, net, node, date)
+func (sa *StorageAdapter) FindConflictingNode(zone, net, node int, date time.Time, domain string) (bool, error) {
+	return sa.nodeOps.FindConflictingNode(zone, net, node, date, domain)
 }
 
-func (sa *StorageAdapter) UpdateFlagStatistics(date time.Time) error {
-	return sa.storage.UpdateFlagStatistics(date)
+func (sa *StorageAdapter) UpdateFlagStatistics(date time.Time, domain string) error {
+	return sa.storage.UpdateFlagStatistics(date, domain)
 }
 
 // MultiProcessor manages concurrent file processing with generic storage interface
@@ -85,6 +85,21 @@ type MultiProcessor struct {
 	batchSize  int
 	verbose    bool
 	quiet      bool
+	domain     string // FTN network the processed nodelists belong to
+}
+
+// SetDomain sets the FTN network stamped on parsed nodes and used for the
+// per-network import gate. Defaults to fidonet when unset.
+func (p *MultiProcessor) SetDomain(domain string) {
+	p.domain = domain
+}
+
+// effectiveDomain returns the configured domain or the default network.
+func (p *MultiProcessor) effectiveDomain() string {
+	if p.domain == "" {
+		return database.DefaultDomain
+	}
+	return p.domain
 }
 
 // NewMultiProcessor creates a new concurrent processor with generic storage interface
@@ -199,7 +214,7 @@ func (p *MultiProcessor) ProcessFiles(ctx context.Context, files []string) error
 			if p.verbose {
 				fmt.Printf("  Updating flag statistics for %s...\n", date.Format("2006-01-02"))
 			}
-			if err := p.storage.UpdateFlagStatistics(date); err != nil {
+			if err := p.storage.UpdateFlagStatistics(date, p.effectiveDomain()); err != nil {
 				fmt.Printf("  Warning: Failed to update flag statistics for %s: %v\n", date.Format("2006-01-02"), err)
 				// Non-fatal error - continue with other dates
 			} else {
@@ -230,6 +245,7 @@ func (p *MultiProcessor) worker(ctx context.Context, jobs <-chan Job, results ch
 	// The Parser struct has mutable state (Context, nodeTracker, DetectedFormat)
 	// that would be corrupted if shared across concurrent goroutines.
 	workerParser := parser.New(p.verbose)
+	workerParser.SetDomain(p.effectiveDomain())
 
 	for {
 		select {
@@ -278,7 +294,7 @@ func (p *MultiProcessor) processFileWithParser(ctx context.Context, job Job, fil
 	// Check if already processed
 	if len(nodes) > 0 && nodes[0].NodelistDate.Year() > 1900 {
 		nodelistDate := nodes[0].NodelistDate
-		isProcessed, err := p.storage.IsNodelistProcessed(nodelistDate)
+		isProcessed, err := p.storage.IsNodelistProcessed(nodelistDate, p.effectiveDomain())
 		if err != nil {
 			result.Error = fmt.Errorf("failed to check if processed: %w", err)
 			result.Duration = time.Since(startTime)

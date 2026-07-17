@@ -16,6 +16,8 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 			net UInt16,
 			node UInt16,
 			address String,
+			domain LowCardinality(String) DEFAULT 'fidonet',
+			derived_from_address String DEFAULT '',
 
 			hostname String,
 			resolved_ipv4 Array(String),

@@ -137,13 +137,17 @@ func (cno *ClickHouseNodeOperations) insertChunkNative(ctx context.Context, conn
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 	)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
 
 	for _, node := range chunk {
+		if node.Domain == "" {
+			node.Domain = database.DefaultDomain
+		}
+
 		// Compute FTS ID if not set
 		if node.FtsId == "" {
 			node.ComputeFtsId()
@@ -179,6 +183,7 @@ func (cno *ClickHouseNodeOperations) insertChunkNative(ctx context.Context, conn
 			internetConfigStr,
 			node.FtsId,
 			node.RawLine,
+			node.Domain,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to append row: %w", err)
@@ -232,6 +237,9 @@ func (cno *ClickHouseNodeOperations) insertChunkSQL(tx *sql.Tx, chunk []database
 	defer stmt.Close()
 
 	for _, node := range chunk {
+		if node.Domain == "" {
+			node.Domain = database.DefaultDomain
+		}
 		if node.FtsId == "" {
 			node.ComputeFtsId()
 		}
@@ -247,7 +255,7 @@ func (cno *ClickHouseNodeOperations) insertChunkSQL(tx *sql.Tx, chunk []database
 			node.Region, node.MaxSpeed, node.IsCM, node.IsMO,
 			node.Flags, node.ModemFlags,
 			node.ConflictSequence, node.HasConflict, node.HasInet,
-			internetConfigStr, node.FtsId, node.RawLine,
+			internetConfigStr, node.FtsId, node.RawLine, node.Domain,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to execute insert: %w", err)
@@ -309,8 +317,9 @@ func (cno *ClickHouseNodeOperations) GetNodes(filter database.NodeFilter) ([]dat
 	return nodes, nil
 }
 
-// GetNodeHistory retrieves all historical entries for a specific node
-func (cno *ClickHouseNodeOperations) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
+// GetNodeHistory retrieves all historical entries for a specific node.
+// An empty domain matches all networks.
+func (cno *ClickHouseNodeOperations) GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error) {
 	// Validate input
 	if zone < 1 || zone > 65535 {
 		return nil, fmt.Errorf("invalid zone: %d", zone)
@@ -328,7 +337,7 @@ func (cno *ClickHouseNodeOperations) GetNodeHistory(zone, net, node int) ([]data
 	conn := cno.db.Conn()
 
 	query := cno.queryBuilder.NodeHistorySQL()
-	rows, err := conn.Query(query, zone, net, node)
+	rows, err := conn.Query(query, zone, net, node, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query node history: %w", err)
 	}

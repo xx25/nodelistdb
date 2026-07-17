@@ -737,6 +737,9 @@
                                     {{else}}
                                     <span class="status-badge failed">Failed</span>
                                     {{end}}
+                                    {{if .DerivedFromAddress}}
+                                    <span class="badge badge-info" title="Not tested directly: result derived from the announced AKA list of {{.DerivedFromAddress}}">via AKA {{.DerivedFromAddress}}</span>
+                                    {{end}}
                                 </td>
                                 <!-- BinkP IPv4 -->
                                 <td>

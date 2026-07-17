@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/cache"
+	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/logging"
 )
 
@@ -65,13 +66,13 @@ func (cs *CachedStorage) GetCacheMetrics() *cache.Metrics {
 func (cs *CachedStorage) warmupCache() {
 	logging.Info("Starting cache warmup")
 
-	// Pre-cache latest stats
-	if date, err := cs.Storage.StatsOps().GetLatestStatsDate(); err == nil {
-		_, _ = cs.GetStats(date)
+	// Pre-cache latest stats (default network)
+	if date, err := cs.Storage.StatsOps().GetLatestStatsDate(database.DefaultDomain); err == nil {
+		_, _ = cs.GetStats(date, database.DefaultDomain)
 	}
 
 	// Pre-cache available dates
-	_, _ = cs.GetAvailableDates()
+	_, _ = cs.GetAvailableDates(database.DefaultDomain)
 
 	// Pre-cache some popular nodes (example addresses)
 	popularNodes := []struct{ Zone, Net, Node int }{
@@ -81,7 +82,7 @@ func (cs *CachedStorage) warmupCache() {
 	}
 
 	for _, node := range popularNodes {
-		_, _ = cs.GetNodeHistory(node.Zone, node.Net, node.Node)
+		_, _ = cs.GetNodeHistory(node.Zone, node.Net, node.Node, "")
 	}
 
 	logging.Info("Cache warmup completed")

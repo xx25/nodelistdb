@@ -26,6 +26,7 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 		Zone:          node.Zone,
 		Net:           node.Net,
 		Node:          node.Node,
+		Domain:        node.EffectiveDomain(),
 		TestTime:      time.Now(),
 		TestDate:      time.Now().Truncate(24 * time.Hour),
 		IsOperational: false,

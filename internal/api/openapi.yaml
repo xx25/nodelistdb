@@ -69,13 +69,18 @@ paths:
       tags:
         - Nodes
       parameters:
+        - name: domain
+          in: query
+          description: FTN network to search in (omit to search all networks)
+          schema:
+            type: string
+            example: fsxnet
         - name: zone
           in: query
-          description: FidoNet zone number (1-6)
+          description: FTN zone number
           schema:
             type: integer
             minimum: 1
-            maximum: 6
             example: 2
         - name: net
           in: query
@@ -500,13 +505,61 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/networks:
+    get:
+      summary: List FTN Networks
+      description: >
+        List the FTN networks (domains) present in the database with each
+        network's latest nodelist date and node count on that date.
+      operationId: getNetworks
+      tags:
+        - Statistics
+      responses:
+        '200':
+          description: Networks present in the database
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  networks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        domain:
+                          type: string
+                          example: fsxnet
+                        latest_date:
+                          type: string
+                          format: date-time
+                        node_count:
+                          type: integer
+                  count:
+                    type: integer
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/stats:
     get:
       summary: Get Network Statistics
-      description: Get comprehensive FidoNet network statistics
+      description: Get comprehensive FTN network statistics
       operationId: getStats
       tags:
         - Statistics
+      parameters:
+        - name: domain
+          in: query
+          description: FTN network to report on (defaults to fidonet)
+          schema:
+            type: string
+            default: fidonet
+        - name: date
+          in: query
+          description: Nodelist date (YYYY-MM-DD); nearest available date is used
+          schema:
+            type: string
+            format: date
       responses:
         '200':
           description: Network statistics
@@ -524,6 +577,13 @@ paths:
       operationId: getAvailableDates
       tags:
         - Statistics
+      parameters:
+        - name: domain
+          in: query
+          description: FTN network whose dates to list (defaults to fidonet)
+          schema:
+            type: string
+            default: fidonet
       responses:
         '200':
           description: Available dates

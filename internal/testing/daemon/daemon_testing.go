@@ -53,6 +53,11 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 		logging.Infof("Scheduler selected %d nodes for testing", len(nodes))
 	}
 
+	// Collapse cross-network AKA equivalence groups to one representative per
+	// cycle: the deferred entries get covered by derived results instead of
+	// direct tests
+	nodes = d.collapseAKAGroups(nodes)
+
 	// Log breakdown of test reasons
 	reasonCounts := make(map[string]int)
 	for _, node := range nodes {
@@ -75,6 +80,9 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	batchSize := d.config.Daemon.BatchSize
 	var allResults []*models.TestResult
 	var mu sync.Mutex
+
+	// Each candidate identity gets at most one derived result per cycle
+	cycle := newCycleCoverage()
 
 	for i := 0; i < len(nodes); i += batchSize {
 		end := i + batchSize
@@ -102,7 +110,7 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 			d.workerPool.Submit(func() {
 				defer wg.Done()
 
-				result := d.testExecutor.TestNode(ctx, nodeToTest)
+				result, partials := d.testExecutor.TestNodeWithPartials(ctx, nodeToTest)
 				if result == nil {
 					return
 				}
@@ -112,8 +120,13 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 					d.scheduler.UpdateTestResult(ctx, nodeToTest, result)
 				}
 
+				// Cover the same host's entries in other networks with
+				// derived results (stored via the same batch path)
+				derived := d.deriveAKAResults(nodeToTest, result, partials, cycle)
+
 				batchMu.Lock()
 				batchResults = append(batchResults, result)
+				batchResults = append(batchResults, derived...)
 				batchMu.Unlock()
 			})
 		}
@@ -170,27 +183,36 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	var zone, net, node uint16
 	var hostname string
 	var port int
+	var nodeDomain string
 
-	// Try to parse as FTN address first (e.g., "2:5053/56")
-	if _, err := fmt.Sscanf(nodeSpec, "%d:%d/%d", &zone, &net, &node); err == nil {
+	// Try to parse as FTN address first (e.g., "2:5053/56" or "21:1/100@fsxnet")
+	if aka, ok := parseAKA(nodeSpec); ok {
+		zone, net, node = uint16(aka.Zone), uint16(aka.Net), uint16(aka.Node)
 		// It's an FTN address - look up node in database
 		nodes, err := d.storage.GetNodesByZone(ctx, int(zone))
 		if err != nil {
 			return fmt.Errorf("failed to query nodes: %w", err)
 		}
 
-		// Find the specific node
+		// Find the specific node; without an @domain suffix the default
+		// network is preferred when the address exists in several
 		var targetNode *models.Node
 		for _, n := range nodes {
-			if n.Zone == int(zone) && n.Net == int(net) && n.Node == int(node) {
+			if n.Zone != int(zone) || n.Net != int(net) || n.Node != int(node) {
+				continue
+			}
+			if aka.Domain != "" && aka.Domain != n.EffectiveDomain() {
+				continue
+			}
+			if targetNode == nil || n.EffectiveDomain() == models.DefaultDomain {
 				targetNode = n
-				break
 			}
 		}
 
 		if targetNode == nil {
 			return fmt.Errorf("node %s not found in database", nodeSpec)
 		}
+		nodeDomain = targetNode.EffectiveDomain()
 
 		// Get hostname from node data (with system name fallback)
 		hostname = targetNode.GetPrimaryHostname()
@@ -241,6 +263,7 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 		Zone:              int(zone),
 		Net:               int(net),
 		Node:              int(node),
+		Domain:            nodeDomain,
 		InternetHostnames: []string{hostname},
 		HasInet:           true,
 		InternetProtocols: []string{},

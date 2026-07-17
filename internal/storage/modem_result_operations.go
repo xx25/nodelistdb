@@ -117,7 +117,7 @@ func (m *ModemResultOperations) StoreModemTestResult(ctx context.Context, input 
 
 	query := `
 		INSERT INTO node_test_results (
-			test_time, zone, net, node, address, test_source,
+			test_time, zone, net, node, address, domain, test_source,
 			modem_tested, modem_success, modem_response_ms,
 			modem_system_name, modem_mailer_info, modem_addresses,
 			modem_connect_speed, modem_protocol, modem_caller_id,
@@ -142,7 +142,7 @@ func (m *ModemResultOperations) StoreModemTestResult(ctx context.Context, input 
 			modem_ast_hangup_cause, modem_ast_hangup_source, modem_ast_early_media,
 			is_operational, hostname
 		) VALUES (
-			?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?,
 			?, ?, ?,
 			?, ?, ?,
@@ -169,8 +169,9 @@ func (m *ModemResultOperations) StoreModemTestResult(ctx context.Context, input 
 		)
 	`
 
+	// PSTN modem testing is FidoNet-scoped; other networks are IP-only
 	_, err := m.db.Conn().ExecContext(ctx, query,
-		input.TestTime, input.Zone, input.Net, input.Node, address, testSource,
+		input.TestTime, input.Zone, input.Net, input.Node, address, database.DefaultDomain, testSource,
 		true, // modem_tested
 		input.Success,
 		input.ResponseMs,

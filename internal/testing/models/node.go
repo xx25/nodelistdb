@@ -8,11 +8,15 @@ import (
 	"github.com/nodelistdb/internal/testing/timeavail"
 )
 
-// Node represents a FidoNet node from the database
+// DefaultDomain is the FTN network assumed when none is specified.
+const DefaultDomain = "fidonet"
+
+// Node represents an FTN node from the database
 type Node struct {
 	Zone              int                `db:"zone"`
 	Net               int                `db:"net"`
 	Node              int                `db:"node"`
+	Domain            string             `db:"domain"` // FTN network (fidonet, fsxnet, ...)
 	SystemName        string             `db:"system_name"`
 	SysopName         string             `db:"sysop_name"`
 	Location          string             `db:"location"`
@@ -27,9 +31,24 @@ type Node struct {
 	InfoFlags         []string           `db:"-"` // Information flags from InternetConfig (INO4, ICM)
 }
 
-// Address returns the FidoNet address string
+// Address returns the FTN address string
 func (n *Node) Address() string {
 	return fmt.Sprintf("%d:%d/%d", n.Zone, n.Net, n.Node)
+}
+
+// EffectiveDomain returns the node's FTN network, defaulting to fidonet.
+func (n *Node) EffectiveDomain() string {
+	if n.Domain == "" {
+		return DefaultDomain
+	}
+	return n.Domain
+}
+
+// Key returns the domain-qualified node identity ("zone:net/node@domain").
+// Zone numbers are reused across FTN networks, so every map keyed by node
+// identity must include the domain.
+func (n *Node) Key() string {
+	return fmt.Sprintf("%d:%d/%d@%s", n.Zone, n.Net, n.Node, n.EffectiveDomain())
 }
 
 // HasProtocol checks if node supports a specific protocol

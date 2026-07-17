@@ -11,12 +11,20 @@ type NodeSummary struct {
 	Zone            int       `json:"zone"`
 	Net             int       `json:"net"`
 	Node            int       `json:"node"`
+	Domain          string    `json:"domain,omitempty"`
 	SystemName      string    `json:"system_name"`
 	Location        string    `json:"location"`
 	SysopName       string    `json:"sysop_name"`
 	FirstDate       time.Time `json:"first_date"`
 	LastDate        time.Time `json:"last_date"`
 	CurrentlyActive bool      `json:"currently_active"`
+}
+
+// DomainInfo describes one FTN network present in the database
+type DomainInfo struct {
+	Domain     string    `json:"domain"`
+	LatestDate time.Time `json:"latest_date"`
+	NodeCount  int       `json:"node_count"`
 }
 
 // SysopInfo represents information about a sysop
@@ -211,6 +219,10 @@ type NodeTestResult struct {
 	HasConnectivityIssues bool `json:"has_connectivity_issues"`
 	AddressValidated      bool `json:"address_validated"`
 
+	// Multi-network identity and AKA-derivation provenance
+	Domain             string `json:"domain,omitempty"`               // FTN network of the tested identity
+	DerivedFromAddress string `json:"derived_from_address,omitempty"` // non-empty: result derived from this node's direct test
+
 	// Per-hostname testing fields (simplified migration)
 	TestedHostname        string   `json:"tested_hostname"`         // Which hostname was tested
 	HostnameIndex         int32    `json:"hostname_index"`          // -1=legacy, 0=primary, 1+=backup
@@ -293,39 +305,39 @@ type Operations interface {
 
 	// Node operations (delegated to NodeOps())
 	GetNodes(filter database.NodeFilter) ([]database.Node, error)
-	GetNodeHistory(zone, net, node int) ([]database.Node, error)
-	GetNodeDateRange(zone, net, node int) (firstDate, lastDate time.Time, err error)
+	GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error)
+	GetNodeDateRange(zone, net, node int, domain string) (firstDate, lastDate time.Time, err error)
 	InsertNodes(nodes []database.Node) error
 
 	// Search operations (delegated to SearchOps())
-	SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error)
-	GetNodeChanges(zone, net, node int) ([]database.NodeChange, error)
+	SearchNodesBySysop(sysopName string, limit int, domain string) ([]NodeSummary, error)
+	GetNodeChanges(zone, net, node int, domain string) ([]database.NodeChange, error)
 	GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error)
 	GetNodesBySysop(sysopName string, limit int) ([]database.Node, error)
 	SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error)
 
 	// Analytics operations (delegated to AnalyticsOps())
-	GetFlagFirstAppearance(flagName string) (*FlagFirstAppearance, error)
-	GetFlagUsageByYear(flagName string) ([]FlagUsageByYear, error)
-	GetNetworkHistory(zone, net int) (*NetworkHistory, error)
+	GetFlagFirstAppearance(flagName string, domain string) (*FlagFirstAppearance, error)
+	GetFlagUsageByYear(flagName string, domain string) ([]FlagUsageByYear, error)
+	GetNetworkHistory(zone, net int, domain string) (*NetworkHistory, error)
 
 	// Statistics operations (delegated to StatsOps())
-	GetStats(date time.Time) (*database.NetworkStats, error)
-	GetLatestStatsDate() (time.Time, error)
-	GetAvailableDates() ([]time.Time, error)
-	GetNearestAvailableDate(requestedDate time.Time) (time.Time, error)
-	GetNodeCountHistory() ([]NodeCountByDate, error)
+	GetStats(date time.Time, domain string) (*database.NetworkStats, error)
+	GetLatestStatsDate(domain string) (time.Time, error)
+	GetAvailableDates(domain string) ([]time.Time, error)
+	GetNearestAvailableDate(requestedDate time.Time, domain string) (time.Time, error)
+	GetNodeCountHistory(domain string) ([]NodeCountByDate, error)
 
 	// Hierarchy browser operations (delegated to StatsOps())
-	GetBrowseZones(date time.Time) ([]BrowseZone, error)
-	GetBrowseRegions(date time.Time, zone int) ([]BrowseRegion, error)
-	GetBrowseNets(date time.Time, zone, region int) ([]BrowseNet, error)
-	GetBrowseNodes(date time.Time, zone, net int) ([]database.Node, error)
+	GetBrowseZones(date time.Time, domain string) ([]BrowseZone, error)
+	GetBrowseRegions(date time.Time, zone int, domain string) ([]BrowseRegion, error)
+	GetBrowseNets(date time.Time, zone, region int, domain string) ([]BrowseNet, error)
+	GetBrowseNodes(date time.Time, zone, net int, domain string) ([]database.Node, error)
 
 	// Test operations (delegated to TestOps())
-	GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error)
-	GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error)
-	GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error)
+	GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error)
+	GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error)
+	GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error)
 	GetReachabilityTrends(days int) ([]ReachabilityTrend, error)
 	GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error)
 	SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error)
@@ -371,9 +383,10 @@ type Operations interface {
 	WhoisOps() *WhoisOperations
 
 	// Utility operations (delegated to NodeOps())
-	IsNodelistProcessed(nodelistDate time.Time) (bool, error)
-	FindConflictingNode(zone, net, node int, date time.Time) (bool, error)
-	GetMaxNodelistDate() (time.Time, error)
+	IsNodelistProcessed(nodelistDate time.Time, domain string) (bool, error)
+	FindConflictingNode(zone, net, node int, date time.Time, domain string) (bool, error)
+	GetMaxNodelistDate(domain string) (time.Time, error)
+	GetDomains() ([]DomainInfo, error)
 
 	// Lifecycle
 	Close() error

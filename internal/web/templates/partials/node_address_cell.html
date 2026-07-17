@@ -1,6 +1,6 @@
 {{define "node_address_cell"}}
 <td>
-    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">
+    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="node-link">
         <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
     </a>
 </td>

@@ -23,7 +23,11 @@ type browseData struct {
 	SelectedDate   string // raw ?date= value, for the date <select>
 	ActualDate     string // resolved nodelist date (YYYY-MM-DD)
 	DateAdjusted   bool   // true if the requested date was snapped to a nearby one
-	DateQuery      string // "" or "?date=YYYY-MM-DD" suffix carried on nav links
+	DateQuery      string // "" or "?date=...&domain=..." suffix carried on nav links
+
+	// Multi-network support.
+	Domain   string              // selected FTN network (always set)
+	Networks []storage.DomainInfo // all networks, for the selector on the top level
 
 	// Breadcrumb context.
 	Zone       int
@@ -41,19 +45,20 @@ type browseData struct {
 }
 
 // resolveBrowseDate reads the optional ?date= query parameter and returns the
-// nearest available nodelist date. With no parameter it returns the latest date.
-func (s *Server) resolveBrowseDate(r *http.Request) (actual time.Time, raw string, adjusted bool, err error) {
+// nearest available nodelist date within the selected network. With no
+// parameter it returns the network's latest date.
+func (s *Server) resolveBrowseDate(r *http.Request, domain string) (actual time.Time, raw string, adjusted bool, err error) {
 	raw = r.URL.Query().Get("date")
 	if raw == "" {
-		actual, err = s.storage.GetLatestStatsDate()
+		actual, err = s.storage.GetLatestStatsDate(domain)
 		return actual, raw, false, err
 	}
 	parsed, perr := time.Parse("2006-01-02", raw)
 	if perr != nil {
-		actual, err = s.storage.GetLatestStatsDate()
+		actual, err = s.storage.GetLatestStatsDate(domain)
 		return actual, raw, true, err
 	}
-	actual, err = s.storage.GetNearestAvailableDate(parsed)
+	actual, err = s.storage.GetNearestAvailableDate(parsed, domain)
 	if err != nil {
 		return actual, raw, false, err
 	}
@@ -68,10 +73,11 @@ func (s *Server) newBrowseData(r *http.Request, level, title string) (*browseDat
 		ActivePage: "browse",
 		Level:      level,
 		Version:    version.GetVersionInfo(),
+		Domain:     requestDomain(r),
 	}
-	data.AvailableDates, _ = s.storage.GetAvailableDates()
+	data.AvailableDates, _ = s.storage.GetAvailableDates(data.Domain)
 
-	actualDate, raw, adjusted, err := s.resolveBrowseDate(r)
+	actualDate, raw, adjusted, err := s.resolveBrowseDate(r, data.Domain)
 	data.SelectedDate = raw
 	if err != nil {
 		data.Error = "Failed to determine nodelist date: " + err.Error()
@@ -79,8 +85,17 @@ func (s *Server) newBrowseData(r *http.Request, level, title string) (*browseDat
 	}
 	data.ActualDate = actualDate.Format("2006-01-02")
 	data.DateAdjusted = adjusted
+
+	// Carry the selected date and non-default network on every nav link
+	var params []string
 	if raw != "" {
-		data.DateQuery = "?date=" + data.ActualDate
+		params = append(params, "date="+data.ActualDate)
+	}
+	if data.Domain != database.DefaultDomain {
+		params = append(params, "domain="+data.Domain)
+	}
+	if len(params) > 0 {
+		data.DateQuery = "?" + strings.Join(params, "&")
 	}
 	return data, actualDate, true
 }
@@ -110,7 +125,10 @@ func (s *Server) BrowseZonesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zones, err := s.storage.GetBrowseZones(actualDate)
+	// The top level also lists all networks so users can switch between them
+	data.Networks, _ = s.storage.GetDomains()
+
+	zones, err := s.storage.GetBrowseZones(actualDate, data.Domain)
 	if err != nil {
 		data.Error = "Failed to load zones: " + err.Error()
 		s.renderBrowse(w, data)
@@ -144,7 +162,7 @@ func (s *Server) BrowseZoneHandler(w http.ResponseWriter, r *http.Request) {
 	data.Zone = zone
 	data.Title = "Browse Zone " + parts[0]
 
-	regions, err := s.storage.GetBrowseRegions(actualDate, zone)
+	regions, err := s.storage.GetBrowseRegions(actualDate, zone, data.Domain)
 	if err != nil {
 		data.Error = "Failed to load regions: " + err.Error()
 		s.renderBrowse(w, data)
@@ -183,7 +201,7 @@ func (s *Server) BrowseRegionHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Pick up the region-coordinator name for the breadcrumb/heading.
 	if data.HasRegion {
-		if regions, err := s.storage.GetBrowseRegions(actualDate, zone); err == nil {
+		if regions, err := s.storage.GetBrowseRegions(actualDate, zone, data.Domain); err == nil {
 			for _, rg := range regions {
 				if rg.Region == region {
 					data.RegionName = rg.Name
@@ -193,7 +211,7 @@ func (s *Server) BrowseRegionHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	nets, err := s.storage.GetBrowseNets(actualDate, zone, region)
+	nets, err := s.storage.GetBrowseNets(actualDate, zone, region, data.Domain)
 	if err != nil {
 		data.Error = "Failed to load nets: " + err.Error()
 		s.renderBrowse(w, data)
@@ -229,7 +247,7 @@ func (s *Server) BrowseNetHandler(w http.ResponseWriter, r *http.Request) {
 	data.Net = net
 	data.Title = "Browse Net " + parts[0] + ":" + parts[1]
 
-	nodes, err := s.storage.GetBrowseNodes(actualDate, zone, net)
+	nodes, err := s.storage.GetBrowseNodes(actualDate, zone, net, data.Domain)
 	if err != nil {
 		data.Error = "Failed to load nodes: " + err.Error()
 		s.renderBrowse(w, data)

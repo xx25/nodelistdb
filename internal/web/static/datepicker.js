@@ -1,7 +1,9 @@
-// Fancy Date Picker for NodelistDB Stats Page
+// Fancy Date Picker for NodelistDB pages with per-date views (stats, browse, ...)
 class NodelistDatePicker {
-    constructor(containerId, availableDates, currentDate) {
+    constructor(containerId, availableDates, currentDate, basePath) {
         this.container = document.getElementById(containerId);
+        // Page to reload with ?date=...; defaults to /stats for backward compatibility
+        this.basePath = basePath || '/stats';
         this.availableDates = new Set(availableDates);
         // Firefox-safe date parsing
         this.currentDate = this.parseDate(currentDate);
@@ -246,22 +248,34 @@ class NodelistDatePicker {
                 this.selectedDate = new Date(year, month - 1, day);
                 input.value = dateStr;
                 dropdown.style.display = 'none';
-                
-                // Navigate to the selected date
-                window.location.href = `/stats?date=${dateStr}`;
+
+                this.navigateTo(dateStr);
             }
         });
-        
-        // Today button
+
+        // Today button (server snaps to the nearest available date)
         document.querySelector('.date-picker-today-btn').addEventListener('click', () => {
-            const today = this.formatDate(new Date());
-            // Find nearest available date to today
-            window.location.href = `/stats?date=${today}`;
+            this.navigateTo(this.formatDate(new Date()));
         });
-        
+
         // Latest data button
         document.querySelector('.date-picker-clear-btn').addEventListener('click', () => {
-            window.location.href = '/stats';
+            this.navigateTo(null);
         });
+    }
+
+    // Reload the page for the given date (null = latest data), keeping the
+    // network selection (?domain=) intact
+    navigateTo(dateStr) {
+        const params = new URLSearchParams();
+        if (dateStr) {
+            params.set('date', dateStr);
+        }
+        const domain = new URLSearchParams(window.location.search).get('domain');
+        if (domain) {
+            params.set('domain', domain);
+        }
+        const query = params.toString();
+        window.location.href = this.basePath + (query ? '?' + query : '');
     }
 }

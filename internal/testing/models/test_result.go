@@ -13,6 +13,12 @@ type TestResult struct {
 	Net      int
 	Node     int
 	Address  string
+	Domain   string // FTN network of the tested identity (fidonet, fsxnet, ...)
+
+	// Provenance: when non-empty, this result was not obtained by a direct
+	// test but derived from another node's test via announced AKAs; the value
+	// is the directly tested node's address.
+	DerivedFromAddress string
 
 	// DNS Resolution
 	Hostname     string   // Primary hostname attempted
@@ -103,6 +109,16 @@ type IfcicoTestDetails struct {
 	SystemName   string
 	Addresses    []string
 	ResponseType string // REQ/ACK/NAK/CLI/HBT
+}
+
+// AnnouncedAKARecord holds the AKA list one node identity announced during
+// recent handshakes. Used to seed the AKA equivalence index.
+type AnnouncedAKARecord struct {
+	Zone      int
+	Net       int
+	Node      int
+	Domain    string
+	Announced []string
 }
 
 // DNSResult represents DNS resolution result
@@ -213,6 +229,7 @@ func NewTestResult(node *Node) *TestResult {
 		Net:      node.Net,
 		Node:     node.Node,
 		Address:  node.Address(),
+		Domain:   node.EffectiveDomain(),
 		Hostname: node.GetPrimaryHostname(),
 		// Initialize per-hostname fields with legacy values
 		HostnameIndex:        -1,  // Mark as legacy by default
@@ -407,6 +424,14 @@ func (pr *ProtocolTestResult) GetConnectivityType() string {
 		return "failed"
 	}
 	return "not-tested"
+}
+
+// Clone returns a copy of the test result suitable for storing under another
+// node identity (AKA-derived results). Protocol result pointers are shared:
+// they are read-only once testing has finished.
+func (tr *TestResult) Clone() *TestResult {
+	clone := *tr
+	return &clone
 }
 
 // NewAggregatedTestResult creates a new aggregated test result for a node

@@ -25,6 +25,7 @@
             <tr>
                 <th data-sortable data-type="string">Network Name</th>
                 <th data-sortable data-type="number">Node Count</th>
+                <th data-sortable data-type="string">Nodelist Imported</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -37,6 +38,13 @@
                     </a>
                 </td>
                 <td>{{.NodeCount}}</td>
+                <td>
+                    {{if .Imported}}
+                    <span class="badge badge-success" title="This network's nodelist is imported into NodelistDB">✓ imported</span>
+                    {{else}}
+                    <span class="badge" title="AKAs detected during handshakes only; nodelist not imported">detected only</span>
+                    {{end}}
+                </td>
                 <td>
                     <a href="/analytics/other-networks/nodes?network={{.NetworkName}}&days={{$.Days}}&limit={{$.Limit}}" class="btn btn-sm btn-outline">View Nodes</a>
                 </td>

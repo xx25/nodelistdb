@@ -10,12 +10,12 @@ import (
 // Analytics-related caching operations (flags, networks, historical data)
 
 // GetFlagFirstAppearance returns when a flag first appeared in the nodelist
-func (cs *CachedStorage) GetFlagFirstAppearance(flagName string) (*FlagFirstAppearance, error) {
+func (cs *CachedStorage) GetFlagFirstAppearance(flagName string, domain string) (*FlagFirstAppearance, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.AnalyticsOps().GetFlagFirstAppearance(flagName)
+		return cs.Storage.AnalyticsOps().GetFlagFirstAppearance(flagName, domain)
 	}
 
-	key := cs.keyGen.FlagFirstAppearanceKey(flagName)
+	key := cs.keyGen.FlagFirstAppearanceKey(flagName) + ":" + domain
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -29,7 +29,7 @@ func (cs *CachedStorage) GetFlagFirstAppearance(flagName string) (*FlagFirstAppe
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	fa, err := cs.Storage.AnalyticsOps().GetFlagFirstAppearance(flagName)
+	fa, err := cs.Storage.AnalyticsOps().GetFlagFirstAppearance(flagName, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -45,12 +45,12 @@ func (cs *CachedStorage) GetFlagFirstAppearance(flagName string) (*FlagFirstAppe
 }
 
 // GetFlagUsageByYear returns flag usage statistics by year
-func (cs *CachedStorage) GetFlagUsageByYear(flagName string) ([]FlagUsageByYear, error) {
+func (cs *CachedStorage) GetFlagUsageByYear(flagName string, domain string) ([]FlagUsageByYear, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.AnalyticsOps().GetFlagUsageByYear(flagName)
+		return cs.Storage.AnalyticsOps().GetFlagUsageByYear(flagName, domain)
 	}
 
-	key := cs.keyGen.FlagUsageByYearKey(flagName)
+	key := cs.keyGen.FlagUsageByYearKey(flagName) + ":" + domain
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -64,7 +64,7 @@ func (cs *CachedStorage) GetFlagUsageByYear(flagName string) ([]FlagUsageByYear,
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	usage, err := cs.Storage.AnalyticsOps().GetFlagUsageByYear(flagName)
+	usage, err := cs.Storage.AnalyticsOps().GetFlagUsageByYear(flagName, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -80,12 +80,12 @@ func (cs *CachedStorage) GetFlagUsageByYear(flagName string) ([]FlagUsageByYear,
 }
 
 // GetNetworkHistory returns historical network statistics
-func (cs *CachedStorage) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
+func (cs *CachedStorage) GetNetworkHistory(zone, net int, domain string) (*NetworkHistory, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.AnalyticsOps().GetNetworkHistory(zone, net)
+		return cs.Storage.AnalyticsOps().GetNetworkHistory(zone, net, domain)
 	}
 
-	key := cs.keyGen.NetworkHistoryKey(zone, net)
+	key := cs.keyGen.NetworkHistoryKey(zone, net) + ":" + domain
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -99,7 +99,7 @@ func (cs *CachedStorage) GetNetworkHistory(zone, net int) (*NetworkHistory, erro
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	history, err := cs.Storage.AnalyticsOps().GetNetworkHistory(zone, net)
+	history, err := cs.Storage.AnalyticsOps().GetNetworkHistory(zone, net, domain)
 	if err != nil {
 		return nil, err
 	}

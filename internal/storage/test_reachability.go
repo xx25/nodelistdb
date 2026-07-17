@@ -26,14 +26,14 @@ func NewReachabilityOperations(db database.DatabaseInterface, queryBuilder *Test
 }
 
 // GetNodeReachabilityStats calculates reachability statistics for a node
-func (r *ReachabilityOperations) GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error) {
+func (r *ReachabilityOperations) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	conn := r.db.Conn()
 	query := r.queryBuilder.BuildReachabilityStatsQuery()
 
-	row := conn.QueryRow(query, zone, net, node, days)
+	row := conn.QueryRow(query, zone, net, node, days, domain, domain)
 
 	var stats NodeReachabilityStats
 	var lastStatus bool

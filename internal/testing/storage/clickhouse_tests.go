@@ -80,7 +80,8 @@ func (s *ClickHouseStorage) flushBatch(ctx context.Context) error {
 		tested_hostname, hostname_index, is_aggregated, total_hostnames, hostnames_tested, hostnames_operational,
 		binkp_ipv4_addresses, binkp_ipv6_addresses, ifcico_ipv4_addresses, ifcico_ipv6_addresses,
 		address_validated_ipv4, address_validated_ipv6,
-		ftp_anon_success
+		ftp_anon_success,
+		domain, derived_from_address
 	)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
@@ -259,8 +260,9 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 	return results, nil
 }
 
-// GetNodeTestHistory retrieves test history for a specific node
-func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, node int, limit int) ([]*models.TestResult, error) {
+// GetNodeTestHistory retrieves test history for a specific node.
+// An empty domain matches all networks.
+func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, node int, domain string, limit int) ([]*models.TestResult, error) {
 	// Debug logging disabled for performance
 	// fmt.Printf("DEBUG GetNodeTestHistory: Querying history for %d:%d/%d (limit=%d)\n", zone, net, node, limit)
 
@@ -284,14 +286,14 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 			tested_hostname, hostname_index, is_aggregated,
 			total_hostnames, hostnames_tested, hostnames_operational
 		FROM node_test_results
-		WHERE zone = ? AND net = ? AND node = ?
+		WHERE zone = ? AND net = ? AND node = ? AND (? = '' OR domain = ?)
 		ORDER BY test_time DESC, hostname_index`
 
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
 
-	rows, err := s.conn.Query(ctx, query, zone, net, node)
+	rows, err := s.conn.Query(ctx, query, zone, net, node, domain, domain)
 	if err != nil {
 		// Log the error for debugging
 		fmt.Printf("DEBUG GetNodeTestHistory ERROR: Failed to query history for %d:%d/%d - %v\n", zone, net, node, err)
@@ -430,8 +432,55 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 	return results, nil
 }
 
+// GetRecentAnnouncedAKAs returns, for each node identity with a recent
+// successful direct test, the union of addresses announced during BinkP and
+// IFCICO handshakes. Used to seed the AKA equivalence index at daemon startup.
+func (s *ClickHouseStorage) GetRecentAnnouncedAKAs(ctx context.Context, days int) ([]models.AnnouncedAKARecord, error) {
+	query := `
+		SELECT
+			zone, net, node, domain,
+			arrayDistinct(arrayFlatten(groupArray(arrayConcat(
+				binkp_addresses, ifcico_addresses,
+				binkp_ipv4_addresses, binkp_ipv6_addresses,
+				ifcico_ipv4_addresses, ifcico_ipv6_addresses)))) AS announced
+		FROM node_test_results
+		WHERE test_time >= now() - INTERVAL ? DAY
+			AND derived_from_address = ''
+			AND is_operational = true
+			AND (length(binkp_addresses) > 0 OR length(ifcico_addresses) > 0
+				OR length(binkp_ipv4_addresses) > 0 OR length(binkp_ipv6_addresses) > 0
+				OR length(ifcico_ipv4_addresses) > 0 OR length(ifcico_ipv6_addresses) > 0)
+		GROUP BY zone, net, node, domain
+	`
+
+	rows, err := s.conn.Query(ctx, query, days)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent announced AKAs: %w", err)
+	}
+	defer rows.Close()
+
+	var records []models.AnnouncedAKARecord
+	for rows.Next() {
+		var rec models.AnnouncedAKARecord
+		var zone, net, node uint16
+		if err := rows.Scan(&zone, &net, &node, &rec.Domain, &rec.Announced); err != nil {
+			return nil, fmt.Errorf("failed to scan announced AKA row: %w", err)
+		}
+		rec.Zone = int(zone)
+		rec.Net = int(net)
+		rec.Node = int(node)
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
 // resultToValues converts TestResult to values for batch insert
 func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
+	domain := r.Domain
+	if domain == "" {
+		domain = models.DefaultDomain
+	}
+
 	// Extract protocol test details
 	var binkpTested, binkpSuccess bool
 	var binkpResponseMs uint32
@@ -715,5 +764,7 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		r.AddressValidatedIPv4, r.AddressValidatedIPv6,
 		// FTP anonymous login result
 		ftpAnonSuccess,
+		// Multi-network identity and AKA-derivation provenance
+		domain, r.DerivedFromAddress,
 	}
 }

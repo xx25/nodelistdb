@@ -43,10 +43,11 @@ type Context struct {
 	CurrentRegion *int
 }
 
-// Parser handles FidoNet nodelist file parsing with all advanced features
+// Parser handles FTN nodelist file parsing with all advanced features
 type Parser struct {
 	// Configuration
 	verbose bool
+	domain  string // FTN network the parsed nodes belong to (default: fidonet)
 
 	// Format detection
 	DetectedFormat NodelistFormat
@@ -96,6 +97,12 @@ func New(verbose bool) *Parser {
 // NewAdvanced creates a new parser (kept for backward compatibility).
 func NewAdvanced(verbose bool) *Parser {
 	return New(verbose)
+}
+
+// SetDomain sets the FTN network name stamped on every parsed node.
+// An empty value falls back to the default network (fidonet).
+func (p *Parser) SetDomain(domain string) {
+	p.domain = domain
 }
 
 // clearReusableMaps resets all reusable maps for the next parsing operation.
@@ -207,6 +214,15 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	// Fallback: extract date from filename if not found in header
 	if nodelistDate.IsZero() {
 		nodelistDate, dayNumber, _ = p.extractDateFromFile(filePath)
+	}
+
+	// Stamp the network this nodelist belongs to on every node
+	domain := p.domain
+	if domain == "" {
+		domain = database.DefaultDomain
+	}
+	for i := range nodes {
+		nodes[i].Domain = domain
 	}
 
 	if p.verbose {

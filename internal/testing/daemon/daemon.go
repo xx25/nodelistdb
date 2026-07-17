@@ -45,6 +45,9 @@ type Daemon struct {
 	// Scheduler for intelligent test scheduling
 	scheduler *Scheduler
 
+	// Cross-network AKA equivalence index (one physical host, several networks)
+	akaEquiv *AkaEquivalence
+
 	// Modular components
 	testExecutor        *TestExecutor
 	testAggregator      *TestAggregator
@@ -59,9 +62,10 @@ type Daemon struct {
 	debugMu sync.RWMutex
 	debug   bool
 
-	// Track nodelist updates
-	lastNodelistDate time.Time
-	nodelistMu       sync.RWMutex
+	// Track nodelist updates (per-network fingerprint of latest dates)
+	lastNodelistDate        time.Time
+	lastNodelistFingerprint string
+	nodelistMu              sync.RWMutex
 
 	// Statistics
 	stats struct {
@@ -128,8 +132,9 @@ func New(cfg *Config) (*Daemon, error) {
 	}
 
 	d := &Daemon{
-		config:  cfg,
-		storage: store,
+		config:   cfg,
+		storage:  store,
+		akaEquiv: NewAkaEquivalence(),
 	}
 
 	// Initialize persistent cache using testdaemon_cache configuration
@@ -318,12 +323,20 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 	}
 
-	// Get initial nodelist date
+	// Seed the cross-network AKA equivalence index
+	d.seedAkaEquivalence(ctx)
+
+	// Get initial nodelist date and per-network fingerprint
 	if nodelistDate, err := d.storage.GetLatestNodelistDate(ctx); err == nil {
 		d.nodelistMu.Lock()
 		d.lastNodelistDate = nodelistDate
 		d.nodelistMu.Unlock()
 		logging.Infof("Current nodelist date: %s", nodelistDate.Format("2006-01-02"))
+	}
+	if fingerprint, err := d.storage.GetNodelistFingerprint(ctx); err == nil {
+		d.nodelistMu.Lock()
+		d.lastNodelistFingerprint = fingerprint
+		d.nodelistMu.Unlock()
 	}
 
 	// Check if CLI-only mode is enabled

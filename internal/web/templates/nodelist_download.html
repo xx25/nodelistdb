@@ -169,6 +169,34 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
         {{end}}
     </div>
 </section>
+
+{{if .Networks}}
+<section class="card">
+    <p class="section-tag">Other FTN networks</p>
+    <h2>Network nodelists</h2>
+    <div class="archive-year-grid">
+        {{range .Networks}}
+        {{$network := .Name}}
+        <article class="archive-year-card">
+            <div class="archive-year-head">
+                <div>
+                    <p class="section-tag">Network</p>
+                    <h3>{{.Name}}</h3>
+                </div>
+            </div>
+            <ul class="archive-preview-list">
+                {{range .Years}}
+                <li>
+                    <a href="/nodelists/{{$network}}/{{.Year}}" class="download-file-link">{{.Year}}</a>
+                    <span class="download-file-note">{{.Count}} files, newest {{.NewestFile.Name}}</span>
+                </li>
+                {{end}}
+            </ul>
+        </article>
+        {{end}}
+    </div>
+</section>
+{{end}}
 {{end}}
 {{end}}
 

@@ -72,6 +72,17 @@
                 <input type="text" id="sysop_name" name="sysop_name" value="{{.SysopName}}" placeholder="e.g. John Doe">
             </div>
 
+            <div class="form-group form-group--half">
+                <label for="domain">Network</label>
+                <select id="domain" name="domain">
+                    <option value="">All networks</option>
+                    <option value="fidonet">fidonet</option>
+                    {{range .Networks}}{{if ne .Domain "fidonet"}}
+                    <option value="{{.Domain}}">{{.Domain}}</option>
+                    {{end}}{{end}}
+                </select>
+            </div>
+
             <div class="form-group form-group--half form-group--checkbox">
                 <label class="checkbox-field" for="include_historical">
                     <input type="checkbox" id="include_historical" name="include_historical" value="1" checked>
@@ -143,7 +154,7 @@
             <tbody>
                 {{range .Nodes}}
                 <tr>
-                    <td><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
+                    <td><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong>{{if and .Domain (ne .Domain "fidonet")}} <span class="badge badge-info">{{.Domain}}</span>{{end}}</td>
                     <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
                     <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
                     <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
@@ -155,7 +166,7 @@
                         <span class="badge badge-historical">Historical</span>
                         {{end}}
                     </td>
-                    <td><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-secondary btn-sm">View History</a></td>
+                    <td><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-secondary btn-sm">View History</a></td>
                 </tr>
                 {{end}}
             </tbody>

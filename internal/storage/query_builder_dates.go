@@ -1,52 +1,63 @@
 package storage
 
-// DateQueryBuilder handles date-related SQL queries
+// DateQueryBuilder handles date-related SQL queries.
+// All queries are domain-scoped: bind the domain twice for the
+// `(? = '' OR domain = ?)` filter; an empty domain matches all networks.
 type DateQueryBuilder struct {
 	base *QueryBuilder
 }
 
+// domainFilterSQL is the reusable optional-domain predicate.
+// Bind the domain value twice; empty string disables the filter.
+const domainFilterSQL = "(? = '' OR domain = ?)"
+
 // IsProcessed returns SQL for checking if a nodelist date is already processed
+// within one network. Binds: domain, nodelist_date.
 func (dqb *DateQueryBuilder) IsProcessed() string {
-	return "SELECT COUNT(*) FROM nodes WHERE nodelist_date = ? LIMIT 1"
+	return "SELECT COUNT(*) FROM nodes WHERE domain = ? AND nodelist_date = ? LIMIT 1"
 }
 
-// Latest returns SQL for getting the latest nodelist date
+// Latest returns SQL for getting the latest nodelist date. Binds: domain, domain.
 func (dqb *DateQueryBuilder) Latest() string {
-	return "SELECT MAX(nodelist_date) FROM nodes"
+	return "SELECT MAX(nodelist_date) FROM nodes WHERE " + domainFilterSQL
 }
 
-// Available returns SQL for getting all available nodelist dates
+// Available returns SQL for getting all available nodelist dates. Binds: domain, domain.
 func (dqb *DateQueryBuilder) Available() string {
-	return "SELECT DISTINCT nodelist_date FROM nodes ORDER BY nodelist_date DESC"
+	return "SELECT DISTINCT nodelist_date FROM nodes WHERE " + domainFilterSQL + " ORDER BY nodelist_date DESC"
 }
 
-// Exists returns SQL for checking if an exact date exists
+// Exists returns SQL for checking if an exact date exists. Binds: date, domain, domain.
 func (dqb *DateQueryBuilder) Exists() string {
-	return "SELECT COUNT(*) FROM nodes WHERE nodelist_date = ?"
+	return "SELECT COUNT(*) FROM nodes WHERE nodelist_date = ? AND " + domainFilterSQL
 }
 
-// NearestBefore returns SQL for finding the closest date before a given date
+// NearestBefore returns SQL for finding the closest date before a given date.
+// Binds: date, domain, domain.
 func (dqb *DateQueryBuilder) NearestBefore() string {
 	return `SELECT MAX(nodelist_date)
 		FROM nodes
-		WHERE nodelist_date < ?`
+		WHERE nodelist_date < ? AND ` + domainFilterSQL
 }
 
-// NearestAfter returns SQL for finding the closest date after a given date
+// NearestAfter returns SQL for finding the closest date after a given date.
+// Binds: date, domain, domain.
 func (dqb *DateQueryBuilder) NearestAfter() string {
 	return `SELECT MIN(nodelist_date)
 		FROM nodes
-		WHERE nodelist_date > ?`
+		WHERE nodelist_date > ? AND ` + domainFilterSQL
 }
 
-// ConsecutiveCheck returns SQL for checking gaps between dates
+// ConsecutiveCheck returns SQL for checking gaps between dates.
+// Binds: date, date, domain, domain.
 func (dqb *DateQueryBuilder) ConsecutiveCheck() string {
-	return "SELECT COUNT(DISTINCT nodelist_date) FROM nodes WHERE nodelist_date > ? AND nodelist_date < ?"
+	return "SELECT COUNT(DISTINCT nodelist_date) FROM nodes WHERE nodelist_date > ? AND nodelist_date < ? AND " + domainFilterSQL
 }
 
-// NextDate returns SQL for finding the next nodelist date after a given date
+// NextDate returns SQL for finding the next nodelist date after a given date.
+// Binds: date, domain, domain.
 func (dqb *DateQueryBuilder) NextDate() string {
-	return "SELECT MIN(nodelist_date) FROM nodes WHERE nodelist_date > ?"
+	return "SELECT MIN(nodelist_date) FROM nodes WHERE nodelist_date > ? AND " + domainFilterSQL
 }
 
 // LEGACY METHODS - For backward compatibility, will be deprecated

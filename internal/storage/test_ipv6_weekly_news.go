@@ -87,7 +87,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 			-- Get latest test results for these new nodes with working IPv6
 			latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
@@ -95,14 +95,14 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 					AND is_operational = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true OR ftp_success = true)
 					AND (zone, net, node) IN (SELECT zone, net, node FROM recent_nodes)
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -129,10 +129,10 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 					AND r.test_time = lt.latest_test_time
 			)
 			SELECT
@@ -161,9 +161,9 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
@@ -222,17 +222,17 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 			-- Count successful IPv6 tests
 			ipv6_success_counts AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successes
 			latest_failed_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE (zone, net, node) IN (
@@ -241,14 +241,14 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 					WHERE success_count = 0
 				)
 				AND test_time >= now() - INTERVAL 7 DAY
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -275,10 +275,10 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_failed_tests lft ON r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
+				INNER JOIN latest_failed_tests lft ON r.domain = lft.domain AND r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
 					AND r.test_time = lft.latest_test_time
 			)
 			SELECT
@@ -307,9 +307,9 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
@@ -363,31 +363,31 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 				SELECT zone, net, node
 				FROM (
 					SELECT
-						zone, net, node,
+						domain, zone, net, node,
 						countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
 					FROM node_test_results
 					WHERE test_time >= now() - INTERVAL 7 DAY
 						AND (zone, net, node) IN (SELECT zone, net, node FROM had_ipv6_before)
-					GROUP BY zone, net, node
+					GROUP BY domain, zone, net, node
 				)
 				WHERE ipv6_success_count = 0
 			),
 			-- Get latest test results
 			latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM no_ipv6_now)
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -414,10 +414,10 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 					AND r.test_time = lt.latest_test_time
 			)
 			SELECT
@@ -446,9 +446,9 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
@@ -500,13 +500,13 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 				SELECT zone, net, node
 				FROM (
 					SELECT
-						zone, net, node,
+						domain, zone, net, node,
 						countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
 					FROM node_test_results
 					WHERE test_time >= now() - INTERVAL 14 DAY
 						AND test_time < now() - INTERVAL 7 DAY
 						AND (zone, net, node) IN (SELECT zone, net, node FROM tested_before)
-					GROUP BY zone, net, node
+					GROUP BY domain, zone, net, node
 				)
 				WHERE ipv6_success_count = 0
 			),
@@ -522,19 +522,19 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 			-- Get latest test results
 			latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM has_ipv6_now)
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -561,10 +561,10 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 					AND r.test_time = lt.latest_test_time
 			)
 			SELECT
@@ -593,9 +593,9 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)

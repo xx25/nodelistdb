@@ -35,7 +35,21 @@ API_BASE_URL="http://localhost:8080/api"             # NodelistDB API endpoint
 TEMP_DIR="/tmp/nodelist_sync"                        # Temporary download directory
 MAX_RETRIES=3                                        # Max download retry attempts
 SERVICE_NAME="nodelistdb"                            # systemd service name
-PARSER_PATH="${SCRIPT_DIR}/parser"                   # Path to parser binary
+PARSER_PATH="${SCRIPT_DIR}/parser"               # Path to parser binary
+
+# Remote server sync configuration
+REMOTE_SYNC_HOST="root@nodelist.5001.ru"         # Remote server to sync nodelists to
+REMOTE_NODELIST_DIR="/opt/nodelists"             # Remote nodelist directory
+
+# Additional FTN networks to sync (fidonet is handled by the main flow).
+# One entry per network: "name|source|url_or_dir|filename_regex"
+#   name           lowercase network name (must exist in config.yaml networks:)
+#   source         http or ftp
+#   url_or_dir     http(s) directory URL, or FTP directory (uses FTP_* creds)
+#   filename_regex extended regex the remote filenames must match
+# Example:
+#   EXTRA_NETWORKS=("fsxnet|http|https://fsxnet.nz/fsxnet/|fsxnet\.[0-9]{3}")
+EXTRA_NETWORKS=()
 
 # Load configuration file if it exists
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -50,10 +64,10 @@ fi
 # Usage: log "message" [error]
 log() {
     local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-
+    
     # Always write to log file
     echo "$message" >> "$LOG_FILE"
-
+    
     # Only print to console if it's an error OR we're not in quiet mode
     if [[ "${2:-}" == "error" ]] || [[ "${QUIET_MODE:-false}" != "true" ]]; then
         echo "$message"
@@ -85,37 +99,37 @@ cleanup() {
 # Check if required system dependencies are available
 check_dependencies() {
     log "Checking system dependencies..."
-
+    
     local deps=("curl" "ftp" "gzip" "systemctl")
     local missing_deps=()
-
+    
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
             missing_deps+=("$dep")
         fi
     done
-
+    
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
         error_exit "Missing required dependencies: ${missing_deps[*]}"
     fi
-
+    
     log "All dependencies found"
 }
 
 # Validate configuration parameters
 validate_config() {
     log "Validating configuration..."
-
+    
     # Check FTP configuration
     if [[ -z "$FTP_HOST" || -z "$FTP_USER" || -z "$FTP_PASS" ]]; then
         error_exit "FTP configuration incomplete. Please set FTP_HOST, FTP_USER, and FTP_PASS in $CONFIG_FILE"
     fi
-
+    
     # Check local directories exist
     if [[ ! -d "$(dirname "$LOCAL_NODELIST_DIR")" ]]; then
         error_exit "Parent directory of LOCAL_NODELIST_DIR does not exist: $(dirname "$LOCAL_NODELIST_DIR")"
     fi
-
+    
     # Check configuration file exists (required for ClickHouse)
     if [[ ! -f "$CONFIG_PATH" ]]; then
         error_exit "Configuration file not found: $CONFIG_PATH"
@@ -125,12 +139,12 @@ validate_config() {
     if [[ ! -x "$PARSER_PATH" ]]; then
         error_exit "Parser binary not found or not executable: $PARSER_PATH"
     fi
-
+    
     # Check if we can reach the API (server must be running)
     if ! curl -s --connect-timeout 5 "$API_BASE_URL/health" > /dev/null; then
         error_exit "Cannot reach NodelistDB API at $API_BASE_URL. Is the server running?"
     fi
-
+    
     log "Configuration validation passed"
 }
 
@@ -158,17 +172,17 @@ is_server_running() {
 # Returns: List of dates in YYYY-MM-DD format, one per line
 get_database_dates() {
     log "Fetching existing dates from database via API..."
-
+    
     local response
     if ! response=$(curl -s --connect-timeout 10 "$API_BASE_URL/stats/dates"); then
         error_exit "Failed to fetch dates from API"
     fi
-
+    
     # Extract dates from JSON response using grep (simple JSON parsing)
     # Expected format: {"dates":["2023-01-01","2023-01-08",...]}
     local dates
     dates=$(echo "$response" | grep -o '"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"' | tr -d '"' | sort)
-
+    
     if [[ -n "$dates" ]]; then
         local count=$(echo "$dates" | wc -l)
         log "Found $count dates in database"
@@ -176,34 +190,37 @@ get_database_dates() {
     else
         log "No dates found in database (empty database)"
     fi
-
+    
     echo "$dates"
 }
 
 # Convert a nodelist filename to a date
 # Input: filename like "nodelist.276" or "z2daily.276"
 # Output: date in YYYY-MM-DD format
-# Logic: Day number of year, adjusting for year boundaries
+# Logic: Day 276 of current year, adjusting for year boundaries
 filename_to_date() {
     local filename="$1"
-
-    # Extract day number from filename (e.g., nodelist.276 -> 276, z2daily.276 -> 276)
-    if [[ "$filename" =~ (nodelist|z2daily)\.([0-9]{3})$ ]]; then
+    
+    # Extract day number from filename (e.g., nodelist.276, z2daily.276,
+    # fsxnet.191). Any <name>.DDD file is accepted.
+    if [[ "$filename" =~ ([A-Za-z0-9_-]+)\.([0-9]{3})$ ]]; then
         local day_num="${BASH_REMATCH[2]}"
         local current_year=$(date +%Y)
         local current_day_of_year=$(date +%j)
-
+        
         # Remove leading zeros for arithmetic
         day_num=$((10#$day_num))
         current_day_of_year=$((10#$current_day_of_year))
-
+        
+        
+        
         local target_year=$current_year
         # If the day number is more than 1 day ahead of today, it must be from last year
         # (we allow +1 day buffer for timezone differences and early uploads)
         if [[ $day_num -gt $((current_day_of_year + 1)) ]]; then
             target_year=$((current_year - 1))
         fi
-
+        
         # Convert day of year to actual date
         local date_str
         if date_str=$(date -d "${target_year}-01-01 +$((day_num - 1)) days" +%Y-%m-%d 2>/dev/null); then
@@ -211,7 +228,7 @@ filename_to_date() {
             return 0
         fi
     fi
-
+    
     return 1
 }
 
@@ -225,10 +242,10 @@ get_ftp_listing() {
     local ftp_dir="$1"
     local temp_list="${TEMP_DIR}/ftp_listing.txt"
     local temp_clean="${TEMP_DIR}/ftp_clean.txt"
-
+    
     # Redirect log output to stderr to avoid capturing it in return value
     log "Getting FTP directory listing from $FTP_HOST:$ftp_dir..." >&2
-
+    
     # Use FTP to get directory listing, capture both stdout and stderr
     if ftp -n "$FTP_HOST" > "$temp_list" 2>&1 <<EOF
 user $FTP_USER $FTP_PASS
@@ -247,19 +264,19 @@ EOF
         grep -v -E "^(Getting|No nodelist|Found)" | \
         grep -E "^[-drwx].*|^[0-9].*|^[A-Za-z].*[0-9].*(nodelist|z2daily)" | \
         awk '{print $NF}' > "$temp_clean"
-
+        
         # Extract nodelist files from the cleaned listing
         # Look for files like "nodelist.276", "NODELIST.276", "z2daily.276", or "Z2DAILY.276"
         local files
         files=$(grep -i -E "(nodelist|z2daily)\.[0-9]{3}$" "$temp_clean" | sort)
-
+        
         if [[ -n "$files" ]]; then
             local count=$(echo "$files" | wc -l)
             log "Found $count nodelist files on FTP server" >&2
         else
             log "No nodelist files found on FTP server" >&2
         fi
-
+        
         # Only output the files list, not log messages
         echo "$files"
         return 0
@@ -272,15 +289,15 @@ EOF
 # Args: remote_filename local_filepath ftp_directory
 download_ftp_file() {
     local remote_file="$1"
-    local local_file="$2"
+    local local_file="$2" 
     local ftp_dir="$3"
-
+    
     log "Downloading $remote_file from FTP..."
-
+    
     # Retry loop for network reliability
     local retry=0
     while [[ $retry -lt $MAX_RETRIES ]]; do
-
+        
         # Attempt FTP download
         if ftp -n "$FTP_HOST" <<EOF 2>/dev/null
 user $FTP_USER $FTP_PASS
@@ -301,16 +318,17 @@ EOF
         else
             log "FTP download failed for $remote_file"
         fi
-
+        
         # Increment retry counter and wait before next attempt
-        ((retry++))
+        retry=$((retry + 1))
         if [[ $retry -lt $MAX_RETRIES ]]; then
             log "Retry attempt $retry/$MAX_RETRIES for $remote_file in 5 seconds..."
             sleep 5
         fi
     done
 
-    error_exit "Failed to download $remote_file after $MAX_RETRIES attempts"
+    log "ERROR: Failed to download $remote_file after $MAX_RETRIES attempts" error
+    return 1
 }
 
 #################################################################################
@@ -356,28 +374,28 @@ import_to_database() {
 
 # Compress and store a nodelist file in the proper directory structure
 # Args: source_file_path
-# Creates: $LOCAL_NODELIST_DIR/YYYY/nodelist.XXX.gz
+# Creates: /home/dp/nodelists/YYYY/nodelist.XXX.gz
 compress_and_store() {
     local file_path="$1"
     local filename=$(basename "$file_path")
-
+    
     # Determine the year for this file based on its date
     local file_date
     if ! file_date=$(filename_to_date "$filename"); then
         error_exit "Could not determine date for file: $filename"
     fi
-
+    
     local year=$(echo "$file_date" | cut -d'-' -f1)
     local year_dir="${LOCAL_NODELIST_DIR}/${year}"
-
+    
     # Create year directory if it doesn't exist
     mkdir -p "$year_dir"
-
-    # Compress file with .gz extension
+    
+    # Compress file with .gz extension (following the pattern in /home/dp/nodelists)
     local compressed_file="${year_dir}/${filename,,}.gz"  # Convert filename to lowercase
-
+    
     log "Compressing and storing $filename -> $compressed_file"
-
+    
     # Use gzip to compress the file
     if gzip -c "$file_path" > "$compressed_file"; then
         # Verify compressed file was created successfully
@@ -385,7 +403,7 @@ compress_and_store() {
             local original_size=$(stat -c%s "$file_path")
             local compressed_size=$(stat -c%s "$compressed_file")
             local ratio=$(( (original_size - compressed_size) * 100 / original_size ))
-
+            
             log "Successfully compressed $filename (${ratio}% reduction: ${original_size} -> ${compressed_size} bytes)"
             return 0
         else
@@ -397,45 +415,278 @@ compress_and_store() {
 }
 
 #################################################################################
+#################################################################################
+# REMOTE SERVER SYNCHRONIZATION
+#################################################################################
+
+# Sync a compressed nodelist file to remote server
+# Args: compressed_file_path
+sync_to_remote() {
+    local file_path="$1"
+    
+    # Skip if remote sync is not configured
+    if [[ -z "${REMOTE_SYNC_HOST:-}" ]]; then
+        return 0
+    fi
+    
+    local filename=$(basename "$file_path")
+    local year_dir=$(basename $(dirname "$file_path"))
+    local remote_dir="${REMOTE_NODELIST_DIR}/${year_dir}"
+    
+    log "Syncing $filename to $REMOTE_SYNC_HOST:$remote_dir..."
+    
+    # Create remote year directory if needed and copy file
+    if ssh -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
+        if scp -q "$file_path" "${REMOTE_SYNC_HOST}:${remote_dir}/"; then
+            log "Successfully synced $filename to remote server"
+            return 0
+        else
+            log "Warning: Failed to copy $filename to remote server" error
+            return 1
+        fi
+    else
+        log "Warning: Cannot connect to remote server $REMOTE_SYNC_HOST" error
+        return 1
+    fi
+}
+
+
+# EXTRA NETWORK SYNCHRONIZATION (fsxNet and friends)
+#################################################################################
+
+# Get the dates already imported for one network
+# Args: network_name
+get_database_dates_for_domain() {
+    local domain="$1"
+    local response
+    if ! response=$(curl -s --connect-timeout 10 "$API_BASE_URL/stats/dates?domain=${domain}"); then
+        error_exit "Failed to fetch dates for network $domain from API"
+    fi
+    echo "$response" | grep -o '"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"' | tr -d '"' | sort
+}
+
+# List remote files for an extra network
+# Args: source url_or_dir filename_regex
+list_extra_network_files() {
+    local source="$1" location="$2" name_re="$3"
+
+    case "$source" in
+        http)
+            # Parse hrefs out of the HTTP index page
+            curl -s --connect-timeout 15 "$location" \
+                | grep -o -i -E 'href="[^"]+"' \
+                | sed -E 's/^[Hh][Rr][Ee][Ff]="//; s/"$//' \
+                | awk -F/ '{print $NF}' \
+                | grep -i -E "^${name_re}(\.(gz|zip|z[0-9]{2}))?$" \
+                | sort -u
+            ;;
+        ftp)
+            local temp_list="${TEMP_DIR}/extra_ftp_listing.txt"
+            ftp -n "$FTP_HOST" > "$temp_list" 2>&1 <<FTPCMDS
+user $FTP_USER $FTP_PASS
+cd $location
+ls
+quit
+FTPCMDS
+            awk '{print $NF}' "$temp_list" | grep -i -E "^${name_re}(\.(gz|zip|z[0-9]{2}))?$" | sort -u
+            ;;
+        *)
+            error_exit "Unknown source type for extra network: $source"
+            ;;
+    esac
+}
+
+# Download one remote file for an extra network
+# Args: source url_or_dir remote_file local_file
+download_extra_network_file() {
+    local source="$1" location="$2" remote_file="$3" local_file="$4"
+
+    case "$source" in
+        http)
+            curl -s --connect-timeout 15 --retry "$MAX_RETRIES" -o "$local_file" "${location%/}/${remote_file}"
+            [[ -f "$local_file" && -s "$local_file" ]]
+            ;;
+        ftp)
+            download_ftp_file "$remote_file" "$local_file" "$location"
+            ;;
+    esac
+}
+
+# Decompress archive variants (.gz / .zip / .zNN) in place.
+# Args: file_path  — echoes the path of the decompressed nodelist file
+decompress_nodelist_archive() {
+    local file_path="$1"
+    local lower="${file_path,,}"
+
+    if [[ "$lower" == *.gz ]]; then
+        gunzip -f "$file_path"
+        echo "${file_path%.*}"
+        return 0
+    fi
+
+    if [[ "$lower" == *.zip ]] || [[ "$lower" =~ \.z[0-9]{2}$ ]]; then
+        # .zNN files are usually ZIP archives holding one nodelist file
+        if file "$file_path" | grep -qi zip; then
+            local extract_dir="${TEMP_DIR}/extract_$$"
+            mkdir -p "$extract_dir"
+            unzip -o -q "$file_path" -d "$extract_dir"
+            local extracted
+            extracted=$(find "$extract_dir" -type f | head -1)
+            [[ -n "$extracted" ]] || return 1
+            local target="${TEMP_DIR}/$(basename "${extracted,,}")"
+            mv "$extracted" "$target"
+            rm -rf "$extract_dir" "$file_path"
+            echo "$target"
+            return 0
+        fi
+    fi
+
+    echo "$file_path"
+}
+
+# Sync one extra network definition ("name|source|url_or_dir|filename_regex")
+sync_extra_network() {
+    local spec="$1"
+    local name source location name_re
+    IFS='|' read -r name source location name_re <<< "$spec"
+
+    if [[ -z "$name" || -z "$source" || -z "$location" || -z "$name_re" ]]; then
+        log "Skipping malformed EXTRA_NETWORKS entry: $spec" error
+        return 1
+    fi
+
+    log "--- Syncing network '$name' from $source $location ---"
+
+    local db_dates remote_files
+    db_dates=$(get_database_dates_for_domain "$name")
+    remote_files=$(list_extra_network_files "$source" "$location" "$name_re")
+
+    if [[ -z "$remote_files" ]]; then
+        log "No $name nodelist files found at $location"
+        return 0
+    fi
+
+    while IFS= read -r remote_file; do
+        [[ -z "$remote_file" ]] && continue
+
+        local plain_name="${remote_file%.gz}"
+        plain_name="${plain_name%.zip}"
+        # Strip .zNN archive extensions (fsxnet.191.z01 -> fsxnet.191)
+        if [[ "${plain_name,,}" =~ \.z[0-9]{2}$ ]]; then
+            plain_name="${plain_name%.*}"
+        fi
+        local file_date
+        if ! file_date=$(filename_to_date "$plain_name"); then
+            log "Warning: could not parse date from $remote_file"
+            continue
+        fi
+
+        if grep -q "^$file_date$" <<< "$db_dates"; then
+            log "Skipping $remote_file - date $file_date already imported for $name"
+            continue
+        fi
+
+        local temp_file="${TEMP_DIR}/${remote_file,,}"
+        if ! download_extra_network_file "$source" "$location" "$remote_file" "$temp_file"; then
+            log "Failed to download $remote_file for $name - will retry next run" error
+            rm -f "$temp_file"
+            continue
+        fi
+
+        local nodelist_file
+        if ! nodelist_file=$(decompress_nodelist_archive "$temp_file"); then
+            log "Failed to unpack $remote_file for $name" error
+            rm -f "$temp_file"
+            continue
+        fi
+
+        # Import with the network's parser flag
+        log "Importing $(basename "$nodelist_file") into database (network: $name)..."
+        if ! "$PARSER_PATH" -path "$nodelist_file" -config "$CONFIG_PATH" -network "$name" -verbose \
+                > "${TEMP_DIR}/parser.log" 2>&1; then
+            log "Parser failed for $(basename "$nodelist_file") (network $name):" error
+            tail -10 "${TEMP_DIR}/parser.log" | while read -r line; do log "  $line" error; done
+            rm -f "$nodelist_file"
+            continue
+        fi
+
+        # Store at <root>/<network>/<year>/<name>.DDD.gz
+        local year=$(echo "$file_date" | cut -d'-' -f1)
+        local year_dir="${LOCAL_NODELIST_DIR}/${name}/${year}"
+        mkdir -p "$year_dir"
+        local compressed_file="${year_dir}/$(basename "${nodelist_file,,}").gz"
+        gzip -c "$nodelist_file" > "$compressed_file"
+        log "Stored $compressed_file"
+
+        # Optional remote mirror (same relative layout)
+        if [[ -n "${REMOTE_SYNC_HOST:-}" ]]; then
+            local remote_dir="${REMOTE_NODELIST_DIR}/${name}/${year}"
+            if ssh -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
+                scp -q "$compressed_file" "${REMOTE_SYNC_HOST}:${remote_dir}/" \
+                    || log "Warning: failed to mirror $compressed_file" error
+            fi
+        fi
+
+        rm -f "$nodelist_file"
+        log "Completed $remote_file for network $name"
+    done <<< "$remote_files"
+
+    log "--- Network '$name' sync finished ---"
+}
+
+# Sync every configured extra network
+sync_extra_networks() {
+    if [[ ${#EXTRA_NETWORKS[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    log "=== Syncing ${#EXTRA_NETWORKS[@]} additional FTN network(s) ==="
+    local spec
+    for spec in "${EXTRA_NETWORKS[@]}"; do
+        sync_extra_network "$spec" || true
+    done
+}
+
+#################################################################################
 # MAIN SYNCHRONIZATION LOGIC
 #################################################################################
 
 # Main function that orchestrates the entire sync process
 sync_nodelists() {
     log "=== Starting NodelistDB synchronization process ==="
-
+    
     # Create temporary directory for downloads
     mkdir -p "$TEMP_DIR"
     log "Using temporary directory: $TEMP_DIR"
-
+    
     # Step 1: Get current state of database via API
     log "Step 1: Checking database state..."
     local db_dates
     db_dates=$(get_database_dates)
-
-    # Step 2: Get available files from FTP server
+    
+    # Step 2: Get available files from FTP server  
     log "Step 2: Checking FTP server..."
     local ftp_files
     ftp_files=$(get_ftp_listing "$FTP_DIR")
-
+    
     if [[ -z "$ftp_files" ]]; then
         log "No nodelist files found on FTP server - nothing to sync"
         return 0
     fi
-
+    
     # Step 3: Determine which files need to be downloaded
     log "Step 3: Determining files to download..."
     local files_to_download=()
     local files_skipped=0
-
+    
     # Check each FTP file against database
     while IFS= read -r ftp_file; do
         [[ -z "$ftp_file" ]] && continue
-
+        
         # Convert filename to date
         local file_date
         if file_date=$(filename_to_date "$ftp_file"); then
-
+            
             # Check if this date already exists in database
             if grep -q "^$file_date$" <<< "$db_dates"; then
                 log "Skipping $ftp_file - date $file_date already in database"
@@ -447,24 +698,25 @@ sync_nodelists() {
         else
             log "Warning: Could not parse date from filename: $ftp_file"
         fi
-
+        
     done <<< "$ftp_files"
-
+    
     # Report what we found
     log "Analysis complete:"
     log "  - Files on FTP: $(echo "$ftp_files" | wc -l)"
     log "  - Files to download: ${#files_to_download[@]}"
     log "  - Files skipped (already in DB): $files_skipped"
-
+    
     # Exit early if nothing to download
     if [[ ${#files_to_download[@]} -eq 0 ]]; then
         log "=== All files are up to date - no synchronization needed ==="
         return 0
     fi
-
+    
     # Step 4: Download and process each file (no server downtime needed with ClickHouse)
     log "Step 4: Processing ${#files_to_download[@]} files..."
     local success_count=0
+    local failed_files=()
     local total_files=${#files_to_download[@]}
 
     for i in "${!files_to_download[@]}"; do
@@ -475,7 +727,12 @@ sync_nodelists() {
 
         # Download file to temp directory
         local temp_file="${TEMP_DIR}/${ftp_file}"
-        download_ftp_file "$ftp_file" "$temp_file" "$FTP_DIR"
+        if ! download_ftp_file "$ftp_file" "$temp_file" "$FTP_DIR"; then
+            log "Skipping $ftp_file - will retry on next sync run" error
+            failed_files+=("$ftp_file")
+            rm -f "$temp_file"
+            continue
+        fi
 
         # If this is a z2daily file, rename it to nodelist format for processing
         local processed_file="$temp_file"
@@ -485,27 +742,39 @@ sync_nodelists() {
             log "Renaming z2daily file: $ftp_file -> $(basename "$processed_file")"
             mv "$temp_file" "$processed_file"
         fi
-
+        
         # Import file into database
         import_to_database "$processed_file"
-
+        
         # Compress and store file in proper location
         compress_and_store "$processed_file"
 
+        # Sync compressed file to remote server
+        local file_date_sync=$(filename_to_date "$(basename "$processed_file")")
+        local year_sync=$(echo "$file_date_sync" | cut -d"-" -f1)
+        local compressed_file_sync="${LOCAL_NODELIST_DIR}/${year_sync}/$(basename "${processed_file,,}").gz"
+        sync_to_remote "$compressed_file_sync"
+        
         # Clean up temporary file
         rm -f "$processed_file"
-
+        
         success_count=$((success_count + 1))
         log "Completed processing $ftp_file ($progress)"
     done
-
+    
     # Final summary (no server restart needed)
-    log "=== Synchronization completed successfully ==="
+    if [[ ${#failed_files[@]} -eq 0 ]]; then
+        log "=== Synchronization completed successfully ==="
+    else
+        log "=== Synchronization completed with ${#failed_files[@]} failed download(s) ==="
+        log "Failed (will retry next run): ${failed_files[*]}" error
+    fi
     log "Files processed: $success_count/$total_files"
 
     if [[ $success_count -gt 0 ]]; then
         log "Updated files:"
         for file in "${files_to_download[@]}"; do
+            [[ " ${failed_files[*]:-} " == *" $file "* ]] && continue
             local file_date=$(filename_to_date "$file")
             if [[ "$file" =~ ^[zZ]2[dD][aA][iI][lL][yY]\. ]]; then
                 local nodelist_name="${file//[zZ]2[dD][aA][iI][lL][yY]/nodelist}"
@@ -515,7 +784,7 @@ sync_nodelists() {
             fi
         done
     fi
-
+    
     log "Database and file storage are now synchronized with FTP server"
     log "Note: ClickHouse allows concurrent operations - server remained online during sync"
 }
@@ -528,16 +797,16 @@ sync_nodelists() {
 create_sample_config() {
     if [[ ! -f "$CONFIG_FILE" ]]; then
         log "Creating sample configuration file: $CONFIG_FILE"
-
+        
         cat > "$CONFIG_FILE" <<'EOF'
 # NodelistDB FTP Synchronization Configuration
-#
+# 
 # Edit this file with your specific FTP server details and paths
 
 # FTP Server Configuration (REQUIRED)
 FTP_HOST="ftp.example.com"                    # FTP server hostname or IP
 FTP_USER="username"                           # FTP username
-FTP_PASS="password"                           # FTP password
+FTP_PASS="password"                           # FTP password  
 FTP_DIR="/pub/fidonet/nodelist"               # Remote directory containing nodelist files
 
 # Local System Paths
@@ -547,6 +816,10 @@ API_BASE_URL="http://localhost:8080/api"      # NodelistDB API endpoint
 
 # Parser Configuration
 PARSER_PATH="./bin/parser"                    # Path to parser binary
+
+# Remote server sync configuration
+REMOTE_SYNC_HOST="root@nodelist.5001.ru"         # Remote server to sync nodelists to
+REMOTE_NODELIST_DIR="/opt/nodelists"             # Remote nodelist directory
 
 # Download Configuration
 MAX_RETRIES=3                                 # Number of retry attempts for failed downloads
@@ -558,14 +831,14 @@ SERVICE_NAME="nodelistdb"                     # systemd service name for the ser
 # Example FTP configurations for common FidoNet nodelist sources:
 #
 # Zone 1 (North America):
-# FTP_HOST="ftp.fidonet.org"
-# FTP_DIR="/nodelist"
+# FTP_HOST="members.shaw.ca"
+# FTP_DIR="/nnftp/f-prot"
 #
-# Zone 2 (Europe):
-# FTP_HOST="ftp.fidonet.org"
+# Zone 2 (Europe):  
+# FTP_HOST="ftp.fidotel.com"
 # FTP_DIR="/nodelist"
 EOF
-
+        
         log "Please edit $CONFIG_FILE with your FTP server details before running sync"
         log "The script will not proceed without proper FTP configuration"
         return 1
@@ -635,14 +908,14 @@ show_server_status() {
     echo "NodelistDB Server Status:"
     echo "========================="
     echo "Service name: $SERVICE_NAME"
-
+    
     if is_server_running; then
         echo "Status: RUNNING"
         echo "API Health: $(curl -s "$API_BASE_URL/health" | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "Not responding")"
     else
         echo "Status: STOPPED"
     fi
-
+    
     echo "API URL: $API_BASE_URL"
     echo "Config: $CONFIG_PATH"
 }
@@ -650,36 +923,36 @@ show_server_status() {
 # Validate configuration and show status
 check_config() {
     log "Checking configuration..."
-
+    
     echo "Configuration Status:"
     echo "===================="
     echo "Config file: $CONFIG_FILE"
     echo "Exists: $(if [[ -f "$CONFIG_FILE" ]]; then echo "YES"; else echo "NO"; fi)"
     echo
-
+    
     if [[ -f "$CONFIG_FILE" ]]; then
         echo "Settings:"
         echo "  FTP_HOST: ${FTP_HOST:-"(not set)"}"
-        echo "  FTP_USER: ${FTP_USER:-"(not set)"}"
+        echo "  FTP_USER: ${FTP_USER:-"(not set)"}" 
         echo "  FTP_DIR: ${FTP_DIR:-"(not set)"}"
         echo "  LOCAL_NODELIST_DIR: $LOCAL_NODELIST_DIR"
         echo "  CONFIG_PATH: $CONFIG_PATH"
         echo "  PARSER_PATH: $PARSER_PATH"
         echo "  API_BASE_URL: $API_BASE_URL"
         echo
-
+        
         # Test API connection
         echo "API Connection Test:"
         if curl -s --connect-timeout 5 "$API_BASE_URL/health" > /dev/null; then
-            echo "  API is reachable"
+            echo "  ✓ API is reachable"
         else
-            echo "  API is not reachable (is server running?)"
+            echo "  ✗ API is not reachable (is server running?)"
         fi
-
+        
         # Check database configuration
         echo "Database Configuration:"
         if [[ -f "$CONFIG_PATH" ]]; then
-            echo "  Config file exists: $CONFIG_PATH"
+            echo "  ✓ Config file exists: $CONFIG_PATH"
             # Check for ClickHouse configuration section
             if grep -q "^clickhouse:" "$CONFIG_PATH"; then
                 echo "  Database type: ClickHouse"
@@ -691,24 +964,24 @@ check_config() {
                 [[ -n "$ch_port" ]] && echo "  ClickHouse port: $ch_port"
                 [[ -n "$ch_db" ]] && echo "  Database name: $ch_db"
             else
-                echo "  No ClickHouse configuration found in config"
+                echo "  ✗ No ClickHouse configuration found in config"
             fi
         else
-            echo "  Config file not found: $CONFIG_PATH"
+            echo "  ✗ Config file not found: $CONFIG_PATH"
         fi
 
         # Check parser binary
         echo
         echo "Parser Binary:"
         if [[ -x "$PARSER_PATH" ]]; then
-            echo "  Parser exists and is executable: $PARSER_PATH"
+            echo "  ✓ Parser exists and is executable: $PARSER_PATH"
         else
-            echo "  Parser not found or not executable: $PARSER_PATH"
+            echo "  ✗ Parser not found or not executable: $PARSER_PATH"
         fi
-
+        
         echo
         check_dependencies
-
+        
     else
         echo "Configuration file does not exist."
         echo "Run the script to create a sample configuration file."
@@ -723,7 +996,7 @@ check_config() {
 main() {
     local dry_run=false
     local verbose=false
-
+    
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -763,47 +1036,47 @@ main() {
                 ;;
         esac
     done
-
+    
     # Enable debug output if verbose mode requested
     if [[ "$verbose" == "true" ]]; then
         set -x
         log "Verbose mode enabled"
     fi
-
+    
     # Start main process
     log "=== NodelistDB FTP Sync Script Starting ==="
     log "Configuration file: $CONFIG_FILE"
     log "Log file: $LOG_FILE"
     log "Process ID: $$"
-
+    
     # Create sample configuration if needed
     if ! create_sample_config; then
         exit 1
     fi
-
+    
     # Set up cleanup trap
     trap cleanup EXIT
-
+    
     # Validate system and configuration
     check_dependencies
     validate_config
-
+    
     # Handle dry-run mode
     if [[ "$dry_run" == "true" ]]; then
         log "=== DRY RUN MODE - No changes will be made ==="
-
+        
         # Create temporary directory for dry-run operations
         mkdir -p "$TEMP_DIR"
-
+        
         # Get database and FTP state without making changes
         local db_dates ftp_files
         db_dates=$(get_database_dates)
         ftp_files=$(get_ftp_listing "$FTP_DIR")
-
+        
         log "Dry run analysis:"
         log "  Database contains $(echo "$db_dates" | wc -l) dates"
         log "  FTP server has $(echo "$ftp_files" | wc -l) files"
-
+        
         # Show what would be downloaded
         local would_download=0
         while IFS= read -r ftp_file; do
@@ -812,18 +1085,19 @@ main() {
             if file_date=$(filename_to_date "$ftp_file"); then
                 if ! echo "$db_dates" | grep -q "^$file_date$"; then
                     log "  Would download: $ftp_file (date: $file_date)"
-                    ((would_download++))
+                    would_download=$((would_download + 1))
                 fi
             fi
         done <<< "$ftp_files"
-
+        
         log "=== Dry run complete - would download $would_download files ==="
         exit 0
     fi
-
-    # Run the actual synchronization
+    
+    # Run the actual synchronization (fidonet first, then extra networks)
     sync_nodelists
-
+    sync_extra_networks
+    
     log "=== NodelistDB FTP Sync Script Completed Successfully ==="
 }
 

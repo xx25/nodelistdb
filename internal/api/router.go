@@ -35,6 +35,9 @@ func (s *Server) SetupRouter() http.Handler {
 		r.Get("/{zone}/{net}/{node}/timeline", s.GetNodeTimelineHandler)
 	})
 
+	// Network (FTN domain) routes
+	r.Get("/api/networks", s.NetworksHandler)
+
 	// Statistics routes
 	r.Get("/api/stats", s.StatsHandler)
 	r.Get("/api/stats/dates", s.GetAvailableDatesHandler)

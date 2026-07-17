@@ -92,7 +92,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 		query = fmt.Sprintf(`
 			WITH latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
@@ -100,14 +100,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					AND is_operational = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -134,10 +134,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 					AND r.test_time = lt.latest_test_time
 			)
 			SELECT
@@ -166,9 +166,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
@@ -176,7 +176,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 		query = fmt.Sprintf(`
 			WITH latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
@@ -184,14 +184,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					AND is_operational = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			)
 			SELECT DISTINCT ON (r.zone, r.net, r.node)
 				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -212,11 +212,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success
+				r.ftp_anon_success, r.domain, r.derived_from_address
 			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
-			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
@@ -287,17 +287,17 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 			-- Count successful IPv6 tests per node in the period
 			ipv6_success_counts AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successful IPv6 tests
 			latest_failed_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE (zone, net, node) IN (
@@ -306,14 +306,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					WHERE success_count = 0
 				)
 				AND test_time >= now() - INTERVAL ? DAY
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -340,10 +340,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_failed_tests lft ON r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
+				INNER JOIN latest_failed_tests lft ON r.domain = lft.domain AND r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
 					AND r.test_time = lft.latest_test_time
 			)
 			SELECT
@@ -372,9 +372,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
@@ -393,17 +393,17 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 			-- Count successful IPv6 tests per node in the period
 			ipv6_success_counts AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					SUM(CASE WHEN (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) THEN 1 ELSE 0 END) as success_count
 				FROM node_test_results
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successful IPv6 tests
 			latest_failed_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE (zone, net, node) IN (
@@ -412,14 +412,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					WHERE success_count = 0
 				)
 				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			)
 			SELECT DISTINCT ON (r.zone, r.net, r.node)
 				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -440,11 +440,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success
+				r.ftp_anon_success, r.domain, r.derived_from_address
 			FROM node_test_results r
-			INNER JOIN latest_failed_tests lft ON r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
+			INNER JOIN latest_failed_tests lft ON r.domain = lft.domain AND r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
 				AND r.test_time = lft.latest_test_time
-			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
@@ -517,18 +517,18 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 			-- Count successful IPv6 tests per node in the period
 			ipv6_success_counts AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_working_ipv4)
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successful IPv6 tests but working IPv4
 			latest_ipv4_only_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE (zone, net, node) IN (
@@ -537,14 +537,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					WHERE success_count = 0
 				)
 				AND test_time >= now() - INTERVAL ? DAY
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -571,8 +571,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_ipv4_only_tests lit ON r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
 					AND r.test_time = lit.latest_test_time
@@ -603,9 +603,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
@@ -625,18 +625,18 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 			-- Count successful IPv6 tests per node in the period
 			ipv6_success_counts AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					SUM(CASE WHEN (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) THEN 1 ELSE 0 END) as success_count
 				FROM node_test_results
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_working_ipv4)
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successful IPv6 tests but working IPv4
 			latest_ipv4_only_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE (zone, net, node) IN (
@@ -645,14 +645,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					WHERE success_count = 0
 				)
 				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			)
 			SELECT DISTINCT ON (r.zone, r.net, r.node)
 				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -673,11 +673,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success
+				r.ftp_anon_success, r.domain, r.derived_from_address
 			FROM node_test_results r
 			INNER JOIN latest_ipv4_only_tests lit ON r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
 				AND r.test_time = lit.latest_test_time
-			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
@@ -739,7 +739,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 		query = fmt.Sprintf(`
 			WITH latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
@@ -747,14 +747,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					AND NOT (binkp_ipv4_success = true OR ifcico_ipv4_success = true OR telnet_ipv4_success = true)
 					%s
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -781,10 +781,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 					AND r.test_time = lt.latest_test_time
 			)
 			SELECT
@@ -813,9 +813,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
@@ -823,7 +823,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 		query = fmt.Sprintf(`
 			WITH latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
@@ -831,14 +831,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					AND NOT (binkp_ipv4_success = true OR ifcico_ipv4_success = true OR telnet_ipv4_success = true)
 					%s
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			)
 			SELECT DISTINCT ON (r.zone, r.net, r.node)
 				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -859,11 +859,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success
+				r.ftp_anon_success, r.domain, r.derived_from_address
 			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
-			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
@@ -924,7 +924,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 		query = fmt.Sprintf(`
 			WITH latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
@@ -932,14 +932,14 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					AND length(resolved_ipv4) = 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
 				SELECT
@@ -966,10 +966,10 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					r.is_operational, r.has_connectivity_issues, r.address_validated,
 					r.tested_hostname, r.hostname_index, r.is_aggregated,
 					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success,
-					row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+					r.ftp_anon_success, r.domain, r.derived_from_address,
+					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 					AND r.test_time = lt.latest_test_time
 			)
 			SELECT
@@ -998,9 +998,9 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
 				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
 				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success
+				rr.ftp_anon_success, rr.domain, rr.derived_from_address
 			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
 			WHERE rr.rn = 1
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
@@ -1008,7 +1008,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 		query = fmt.Sprintf(`
 			WITH latest_tests AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
@@ -1016,14 +1016,14 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					AND array_length(resolved_ipv4) = 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
 				SELECT
-					zone, net, node,
+					domain, zone, net, node,
 					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
 				FROM nodes
-				GROUP BY zone, net, node
+				GROUP BY domain, zone, net, node
 			)
 			SELECT DISTINCT ON (r.zone, r.net, r.node)
 				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -1044,11 +1044,11 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 				r.is_operational, r.has_connectivity_issues, r.address_validated,
 				r.tested_hostname, r.hostname_index, r.is_aggregated,
 				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success
+				r.ftp_anon_success, r.domain, r.derived_from_address
 			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 				AND r.test_time = lt.latest_test_time
-			LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
@@ -1115,13 +1115,13 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true)
 				AND address_validated = true
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		),
 		latest_nodes AS (
 			SELECT zone, net, node,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		),
 		stability AS (
 			SELECT zone, net, node,
@@ -1135,13 +1135,13 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 				)
 				AND NOT (binkp_ipv6_success = true OR ifcico_ipv6_success = true)
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		),
 		best_results AS (
 			SELECT r.test_time, r.zone, r.net, r.node,
 				r.resolved_ipv6, r.isp, r.org,
 				r.binkp_ipv4_success, r.ifcico_ipv4_success, r.telnet_ipv4_success,
-				row_number() OVER (PARTITION BY r.zone, r.net, r.node
+				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node
 					ORDER BY r.hostname_index ASC) as rn
 			FROM node_test_results r
 			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net

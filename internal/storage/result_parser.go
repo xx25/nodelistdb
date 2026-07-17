@@ -32,7 +32,7 @@ func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) 
 		&node.IsCM, &node.IsMO,
 		&flags, &modemFlags,
 		&node.ConflictSequence, &node.HasConflict,
-		&node.HasInet, &internetConfig, &node.FtsId, &node.RawLine,
+		&node.HasInet, &internetConfig, &node.FtsId, &node.RawLine, &node.Domain,
 	)
 	if err != nil {
 		return node, fmt.Errorf("failed to scan node: %w", err)
@@ -86,7 +86,7 @@ func (rp *ResultParser) ParseNodeSummaryRow(scanner RowScanner) (NodeSummary, er
 	err := scanner.Scan(
 		&ns.Zone, &ns.Net, &ns.Node,
 		&ns.SystemName, &ns.Location, &ns.SysopName,
-		&ns.FirstDate, &ns.LastDate, &ns.CurrentlyActive,
+		&ns.FirstDate, &ns.LastDate, &ns.CurrentlyActive, &ns.Domain,
 	)
 	if err != nil {
 		return ns, fmt.Errorf("failed to scan node summary: %w", err)
@@ -320,6 +320,8 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 		&result.HostnamesTested,
 		&result.HostnamesOperational,
 		&result.FTPAnonSuccess,
+		&result.Domain,
+		&result.DerivedFromAddress,
 	)
 
 	if err != nil {

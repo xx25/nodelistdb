@@ -7,8 +7,9 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// SearchNodesBySysop finds all nodes associated with a sysop name
-func (so *SearchOperations) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error) {
+// SearchNodesBySysop finds all nodes associated with a sysop name.
+// An empty domain searches all networks.
+func (so *SearchOperations) SearchNodesBySysop(sysopName string, limit int, domain string) ([]NodeSummary, error) {
 	// Validate and sanitize input
 	if sysopName == "" {
 		return nil, fmt.Errorf("sysop name cannot be empty")
@@ -28,7 +29,7 @@ func (so *SearchOperations) SearchNodesBySysop(sysopName string, limit int) ([]N
 	conn := so.db.Conn()
 
 	query := so.queryBuilder.SysopSearchSQL()
-	rows, err := conn.Query(query, sysopName, limit)
+	rows, err := conn.Query(query, sysopName, domain, domain, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search nodes by sysop: %w", err)
 	}

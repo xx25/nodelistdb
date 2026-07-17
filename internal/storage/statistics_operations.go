@@ -37,10 +37,11 @@ func NewStatisticsOperations(db database.DatabaseInterface, queryBuilder QueryBu
 	}
 }
 
-// GetStats retrieves network statistics for a specific date with smart TTL-based caching
-func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats, error) {
-	cacheKey := date.Format("2006-01-02")
-	
+// GetStats retrieves network statistics for a specific date with smart TTL-based caching.
+// An empty domain aggregates across all networks.
+func (so *StatisticsOperations) GetStats(date time.Time, domain string) (*database.NetworkStats, error) {
+	cacheKey := domain + "@" + date.Format("2006-01-02")
+
 	// Check cache with TTL validation
 	so.cacheMu.RLock()
 	if entry, exists := so.statsCache[cacheKey]; exists {
@@ -60,7 +61,7 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 
 	// Get main statistics
 	statsQuery := so.queryBuilder.StatsSQL()
-	row := conn.QueryRow(statsQuery, date)
+	row := conn.QueryRow(statsQuery, date, domain, domain)
 
 	stats, err := so.resultParser.ParseNetworkStatsRow(row)
 	if err != nil {
@@ -73,7 +74,7 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 	// Get zone distribution
 	stats.ZoneDistribution = make(map[int]int)
 	zoneQuery := so.queryBuilder.ZoneDistributionSQL()
-	rows, err := conn.Query(zoneQuery, date)
+	rows, err := conn.Query(zoneQuery, date, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get zone distribution: %w", err)
 	}
@@ -90,7 +91,7 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 	// Get largest regions (top 10) - using optimized query
 	stats.LargestRegions = []database.RegionInfo{}
 	regionQuery := so.queryBuilder.OptimizedLargestRegionsSQL()
-	rows, err = conn.Query(regionQuery, date)
+	rows, err = conn.Query(regionQuery, date, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get largest regions: %w", err)
 	}
@@ -107,7 +108,7 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 	// Get largest nets (top 10) - using optimized query
 	stats.LargestNets = []database.NetInfo{}
 	netQuery := so.queryBuilder.OptimizedLargestNetsSQL()
-	rows, err = conn.Query(netQuery, date, date)
+	rows, err = conn.Query(netQuery, date, domain, domain, date, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get largest nets: %w", err)
 	}
@@ -151,8 +152,9 @@ func (so *StatisticsOperations) GetStats(date time.Time) (*database.NetworkStats
 	return stats, nil
 }
 
-// GetLatestStatsDate retrieves the most recent date that has statistics
-func (so *StatisticsOperations) GetLatestStatsDate() (time.Time, error) {
+// GetLatestStatsDate retrieves the most recent date that has statistics.
+// An empty domain looks across all networks.
+func (so *StatisticsOperations) GetLatestStatsDate(domain string) (time.Time, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
@@ -160,22 +162,23 @@ func (so *StatisticsOperations) GetLatestStatsDate() (time.Time, error) {
 	var latestDate time.Time
 
 	query := so.queryBuilder.LatestDateSQL()
-	err := conn.QueryRow(query).Scan(&latestDate)
+	err := conn.QueryRow(query, domain, domain).Scan(&latestDate)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to get latest stats date: %w", err)
 	}
 	return latestDate, nil
 }
 
-// GetAvailableDates returns all unique dates that have nodelist data
-func (so *StatisticsOperations) GetAvailableDates() ([]time.Time, error) {
+// GetAvailableDates returns all unique dates that have nodelist data.
+// An empty domain looks across all networks.
+func (so *StatisticsOperations) GetAvailableDates(domain string) ([]time.Time, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
 	conn := so.db.Conn()
 
 	query := so.queryBuilder.AvailableDatesSQL()
-	rows, err := conn.Query(query)
+	rows, err := conn.Query(query, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get available dates: %w", err)
 	}
@@ -197,8 +200,10 @@ func (so *StatisticsOperations) GetAvailableDates() ([]time.Time, error) {
 	return dates, nil
 }
 
-// GetNearestAvailableDate finds the closest available date to the requested date
-func (so *StatisticsOperations) GetNearestAvailableDate(requestedDate time.Time) (time.Time, error) {
+// GetNearestAvailableDate finds the closest available date to the requested date.
+// An empty domain looks across all networks; a concrete domain keeps other
+// networks' denser date grids from leaking into this network's date picker.
+func (so *StatisticsOperations) GetNearestAvailableDate(requestedDate time.Time, domain string) (time.Time, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
@@ -207,7 +212,7 @@ func (so *StatisticsOperations) GetNearestAvailableDate(requestedDate time.Time)
 	// First check if the exact date exists
 	var count int
 	exactQuery := so.queryBuilder.ExactDateExistsSQL()
-	err := conn.QueryRow(exactQuery, requestedDate).Scan(&count)
+	err := conn.QueryRow(exactQuery, requestedDate, domain, domain).Scan(&count)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to check if date exists: %w", err)
 	}
@@ -220,14 +225,14 @@ func (so *StatisticsOperations) GetNearestAvailableDate(requestedDate time.Time)
 
 	// Get the closest date before
 	beforeQuery := so.queryBuilder.NearestDateBeforeSQL()
-	err = conn.QueryRow(beforeQuery, requestedDate).Scan(&beforeDate)
+	err = conn.QueryRow(beforeQuery, requestedDate, domain, domain).Scan(&beforeDate)
 	if err != nil && err != sql.ErrNoRows {
 		return time.Time{}, fmt.Errorf("failed to get date before: %w", err)
 	}
 
 	// Get the closest date after
 	afterQuery := so.queryBuilder.NearestDateAfterSQL()
-	err = conn.QueryRow(afterQuery, requestedDate).Scan(&afterDate)
+	err = conn.QueryRow(afterQuery, requestedDate, domain, domain).Scan(&afterDate)
 	if err != nil && err != sql.ErrNoRows {
 		return time.Time{}, fmt.Errorf("failed to get date after: %w", err)
 	}
@@ -247,11 +252,11 @@ func (so *StatisticsOperations) GetNearestAvailableDate(requestedDate time.Time)
 	}
 
 	// If no dates found at all, return the latest available date
-	return so.GetLatestStatsDate()
+	return so.GetLatestStatsDate(domain)
 }
 
 // GetDateRangeStats returns statistics for a range of dates
-func (so *StatisticsOperations) GetDateRangeStats(startDate, endDate time.Time) ([]database.NetworkStats, error) {
+func (so *StatisticsOperations) GetDateRangeStats(startDate, endDate time.Time, domain string) ([]database.NetworkStats, error) {
 	if startDate.After(endDate) {
 		return nil, fmt.Errorf("start date cannot be after end date")
 	}
@@ -262,11 +267,11 @@ func (so *StatisticsOperations) GetDateRangeStats(startDate, endDate time.Time) 
 	conn := so.db.Conn()
 
 	// Get all dates in the range first
-	query := `SELECT DISTINCT nodelist_date FROM nodes 
-		WHERE nodelist_date >= ? AND nodelist_date <= ? 
+	query := `SELECT DISTINCT nodelist_date FROM nodes
+		WHERE nodelist_date >= ? AND nodelist_date <= ? AND ` + domainFilterSQL + `
 		ORDER BY nodelist_date ASC`
 
-	rows, err := conn.Query(query, startDate, endDate)
+	rows, err := conn.Query(query, startDate, endDate, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dates in range: %w", err)
 	}
@@ -284,7 +289,7 @@ func (so *StatisticsOperations) GetDateRangeStats(startDate, endDate time.Time) 
 	// Get stats for each date
 	var allStats []database.NetworkStats
 	for _, date := range dates {
-		stats, err := so.GetStats(date)
+		stats, err := so.GetStats(date, domain)
 		if err != nil {
 			// Log error but continue with other dates
 			continue
@@ -342,7 +347,8 @@ type NodeCountByDate struct {
 }
 
 // GetNodeCountHistory returns total node count per nodelist date for charting.
-func (so *StatisticsOperations) GetNodeCountHistory() ([]NodeCountByDate, error) {
+// An empty domain counts across all networks.
+func (so *StatisticsOperations) GetNodeCountHistory(domain string) ([]NodeCountByDate, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
@@ -351,9 +357,10 @@ func (so *StatisticsOperations) GetNodeCountHistory() ([]NodeCountByDate, error)
 	rows, err := conn.Query(`
 		SELECT nodelist_date, count(*) AS total_nodes
 		FROM nodes
+		WHERE `+domainFilterSQL+`
 		GROUP BY nodelist_date
 		ORDER BY nodelist_date ASC
-	`)
+	`, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query node count history: %w", err)
 	}
@@ -486,17 +493,17 @@ func (so *StatisticsOperations) GetTopSysops(date time.Time, limit int) ([]Sysop
 }
 
 // GetGrowthStats calculates growth statistics between two dates
-func (so *StatisticsOperations) GetGrowthStats(startDate, endDate time.Time) (*GrowthStats, error) {
+func (so *StatisticsOperations) GetGrowthStats(startDate, endDate time.Time, domain string) (*GrowthStats, error) {
 	if startDate.After(endDate) {
 		return nil, fmt.Errorf("start date cannot be after end date")
 	}
 
-	startStats, err := so.GetStats(startDate)
+	startStats, err := so.GetStats(startDate, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get start date stats: %w", err)
 	}
 
-	endStats, err := so.GetStats(endDate)
+	endStats, err := so.GetStats(endDate, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get end date stats: %w", err)
 	}
@@ -628,12 +635,12 @@ type BrowseNet struct {
 }
 
 // GetBrowseZones lists every zone present in the nodelist for the given date.
-func (so *StatisticsOperations) GetBrowseZones(date time.Time) ([]BrowseZone, error) {
+func (so *StatisticsOperations) GetBrowseZones(date time.Time, domain string) ([]BrowseZone, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
 	conn := so.db.Conn()
-	rows, err := conn.Query(so.queryBuilder.BrowseZonesSQL(), date)
+	rows, err := conn.Query(so.queryBuilder.BrowseZonesSQL(), date, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query browse zones: %w", err)
 	}
@@ -651,12 +658,12 @@ func (so *StatisticsOperations) GetBrowseZones(date time.Time) ([]BrowseZone, er
 }
 
 // GetBrowseRegions lists every region within a zone for the given date.
-func (so *StatisticsOperations) GetBrowseRegions(date time.Time, zone int) ([]BrowseRegion, error) {
+func (so *StatisticsOperations) GetBrowseRegions(date time.Time, zone int, domain string) ([]BrowseRegion, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
 	conn := so.db.Conn()
-	rows, err := conn.Query(so.queryBuilder.BrowseRegionsSQL(), date, zone)
+	rows, err := conn.Query(so.queryBuilder.BrowseRegionsSQL(), date, zone, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query browse regions: %w", err)
 	}
@@ -675,12 +682,12 @@ func (so *StatisticsOperations) GetBrowseRegions(date time.Time, zone int) ([]Br
 
 // GetBrowseNets lists every net within a zone+region for the given date.
 // Pass region 0 to list nets that have no region assigned.
-func (so *StatisticsOperations) GetBrowseNets(date time.Time, zone, region int) ([]BrowseNet, error) {
+func (so *StatisticsOperations) GetBrowseNets(date time.Time, zone, region int, domain string) ([]BrowseNet, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
 	conn := so.db.Conn()
-	rows, err := conn.Query(so.queryBuilder.BrowseNetsSQL(), date, zone, region)
+	rows, err := conn.Query(so.queryBuilder.BrowseNetsSQL(), date, zone, region, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query browse nets: %w", err)
 	}
@@ -698,12 +705,12 @@ func (so *StatisticsOperations) GetBrowseNets(date time.Time, zone, region int) 
 }
 
 // GetBrowseNodes lists every entry within a zone+net for a single nodelist date.
-func (so *StatisticsOperations) GetBrowseNodes(date time.Time, zone, net int) ([]database.Node, error) {
+func (so *StatisticsOperations) GetBrowseNodes(date time.Time, zone, net int, domain string) ([]database.Node, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
 	conn := so.db.Conn()
-	rows, err := conn.Query(so.queryBuilder.BrowseNodesSQL(), date, zone, net)
+	rows, err := conn.Query(so.queryBuilder.BrowseNodesSQL(), date, zone, net, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query browse nodes: %w", err)
 	}

@@ -6,25 +6,24 @@ import (
 	"github.com/nodelistdb/internal/testing/logging"
 )
 
-// checkAndRefreshNodelist checks if the nodelist has been updated and refreshes if needed
+// checkAndRefreshNodelist checks if any network's nodelist has been updated
+// and refreshes if needed. Comparison uses a per-network fingerprint: with
+// several networks at different cadences, a global max date would never notice
+// an import whose date is older than another network's latest.
 func (d *Daemon) checkAndRefreshNodelist(ctx context.Context) bool {
-	// Get current nodelist date from database
-	currentDate, err := d.storage.GetLatestNodelistDate(ctx)
+	currentFingerprint, err := d.storage.GetNodelistFingerprint(ctx)
 	if err != nil {
-		logging.Errorf("Failed to check nodelist date: %v", err)
+		logging.Errorf("Failed to check nodelist fingerprint: %v", err)
 		return false
 	}
 
-	// Check if it's different from our last known date
 	d.nodelistMu.RLock()
-	lastDate := d.lastNodelistDate
+	lastFingerprint := d.lastNodelistFingerprint
 	d.nodelistMu.RUnlock()
 
-	if currentDate.After(lastDate) {
-		// New nodelist detected!
-		logging.Infof("New nodelist detected: %s (was %s)",
-			currentDate.Format("2006-01-02"),
-			lastDate.Format("2006-01-02"))
+	if currentFingerprint != lastFingerprint {
+		// New nodelist detected in at least one network!
+		logging.Infof("New nodelist detected: %s (was %s)", currentFingerprint, lastFingerprint)
 
 		// Refresh the scheduler with new nodes
 		// This will automatically schedule immediate retests for nodes with changed internet config
@@ -33,10 +32,14 @@ func (d *Daemon) checkAndRefreshNodelist(ctx context.Context) bool {
 			return false
 		}
 
-		// Update our last known date
+		// Update our last known fingerprint
 		d.nodelistMu.Lock()
-		d.lastNodelistDate = currentDate
+		d.lastNodelistFingerprint = currentFingerprint
 		d.nodelistMu.Unlock()
+
+		// Reseed the AKA equivalence index: the refreshed nodelists may have
+		// changed hostname sets or added cross-network entries
+		d.seedAkaEquivalence(ctx)
 
 		logging.Infof("Nodelist refresh complete. Nodes with changed internet config will be retested immediately.")
 

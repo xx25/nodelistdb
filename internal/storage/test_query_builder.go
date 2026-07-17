@@ -42,10 +42,11 @@ func (tqb *TestQueryBuilder) BuildTestHistoryQuery() string {
 			is_operational, has_connectivity_issues, address_validated,
 			tested_hostname, hostname_index, is_aggregated,
 			total_hostnames, hostnames_tested, hostnames_operational,
-			ftp_anon_success
+			ftp_anon_success, domain, derived_from_address
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
 		AND test_time >= now() - INTERVAL ? DAY
+		AND (? = '' OR domain = ?)
 		ORDER BY test_time ASC, hostname_index`
 }
 
@@ -76,9 +77,10 @@ func (tqb *TestQueryBuilder) BuildDetailedTestResultQuery() string {
 			is_operational, has_connectivity_issues, address_validated,
 			tested_hostname, hostname_index, is_aggregated,
 			total_hostnames, hostnames_tested, hostnames_operational,
-			ftp_anon_success
+			ftp_anon_success, domain, derived_from_address
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ? AND test_time = parseDateTimeBestEffort(?)
+		AND (? = '' OR domain = ?)
 		ORDER BY is_aggregated DESC, hostname_index ASC
 		LIMIT 1`
 }
@@ -146,7 +148,8 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
 		AND test_time >= now() - INTERVAL ? DAY
-		GROUP BY zone, net, node`
+		AND (? = '' OR domain = ?)
+		GROUP BY domain, zone, net, node`
 }
 
 // BuildReachabilityTrendsQuery builds a query for reachability trends over time (ClickHouse)
@@ -164,7 +167,7 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 		daily_status AS (
 			SELECT
 				d.report_date,
-				r.zone, r.net, r.node,
+				r.domain, r.zone, r.net, r.node,
 				argMax(r.is_operational, r.test_time) as last_status,
 				max(r.test_time) as last_test_time,
 				argMax(least(
@@ -175,13 +178,13 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 			FROM date_series d
 			CROSS JOIN node_test_results r
 			WHERE r.test_time <= d.report_date + INTERVAL 1 DAY
-			GROUP BY d.report_date, r.zone, r.net, r.node
+			GROUP BY d.report_date, r.domain, r.zone, r.net, r.node
 		)
 		SELECT
 			report_date as test_date,
-			count(DISTINCT (zone, net, node)) as total_nodes,
-			countDistinctIf((zone, net, node), last_status = 1) as operational_nodes,
-			countDistinctIf((zone, net, node), last_status = 0) as failed_nodes,
+			count(DISTINCT (domain, zone, net, node)) as total_nodes,
+			countDistinctIf((domain, zone, net, node), last_status = 1) as operational_nodes,
+			countDistinctIf((domain, zone, net, node), last_status = 0) as failed_nodes,
 			avg(toUInt8(last_status)) * 100 as success_rate,
 			avgIf(last_response_ms, last_status = 1 AND last_response_ms < 999999) as avg_response_ms
 		FROM daily_status
@@ -229,29 +232,29 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter stri
 	return fmt.Sprintf(`
 		WITH latest_tests AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND %s = true
 				AND is_operational = true
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		),
 		-- Prefer aggregated results for multi-hostname nodes, otherwise take single result
 		best_results AS (
 			SELECT
-				r.zone, r.net, r.node, r.test_time,
-				row_number() OVER (PARTITION BY r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+				r.domain, r.zone, r.net, r.node, r.test_time,
+				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 		),
 		latest_nodes AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(system_name, nodelist_date) as system_name
 			FROM nodes
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		)
 		SELECT
 			r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -277,10 +280,10 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter stri
 			r.is_operational, r.has_connectivity_issues, r.address_validated,
 			r.tested_hostname, r.hostname_index, r.is_aggregated,
 			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-			r.ftp_anon_success
+			r.ftp_anon_success, r.domain, r.derived_from_address
 		FROM node_test_results r
-		JOIN best_results br ON r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
-		LEFT JOIN latest_nodes ln ON r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
+		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
+		LEFT JOIN latest_nodes ln ON r.domain = ln.domain AND r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
 		ORDER BY r.test_time DESC
 		LIMIT ?`, protocolColumn, nodeFilter)
 }
@@ -312,9 +315,9 @@ func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
 			is_operational, has_connectivity_issues, address_validated,
 			tested_hostname, hostname_index, is_aggregated,
 			total_hostnames, hostnames_tested, hostnames_operational,
-			ftp_anon_success
+			ftp_anon_success, domain, derived_from_address
 		FROM (
-			SELECT *, row_number() OVER (PARTITION BY zone, net, node ORDER BY test_time DESC) as rn
+			SELECT *, row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY test_time DESC) as rn
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 		)

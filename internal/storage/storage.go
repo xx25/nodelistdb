@@ -111,37 +111,41 @@ func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) 
 	return s.nodeOperations.GetNodes(filter)
 }
 
-func (s *Storage) GetNodeHistory(zone, net, node int) ([]database.Node, error) {
-	return s.nodeOperations.GetNodeHistory(zone, net, node)
+func (s *Storage) GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error) {
+	return s.nodeOperations.GetNodeHistory(zone, net, node, domain)
 }
 
-func (s *Storage) GetNodeDateRange(zone, net, node int) (firstDate, lastDate time.Time, err error) {
-	return s.nodeOperations.GetNodeDateRange(zone, net, node)
+func (s *Storage) GetNodeDateRange(zone, net, node int, domain string) (firstDate, lastDate time.Time, err error) {
+	return s.nodeOperations.GetNodeDateRange(zone, net, node, domain)
 }
 
 func (s *Storage) InsertNodes(nodes []database.Node) error {
 	return s.nodeOperations.InsertNodes(nodes)
 }
 
-func (s *Storage) IsNodelistProcessed(nodelistDate time.Time) (bool, error) {
-	return s.nodeOperations.IsNodelistProcessed(nodelistDate)
+func (s *Storage) IsNodelistProcessed(nodelistDate time.Time, domain string) (bool, error) {
+	return s.nodeOperations.IsNodelistProcessed(nodelistDate, domain)
 }
 
-func (s *Storage) FindConflictingNode(zone, net, node int, date time.Time) (bool, error) {
-	return s.nodeOperations.FindConflictingNode(zone, net, node, date)
+func (s *Storage) FindConflictingNode(zone, net, node int, date time.Time, domain string) (bool, error) {
+	return s.nodeOperations.FindConflictingNode(zone, net, node, date, domain)
 }
 
-func (s *Storage) GetMaxNodelistDate() (time.Time, error) {
-	return s.nodeOperations.GetMaxNodelistDate()
+func (s *Storage) GetMaxNodelistDate(domain string) (time.Time, error) {
+	return s.nodeOperations.GetMaxNodelistDate(domain)
+}
+
+func (s *Storage) GetDomains() ([]DomainInfo, error) {
+	return s.nodeOperations.GetDomains()
 }
 
 // Search Operations delegated methods
-func (s *Storage) SearchNodesBySysop(sysopName string, limit int) ([]NodeSummary, error) {
-	return s.searchOperations.SearchNodesBySysop(sysopName, limit)
+func (s *Storage) SearchNodesBySysop(sysopName string, limit int, domain string) ([]NodeSummary, error) {
+	return s.searchOperations.SearchNodesBySysop(sysopName, limit, domain)
 }
 
-func (s *Storage) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
-	return s.searchOperations.GetNodeChanges(zone, net, node)
+func (s *Storage) GetNodeChanges(zone, net, node int, domain string) ([]database.NodeChange, error) {
+	return s.searchOperations.GetNodeChanges(zone, net, node, domain)
 }
 
 func (s *Storage) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
@@ -157,70 +161,70 @@ func (s *Storage) SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSum
 }
 
 // Analytics Operations delegated methods
-func (s *Storage) GetFlagFirstAppearance(flagName string) (*FlagFirstAppearance, error) {
-	return s.analyticsOperations.GetFlagFirstAppearance(flagName)
+func (s *Storage) GetFlagFirstAppearance(flagName string, domain string) (*FlagFirstAppearance, error) {
+	return s.analyticsOperations.GetFlagFirstAppearance(flagName, domain)
 }
 
-func (s *Storage) GetFlagUsageByYear(flagName string) ([]FlagUsageByYear, error) {
-	return s.analyticsOperations.GetFlagUsageByYear(flagName)
+func (s *Storage) GetFlagUsageByYear(flagName string, domain string) ([]FlagUsageByYear, error) {
+	return s.analyticsOperations.GetFlagUsageByYear(flagName, domain)
 }
 
-func (s *Storage) GetNetworkHistory(zone, net int) (*NetworkHistory, error) {
-	return s.analyticsOperations.GetNetworkHistory(zone, net)
+func (s *Storage) GetNetworkHistory(zone, net int, domain string) (*NetworkHistory, error) {
+	return s.analyticsOperations.GetNetworkHistory(zone, net, domain)
 }
 
-func (s *Storage) UpdateFlagStatistics(nodelistDate time.Time) error {
-	return s.analyticsOperations.UpdateFlagStatistics(nodelistDate)
+func (s *Storage) UpdateFlagStatistics(nodelistDate time.Time, domain string) error {
+	return s.analyticsOperations.UpdateFlagStatistics(nodelistDate, domain)
 }
 
 // Statistics Operations delegated methods
-func (s *Storage) GetStats(date time.Time) (*database.NetworkStats, error) {
-	return s.statsOperations.GetStats(date)
+func (s *Storage) GetStats(date time.Time, domain string) (*database.NetworkStats, error) {
+	return s.statsOperations.GetStats(date, domain)
 }
 
-func (s *Storage) GetLatestStatsDate() (time.Time, error) {
-	return s.statsOperations.GetLatestStatsDate()
+func (s *Storage) GetLatestStatsDate(domain string) (time.Time, error) {
+	return s.statsOperations.GetLatestStatsDate(domain)
 }
 
-func (s *Storage) GetAvailableDates() ([]time.Time, error) {
-	return s.statsOperations.GetAvailableDates()
+func (s *Storage) GetAvailableDates(domain string) ([]time.Time, error) {
+	return s.statsOperations.GetAvailableDates(domain)
 }
 
-func (s *Storage) GetNearestAvailableDate(requestedDate time.Time) (time.Time, error) {
-	return s.statsOperations.GetNearestAvailableDate(requestedDate)
+func (s *Storage) GetNearestAvailableDate(requestedDate time.Time, domain string) (time.Time, error) {
+	return s.statsOperations.GetNearestAvailableDate(requestedDate, domain)
 }
 
-func (s *Storage) GetNodeCountHistory() ([]NodeCountByDate, error) {
-	return s.statsOperations.GetNodeCountHistory()
+func (s *Storage) GetNodeCountHistory(domain string) ([]NodeCountByDate, error) {
+	return s.statsOperations.GetNodeCountHistory(domain)
 }
 
-func (s *Storage) GetBrowseZones(date time.Time) ([]BrowseZone, error) {
-	return s.statsOperations.GetBrowseZones(date)
+func (s *Storage) GetBrowseZones(date time.Time, domain string) ([]BrowseZone, error) {
+	return s.statsOperations.GetBrowseZones(date, domain)
 }
 
-func (s *Storage) GetBrowseRegions(date time.Time, zone int) ([]BrowseRegion, error) {
-	return s.statsOperations.GetBrowseRegions(date, zone)
+func (s *Storage) GetBrowseRegions(date time.Time, zone int, domain string) ([]BrowseRegion, error) {
+	return s.statsOperations.GetBrowseRegions(date, zone, domain)
 }
 
-func (s *Storage) GetBrowseNets(date time.Time, zone, region int) ([]BrowseNet, error) {
-	return s.statsOperations.GetBrowseNets(date, zone, region)
+func (s *Storage) GetBrowseNets(date time.Time, zone, region int, domain string) ([]BrowseNet, error) {
+	return s.statsOperations.GetBrowseNets(date, zone, region, domain)
 }
 
-func (s *Storage) GetBrowseNodes(date time.Time, zone, net int) ([]database.Node, error) {
-	return s.statsOperations.GetBrowseNodes(date, zone, net)
+func (s *Storage) GetBrowseNodes(date time.Time, zone, net int, domain string) ([]database.Node, error) {
+	return s.statsOperations.GetBrowseNodes(date, zone, net, domain)
 }
 
 // Test Operations delegated methods
-func (s *Storage) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
-	return s.testOperations.GetNodeTestHistory(zone, net, node, days)
+func (s *Storage) GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetNodeTestHistory(zone, net, node, days, domain)
 }
 
-func (s *Storage) GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error) {
-	return s.testOperations.GetDetailedTestResult(zone, net, node, testTime)
+func (s *Storage) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
+	return s.testOperations.GetDetailedTestResult(zone, net, node, testTime, domain)
 }
 
-func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error) {
-	return s.testOperations.GetNodeReachabilityStats(zone, net, node, days)
+func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
+	return s.testOperations.GetNodeReachabilityStats(zone, net, node, days, domain)
 }
 
 func (s *Storage) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
@@ -417,7 +421,7 @@ func (s *Storage) HealthCheck() error {
 	}
 
 	// Test basic query functionality
-	_, err := s.statsOperations.GetLatestStatsDate()
+	_, err := s.statsOperations.GetLatestStatsDate("")
 	if err != nil {
 		// This might fail if no data exists, which is okay
 		// Only fail if it's a connection or query syntax error

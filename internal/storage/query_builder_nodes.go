@@ -152,12 +152,16 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 	) VALUES `)
 
 	for i, node := range nodes {
 		if i > 0 {
 			buf.WriteByte(',')
+		}
+
+		if node.Domain == "" {
+			node.Domain = database.DefaultDomain
 		}
 
 		// Compute FTS ID if not set
@@ -209,8 +213,9 @@ func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *Res
 			buf.WriteString("'{}',")
 		}
 
-		// FTS ID and raw line
-		buf.WriteString(fmt.Sprintf("'%s','%s')", qb.escapeSQL(node.FtsId), qb.escapeSQL(node.RawLine)))
+		// FTS ID, raw line and domain
+		buf.WriteString(fmt.Sprintf("'%s','%s','%s')",
+			qb.escapeSQL(node.FtsId), qb.escapeSQL(node.RawLine), qb.escapeSQL(node.Domain)))
 	}
 
 	return buf.String()
@@ -223,7 +228,7 @@ func (qb *QueryBuilder) NodeSelectSQL() string {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 	FROM nodes`
 }
 
@@ -235,10 +240,10 @@ func (qb *QueryBuilder) InsertNodeSQL() string {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 		?, ?,
-		?, ?, ?, ?, ?, ?)`
+		?, ?, ?, ?, ?, ?, ?)`
 }
 
 // BuildBatchInsertSQL creates a batch INSERT statement with proper parameterization
@@ -248,7 +253,7 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 	}
 
 	// Create placeholder for one row with direct array binding (no JSON casting)
-	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	valuePlaceholder := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 	// Build batch values
 	values := make([]string, batchSize)
@@ -262,7 +267,7 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
 			is_cm, is_mo,
 			flags, modem_flags,
-			conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+			conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 		) VALUES %s
 		ON CONFLICT (zone, net, node, nodelist_date, conflict_sequence)
 		DO NOTHING`, strings.Join(values, ","))
@@ -274,18 +279,20 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 	var args []interface{}
 
 	if filter.LatestOnly != nil && *filter.LatestOnly {
-		// ClickHouse-compatible latest only query
+		// ClickHouse-compatible latest only query.
+		// "Latest" is per (domain, zone, net, node): the same 3D address may exist
+		// in several networks with different nodelist cadences.
 		baseSQL = `
 		SELECT zone, net, node, nodelist_date, day_number,
 			   system_name, location, sysop_name, phone, node_type, region, max_speed,
 			   is_cm, is_mo,
 			   flags, modem_flags,
-			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 		FROM nodes
-		WHERE (zone, net, node, nodelist_date) IN (
-			SELECT zone, net, node, MAX(nodelist_date) as max_date
+		WHERE (domain, zone, net, node, nodelist_date) IN (
+			SELECT domain, zone, net, node, MAX(nodelist_date) as max_date
 			FROM nodes
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		)`
 
 		conditions, conditionArgs := qb.buildWhereConditions(filter)
@@ -311,13 +318,13 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
 			is_cm, is_mo,
 			flags, modem_flags,
-			conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+			conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 		FROM (
 			SELECT *,
-				   row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
+				   row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
 			FROM nodes
-			WHERE (zone, net, node) IN (
-				SELECT DISTINCT zone, net, node
+			WHERE (domain, zone, net, node) IN (
+				SELECT DISTINCT domain, zone, net, node
 				FROM nodes` + whereClause + `
 			)
 		) ranked
@@ -375,6 +382,11 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 	}
 
 	// Add other non-text filters
+	if filter.Domain != nil && *filter.Domain != "" {
+		conditions = append(conditions, "domain = ?")
+		args = append(args, *filter.Domain)
+	}
+
 	if filter.Zone != nil {
 		conditions = append(conditions, "zone = ?")
 		args = append(args, *filter.Zone)
@@ -423,9 +435,9 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 		args = append(args, *filter.DateTo)
 	}
 
-	// Latest only
+	// Latest only - per-domain latest, since networks publish on different cadences
 	if filter.LatestOnly != nil && *filter.LatestOnly {
-		conditions = append(conditions, "nodelist_date = (SELECT MAX(nodelist_date) FROM nodes)")
+		conditions = append(conditions, "(domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes GROUP BY domain)")
 	}
 
 	// Build final query
@@ -453,6 +465,10 @@ func (qb *QueryBuilder) buildWhereConditions(filter database.NodeFilter) ([]stri
 	var conditions []string
 	var args []interface{}
 
+	if filter.Domain != nil && *filter.Domain != "" {
+		conditions = append(conditions, "domain = ?")
+		args = append(args, *filter.Domain)
+	}
 	if filter.Zone != nil {
 		conditions = append(conditions, "zone = ?")
 		args = append(args, *filter.Zone)
@@ -509,70 +525,84 @@ func (qb *QueryBuilder) buildWhereConditions(filter database.NodeFilter) ([]stri
 	return conditions, args
 }
 
-// NodeHistorySQL returns SQL for retrieving node history
+// NodeHistorySQL returns SQL for retrieving node history.
+// Binds: zone, net, node, domain, domain (empty domain matches all networks).
 func (qb *QueryBuilder) NodeHistorySQL() string {
 	return `
 	SELECT zone, net, node, nodelist_date, day_number,
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo,
 		   flags, modem_flags,
-		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line
+		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 	FROM nodes
-	WHERE zone = ? AND net = ? AND node = ?
+	WHERE zone = ? AND net = ? AND node = ? AND ` + domainFilterSQL + `
 	ORDER BY nodelist_date ASC, conflict_sequence ASC`
 }
 
-// NodeDateRangeSQL returns SQL for getting first and last dates of a node
+// NodeDateRangeSQL returns SQL for getting first and last dates of a node.
+// Binds: zone, net, node, domain, domain.
 func (qb *QueryBuilder) NodeDateRangeSQL() string {
 	return `
 	SELECT MIN(nodelist_date) as first_date, MAX(nodelist_date) as last_date
 	FROM nodes
-	WHERE zone = ? AND net = ? AND node = ?`
+	WHERE zone = ? AND net = ? AND node = ? AND ` + domainFilterSQL
 }
 
-// ConflictCheckSQL returns SQL for checking if a node already exists for a date
+// NodeDomainsSQL returns SQL listing the domains a 3D address exists in.
+func (qb *QueryBuilder) NodeDomainsSQL() string {
+	return `SELECT DISTINCT domain FROM nodes WHERE zone = ? AND net = ? AND node = ? ORDER BY domain`
+}
+
+// ConflictCheckSQL returns SQL for checking if a node already exists for a date.
+// The check is domain-scoped: the same 3D address in two networks on the same
+// date is legal and must not be flagged as a conflict.
 func (qb *QueryBuilder) ConflictCheckSQL() string {
 	return `SELECT COUNT(*) FROM nodes
-		 WHERE zone = ? AND net = ? AND node = ? AND nodelist_date = ?
+		 WHERE zone = ? AND net = ? AND node = ? AND nodelist_date = ? AND domain = ?
 		 LIMIT 1`
 }
 
 // MarkConflictSQL returns SQL for marking original entry as conflicted
 func (qb *QueryBuilder) MarkConflictSQL() string {
 	return `UPDATE nodes SET has_conflict = true
-		WHERE zone = ? AND net = ? AND node = ? AND nodelist_date = ? AND conflict_sequence = 0`
+		WHERE zone = ? AND net = ? AND node = ? AND nodelist_date = ? AND domain = ? AND conflict_sequence = 0`
 }
 
 // SysopSearchSQL returns SQL for sysop search with window functions
 func (qb *QueryBuilder) SysopSearchSQL() string {
-	// ClickHouse-optimized sysop search using window functions to avoid aggregation issues
+	// ClickHouse-optimized sysop search using window functions to avoid aggregation
+	// issues. Node identity and "currently active" are evaluated per domain: each
+	// network has its own latest nodelist date.
 	return `
 	WITH
-	global_max AS (
-		SELECT MAX(nodelist_date) as max_date FROM nodes
+	domain_max AS (
+		SELECT domain, MAX(nodelist_date) as max_date FROM nodes GROUP BY domain
 	),
 	ranked_nodes AS (
 		SELECT
-			zone, net, node, nodelist_date, system_name, location, sysop_name,
-			row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC) as rn,
-			MIN(nodelist_date) OVER (PARTITION BY zone, net, node) as first_date,
-			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date
+			domain, zone, net, node, nodelist_date, system_name, location, sysop_name,
+			row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY nodelist_date DESC) as rn,
+			MIN(nodelist_date) OVER (PARTITION BY domain, zone, net, node) as first_date,
+			MAX(nodelist_date) OVER (PARTITION BY domain, zone, net, node) as last_date
 		FROM nodes
 		WHERE replaceAll(sysop_name, '_', ' ') ILIKE concat('%', replaceAll(?, '_', ' '), '%')
+			AND (? = '' OR domain = ?)
 	),
 	latest_per_node AS (
 		SELECT
-			zone, net, node, system_name, location, sysop_name,
+			domain, zone, net, node, system_name, location, sysop_name,
 			first_date, last_date, nodelist_date
 		FROM ranked_nodes
 		WHERE rn = 1
 	)
 	SELECT
-		zone, net, node, system_name, location, sysop_name,
-		first_date, last_date,
-		CASE WHEN last_date = (SELECT max_date FROM global_max) THEN true ELSE false END as currently_active
-	FROM latest_per_node
-	ORDER BY first_date DESC
+		lpn.zone, lpn.net, lpn.node, lpn.system_name, lpn.location, lpn.sysop_name,
+		lpn.first_date, lpn.last_date,
+		CASE WHEN lpn.last_date = dm.max_date THEN true ELSE false END as currently_active,
+		lpn.domain
+	FROM latest_per_node lpn
+	JOIN domain_max dm ON lpn.domain = dm.domain
+	ORDER BY lpn.first_date DESC
 	LIMIT ?`
 }
 
@@ -580,15 +610,15 @@ func (qb *QueryBuilder) SysopSearchSQL() string {
 func (qb *QueryBuilder) NodeSummarySearchSQL() string {
 	return `
 	WITH
-	global_max AS (
-		SELECT MAX(nodelist_date) as max_date FROM nodes
+	domain_max AS (
+		SELECT domain, MAX(nodelist_date) as max_date FROM nodes GROUP BY domain
 	),
 	ranked_nodes AS (
 		SELECT
-			zone, net, node, nodelist_date, system_name, location, sysop_name,
-			row_number() OVER (PARTITION BY zone, net, node ORDER BY nodelist_date DESC) as rn,
-			MIN(nodelist_date) OVER (PARTITION BY zone, net, node) as first_date,
-			MAX(nodelist_date) OVER (PARTITION BY zone, net, node) as last_date
+			domain, zone, net, node, nodelist_date, system_name, location, sysop_name,
+			row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY nodelist_date DESC) as rn,
+			MIN(nodelist_date) OVER (PARTITION BY domain, zone, net, node) as first_date,
+			MAX(nodelist_date) OVER (PARTITION BY domain, zone, net, node) as last_date
 		FROM nodes
 		WHERE 1=1
 			AND (? IS NULL OR zone = ?)
@@ -597,20 +627,23 @@ func (qb *QueryBuilder) NodeSummarySearchSQL() string {
 			AND (? IS NULL OR system_name ILIKE ?)
 			AND (? IS NULL OR location ILIKE ?)
 			AND (? IS NULL OR replaceAll(sysop_name, '_', ' ') ILIKE replaceAll(?, '_', ' '))
+			AND (? = '' OR domain = ?)
 	),
 	latest_per_node AS (
 		SELECT
-			zone, net, node, system_name, location, sysop_name,
+			domain, zone, net, node, system_name, location, sysop_name,
 			first_date, last_date, nodelist_date
 		FROM ranked_nodes
 		WHERE rn = 1
 	)
 	SELECT
-		zone, net, node, system_name, location, sysop_name,
-		first_date, last_date,
-		CASE WHEN last_date = (SELECT max_date FROM global_max) THEN true ELSE false END as currently_active
-	FROM latest_per_node
-	ORDER BY last_date DESC, zone, net, node
+		lpn.zone, lpn.net, lpn.node, lpn.system_name, lpn.location, lpn.sysop_name,
+		lpn.first_date, lpn.last_date,
+		CASE WHEN lpn.last_date = dm.max_date THEN true ELSE false END as currently_active,
+		lpn.domain
+	FROM latest_per_node lpn
+	JOIN domain_max dm ON lpn.domain = dm.domain
+	ORDER BY lpn.last_date DESC, lpn.zone, lpn.net, lpn.node
 	LIMIT ?`
 }
 
@@ -621,8 +654,8 @@ func (qb *QueryBuilder) UniqueSysopsSQL() string {
 		WITH sysop_stats AS (
 			SELECT
 				sysop_name,
-				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as node_count,
-				COUNT(DISTINCT CASE WHEN nodelist_date = (SELECT MAX(nodelist_date) FROM nodes) THEN concat(toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
+				COUNT(DISTINCT concat(domain, '#', toString(zone), ':', toString(net), '/', toString(node))) as node_count,
+				COUNT(DISTINCT CASE WHEN (domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes GROUP BY domain) THEN concat(domain, '#', toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
 				MIN(nodelist_date) as first_seen,
 				MAX(nodelist_date) as last_seen,
 				arraySort(arrayDistinct(groupArray(zone))) as zones
@@ -649,8 +682,8 @@ func (qb *QueryBuilder) UniqueSysopsWithFilterSQL() string {
 		WITH sysop_stats AS (
 			SELECT
 				sysop_name,
-				COUNT(DISTINCT concat(toString(zone), ':', toString(net), '/', toString(node))) as node_count,
-				COUNT(DISTINCT CASE WHEN nodelist_date = (SELECT MAX(nodelist_date) FROM nodes) THEN concat(toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
+				COUNT(DISTINCT concat(domain, '#', toString(zone), ':', toString(net), '/', toString(node))) as node_count,
+				COUNT(DISTINCT CASE WHEN (domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes GROUP BY domain) THEN concat(domain, '#', toString(zone), ':', toString(net), '/', toString(node)) END) as active_nodes,
 				MIN(nodelist_date) as first_seen,
 				MAX(nodelist_date) as last_seen,
 				arraySort(arrayDistinct(groupArray(zone))) as zones

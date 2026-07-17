@@ -10,6 +10,7 @@
 
 {{define "head_scripts"}}
 <script src="/static/sortable-table.js"></script>
+<script src="/static/datepicker.js"></script>
 {{end}}
 
 {{define "content"}}
@@ -35,19 +36,30 @@
     {{end}}
 </div>
 
+{{if and (eq .Level "zones") .Networks}}
+{{if gt (len .Networks) 1}}
+<div class="breadcrumb" style="margin-bottom: 1rem;">
+    Network:
+    {{$current := .Domain}}
+    {{range .Networks}}
+    {{if eq .Domain $current}}<strong>{{.Domain}}</strong>{{else}}<a href="/browse{{if ne .Domain "fidonet"}}?domain={{.Domain}}{{end}}">{{.Domain}}</a>{{end}}
+    {{end}}
+</div>
+{{end}}
+{{end}}
+
 {{if .AvailableDates}}
-<form method="get" class="search-form" style="margin-bottom: 1rem;">
-    <div class="form-group">
-        <label for="date">Nodelist date</label>
-        <select id="date" name="date" onchange="this.form.submit()">
-            {{$sel := .ActualDate}}
-            {{range .AvailableDates}}
-            <option value="{{.Format "2006-01-02"}}"{{if eq (.Format "2006-01-02") $sel}} selected{{end}}>{{.Format "2006-01-02"}}</option>
-            {{end}}
-        </select>
-        <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
-    </div>
-</form>
+<div class="form-group" style="margin-bottom: 1rem; max-width: 20rem;">
+    <label>Nodelist date</label>
+    <div id="date-picker-container" class="date-picker-shell"></div>
+    <noscript>
+        <form method="get">
+            <input type="date" name="date" value="{{.ActualDate}}">
+            {{if ne .Domain "fidonet"}}<input type="hidden" name="domain" value="{{.Domain}}">{{end}}
+            <button type="submit" class="btn btn-sm">Show</button>
+        </form>
+    </noscript>
+</div>
 {{end}}
 
 {{if .DateAdjusted}}
@@ -66,7 +78,7 @@
 {{if eq .Level "zones"}}
 <section class="card">
     <div class="stats-box">
-        <h3>{{len .Zones}} zone{{if ne (len .Zones) 1}}s{{end}} in the {{.ActualDate}} nodelist</h3>
+        <h3>{{len .Zones}} zone{{if ne (len .Zones) 1}}s{{end}} in the {{.ActualDate}} {{.Domain}} nodelist</h3>
     </div>
     {{if .Zones}}
     <div class="table-responsive">
@@ -190,7 +202,7 @@
             <tbody>
                 {{range .Nodes}}
                 <tr>
-                    <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}" style="width: 1%; white-space: nowrap; vertical-align: top;"><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
+                    <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}" style="width: 1%; white-space: nowrap; vertical-align: top;"><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if ne $.Domain "fidonet"}}?domain={{$.Domain}}{{end}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
                     <td class="mono" style="width: auto; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere;">{{if .RawLine}}{{.RawLine}}{{else}}<em class="muted">(raw line not stored)</em>{{end}}</td>
                 </tr>
                 {{end}}
@@ -205,4 +217,24 @@
 
 {{end}}{{/* end if .Error */}}
 
+{{end}}
+
+{{define "footer_scripts"}}
+<script>
+(function() {
+    {{if .AvailableDates}}
+    const datePickerTarget = document.getElementById("date-picker-container");
+    if (datePickerTarget) {
+        const availableDates = [
+            {{range .AvailableDates}}
+            "{{.Format "2006-01-02"}}",
+            {{end}}
+        ];
+        const currentDate = "{{.ActualDate}}";
+        // Stay on the current browse level when switching dates
+        new NodelistDatePicker("date-picker-container", availableDates, currentDate, window.location.pathname);
+    }
+    {{end}}
+})();
+</script>
 {{end}}

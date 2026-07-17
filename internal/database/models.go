@@ -6,12 +6,19 @@ import (
 	"time"
 )
 
-// Node represents a FidoNet node entry
+// DefaultDomain is the FTN network assumed when none is specified.
+const DefaultDomain = "fidonet"
+
+// Node represents an FTN node entry
 type Node struct {
 	// Core identity
 	Zone int `json:"zone"`
 	Net  int `json:"net"`
 	Node int `json:"node"`
+
+	// FTN network this entry belongs to (fidonet, fsxnet, ...).
+	// Zone numbers are reused across networks, so zone never identifies the network.
+	Domain string `json:"domain,omitempty"`
 
 	// Nodelist metadata
 	NodelistDate time.Time `json:"nodelist_date"`
@@ -49,12 +56,18 @@ type Node struct {
 	RawLine string `json:"raw_line,omitempty"`
 }
 
-// ComputeFtsId generates the FTS identifier for this node
+// ComputeFtsId generates the FTS identifier for this node.
+// The fidonet format ("z:n/n@date#seq") is kept unchanged so existing rows stay
+// valid; other domains carry an extra "@domain" suffix to keep the id unique
+// when the same 3D address exists in several networks.
 func (n *Node) ComputeFtsId() {
 	n.FtsId = fmt.Sprintf("%d:%d/%d@%s#%d",
 		n.Zone, n.Net, n.Node,
 		n.NodelistDate.Format("2006-01-02"),
 		n.ConflictSequence)
+	if n.Domain != "" && n.Domain != DefaultDomain {
+		n.FtsId += "@" + n.Domain
+	}
 }
 
 // InternetProtocolDetail represents details for a specific protocol
@@ -82,6 +95,9 @@ type NodeFilter struct {
 	Zone *int `json:"zone,omitempty"`
 	Net  *int `json:"net,omitempty"`
 	Node *int `json:"node,omitempty"`
+
+	// FTN network filter (nil = all networks)
+	Domain *string `json:"domain,omitempty"`
 
 	// Date filters
 	DateFrom *time.Time `json:"date_from,omitempty"`

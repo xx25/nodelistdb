@@ -15,7 +15,15 @@
 {{define "content"}}
             <div class="card">
                 <h2>Node Information</h2>
-                <p><strong>Address:</strong> {{.Address}}</p>
+                <p><strong>Address:</strong> {{.Address}}{{if and .Domain (ne .Domain "fidonet")}} <span class="badge badge-info">{{.Domain}}</span>{{end}}</p>
+                {{if gt (len .AvailableDomains) 1}}
+                <p><strong>Networks:</strong>
+                    {{$current := .Domain}}{{$address := .Address}}
+                    {{range .AvailableDomains}}
+                    {{if eq . $current}}<strong>{{.}}</strong>{{else}}<a href="?domain={{.}}">{{.}}</a>{{end}}
+                    {{end}}
+                </p>
+                {{end}}
                 <p><strong>Active Period:</strong> {{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}</p>
                 <p><strong>Total Entries:</strong> {{len .History}}</p>
                 <p><strong>Changes:</strong> {{len .Changes}}</p>

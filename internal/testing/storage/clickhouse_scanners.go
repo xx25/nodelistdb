@@ -30,6 +30,7 @@ func scanNodesNative(rows driver.Rows) ([]*models.Node, error) {
 			&protocols,
 			&node.HasInet,
 			&configJSON,
+			&node.Domain,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)

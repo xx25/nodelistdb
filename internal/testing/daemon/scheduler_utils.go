@@ -2,14 +2,16 @@ package daemon
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/nodelistdb/internal/testing/models"
 )
 
-// nodeKey generates a unique key for a node
+// nodeKey generates a unique key for a node. The key is domain-qualified
+// ("zone:net/node@domain"): the same 3D address may exist in several FTN
+// networks and each gets its own schedule entry.
 func (s *Scheduler) nodeKey(node *models.Node) string {
-	return fmt.Sprintf("%d:%d/%d", node.Zone, node.Net, node.Node)
+	return node.Key()
 }
 
 // GetScheduleStatus returns statistics about the current schedule state
@@ -52,17 +54,91 @@ func (s *Scheduler) GetScheduleStatus() map[string]interface{} {
 	}
 }
 
-// ResetNodeSchedule resets the schedule for a specific node
-func (s *Scheduler) ResetNodeSchedule(ctx context.Context, zone, net, node uint16) {
+// ResetNodeSchedule resets the schedule for a specific node. It builds the
+// same domain-qualified key as nodeKey(); an empty domain means fidonet.
+func (s *Scheduler) ResetNodeSchedule(ctx context.Context, zone, net, node uint16, domain string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	key := fmt.Sprintf("%d:%d/%d", zone, net, node)
+	key := (&models.Node{Zone: int(zone), Net: int(net), Node: int(node), Domain: domain}).Key()
 	if schedule, exists := s.schedules[key]; exists {
 		schedule.ConsecutiveFails = 0
 		schedule.BackoffLevel = 0
 		schedule.NextTestTime = s.timeNow() // Use timeNow() for testability
 	}
+}
+
+// SchedulesFor3D returns the scheduled nodes matching a 3D address across all
+// FTN networks. Used by AKA-derivation to find the same physical host's
+// entries in other networks.
+func (s *Scheduler) SchedulesFor3D(zone, net, node int) []*models.Node {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []*models.Node
+	for _, schedule := range s.schedules {
+		n := schedule.Node
+		if n.Zone == zone && n.Net == net && n.Node == node {
+			result = append(result, n)
+		}
+	}
+	return result
+}
+
+// AllScheduledNodes returns a snapshot of all scheduled nodes. Used to seed
+// the AKA equivalence index at startup.
+func (s *Scheduler) AllScheduledNodes() []*models.Node {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]*models.Node, 0, len(s.schedules))
+	for _, schedule := range s.schedules {
+		result = append(result, schedule.Node)
+	}
+	return result
+}
+
+// LastTestTime returns the recorded last test time for a node key.
+func (s *Scheduler) LastTestTime(key string) (t time.Time, ok bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if schedule, exists := s.schedules[key]; exists {
+		return schedule.LastTestTime, true
+	}
+	return time.Time{}, false
+}
+
+// MarkDerivedResult updates a node's schedule after its state was covered by
+// an AKA-derived result: the node counts as freshly tested and its next direct
+// test moves one interval out.
+func (s *Scheduler) MarkDerivedResult(node *models.Node, result *models.TestResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := s.nodeKey(node)
+	schedule, exists := s.schedules[key]
+	if !exists {
+		schedule = &NodeSchedule{
+			Node:     node,
+			Priority: s.calculatePriority(node),
+		}
+		s.schedules[key] = schedule
+	}
+
+	schedule.LastTestTime = result.TestTime
+	schedule.LastTestSuccess = result.IsOperational
+	schedule.TestReason = "aka_derived"
+
+	if result.IsOperational {
+		schedule.ConsecutiveFails = 0
+		schedule.BackoffLevel = 0
+	} else {
+		schedule.ConsecutiveFails++
+		schedule.BackoffLevel = s.calculateBackoffLevel(schedule.ConsecutiveFails)
+	}
+
+	schedule.NextTestTime = s.calculateNextTestTime(schedule)
 }
 
 // String returns the string representation of a ScheduleStrategy

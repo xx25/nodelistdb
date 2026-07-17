@@ -8,10 +8,12 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// GetNodeChanges analyzes the history of a node and returns detected changes
-func (so *SearchOperations) GetNodeChanges(zone, net, node int) ([]database.NodeChange, error) {
+// GetNodeChanges analyzes the history of a node and returns detected changes.
+// An empty domain matches all networks; gap detection then uses the union of
+// all networks' dates, so pass a concrete domain whenever it is known.
+func (so *SearchOperations) GetNodeChanges(zone, net, node int, domain string) ([]database.NodeChange, error) {
 	// Get all historical entries using node operations
-	history, err := so.nodeOps.GetNodeHistory(zone, net, node)
+	history, err := so.nodeOps.GetNodeHistory(zone, net, node, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node history: %w", err)
 	}
@@ -20,8 +22,8 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int) ([]database.Node
 		return nil, nil
 	}
 
-	// Pre-load all unique nodelist dates for efficient gap checking
-	allDates, err := so.getAllNodelistDates()
+	// Pre-load this network's nodelist dates for efficient gap checking
+	allDates, err := so.getAllNodelistDates(domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load nodelist dates: %w", err)
 	}
@@ -51,7 +53,7 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int) ([]database.Node
 		if !so.isConsecutiveNodelist(prev.NodelistDate, curr.NodelistDate, allDates) {
 			// Node was removed and then re-added
 			changes = append(changes, database.NodeChange{
-				Date:       so.getNextNodelistDate(prev.NodelistDate),
+				Date:       so.getNextNodelistDate(prev.NodelistDate, domain),
 				DayNumber:  so.getNextDayNumber(prev.DayNumber),
 				ChangeType: "removed",
 				Changes:    make(map[string]string),
@@ -85,9 +87,9 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int) ([]database.Node
 
 	// Check if node is currently removed
 	lastNode := &history[len(history)-1]
-	if !so.isCurrentlyActive(lastNode) {
+	if !so.isCurrentlyActive(lastNode, domain) {
 		changes = append(changes, database.NodeChange{
-			Date:       so.getNextNodelistDate(lastNode.NodelistDate),
+			Date:       so.getNextNodelistDate(lastNode.NodelistDate, domain),
 			DayNumber:  so.getNextDayNumber(lastNode.DayNumber),
 			ChangeType: "removed",
 			Changes:    make(map[string]string),
@@ -164,12 +166,13 @@ func (so *SearchOperations) equalStringSlices(a, b []string) bool {
 	return true
 }
 
-// getAllNodelistDates loads all unique nodelist dates from the database
-func (so *SearchOperations) getAllNodelistDates() ([]time.Time, error) {
+// getAllNodelistDates loads all unique nodelist dates from the database.
+// An empty domain returns dates across all networks.
+func (so *SearchOperations) getAllNodelistDates(domain string) ([]time.Time, error) {
 	conn := so.db.Conn()
-	query := "SELECT DISTINCT nodelist_date FROM nodes ORDER BY nodelist_date"
+	query := "SELECT DISTINCT nodelist_date FROM nodes WHERE " + domainFilterSQL + " ORDER BY nodelist_date"
 
-	rows, err := conn.Query(query)
+	rows, err := conn.Query(query, domain, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -200,11 +203,11 @@ func (so *SearchOperations) isConsecutiveNodelist(date1, date2 time.Time, allDat
 }
 
 // getNextNodelistDate gets the next nodelist date after the given date
-func (so *SearchOperations) getNextNodelistDate(afterDate time.Time) time.Time {
+func (so *SearchOperations) getNextNodelistDate(afterDate time.Time, domain string) time.Time {
 	conn := so.db.Conn()
 	var nextDate time.Time
 	query := so.queryBuilder.NextNodelistDateSQL()
-	err := conn.QueryRow(query, afterDate).Scan(&nextDate)
+	err := conn.QueryRow(query, afterDate, domain, domain).Scan(&nextDate)
 
 	if err != nil {
 		return afterDate.AddDate(0, 0, 7) // Assume weekly
@@ -219,11 +222,15 @@ func (so *SearchOperations) getNextDayNumber(afterDay int) int {
 }
 
 // isCurrentlyActive checks if a node is currently active in the latest nodelist
-func (so *SearchOperations) isCurrentlyActive(node *database.Node) bool {
+// of its network
+func (so *SearchOperations) isCurrentlyActive(node *database.Node, domain string) bool {
+	if domain == "" && node.Domain != "" {
+		domain = node.Domain
+	}
 	conn := so.db.Conn()
 	var maxDate time.Time
 	query := so.queryBuilder.LatestDateSQL()
-	err := conn.QueryRow(query).Scan(&maxDate)
+	err := conn.QueryRow(query, domain, domain).Scan(&maxDate)
 
 	if err != nil {
 		return false

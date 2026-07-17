@@ -45,20 +45,20 @@ func NewTestOperationsRefactored(db database.DatabaseInterface, queryBuilder Que
 // ===== Test History Operations (delegated to TestHistoryOperations) =====
 
 // GetNodeTestHistory retrieves test history for a specific node
-func (to *TestOperationsRefactored) GetNodeTestHistory(zone, net, node int, days int) ([]NodeTestResult, error) {
-	return to.historyOps.GetNodeTestHistory(zone, net, node, days)
+func (to *TestOperationsRefactored) GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
+	return to.historyOps.GetNodeTestHistory(zone, net, node, days, domain)
 }
 
 // GetDetailedTestResult retrieves a detailed test result for a specific node and timestamp
-func (to *TestOperationsRefactored) GetDetailedTestResult(zone, net, node int, testTime string) (*NodeTestResult, error) {
-	return to.historyOps.GetDetailedTestResult(zone, net, node, testTime)
+func (to *TestOperationsRefactored) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
+	return to.historyOps.GetDetailedTestResult(zone, net, node, testTime, domain)
 }
 
 // ===== Reachability Operations (delegated to ReachabilityOperations) =====
 
 // GetNodeReachabilityStats calculates reachability statistics for a node
-func (to *TestOperationsRefactored) GetNodeReachabilityStats(zone, net, node int, days int) (*NodeReachabilityStats, error) {
-	return to.reachabilityOps.GetNodeReachabilityStats(zone, net, node, days)
+func (to *TestOperationsRefactored) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
+	return to.reachabilityOps.GetNodeReachabilityStats(zone, net, node, days, domain)
 }
 
 // GetReachabilityTrendsAllTime gets all-time daily reachability trends from pre-aggregated stats

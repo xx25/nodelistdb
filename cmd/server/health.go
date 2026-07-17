@@ -48,9 +48,9 @@ func (h *serverHealthChecker) CheckHealth() *api.HealthStatus {
 		status.Status = "degraded"
 	}
 
-	// Node count from latest nodelist
-	if latestDate, err := h.storage.StatsOps().GetLatestStatsDate(); err == nil {
-		if count, err := h.storage.NodeOps().CountNodes(latestDate); err == nil {
+	// Node count from the default network's latest nodelist
+	if latestDate, err := h.storage.StatsOps().GetLatestStatsDate(database.DefaultDomain); err == nil {
+		if count, err := h.storage.NodeOps().CountNodes(latestDate, database.DefaultDomain); err == nil {
 			status.Nodes = api.NodeCountInfo{
 				LatestDate: latestDate.Format("2006-01-02"),
 				Count:      count,

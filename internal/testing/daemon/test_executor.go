@@ -25,6 +25,16 @@ func NewTestExecutor(d *Daemon) *TestExecutor {
 
 // TestNode tests a node based on whether it has single or multiple hostnames
 func (te *TestExecutor) TestNode(ctx context.Context, node *models.Node) *models.TestResult {
+	result, _ := te.TestNodeWithPartials(ctx, node)
+	return result
+}
+
+// TestNodeWithPartials tests a node and additionally returns the per-hostname
+// partial results for multi-hostname nodes (nil for single-hostname nodes).
+// AKA-derivation needs the partials: aggregation keeps only the first
+// successful protocol result per protocol, dropping later hostnames'
+// announced address lists.
+func (te *TestExecutor) TestNodeWithPartials(ctx context.Context, node *models.Node) (*models.TestResult, []*models.TestResult) {
 	// Note: Scheduling logic should be handled by the daemon before calling this method
 
 	// If node has no hostnames but has a valid system name that can be used as hostname,
@@ -39,7 +49,7 @@ func (te *TestExecutor) TestNode(ctx context.Context, node *models.Node) *models
 	if len(node.InternetHostnames) > 1 {
 		return te.testMultipleHostnameNode(ctx, node)
 	}
-	return te.testSingleHostnameNode(ctx, node)
+	return te.testSingleHostnameNode(ctx, node), nil
 }
 
 // testSingleHostnameNode tests a node with a single hostname
@@ -57,7 +67,7 @@ func (te *TestExecutor) testSingleHostnameNode(ctx context.Context, node *models
 }
 
 // testMultipleHostnameNode tests a node with multiple hostnames
-func (te *TestExecutor) testMultipleHostnameNode(ctx context.Context, node *models.Node) *models.TestResult {
+func (te *TestExecutor) testMultipleHostnameNode(ctx context.Context, node *models.Node) (*models.TestResult, []*models.TestResult) {
 	nodeAddr := node.Address()
 	logging.Infof("Testing node %s with %d hostnames", nodeAddr, len(node.InternetHostnames))
 
@@ -87,7 +97,7 @@ func (te *TestExecutor) testMultipleHostnameNode(ctx context.Context, node *mode
 		// Add a small delay between hostname tests to avoid overwhelming the node
 		select {
 		case <-ctx.Done():
-			return nil
+			return nil, nil
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
@@ -97,7 +107,7 @@ func (te *TestExecutor) testMultipleHostnameNode(ctx context.Context, node *mode
 	aggregated := te.aggregator.CreateAggregatedResult(node, results)
 
 	// Storage is handled by the caller (daemon or CLI), not here
-	return aggregated
+	return aggregated, results
 }
 
 // performTesting performs the actual testing of a node
@@ -107,6 +117,7 @@ func (te *TestExecutor) performTesting(ctx context.Context, node *models.Node, h
 		Net:            node.Net,
 		Node:           node.Node,
 		Address:        node.Address(),
+		Domain:         node.EffectiveDomain(),
 		TestTime:       time.Now(),
 		TestDate:       time.Now().Truncate(24 * time.Hour),
 		Hostname:       hostname,

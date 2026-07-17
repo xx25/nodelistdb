@@ -4,10 +4,42 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nodelistdb/internal/database"
 )
+
+// resolveNodeDomain picks the FTN network for a node endpoint. An explicit
+// ?domain= query parameter wins; otherwise, when the 3D address exists in
+// exactly one network that network is used, and when it exists in several the
+// default network (fidonet) is preferred so pre-multi-network URLs keep their
+// meaning. The full list of networks the address exists in is returned so
+// handlers can expose it as available_domains.
+func (s *Server) resolveNodeDomain(r *http.Request, zone, net, node int) (string, []string) {
+	domains, err := s.storage.NodeOps().GetNodeDomains(zone, net, node)
+	if err != nil {
+		domains = nil
+	}
+
+	if d := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))); d != "" {
+		return d, domains
+	}
+
+	switch len(domains) {
+	case 0:
+		return database.DefaultDomain, domains
+	case 1:
+		return domains[0], domains
+	default:
+		for _, d := range domains {
+			if d == database.DefaultDomain {
+				return d, domains
+			}
+		}
+		return domains[0], domains
+	}
+}
 
 // SearchNodesHandler handles node search requests.
 // GET /api/nodes?zone=1&net=234&node=56&date_from=2023-01-01&limit=100
@@ -85,12 +117,19 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Search for the specific node
+	// Search for the specific node within the resolved network
+	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
+	if len(availableDomains) > 1 {
+		// The body stays a bare node object for backward compatibility; the
+		// header tells clients the address exists in several networks
+		w.Header().Set("X-Available-Domains", strings.Join(availableDomains, ","))
+	}
 	filter := database.NodeFilter{
-		Zone:  &zone,
-		Net:   &net,
-		Node:  &node,
-		Limit: 1, // Get only the most recent version
+		Zone:   &zone,
+		Net:    &net,
+		Node:   &node,
+		Domain: &domain,
+		Limit:  1, // Get only the most recent version
 	}
 
 	nodes, err := s.storage.NodeOps().GetNodes(filter)
@@ -134,8 +173,9 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get node history
-	history, err := s.storage.NodeOps().GetNodeHistory(zone, net, node)
+	// Get node history within the resolved network
+	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
+	history, err := s.storage.NodeOps().GetNodeHistory(zone, net, node, domain)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get node history: %v", err), http.StatusInternalServerError)
 		return
@@ -150,14 +190,16 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// Note: Errors from GetNodeDateRange are not critical - if it fails,
 	// firstDate and lastDate will be zero values which is acceptable.
 	// The history data itself is sufficient for the response.
-	firstDate, lastDate, _ := s.storage.NodeOps().GetNodeDateRange(zone, net, node)
+	firstDate, lastDate, _ := s.storage.NodeOps().GetNodeDateRange(zone, net, node, domain)
 
 	response := map[string]interface{}{
-		"address":    fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"history":    history,
-		"count":      len(history),
-		"first_date": firstDate,
-		"last_date":  lastDate,
+		"address":           fmt.Sprintf("%d:%d/%d", zone, net, node),
+		"domain":            domain,
+		"available_domains": availableDomains,
+		"history":           history,
+		"count":             len(history),
+		"first_date":        firstDate,
+		"last_date":         lastDate,
 	}
 
 	WriteJSONSuccess(w, response)
@@ -189,17 +231,20 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all node changes without filtering
-	changes, err := s.storage.SearchOps().GetNodeChanges(zone, net, node)
+	// Get all node changes within the resolved network
+	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
+	changes, err := s.storage.SearchOps().GetNodeChanges(zone, net, node, domain)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get node changes: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	response := map[string]interface{}{
-		"address": fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"changes": changes,
-		"count":   len(changes),
+		"address":           fmt.Sprintf("%d:%d/%d", zone, net, node),
+		"domain":            domain,
+		"available_domains": availableDomains,
+		"changes":           changes,
+		"count":             len(changes),
 	}
 
 	WriteJSONSuccess(w, response)
@@ -231,8 +276,9 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Get node history
-	history, err := s.storage.NodeOps().GetNodeHistory(zone, net, node)
+	// Get node history within the resolved network
+	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
+	history, err := s.storage.NodeOps().GetNodeHistory(zone, net, node, domain)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get node history: %v", err), http.StatusInternalServerError)
 		return
@@ -272,9 +318,11 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	response := map[string]interface{}{
-		"address":  fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"timeline": timeline,
-		"count":    len(timeline),
+		"address":           fmt.Sprintf("%d:%d/%d", zone, net, node),
+		"domain":            domain,
+		"available_domains": availableDomains,
+		"timeline":          timeline,
+		"count":             len(timeline),
 	}
 
 	WriteJSONSuccess(w, response)

@@ -12,6 +12,7 @@ import (
 type OtherNetworkSummary struct {
 	NetworkName string // e.g., "tqwnet", "fsxnet"
 	NodeCount   int    // Number of unique nodes announcing this network
+	Imported    bool   // true when this network's nodelist is imported into the database
 }
 
 // OtherNetworkNode holds a node that announces AKAs in other networks
@@ -55,32 +56,32 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNet
 		-- Get latest test per node with successful BinkP or IFCICO
 		latest_tests AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		),
 		-- Get addresses from latest tests, pick one row per node (lowest hostname_index)
 		latest_addresses AS (
 			SELECT
-				r.zone, r.net, r.node,
+				r.domain, r.zone, r.net, r.node,
 				arrayConcat(
 					if(r.binkp_success, r.binkp_addresses, []),
 					if(r.ifcico_success, r.ifcico_addresses, [])
 				) as all_addresses
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			WHERE r.is_aggregated = false
 				AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
 		),
 		-- Extract network names from addresses with @ suffix
 		network_addresses AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				lower(extractAllGroups(addr, '@([a-zA-Z0-9_-]+)')[1][1]) as network_name
 			FROM latest_addresses
 			ARRAY JOIN all_addresses as addr
@@ -88,7 +89,8 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNet
 		)
 		SELECT
 			network_name,
-			count(DISTINCT (zone, net, node)) as node_count
+			count(DISTINCT (domain, zone, net, node)) as node_count,
+			network_name IN (SELECT DISTINCT domain FROM nodes) as imported
 		FROM network_addresses
 		WHERE network_name != '' AND network_name != 'fidonet'
 		GROUP BY network_name
@@ -104,7 +106,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNet
 	var results []OtherNetworkSummary
 	for rows.Next() {
 		var s OtherNetworkSummary
-		if err := rows.Scan(&s.NetworkName, &s.NodeCount); err != nil {
+		if err := rows.Scan(&s.NetworkName, &s.NodeCount, &s.Imported); err != nil {
 			return nil, fmt.Errorf("failed to scan network summary: %w", err)
 		}
 		results = append(results, s)
@@ -132,26 +134,26 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 		-- Get latest test per node with successful BinkP or IFCICO
 		latest_tests AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		),
 		-- Find nodes with addresses in the target network, one row per node
 		-- Pick the row with the lowest hostname_index to avoid duplicates from multi-host nodes
 		best_rows AS (
 			SELECT
-				r.zone, r.net, r.node, r.test_time, r.hostname_index,
+				r.domain, r.zone, r.net, r.node, r.test_time, r.hostname_index,
 				row_number() OVER (
-					PARTITION BY r.zone, r.net, r.node
+					PARTITION BY r.domain, r.zone, r.net, r.node
 					ORDER BY r.hostname_index ASC
 				) as rn
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			WHERE r.is_aggregated = false
 				AND (
 					arrayExists(addr -> lower(addr) LIKE '%@' || lower(?) || '%', r.binkp_addresses)
@@ -186,7 +188,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 			-- Extract addresses for this specific network
 			arrayDistinct(arrayFilter(addr -> lower(addr) LIKE '%@' || lower(?) || '%', arrayConcat(r.binkp_addresses, r.ifcico_addresses))) as network_addresses
 		FROM node_test_results r
-		JOIN best_rows br ON r.zone = br.zone AND r.net = br.net AND r.node = br.node
+		JOIN best_rows br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node
 			AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
 		WHERE r.is_aggregated = false
 		ORDER BY r.zone, r.net, r.node

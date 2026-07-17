@@ -14,6 +14,20 @@
 # ============================================================================
 # CLICKHOUSE DATABASE (Required for ALL components)
 # ============================================================================
+# =============================================================================
+# FTN NETWORKS (multi-network support)
+# =============================================================================
+# Networks known to the system. When this section is absent, a single default
+# entry for fidonet is used, so single-network installs need no changes.
+# The parser's -network flag must name one of these entries; nodelist_pattern
+# is a regex matched against nodelist filenames (.gz stripped before matching).
+#
+# networks:
+#   - name: fidonet
+#     nodelist_pattern: '(?i)^nodelist'      # default: traditional nodelist.* names
+#   - name: fsxnet
+#     nodelist_pattern: '(?i)^fsxnet\.\d{3}$' # default for non-fidonet: <name>.DDD
+
 clickhouse:
   host: localhost              # ClickHouse server hostname
   port: 9000                   # Native protocol port (9000 = default)
