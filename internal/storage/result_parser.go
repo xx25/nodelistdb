@@ -80,6 +80,39 @@ func (rp *ResultParser) parseInternetConfig(node *database.Node, internetConfig 
 	}
 }
 
+// ParsePointRow parses a database row into a Point struct.
+// Column order matches pointsColumnsSQL (query_builder_points.go).
+func (rp *ResultParser) ParsePointRow(scanner RowScanner) (database.Point, error) {
+	var point database.Point
+	var flags, modemFlags interface{}
+	var internetConfig string
+	var sourcePriority uint8
+	var conflictSequence uint16
+
+	err := scanner.Scan(
+		&point.Domain, &point.Zone, &point.Net, &point.Node, &point.PointNum,
+		&point.PointlistDate, &point.DayNumber,
+		&point.ListSource, &sourcePriority, &point.SourceFormat,
+		&point.SystemName, &point.Location, &point.SysopName, &point.Phone, &point.MaxSpeed,
+		&point.IsCM, &point.IsMO, &point.HasInet,
+		&flags, &modemFlags, &internetConfig,
+		&conflictSequence, &point.HasConflict, &point.FtsId, &point.RawLine,
+	)
+	if err != nil {
+		return point, fmt.Errorf("failed to scan point: %w", err)
+	}
+
+	point.SourcePriority = sourcePriority
+	point.ConflictSequence = int(conflictSequence)
+	point.Flags = rp.parseInterfaceToStringArray(flags)
+	point.ModemFlags = rp.parseInterfaceToStringArray(modemFlags)
+	if internetConfig != "" && internetConfig != "{}" {
+		point.InternetConfig = json.RawMessage(internetConfig)
+	}
+
+	return point, nil
+}
+
 // ParseNodeSummaryRow parses a database row into a NodeSummary struct
 func (rp *ResultParser) ParseNodeSummaryRow(scanner RowScanner) (NodeSummary, error) {
 	var ns NodeSummary
@@ -260,6 +293,11 @@ func (rp *ResultParser) ParseTestResultRow(scanner RowScanner, result *NodeTestR
 		&result.VModemSuccess,
 		&result.VModemResponseMs,
 		&result.VModemError,
+		&result.VModemVariant,
+		&result.VModemConformant,
+		&result.VModemSoftware,
+		&result.VModemSystemName,
+		&result.VModemAddresses,
 		&result.BinkPIPv4Tested,
 		&result.BinkPIPv4Success,
 		&result.BinkPIPv4ResponseMs,

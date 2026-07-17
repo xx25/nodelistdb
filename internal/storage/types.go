@@ -39,11 +39,11 @@ type SysopInfo struct {
 
 // SoftwareDistribution represents software distribution statistics
 type SoftwareDistribution struct {
-	Protocol         string                  `json:"protocol"`
-	TotalNodes       int                     `json:"total_nodes"`
-	SoftwareTypes    []SoftwareTypeStats     `json:"software_types"`
-	VersionBreakdown []SoftwareVersionStats  `json:"version_breakdown"`
-	OSDistribution   []OSStats               `json:"os_distribution"`
+	Protocol         string                 `json:"protocol"`
+	TotalNodes       int                    `json:"total_nodes"`
+	SoftwareTypes    []SoftwareTypeStats    `json:"software_types"`
+	VersionBreakdown []SoftwareVersionStats `json:"version_breakdown"`
+	OSDistribution   []OSStats              `json:"os_distribution"`
 	LastUpdated      time.Time              `json:"last_updated"`
 }
 
@@ -71,12 +71,12 @@ type OSStats struct {
 
 // GeoHostingDistribution represents hosting distribution by geography
 type GeoHostingDistribution struct {
-	TotalNodes           int              `json:"total_nodes"`
-	CountryDistribution  []CountryStats   `json:"country_distribution"`
-	ProviderDistribution []ProviderStats  `json:"provider_distribution"`
-	TopCountries         []CountryStats   `json:"top_countries"`  // Top 20
-	TopProviders         []ProviderStats  `json:"top_providers"`  // Top 20
-	LastUpdated          time.Time        `json:"last_updated"`
+	TotalNodes           int             `json:"total_nodes"`
+	CountryDistribution  []CountryStats  `json:"country_distribution"`
+	ProviderDistribution []ProviderStats `json:"provider_distribution"`
+	TopCountries         []CountryStats  `json:"top_countries"` // Top 20
+	TopProviders         []ProviderStats `json:"top_providers"` // Top 20
+	LastUpdated          time.Time       `json:"last_updated"`
 }
 
 // CountryStats represents statistics for a country
@@ -89,9 +89,9 @@ type CountryStats struct {
 
 // ProviderStats represents statistics for a hosting provider
 type ProviderStats struct {
-	Provider     string   `json:"provider"`      // ISP name
-	Organization string   `json:"organization"`  // Org name (optional)
-	ASN          uint32   `json:"asn"`           // AS number (optional)
+	Provider     string   `json:"provider"`     // ISP name
+	Organization string   `json:"organization"` // Org name (optional)
+	ASN          uint32   `json:"asn"`          // AS number (optional)
 	NodeCount    int      `json:"node_count"`
 	Percentage   float64  `json:"percentage"`
 	Countries    []string `json:"countries"` // Countries where this provider hosts nodes
@@ -99,15 +99,15 @@ type ProviderStats struct {
 
 // NodeTestResult represents a test result for a node
 type NodeTestResult struct {
-	TestTime              time.Time `json:"test_time"`
-	Zone                  int       `json:"zone"`
-	Net                   int       `json:"net"`
-	Node                  int       `json:"node"`
-	Address               string    `json:"address"`
-	Hostname              string    `json:"hostname"`
-	ResolvedIPv4          []string  `json:"resolved_ipv4"`
-	ResolvedIPv6          []string  `json:"resolved_ipv6"`
-	DNSError              string    `json:"dns_error"`
+	TestTime     time.Time `json:"test_time"`
+	Zone         int       `json:"zone"`
+	Net          int       `json:"net"`
+	Node         int       `json:"node"`
+	Address      string    `json:"address"`
+	Hostname     string    `json:"hostname"`
+	ResolvedIPv4 []string  `json:"resolved_ipv4"`
+	ResolvedIPv6 []string  `json:"resolved_ipv6"`
+	DNSError     string    `json:"dns_error"`
 
 	// Geolocation
 	Country     string  `json:"country"`
@@ -156,10 +156,15 @@ type NodeTestResult struct {
 	FTPAnonSuccess *bool  `json:"ftp_anon_success"` // nil=not attempted, true=success, false=rejected
 
 	// VModem Test Results
-	VModemTested     bool   `json:"vmodem_tested"`
-	VModemSuccess    bool   `json:"vmodem_success"`
-	VModemResponseMs uint32 `json:"vmodem_response_ms"`
-	VModemError      string `json:"vmodem_error"`
+	VModemTested     bool     `json:"vmodem_tested"`
+	VModemSuccess    bool     `json:"vmodem_success"`
+	VModemResponseMs uint32   `json:"vmodem_response_ms"`
+	VModemError      string   `json:"vmodem_error"`
+	VModemVariant    string   `json:"vmodem_variant"`     // protocol actually observed on the IVM port
+	VModemConformant bool     `json:"vmodem_conformant"`  // true only for a genuine VMODEM (VMP) responder
+	VModemSoftware   string   `json:"vmodem_software"`    // detected mailer/software
+	VModemSystemName string   `json:"vmodem_system_name"` // remote system name (EMSI)
+	VModemAddresses  []string `json:"vmodem_addresses"`   // remote FTN addresses (EMSI)
 
 	// IPv4-specific Test Results
 	BinkPIPv4Tested      bool   `json:"binkp_ipv4_tested"`
@@ -224,13 +229,13 @@ type NodeTestResult struct {
 	DerivedFromAddress string `json:"derived_from_address,omitempty"` // non-empty: result derived from this node's direct test
 
 	// Per-hostname testing fields (simplified migration)
-	TestedHostname        string   `json:"tested_hostname"`         // Which hostname was tested
-	HostnameIndex         int32    `json:"hostname_index"`          // -1=legacy, 0=primary, 1+=backup
-	IsAggregated          bool     `json:"is_aggregated"`           // false=per-hostname, true=summary
-	TotalHostnames        int32    `json:"total_hostnames"`         // Total number of hostnames for this node
-	HostnamesTested       int32    `json:"hostnames_tested"`        // Number of hostnames actually tested
-	HostnamesOperational  int32    `json:"hostnames_operational"`   // Number of operational hostnames
-	AllHostnames          []string `json:"all_hostnames"`           // All hostnames for this node (for display)
+	TestedHostname       string   `json:"tested_hostname"`       // Which hostname was tested
+	HostnameIndex        int32    `json:"hostname_index"`        // -1=legacy, 0=primary, 1+=backup
+	IsAggregated         bool     `json:"is_aggregated"`         // false=per-hostname, true=summary
+	TotalHostnames       int32    `json:"total_hostnames"`       // Total number of hostnames for this node
+	HostnamesTested      int32    `json:"hostnames_tested"`      // Number of hostnames actually tested
+	HostnamesOperational int32    `json:"hostnames_operational"` // Number of operational hostnames
+	AllHostnames         []string `json:"all_hostnames"`         // All hostnames for this node (for display)
 }
 
 // NodeReachabilityStats represents aggregated reachability statistics for a node
@@ -247,25 +252,25 @@ type NodeReachabilityStats struct {
 	AverageResponseMs     float64   `json:"average_response_ms"`
 	LastTestTime          time.Time `json:"last_test_time"`
 	LastStatus            string    `json:"last_status"`
-	BinkPSuccessRate      float64   `json:"binkp_success_rate"`      // Combined (IPv4 OR IPv6)
-	IfcicoSuccessRate     float64   `json:"ifcico_success_rate"`     // Combined (IPv4 OR IPv6)
-	TelnetSuccessRate     float64   `json:"telnet_success_rate"`     // Combined (IPv4 OR IPv6)
-	BinkPIPv4SuccessRate  float64   `json:"binkp_ipv4_success_rate"` // IPv4-only
-	IfcicoIPv4SuccessRate float64   `json:"ifcico_ipv4_success_rate"`// IPv4-only
-	TelnetIPv4SuccessRate float64   `json:"telnet_ipv4_success_rate"`// IPv4-only
-	BinkPIPv6SuccessRate  float64   `json:"binkp_ipv6_success_rate"` // IPv6-only
-	IfcicoIPv6SuccessRate float64   `json:"ifcico_ipv6_success_rate"`// IPv6-only
-	TelnetIPv6SuccessRate float64   `json:"telnet_ipv6_success_rate"`// IPv6-only
+	BinkPSuccessRate      float64   `json:"binkp_success_rate"`       // Combined (IPv4 OR IPv6)
+	IfcicoSuccessRate     float64   `json:"ifcico_success_rate"`      // Combined (IPv4 OR IPv6)
+	TelnetSuccessRate     float64   `json:"telnet_success_rate"`      // Combined (IPv4 OR IPv6)
+	BinkPIPv4SuccessRate  float64   `json:"binkp_ipv4_success_rate"`  // IPv4-only
+	IfcicoIPv4SuccessRate float64   `json:"ifcico_ipv4_success_rate"` // IPv4-only
+	TelnetIPv4SuccessRate float64   `json:"telnet_ipv4_success_rate"` // IPv4-only
+	BinkPIPv6SuccessRate  float64   `json:"binkp_ipv6_success_rate"`  // IPv6-only
+	IfcicoIPv6SuccessRate float64   `json:"ifcico_ipv6_success_rate"` // IPv6-only
+	TelnetIPv6SuccessRate float64   `json:"telnet_ipv6_success_rate"` // IPv6-only
 }
 
 // ReachabilityTrend represents reachability trend over time
 type ReachabilityTrend struct {
-	Date              time.Time `json:"date"`
-	TotalNodes        int       `json:"total_nodes"`
-	OperationalNodes  int       `json:"operational_nodes"`
-	FailedNodes       int       `json:"failed_nodes"`
-	SuccessRate       float64   `json:"success_rate"`
-	AvgResponseMs     float64   `json:"avg_response_ms"`
+	Date             time.Time `json:"date"`
+	TotalNodes       int       `json:"total_nodes"`
+	OperationalNodes int       `json:"operational_nodes"`
+	FailedNodes      int       `json:"failed_nodes"`
+	SuccessRate      float64   `json:"success_rate"`
+	AvgResponseMs    float64   `json:"avg_response_ms"`
 }
 
 // BatchInsertConfig holds configuration for batch insert operations
@@ -308,6 +313,19 @@ type Operations interface {
 	GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error)
 	GetNodeDateRange(zone, net, node int, domain string) (firstDate, lastDate time.Time, err error)
 	InsertNodes(nodes []database.Node) error
+
+	// Point operations (delegated to PointOps())
+	PointOps() *PointOperations
+	GetPointsByBoss(domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error)
+	GetPointHistory(domain string, zone, net, node, point int) ([]database.Point, error)
+	SearchPoints(filter database.PointFilter) ([]database.Point, error)
+	SearchPointsWithLifetime(filter database.PointFilter) ([]PointSummary, error)
+	GetPointStats(domain string, asOf *time.Time) (*PointStats, error)
+	GetPointCountsByNet(domain string, zone, net int, asOf *time.Time) (map[int]uint64, error)
+	GetPointDomains(zone, net, node int, point *int) ([]string, error)
+	GetPointlistDates(domain, listSource string) ([]database.PointlistFile, error)
+	GetPointlistSources(domain string) ([]PointlistSourceInfo, error)
+	LatestPointlistDate(domain string) (time.Time, bool, error)
 
 	// Search operations (delegated to SearchOps())
 	SearchNodesBySysop(sysopName string, limit int, domain string) ([]NodeSummary, error)
@@ -449,6 +467,7 @@ type QueryBuilderInterface interface {
 // ResultParserInterface defines the contract for parsing database results
 type ResultParserInterface interface {
 	ParseNodeRow(scanner RowScanner) (database.Node, error)
+	ParsePointRow(scanner RowScanner) (database.Point, error)
 	ParseNodeSummaryRow(scanner RowScanner) (NodeSummary, error)
 	ParseNetworkStatsRow(scanner RowScanner) (*database.NetworkStats, error)
 	ParseRegionInfoRow(scanner RowScanner) (database.RegionInfo, error)
@@ -465,7 +484,9 @@ type RowScanner interface {
 
 // singleRowScanner wraps sql.Row to implement RowScanner interface
 type singleRowScanner struct {
-	Row interface{ Scan(dest ...interface{}) error }
+	Row interface {
+		Scan(dest ...interface{}) error
+	}
 }
 
 func (s *singleRowScanner) Scan(dest ...interface{}) error {
@@ -591,19 +612,19 @@ type ModemAccessibleNode struct {
 // ModemNoAnswerNode represents a node that was tested via modem but never answered
 // Used for the PSTN No Answer analytics report showing nodes that are always unreachable
 type ModemNoAnswerNode struct {
-	Zone               int       `json:"zone"`
-	Net                int       `json:"net"`
-	Node               int       `json:"node"`
-	Address            string    `json:"address"`
-	TestTime           time.Time `json:"test_time"`
-	ModemPhoneDialed   string    `json:"modem_phone_dialed"`
-	ModemOperatorName  string    `json:"modem_operator_name"`
-	ModemAstDisposition string   `json:"modem_ast_disposition"`
-	ModemAstHangupCause uint8   `json:"modem_ast_hangup_cause"`
-	TestSource         string    `json:"test_source"`
-	AttemptCount       uint32    `json:"attempt_count"`
-	IsPSTNDead         bool      `json:"is_pstn_dead"`
-	PSTNDeadReason     string    `json:"pstn_dead_reason,omitempty"`
+	Zone                int       `json:"zone"`
+	Net                 int       `json:"net"`
+	Node                int       `json:"node"`
+	Address             string    `json:"address"`
+	TestTime            time.Time `json:"test_time"`
+	ModemPhoneDialed    string    `json:"modem_phone_dialed"`
+	ModemOperatorName   string    `json:"modem_operator_name"`
+	ModemAstDisposition string    `json:"modem_ast_disposition"`
+	ModemAstHangupCause uint8     `json:"modem_ast_hangup_cause"`
+	TestSource          string    `json:"test_source"`
+	AttemptCount        uint32    `json:"attempt_count"`
+	IsPSTNDead          bool      `json:"is_pstn_dead"`
+	PSTNDeadReason      string    `json:"pstn_dead_reason,omitempty"`
 }
 
 // ModemTestDetail represents detailed modem test data for a single test result
@@ -703,13 +724,13 @@ type IPv6NodeListEntry struct {
 	TelnetIPv4Success bool `json:"telnet_ipv4_success"`
 
 	// Computed fields (populated in Go after query)
-	IPv6Type    string `json:"ipv6_type"`    // "Native", "T-6in4", "T-6to4", "T-Teredo"
-	Provider    string `json:"provider"`     // Cleaned ISP/Org name
-	HasFidoAddr bool   `json:"has_fido_addr"`  // f flag: has ::f1d0:z:n:nn style address
+	IPv6Type     string `json:"ipv6_type"`      // "Native", "T-6in4", "T-6to4", "T-Teredo"
+	Provider     string `json:"provider"`       // Cleaned ISP/Org name
+	HasFidoAddr  bool   `json:"has_fido_addr"`  // f flag: has ::f1d0:z:n:nn style address
 	FidoIPv6Addr string `json:"fido_ipv6_addr"` // The actual f1d0 IPv6 address found
-	HasNoIPv4   bool   `json:"has_no_ipv4"`   // INO4: no working IPv4
-	IsUnstable  bool   `json:"is_unstable"`   // 6UNS: failed >2 times in 30 days
-	Remarks     string `json:"remarks"`       // Combined remarks string
+	HasNoIPv4    bool   `json:"has_no_ipv4"`    // INO4: no working IPv4
+	IsUnstable   bool   `json:"is_unstable"`    // 6UNS: failed >2 times in 30 days
+	Remarks      string `json:"remarks"`        // Combined remarks string
 }
 
 // Error messages for consistent error handling

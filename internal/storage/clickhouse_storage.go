@@ -12,7 +12,9 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// ClickHouseStorage provides ClickHouse-specific database operations
+// ClickHouseStorage provides ClickHouse-specific database operations.
+// NOTE: this dormant native path does not implement pointlist operations;
+// points are written only via PointOperations (point_operations.go).
 type ClickHouseStorage struct {
 	db           database.DatabaseInterface
 	nodeOps      *ClickHouseNodeOperations

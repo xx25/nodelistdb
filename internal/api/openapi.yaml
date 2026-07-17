@@ -388,6 +388,346 @@ paths:
                     items:
                       $ref: '#/components/schemas/TimelineEvent'
 
+  /api/nodes/{zone}/{net}/{node}/points:
+    get:
+      summary: Get Points Under a Boss Node
+      description: |
+        Returns the pointlist snapshot under a boss node: per pointlist series
+        the latest issue at or before the as-of date (within a 60-day staleness
+        window), with overlapping entries resolved to the most authoritative
+        series (net-level < regional < zone rollup).
+      operationId: getNodePoints
+      tags:
+        - Points
+      parameters:
+        - name: zone
+          in: path
+          required: true
+          description: FidoNet zone number
+          schema:
+            type: integer
+        - name: net
+          in: path
+          required: true
+          description: Network number
+          schema:
+            type: integer
+        - name: node
+          in: path
+          required: true
+          description: Boss node number
+          schema:
+            type: integer
+        - name: date
+          in: query
+          required: false
+          description: As-of date (YYYY-MM-DD); defaults to the newest imported issue
+          schema:
+            type: string
+            format: date
+        - name: domain
+          in: query
+          required: false
+          description: FTN network (defaults to the network the boss's points exist in)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Points retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address:
+                    type: string
+                    example: "2:5001/100"
+                  domain:
+                    type: string
+                    example: fidonet
+                  available_domains:
+                    type: array
+                    items:
+                      type: string
+                  points:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Point'
+                  count:
+                    type: integer
+
+  /api/points:
+    get:
+      summary: Search Points
+      description: |
+        Search pointlist entries. Requires at least one constraint (zone, net,
+        node, point, system_name, location, sysop_name, list_source, or date
+        range). With latest_only=true the search applies snapshot semantics
+        (one row per 4-D address, cross-source overlap resolved); otherwise
+        every matching historical row is returned, newest first.
+      operationId: searchPoints
+      tags:
+        - Points
+      parameters:
+        - name: zone
+          in: query
+          schema:
+            type: integer
+        - name: net
+          in: query
+          schema:
+            type: integer
+        - name: node
+          in: query
+          description: Boss node number
+          schema:
+            type: integer
+        - name: point
+          in: query
+          description: Point number
+          schema:
+            type: integer
+        - name: domain
+          in: query
+          description: FTN network (omit for all networks)
+          schema:
+            type: string
+        - name: list_source
+          in: query
+          description: Pointlist series (r24, z2, ...)
+          schema:
+            type: string
+        - name: system_name
+          in: query
+          description: System name (substring, case-insensitive, min 2 chars)
+          schema:
+            type: string
+        - name: location
+          in: query
+          description: Location (substring, case-insensitive, min 2 chars)
+          schema:
+            type: string
+        - name: sysop_name
+          in: query
+          description: Sysop name (substring, case-insensitive, min 2 chars)
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          description: End of date range; with latest_only=true also the snapshot as-of date
+          schema:
+            type: string
+            format: date
+        - name: latest_only
+          in: query
+          description: Apply snapshot semantics (one row per 4-D address)
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  points:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Point'
+                  count:
+                    type: integer
+        '400':
+          description: Missing constraint or invalid parameter
+
+  /api/points/{zone}/{net}/{node}/{point}:
+    get:
+      summary: Get Point
+      description: |
+        Returns the current snapshot entry of one 4-D point address. When the
+        address exists in several FTN networks, the X-Available-Domains
+        response header lists them; select one with ?domain=.
+      operationId: getPoint
+      tags:
+        - Points
+      parameters:
+        - name: zone
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: net
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: node
+          in: path
+          required: true
+          description: Boss node number
+          schema:
+            type: integer
+        - name: point
+          in: path
+          required: true
+          description: Point number
+          schema:
+            type: integer
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Point retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Point'
+        '404':
+          description: Point not found
+
+  /api/points/{zone}/{net}/{node}/{point}/history:
+    get:
+      summary: Get Point History
+      description: |
+        Returns every stored entry of one 4-D point address across all
+        pointlist series and issue dates. Rows are labeled with list_source;
+        overlapping series are not collapsed.
+      operationId: getPointHistory
+      tags:
+        - Points
+      parameters:
+        - name: zone
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: net
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: node
+          in: path
+          required: true
+          description: Boss node number
+          schema:
+            type: integer
+        - name: point
+          in: path
+          required: true
+          description: Point number
+          schema:
+            type: integer
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Point history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address:
+                    type: string
+                    example: "2:5001/100.1"
+                  domain:
+                    type: string
+                  available_domains:
+                    type: array
+                    items:
+                      type: string
+                  history:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Point'
+                  count:
+                    type: integer
+        '404':
+          description: Point not found
+
+  /api/pointlists/dates:
+    get:
+      summary: List Imported Pointlist Files
+      description: Lists imported pointlist issues (per series), newest first.
+      operationId: getPointlistDates
+      tags:
+        - Points
+      parameters:
+        - name: domain
+          in: query
+          description: FTN network (default fidonet)
+          schema:
+            type: string
+        - name: source
+          in: query
+          description: Restrict to one pointlist series (r24, z2, ...)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pointlist files retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PointlistFile'
+                  count:
+                    type: integer
+
+  /api/pointlists/sources:
+    get:
+      summary: List Pointlist Sources
+      description: Summarizes the imported pointlist series (coverage, file and point counts).
+      operationId: getPointlistSources
+      tags:
+        - Points
+      parameters:
+        - name: domain
+          in: query
+          description: FTN network (default fidonet)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pointlist sources retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sources:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PointlistSource'
+                  count:
+                    type: integer
 
   /api/sysops:
     get:
@@ -919,6 +1259,156 @@ components:
           type: boolean
           description: Whether this node has duplicate entries
           example: false
+
+    Point:
+      type: object
+      description: One FTN pointlist entry (FTS-5002)
+      properties:
+        zone:
+          type: integer
+          description: FidoNet zone number
+          example: 2
+        net:
+          type: integer
+          description: Network number within the zone
+          example: 5001
+        node:
+          type: integer
+          description: Boss node number
+          example: 100
+        point:
+          type: integer
+          description: Point number under the boss
+          example: 1
+        domain:
+          type: string
+          description: FTN network this entry belongs to
+          example: fidonet
+        pointlist_date:
+          type: string
+          format: date-time
+          description: Issue date of the pointlist this entry came from
+          example: "2024-01-05T00:00:00Z"
+        day_number:
+          type: integer
+          description: Day number of the year (1-366)
+          example: 5
+        list_source:
+          type: string
+          description: Pointlist series this entry came from (r24, z2, ...)
+          example: r50
+        source_priority:
+          type: integer
+          description: Series authority (0 net-level, 10 regional, 20 zone rollup)
+          example: 10
+        source_format:
+          type: string
+          description: Source file format (boss, poss, pvt, point, fakenet)
+          example: boss
+        system_name:
+          type: string
+          example: "Point System"
+        location:
+          type: string
+          example: "Moscow, Russia"
+        sysop_name:
+          type: string
+          example: "John Doe"
+        phone:
+          type: string
+          example: "-Unpublished-"
+        max_speed:
+          type: integer
+          example: 33600
+        is_cm:
+          type: boolean
+          description: Continuous Mail capability
+        is_mo:
+          type: boolean
+          description: Mail Only
+        has_inet:
+          type: boolean
+          description: Has internet connectivity flags
+        flags:
+          type: array
+          items:
+            type: string
+          example: ["CM", "IBN"]
+        modem_flags:
+          type: array
+          items:
+            type: string
+          example: ["V34"]
+        internet_config:
+          type: object
+          description: Parsed internet configuration
+          additionalProperties: true
+        conflict_sequence:
+          type: integer
+          description: Sequence number for duplicate entries within one file (0 = original)
+        has_conflict:
+          type: boolean
+          description: Whether this 4-D address appeared more than once in one file
+        fts_id:
+          type: string
+          description: Full-text search identifier
+          example: "2:5001/100.1@2024-01-05#0"
+
+    PointlistFile:
+      type: object
+      description: One imported pointlist file (import gate row)
+      properties:
+        domain:
+          type: string
+          example: fidonet
+        list_source:
+          type: string
+          example: z2
+        pointlist_date:
+          type: string
+          format: date-time
+          example: "2024-01-05T00:00:00Z"
+        day_number:
+          type: integer
+          example: 5
+        filename:
+          type: string
+          example: "Z2PNT.005"
+        source_format:
+          type: string
+          example: boss
+        points_count:
+          type: integer
+          example: 2848
+        bosses_count:
+          type: integer
+          example: 161
+        imported_at:
+          type: string
+          format: date-time
+
+    PointlistSource:
+      type: object
+      description: Summary of one imported pointlist series
+      properties:
+        domain:
+          type: string
+          example: fidonet
+        list_source:
+          type: string
+          example: r24
+        first_date:
+          type: string
+          format: date-time
+        last_date:
+          type: string
+          format: date-time
+        file_count:
+          type: integer
+          example: 1250
+        total_points:
+          type: integer
+          example: 8000000
 
     NodeSummary:
       type: object

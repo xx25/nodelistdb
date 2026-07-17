@@ -33,6 +33,20 @@ func (s *Server) SetupRouter() http.Handler {
 		r.Get("/{zone}/{net}/{node}/history", s.GetNodeHistoryHandler)
 		r.Get("/{zone}/{net}/{node}/changes", s.GetNodeChangesHandler)
 		r.Get("/{zone}/{net}/{node}/timeline", s.GetNodeTimelineHandler)
+		r.Get("/{zone}/{net}/{node}/points", s.GetNodePointsHandler)
+	})
+
+	// Point (FTS-5002 pointlist) routes
+	r.Route("/api/points", func(r chi.Router) {
+		r.Get("/", s.SearchPointsHandler)
+		r.Get("/{zone}/{net}/{node}/{point}", s.GetPointHandler)
+		r.Get("/{zone}/{net}/{node}/{point}/history", s.GetPointHistoryHandler)
+	})
+
+	// Pointlist metadata routes
+	r.Route("/api/pointlists", func(r chi.Router) {
+		r.Get("/dates", s.PointlistDatesHandler)
+		r.Get("/sources", s.PointlistSourcesHandler)
 	})
 
 	// Network (FTN domain) routes

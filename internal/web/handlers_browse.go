@@ -26,7 +26,7 @@ type browseData struct {
 	DateQuery      string // "" or "?date=...&domain=..." suffix carried on nav links
 
 	// Multi-network support.
-	Domain   string              // selected FTN network (always set)
+	Domain   string               // selected FTN network (always set)
 	Networks []storage.DomainInfo // all networks, for the selector on the top level
 
 	// Breadcrumb context.
@@ -42,6 +42,10 @@ type browseData struct {
 	Regions []storage.BrowseRegion
 	Nets    []storage.BrowseNet
 	Nodes   []database.Node
+
+	// Pointlist snapshot counts per boss node (nodes level only; empty when
+	// the net has no points as of the browsed date).
+	PointCounts map[int]uint64
 }
 
 // resolveBrowseDate reads the optional ?date= query parameter and returns the
@@ -254,6 +258,16 @@ func (s *Server) BrowseNetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data.Nodes = nodes
+
+	// Pointlist counts (one snapshot GROUP BY per page). The current view
+	// (no explicit ?date=) anchors at the newest imported pointlist rather
+	// than the nodelist date — the pointlist feed can lag behind the daily
+	// nodelist; explicit historical dates stay strictly as-of.
+	var pointAsOf *time.Time
+	if data.SelectedDate != "" {
+		pointAsOf = &actualDate
+	}
+	data.PointCounts, _ = s.storage.GetPointCountsByNet(data.Domain, zone, net, pointAsOf)
 
 	// Derive breadcrumb context (region + host name) from the entries themselves
 	// so no extra queries are needed.

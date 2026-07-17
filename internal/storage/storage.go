@@ -17,6 +17,7 @@ type Storage struct {
 	queryBuilder        QueryBuilderInterface
 	resultParser        ResultParserInterface
 	nodeOperations      *NodeOperations
+	pointOperations     *PointOperations
 	searchOperations    *SearchOperations
 	statsOperations     *StatisticsOperations
 	analyticsOperations *AnalyticsOperations
@@ -35,6 +36,11 @@ func (s *Storage) GetDatabase() database.DatabaseInterface {
 // NodeOps returns the node operations component for CRUD operations on nodes
 func (s *Storage) NodeOps() *NodeOperations {
 	return s.nodeOperations
+}
+
+// PointOps returns the point operations component for pointlist data
+func (s *Storage) PointOps() *PointOperations {
+	return s.pointOperations
 }
 
 // SearchOps returns the search operations component for advanced search queries
@@ -82,6 +88,7 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 
 	// Create specialized operation components
 	storage.nodeOperations = NewNodeOperations(db, queryBuilder, resultParser)
+	storage.pointOperations = NewPointOperations(db, queryBuilder, resultParser)
 	storage.searchOperations = NewSearchOperations(db, queryBuilder, resultParser, storage.nodeOperations)
 	storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
 	storage.pstnDeadOperations = NewPSTNDeadOperations(db)
@@ -137,6 +144,47 @@ func (s *Storage) GetMaxNodelistDate(domain string) (time.Time, error) {
 
 func (s *Storage) GetDomains() ([]DomainInfo, error) {
 	return s.nodeOperations.GetDomains()
+}
+
+// Point Operations delegated methods
+func (s *Storage) GetPointsByBoss(domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error) {
+	return s.pointOperations.GetPointsByBoss(domain, zone, net, node, asOf)
+}
+
+func (s *Storage) GetPointHistory(domain string, zone, net, node, point int) ([]database.Point, error) {
+	return s.pointOperations.GetPointHistory(domain, zone, net, node, point)
+}
+
+func (s *Storage) SearchPoints(filter database.PointFilter) ([]database.Point, error) {
+	return s.pointOperations.SearchPoints(filter)
+}
+
+func (s *Storage) SearchPointsWithLifetime(filter database.PointFilter) ([]PointSummary, error) {
+	return s.pointOperations.SearchPointsWithLifetime(filter)
+}
+
+func (s *Storage) GetPointStats(domain string, asOf *time.Time) (*PointStats, error) {
+	return s.pointOperations.GetPointStats(domain, asOf)
+}
+
+func (s *Storage) GetPointCountsByNet(domain string, zone, net int, asOf *time.Time) (map[int]uint64, error) {
+	return s.pointOperations.GetPointCountsByNet(domain, zone, net, asOf)
+}
+
+func (s *Storage) GetPointDomains(zone, net, node int, point *int) ([]string, error) {
+	return s.pointOperations.GetPointDomains(zone, net, node, point)
+}
+
+func (s *Storage) GetPointlistDates(domain, listSource string) ([]database.PointlistFile, error) {
+	return s.pointOperations.GetPointlistDates(domain, listSource)
+}
+
+func (s *Storage) GetPointlistSources(domain string) ([]PointlistSourceInfo, error) {
+	return s.pointOperations.GetPointlistSources(domain)
+}
+
+func (s *Storage) LatestPointlistDate(domain string) (time.Time, bool, error) {
+	return s.pointOperations.LatestPointlistDate(domain)
 }
 
 // Search Operations delegated methods
@@ -436,16 +484,16 @@ func (s *Storage) HealthCheck() error {
 // GetComponentInfo returns information about the storage components
 func (s *Storage) GetComponentInfo() map[string]interface{} {
 	return map[string]interface{}{
-		"version":             "3.0.0-refactored",
-		"architecture":        "component-based with direct access",
-		"query_builder":       "safe parameterized queries",
-		"result_parser":       "type-safe parsing",
-		"node_operations":     "CRUD operations with validation",
-		"search_operations":   "advanced search and change detection",
-		"stats_operations":    "comprehensive statistics",
+		"version":              "3.0.0-refactored",
+		"architecture":         "component-based with direct access",
+		"query_builder":        "safe parameterized queries",
+		"result_parser":        "type-safe parsing",
+		"node_operations":      "CRUD operations with validation",
+		"search_operations":    "advanced search and change detection",
+		"stats_operations":     "comprehensive statistics",
 		"analytics_operations": "historical analytics",
-		"test_operations":     "node testing and reachability",
-		"thread_safety":       "mutex-protected operations",
-		"boilerplate_removed": "~200 lines of delegation eliminated",
+		"test_operations":      "node testing and reachability",
+		"thread_safety":        "mutex-protected operations",
+		"boilerplate_removed":  "~200 lines of delegation eliminated",
 	}
 }

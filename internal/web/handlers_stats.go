@@ -170,6 +170,17 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	// List all networks for the selector
 	networks, _ := s.storage.GetDomains()
 
+	// Pointlist snapshot companion (zero TotalPoints hides the tile). For the
+	// current view (no explicit ?date=) anchor at the newest imported
+	// pointlist — the pointlist feed can lag far behind the daily nodelist
+	// and an as-of-today snapshot would go dark. Explicit historical dates
+	// stay strictly as-of.
+	var pointAsOf *time.Time
+	if dateStr != "" {
+		pointAsOf = &actualDate
+	}
+	pointStats, _ := s.storage.GetPointStats(domain, pointAsOf)
+
 	data := struct {
 		Title          string
 		ActivePage     string
@@ -184,6 +195,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		NodeHistory    []storage.NodeCountByDate
 		Domain         string
 		Networks       []storage.DomainInfo
+		PointStats     *storage.PointStats
 	}{
 		Title:          "Network Statistics",
 		ActivePage:     "stats",
@@ -198,6 +210,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		NodeHistory:    nodeHistory,
 		Domain:         domain,
 		Networks:       networks,
+		PointStats:     pointStats,
 	}
 
 	if data.NoData && err == nil {

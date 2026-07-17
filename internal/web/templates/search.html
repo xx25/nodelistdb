@@ -93,6 +93,16 @@
                 </label>
             </div>
 
+            <div class="form-group form-group--half form-group--checkbox">
+                <label class="checkbox-field" for="include_points">
+                    <input type="checkbox" id="include_points" name="include_points" value="1"{{if .IncludePoints}} checked{{end}}>
+                    <span>
+                        <strong>Include points</strong>
+                        <small>Also search pointlist entries (4-D addresses), shown as a separate result list.</small>
+                    </span>
+                </label>
+            </div>
+
             <div class="form-actions">
                 <button type="submit" class="btn">Search Nodes</button>
             </div>
@@ -172,6 +182,60 @@
             </tbody>
         </table>
     </div>
+</section>
+{{end}}
+
+{{if .IncludePoints}}
+<section class="card">
+    <div class="results-header">
+        <div>
+            <p class="section-tag">Pointlists</p>
+            <h2>{{if .SysopName}}Points operated by {{replaceUnderscores .SysopName}}{{else}}Point results{{end}}</h2>
+            <p class="muted">
+                {{.PointCount}} point{{if ne .PointCount 1}}s{{end}} found{{if eq .PointCount 100}}. Result set limited to 100 entries.{{end}}
+            </p>
+        </div>
+        <span class="badge badge-info">{{.PointCount}} results</span>
+    </div>
+
+    {{if .Points}}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Address</th>
+                    <th>System Name</th>
+                    <th>Location</th>
+                    <th>Sysop</th>
+                    <th>Listed Period</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Points}}
+                <tr>
+                    <td><strong><a href="/points/{{.Zone}}/{{.Net}}/{{.Node}}/{{.PointNum}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}">{{.Zone}}:{{.Net}}/{{.Node}}.{{.PointNum}}</a></strong>{{if and .Domain (ne .Domain "fidonet")}} <span class="badge badge-info">{{.Domain}}</span>{{end}}</td>
+                    <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
+                    <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
+                    <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
+                    <td class="text-muted">{{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}</td>
+                    <td>
+                        {{if .CurrentlyActive}}
+                        <span class="badge badge-success">Active</span>
+                        {{else}}
+                        <span class="badge badge-historical">Historical</span>
+                        {{end}}
+                    </td>
+                    <td><a href="/points/{{.Zone}}/{{.Net}}/{{.Node}}/{{.PointNum}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-secondary btn-sm">View History</a></td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <p class="muted">No matching pointlist entries.</p>
+    {{end}}
 </section>
 {{end}}
 {{end}}

@@ -35,36 +35,42 @@ func domainQuerySuffix(domain string, first bool) string {
 	return "&domain=" + domain
 }
 
-// parseNodeAddress parses a FidoNet node address like "2:5001/100" or "1:234/56.7"
-func parseNodeAddress(address string) (zone, net, node int, err error) {
-	// Remove any whitespace
-	address = strings.TrimSpace(address)
+// ftnAddressRe matches the FidoNet address format zone:net/node[.point]
+var ftnAddressRe = regexp.MustCompile(`^(\d+):(\d+)/(\d+)(?:\.(\d+))?$`)
 
-	// Regular expression to match FidoNet address format: zone:net/node[.point]
-	// We only care about zone:net/node for this search
-	re := regexp.MustCompile(`^(\d+):(\d+)/(\d+)(?:\.(\d+))?$`)
-	matches := re.FindStringSubmatch(address)
-
+// parseFullAddress parses a FidoNet address like "2:5001/100" or
+// "2:5001/100.7". hasPoint reports whether a point suffix was present.
+func parseFullAddress(address string) (zone, net, node, point int, hasPoint bool, err error) {
+	matches := ftnAddressRe.FindStringSubmatch(strings.TrimSpace(address))
 	if len(matches) < 4 {
-		return 0, 0, 0, errors.New("invalid node address format")
+		return 0, 0, 0, 0, false, errors.New("invalid node address format")
 	}
 
-	zone, err = strconv.Atoi(matches[1])
-	if err != nil {
-		return 0, 0, 0, err
+	for i, dest := range []*int{&zone, &net, &node} {
+		v, aerr := strconv.Atoi(matches[i+1])
+		if aerr != nil {
+			return 0, 0, 0, 0, false, aerr
+		}
+		*dest = v
 	}
 
-	net, err = strconv.Atoi(matches[2])
-	if err != nil {
-		return 0, 0, 0, err
+	if matches[4] != "" {
+		point, err = strconv.Atoi(matches[4])
+		if err != nil {
+			return 0, 0, 0, 0, false, err
+		}
+		hasPoint = true
 	}
 
-	node, err = strconv.Atoi(matches[3])
-	if err != nil {
-		return 0, 0, 0, err
-	}
+	return zone, net, node, point, hasPoint, nil
+}
 
-	return zone, net, node, nil
+// parseNodeAddress parses the 3-D part of a FidoNet node address; a ".point"
+// suffix is accepted and ignored (4-D input is routed to the point page by
+// the search handler before node search runs).
+func parseNodeAddress(address string) (zone, net, node int, err error) {
+	zone, net, node, _, _, err = parseFullAddress(address)
+	return zone, net, node, err
 }
 
 // buildNodeFilterFromAddress creates a node filter from a full address string
@@ -81,6 +87,83 @@ func buildNodeFilterFromAddress(address string) (database.NodeFilter, error) {
 		Node:       &node,
 		LatestOnly: &latestOnly,
 	}, nil
+}
+
+// buildPointFilterFromForm creates a point filter from the search form fields,
+// mirroring the node search's branch semantics exactly so the two result
+// sections answer the same question: a full address uses ONLY the address
+// (text fields ignored, like buildNodeFilterFromAddress); a sysop search uses
+// ONLY the sysop (like SearchNodesBySysop); otherwise the individual fields
+// combine. The result is always lifetime-aggregated — the node side's
+// lifetime search ignores the "include historical" checkbox too.
+// ok is false when no usable constraint was given.
+func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
+	filter := database.PointFilter{Limit: 100}
+	hasConstraint := false
+
+	if domain := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); domain != "" {
+		filter.Domain = &domain
+	}
+
+	// Sysop mode searches by operator, nothing else — checked FIRST because
+	// the node side routes to SearchNodesBySysop whenever the sysop field is
+	// filled, even alongside a full address.
+	if sysop := r.FormValue("sysop_name"); strings.TrimSpace(sysop) != "" {
+		if len(strings.TrimSpace(sysop)) < 2 {
+			return filter, false
+		}
+		filter.SysopName = &sysop
+		return filter, true
+	}
+
+	// A full 3-D address searches the points under that boss, nothing else
+	if fullAddress := r.FormValue("full_address"); fullAddress != "" {
+		zone, net, node, _, _, err := parseFullAddress(fullAddress)
+		if err != nil {
+			return filter, false
+		}
+		filter.Zone, filter.Net, filter.Node = &zone, &net, &node
+		return filter, true
+	}
+
+	if v := r.FormValue("zone"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			filter.Zone = &n
+			hasConstraint = true
+		}
+	}
+	if v := r.FormValue("net"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			filter.Net = &n
+			hasConstraint = true
+		}
+	}
+	if v := r.FormValue("node"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			filter.Node = &n
+			// Same guard as the node search: a bare node number without
+			// zone or net would sweep the whole table
+			if filter.Zone != nil || filter.Net != nil {
+				hasConstraint = true
+			}
+		}
+	}
+
+	for _, tf := range []struct {
+		field string
+		dest  **string
+	}{
+		{"system_name", &filter.SystemName},
+		{"location", &filter.Location},
+	} {
+		if v := r.FormValue(tf.field); len(strings.TrimSpace(v)) >= 2 {
+			val := v
+			*tf.dest = &val
+			hasConstraint = true
+		}
+	}
+
+	return filter, hasConstraint
 }
 
 // buildNodeFilterFromForm creates a node filter from individual form fields

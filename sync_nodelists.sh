@@ -51,6 +51,25 @@ REMOTE_NODELIST_DIR="/opt/nodelists"             # Remote nodelist directory
 #   EXTRA_NETWORKS=("fsxnet|http|https://fsxnet.nz/fsxnet/|fsxnet\.[0-9]{3}")
 EXTRA_NETWORKS=()
 
+# Pointlist series to sync (FTS-5002 weeklies).
+# One entry per series: "name|source|url_or_dir|filename_regex|charset[|network]"
+#   name           list_source label (z2, r24, r50, ...) passed to the parser
+#   source         http or ftp
+#   url_or_dir     http(s) directory URL, or FTP directory (uses FTP_* creds)
+#   filename_regex extended regex the remote filenames must match
+#   charset        cp437, cp850, cp866, latin1 or utf8
+#   network        FTN network (optional, default fidonet)
+# Idempotency comes from the parser's pointlist_files gate: already-imported
+# issues are skipped automatically, so every matching remote file can be fed
+# to the parser each run.
+# Example:
+#   EXTRA_POINTLISTS=("z2|http|http://ambrosia60.goip.de/bbsfiles/pointlist/|z2pnt\.z[0-9]{2}|cp437")
+EXTRA_POINTLISTS=()
+
+# Local storage for archived pointlist files:
+# <LOCAL_POINTLIST_DIR>/<network>/<source>/<year>/NAME.DDD.gz
+LOCAL_POINTLIST_DIR="/home/dp/nodelists/pointlists"
+
 # Load configuration file if it exists
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
@@ -541,6 +560,27 @@ decompress_nodelist_archive() {
         fi
     fi
 
+    # .lNN / .lha / .lzh — LHA archives (some pointlist series ship these)
+    if [[ "$lower" =~ \.l(ha|zh|[0-9]{2})$ ]]; then
+        if command -v 7z &> /dev/null; then
+            local extract_dir="${TEMP_DIR}/extract_$$"
+            mkdir -p "$extract_dir"
+            if 7z x -y -o"$extract_dir" "$file_path" >/dev/null 2>&1; then
+                local extracted
+                extracted=$(find "$extract_dir" -type f | head -1)
+                [[ -n "$extracted" ]] || return 1
+                local target="${TEMP_DIR}/$(basename "${extracted,,}")"
+                mv "$extracted" "$target"
+                rm -rf "$extract_dir" "$file_path"
+                echo "$target"
+                return 0
+            fi
+            rm -rf "$extract_dir"
+        fi
+        log "Cannot extract LHA archive $file_path (7z missing or failed)" error
+        return 1
+    fi
+
     echo "$file_path"
 }
 
@@ -644,6 +684,112 @@ sync_extra_networks() {
     local spec
     for spec in "${EXTRA_NETWORKS[@]}"; do
         sync_extra_network "$spec" || true
+    done
+}
+
+#################################################################################
+# POINTLIST SYNCHRONIZATION (FTS-5002 weeklies)
+#################################################################################
+
+# Sync one pointlist series ("name|source|url_or_dir|filename_regex|charset[|network]")
+sync_extra_pointlist() {
+    local spec="$1"
+    local name source location name_re charset network
+    IFS='|' read -r name source location name_re charset network <<< "$spec"
+    network="${network:-fidonet}"
+
+    if [[ -z "$name" || -z "$source" || -z "$location" || -z "$name_re" || -z "$charset" ]]; then
+        log "Skipping malformed EXTRA_POINTLISTS entry: $spec" error
+        return 1
+    fi
+
+    log "--- Syncing pointlist series '$name' from $source $location ---"
+
+    local remote_files
+    remote_files=$(list_extra_network_files "$source" "$location" "$name_re")
+    if [[ -z "$remote_files" ]]; then
+        log "No $name pointlist files found at $location"
+        return 0
+    fi
+
+    while IFS= read -r remote_file; do
+        [[ -z "$remote_file" ]] && continue
+
+        local temp_file="${TEMP_DIR}/${remote_file,,}"
+        if ! download_extra_network_file "$source" "$location" "$remote_file" "$temp_file"; then
+            log "Failed to download $remote_file for pointlist $name - will retry next run" error
+            rm -f "$temp_file"
+            continue
+        fi
+
+        local pointlist_file
+        if ! pointlist_file=$(decompress_nodelist_archive "$temp_file"); then
+            log "Failed to unpack $remote_file for pointlist $name" error
+            rm -f "$temp_file"
+            continue
+        fi
+
+        # Compressed weekly names truncate the day (Z2PNT.Z01 -> Z2PNT.201);
+        # the extracted inner filename carries the true 3-digit day.
+        local plain_name
+        plain_name=$(basename "$pointlist_file")
+        local file_date
+        if ! file_date=$(filename_to_date "$plain_name"); then
+            log "Warning: could not parse day number from $plain_name" error
+            rm -f "$pointlist_file"
+            continue
+        fi
+        local year=$(echo "$file_date" | cut -d'-' -f1)
+
+        # The parser's pointlist_files gate makes re-imports no-ops
+        log "Importing pointlist $(basename "$pointlist_file") (series $name, year $year)..."
+        if ! "$PARSER_PATH" -config "$CONFIG_PATH" -pointlist -network "$network" \
+                -list-source "$name" -year "$year" -charset "$charset" \
+                -path "$pointlist_file" > "${TEMP_DIR}/parser.log" 2>&1; then
+            log "Parser failed for $(basename "$pointlist_file") (pointlist $name):" error
+            tail -10 "${TEMP_DIR}/parser.log" | while read -r line; do log "  $line" error; done
+            rm -f "$pointlist_file"
+            continue
+        fi
+        if grep -q "Already imported" "${TEMP_DIR}/parser.log"; then
+            log "Pointlist $(basename "$pointlist_file") already imported - skipped"
+            rm -f "$pointlist_file"
+            continue
+        fi
+
+        # Archive at <root>/<network>/<source>/<year>/NAME.DDD.gz
+        local year_dir="${LOCAL_POINTLIST_DIR}/${network}/${name}/${year}"
+        mkdir -p "$year_dir"
+        local compressed_file="${year_dir}/$(basename "${pointlist_file,,}").gz"
+        gzip -c "$pointlist_file" > "$compressed_file"
+        log "Stored $compressed_file"
+
+        rm -f "$pointlist_file"
+        log "Completed $remote_file for pointlist series $name"
+    done <<< "$remote_files"
+
+    log "--- Pointlist series '$name' sync finished ---"
+}
+
+# Sync every configured pointlist series
+sync_extra_pointlists() {
+    if [[ ${#EXTRA_POINTLISTS[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    # Same lock file as scripts/import_pointlists.sh: the points table is a
+    # plain MergeTree (no dedup), so the weekly sync and an hours-long bulk
+    # import must never race on the same (domain, source, date) key.
+    exec 201>"/tmp/nodelistdb-import-pointlists.lock"
+    if ! flock -n 201; then
+        log "Pointlist sync skipped: a bulk pointlist import is running (lock held)" error
+        return 0
+    fi
+
+    log "=== Syncing ${#EXTRA_POINTLISTS[@]} pointlist series ==="
+    local spec
+    for spec in "${EXTRA_POINTLISTS[@]}"; do
+        sync_extra_pointlist "$spec" || true
     done
 }
 
@@ -1094,9 +1240,11 @@ main() {
         exit 0
     fi
     
-    # Run the actual synchronization (fidonet first, then extra networks)
+    # Run the actual synchronization (fidonet first, then extra networks,
+    # then pointlist series)
     sync_nodelists
     sync_extra_networks
+    sync_extra_pointlists
     
     log "=== NodelistDB FTP Sync Script Completed Successfully ==="
 }

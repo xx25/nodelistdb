@@ -27,7 +27,39 @@
                 <p><strong>Active Period:</strong> {{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}</p>
                 <p><strong>Total Entries:</strong> {{len .History}}</p>
                 <p><strong>Changes:</strong> {{len .Changes}}</p>
+                {{if .Points}}<p><strong>Points:</strong> <a href="#points">{{len .Points}}</a></p>{{end}}
             </div>
+
+            {{if .Points}}
+            <div class="card" id="points">
+                <h3>Points</h3>
+                <p class="muted">Points registered under this boss node in the latest pointlist snapshot.</p>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Point</th>
+                                <th>System Name</th>
+                                <th>Location</th>
+                                <th>Sysop</th>
+                                <th>Source</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{range .Points}}
+                            <tr>
+                                <td><strong><a href="/points/{{.Zone}}/{{.Net}}/{{.Node}}/{{.PointNum}}{{if ne $.Domain "fidonet"}}?domain={{$.Domain}}{{end}}">{{.Zone}}:{{.Net}}/{{.Node}}.{{.PointNum}}</a></strong></td>
+                                <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
+                                <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
+                                <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
+                                <td><span class="badge badge-info">{{.ListSource}}</span> {{.PointlistDate.Format "2006-01-02"}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {{end}}
             <div class="card">
                 <h3>Change History</h3>
             <div class="timeline">

@@ -300,6 +300,71 @@ func (db *ClickHouseDB) CreateSchema() error {
 		return fmt.Errorf("failed to create flag_statistics table: %w", err)
 	}
 
+	// Create points table for pointlist (FTS-5002) data.
+	// Unlike nodes, domain IS in the sort key: this table was born after
+	// multi-network support, so it takes the correct key from the start.
+	pointsSQL := `
+	CREATE TABLE IF NOT EXISTS points (
+		domain            LowCardinality(String) DEFAULT 'fidonet',
+		zone              Int32,
+		net               Int32,
+		node              Int32,
+		point             Int32,
+		pointlist_date    Date,
+		day_number        Int32,
+		list_source       LowCardinality(String),
+		source_priority   UInt8 DEFAULT 10,
+		source_format     LowCardinality(String),
+		system_name       String DEFAULT '',
+		location          String DEFAULT '',
+		sysop_name        String DEFAULT '',
+		phone             String DEFAULT '',
+		max_speed         UInt32 DEFAULT 0,
+		is_cm             Bool DEFAULT false,
+		is_mo             Bool DEFAULT false,
+		has_inet          Bool DEFAULT false,
+		flags             Array(String) DEFAULT [],
+		modem_flags       Array(String) DEFAULT [],
+		internet_config   String DEFAULT '',
+		conflict_sequence UInt16 DEFAULT 0,
+		has_conflict      Bool DEFAULT false,
+		fts_id            String,
+		raw_line          String DEFAULT '',
+		INDEX idx_pts_sysop  sysop_name     TYPE bloom_filter GRANULARITY 1,
+		INDEX idx_pts_system system_name    TYPE bloom_filter GRANULARITY 1,
+		INDEX idx_pts_loc    location       TYPE bloom_filter GRANULARITY 1,
+		INDEX idx_pts_fts    fts_id         TYPE bloom_filter GRANULARITY 1,
+		INDEX idx_pts_date   pointlist_date TYPE minmax GRANULARITY 1
+	) ENGINE = MergeTree()
+	PARTITION BY zone
+	ORDER BY (domain, zone, net, node, point, pointlist_date, conflict_sequence)
+	SETTINGS index_granularity = 8192`
+
+	if err := db.execSQL(ctx, pointsSQL); err != nil {
+		return fmt.Errorf("failed to create points table: %w", err)
+	}
+
+	// Create pointlist_files gate table: a pointlist file counts as imported
+	// only when its row exists here (registered after all point rows landed)
+	pointlistFilesSQL := `
+	CREATE TABLE IF NOT EXISTS pointlist_files (
+		domain          LowCardinality(String),
+		list_source     LowCardinality(String),
+		pointlist_date  Date,
+		day_number      Int32,
+		filename        String,
+		source_format   LowCardinality(String),
+		points_count    UInt32,
+		bosses_count    UInt32,
+		imported_at     DateTime DEFAULT now()
+	) ENGINE = ReplacingMergeTree(imported_at)
+	ORDER BY (domain, list_source, pointlist_date)
+	SETTINGS index_granularity = 8192`
+
+	if err := db.execSQL(ctx, pointlistFilesSQL); err != nil {
+		return fmt.Errorf("failed to create pointlist_files table: %w", err)
+	}
+
 	return nil
 }
 

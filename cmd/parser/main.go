@@ -35,6 +35,19 @@ func main() {
 		createFTSIndexes = flag.Bool("create-fts", true, "Create Full-Text Search indexes after import")
 		rebuildFTSOnly   = flag.Bool("rebuild-fts", false, "Only rebuild FTS indexes (no data import)")
 		showVersion      = flag.Bool("version", false, "Show version information")
+
+		// Pointlist import mode (FTS-5002)
+		pointlistMode  = flag.Bool("pointlist", false, "Import pointlist files instead of nodelists")
+		extractPoints  = flag.Bool("extract-points", false, "Re-read nodelist files and import only their inline Point lines (backfill; bypasses the nodelist gate)")
+		listSource     = flag.String("list-source", "", "Pointlist series name (r24, z2, ...); default: derived from filename family")
+		sourcePriority = flag.Int("source-priority", -1, "Source priority: 0 net-level, 10 regional, 20 zone rollup; default: derived from filename family")
+		plFormat       = flag.String("format", "auto", "Pointlist format: auto, boss, poss, pvt, point (combined/V7), fakenet")
+		plYear         = flag.Int("year", 0, "Year the pointlist's 3-digit day number belongs to (default: derived from path)")
+		plDefaultZone  = flag.Int("default-zone", 2, "Zone assumed for boss addresses without an explicit zone")
+		plCharset      = flag.String("charset", "cp437", "Pointlist charset: cp437, cp850, cp866, latin1, utf8")
+		plReimport     = flag.Bool("reimport", false, "Delete and reimport already-imported pointlist files (corrected-file replay)")
+		plForce        = flag.Bool("force", false, "Bypass pointlist sanity thresholds (0 points / <50% of nearest issue)")
+		plShrinkCheck  = flag.String("shrink-check", "fail", "When a pointlist shrinks below 50% of the nearest imported issue: fail (refuse) or warn (import anyway)")
 	)
 	flag.Parse()
 
@@ -53,6 +66,30 @@ func main() {
 	if *path == "" && !*rebuildFTSOnly {
 		fmt.Fprintf(os.Stderr, "Error: -path is required (unless using -rebuild-fts)\n")
 		flag.Usage()
+		os.Exit(1)
+	}
+
+	if *pointlistMode && *enableConcurrent {
+		fmt.Fprintf(os.Stderr, "Error: -pointlist does not support -concurrent (one-time batch import, sequential is fine)\n")
+		os.Exit(1)
+	}
+	if *pointlistMode && *rebuildFTSOnly {
+		fmt.Fprintf(os.Stderr, "Error: -pointlist and -rebuild-fts are mutually exclusive\n")
+		os.Exit(1)
+	}
+	if *extractPoints && (*pointlistMode || *rebuildFTSOnly || *enableConcurrent) {
+		fmt.Fprintf(os.Stderr, "Error: -extract-points is mutually exclusive with -pointlist, -rebuild-fts and -concurrent\n")
+		os.Exit(1)
+	}
+	if *pointlistMode && *plShrinkCheck != "fail" && *plShrinkCheck != "warn" {
+		fmt.Fprintf(os.Stderr, "Error: -shrink-check must be 'fail' or 'warn'\n")
+		os.Exit(1)
+	}
+	// -1 is the "derive from filename family" sentinel; the stored column is
+	// UInt8, and an out-of-range value silently wrapping to 0 would make a
+	// file the MOST authoritative source in every snapshot.
+	if *sourcePriority < -1 || *sourcePriority > 255 {
+		fmt.Fprintf(os.Stderr, "Error: -source-priority must be between 0 and 255 (or -1 to derive from the filename)\n")
 		os.Exit(1)
 	}
 
@@ -97,6 +134,17 @@ func main() {
 			cfg.ClickHouse.Host, cfg.ClickHouse.Port, cfg.ClickHouse.Database)
 		if *rebuildFTSOnly {
 			fmt.Println("Mode: FTS Index Rebuild")
+		} else if *pointlistMode {
+			fmt.Println("Mode: Pointlist Import")
+			fmt.Printf("Network: %s\n", networkCfg.Name)
+			fmt.Printf("Path: %s\n", *path)
+			fmt.Printf("Format: %s, Charset: %s, Default zone: %d\n", *plFormat, *plCharset, *plDefaultZone)
+			if *plYear > 0 {
+				fmt.Printf("Year: %d\n", *plYear)
+			}
+			if *listSource != "" {
+				fmt.Printf("List source: %s\n", *listSource)
+			}
 		} else {
 			fmt.Printf("Network: %s\n", networkCfg.Name)
 			fmt.Printf("Path: %s\n", *path)
@@ -163,9 +211,45 @@ func main() {
 	}
 	defer storageLayer.Close()
 
-	// Initialize advanced parser
+	// Extract-points backfill: inline nodelist points only, no node import
+	if *extractPoints {
+		failed := runExtractPoints(storageLayer, *path, networkCfg.Name, networkCfg.Pattern(), *recursive, *verbose, *quiet)
+		if failed > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Pointlist import mode: separate pipeline gated by pointlist_files
+	if *pointlistMode {
+		failed := runPointlistImport(storageLayer, *path, pointlistOptions{
+			Domain:         networkCfg.Name,
+			ListSource:     *listSource,
+			SourcePriority: *sourcePriority,
+			Format:         *plFormat,
+			Year:           *plYear,
+			DefaultZone:    *plDefaultZone,
+			Charset:        *plCharset,
+			Reimport:       *plReimport,
+			Force:          *plForce,
+			ShrinkCheck:    *plShrinkCheck,
+			Recursive:      *recursive,
+			Verbose:        *verbose,
+			Quiet:          *quiet,
+		})
+		if failed > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Initialize advanced parser. Inline "Point," lines (used by some FTN
+	// networks' nodelists) are collected and imported into the points table
+	// alongside the nodes (sequential path; concurrent bulk imports use
+	// -extract-points afterwards).
 	nodelistParser := parser.NewAdvanced(*verbose)
 	nodelistParser.SetDomain(networkCfg.Name)
+	nodelistParser.CollectPoints = true
 
 	// Find nodelist files
 	files, err := findNodelistFiles(*path, *recursive, networkCfg.Pattern())
@@ -303,6 +387,16 @@ func main() {
 					// Non-fatal error - continue processing
 				} else if *verbose {
 					fmt.Println("  ✓ Flag analytics updated")
+				}
+			}
+
+			// Import inline points (gated separately by pointlist_files).
+			// Called even with 0 points: a nodelist that dropped its inline
+			// points must supersede the previous issue in snapshot queries.
+			if !batchErrors {
+				if _, err := importNodelistPoints(storageLayer, networkCfg.Name, parseResult, false, *quiet); err != nil {
+					fmt.Printf("  Warning: Failed to import inline points: %v\n", err)
+					// Non-fatal: -extract-points can backfill later
 				}
 			}
 

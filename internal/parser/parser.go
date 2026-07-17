@@ -29,12 +29,18 @@ const (
 // ParseResult contains the parsed nodes and metadata
 type ParseResult struct {
 	Nodes         []database.Node
+	Points        []database.Point // inline "Point," lines (only with CollectPoints)
 	FilePath      string
 	NodelistDate  time.Time
 	DayNumber     int
 	FileCRC       uint16
 	ProcessedDate time.Time
 }
+
+// NodelistPointSource is the list_source stamped on points extracted from
+// inline nodelist "Point," lines. Priority 0 (net-level): the nodelist itself
+// is the most authoritative source for its own points.
+const NodelistPointSource = "nodelist"
 
 // Context tracks the current parsing context (zone, net, region)
 type Context struct {
@@ -48,6 +54,11 @@ type Parser struct {
 	// Configuration
 	verbose bool
 	domain  string // FTN network the parsed nodes belong to (default: fidonet)
+
+	// CollectPoints emits inline "Point," lines (used by some FTN networks'
+	// nodelists) into ParseResult.Points instead of dropping them. Off by
+	// default so non-import callers see no behaviour change.
+	CollectPoints bool
 
 	// Format detection
 	DetectedFormat NodelistFormat
@@ -206,7 +217,7 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 	defer closeFunc()
 
 	// Parse the file content
-	nodes, nodelistDate, dayNumber, fileCRC, err := p.parseFileContent(reader, filePath, estimatedNodes)
+	nodes, points, nodelistDate, dayNumber, fileCRC, err := p.parseFileContent(reader, filePath, estimatedNodes)
 	if err != nil {
 		return nil, err
 	}
@@ -225,12 +236,28 @@ func (p *Parser) ParseFileWithCRC(filePath string) (*ParseResult, error) {
 		nodes[i].Domain = domain
 	}
 
+	// Stamp identity on inline points: the nodelist itself is their source
+	for i := range points {
+		pt := &points[i]
+		pt.Domain = domain
+		pt.PointlistDate = nodelistDate
+		pt.DayNumber = dayNumber
+		pt.ListSource = NodelistPointSource
+		pt.SourcePriority = SourcePriorityNet
+		pt.SourceFormat = NodelistPointSource
+		pt.ComputeFtsId()
+	}
+
 	if p.verbose {
 		p.printParseResults(filePath, len(nodes), nodelistDate, dayNumber)
+		if len(points) > 0 {
+			fmt.Printf("  Collected %d inline point line(s)\n", len(points))
+		}
 	}
 
 	return &ParseResult{
 		Nodes:         nodes,
+		Points:        points,
 		FilePath:      filePath,
 		NodelistDate:  nodelistDate,
 		DayNumber:     dayNumber,
@@ -274,7 +301,7 @@ func (p *Parser) openFileReader(filePath string) (io.Reader, func(), error) {
 }
 
 // parseFileContent reads and parses the content of a nodelist file.
-func (p *Parser) parseFileContent(reader io.Reader, filePath string, estimatedNodes int) ([]database.Node, time.Time, int, uint16, error) {
+func (p *Parser) parseFileContent(reader io.Reader, filePath string, estimatedNodes int) ([]database.Node, []database.Point, time.Time, int, uint16, error) {
 	// Pre-allocate nodes slice with estimated capacity for better performance
 	nodes := make([]database.Node, 0, estimatedNodes)
 	scanner := bufio.NewScanner(reader)
@@ -285,6 +312,14 @@ func (p *Parser) parseFileContent(reader io.Reader, filePath string, estimatedNo
 	var fileCRC uint16
 	var firstNodeLine string
 	headerParsed := false
+
+	// Inline point collection (CollectPoints): a "Point," line belongs to the
+	// node line immediately preceding it (FTS-5000 keyword vocabulary).
+	var points []database.Point
+	var pointDupTracker map[string][]int
+	if p.CollectPoints {
+		pointDupTracker = make(map[string][]int)
+	}
 
 	// Track duplicates within this file
 	duplicateStats := struct {
@@ -344,6 +379,43 @@ func (p *Parser) parseFileContent(reader io.Reader, filePath string, estimatedNo
 			}
 		}
 
+		// Inline point line: attach to the immediately preceding node
+		if p.CollectPoints {
+			if fields := strings.Split(line, ","); strings.EqualFold(strings.TrimSpace(fields[0]), "Point") {
+				if len(nodes) == 0 {
+					if p.verbose {
+						fmt.Printf("Warning: Point line %d in %s before any node line, skipped\n", lineNum, filepath.Base(filePath))
+					}
+					continue
+				}
+				point, perr := p.parsePointFields(fields)
+				if perr != nil {
+					if p.verbose {
+						fmt.Printf("Warning: Failed to parse point line %d in %s: %v\n", lineNum, filepath.Base(filePath), perr)
+					}
+					continue
+				}
+				boss := &nodes[len(nodes)-1]
+				point.Zone = boss.Zone
+				point.Net = boss.Net
+				point.Node = boss.Node
+				point.RawLine = rawLine
+				key := fmt.Sprintf("%d:%d/%d.%d", point.Zone, point.Net, point.Node, point.PointNum)
+				if existing, ok := pointDupTracker[key]; ok {
+					point.ConflictSequence = len(existing)
+					point.HasConflict = true
+					for _, idx := range existing {
+						points[idx].HasConflict = true
+					}
+					pointDupTracker[key] = append(existing, len(points))
+				} else {
+					pointDupTracker[key] = []int{len(points)}
+				}
+				points = append(points, *point)
+				continue
+			}
+		}
+
 		// Parse node line
 		node, err := p.parseLine(line, nodelistDate, dayNumber, filePath)
 		if err != nil {
@@ -360,10 +432,10 @@ func (p *Parser) parseFileContent(reader io.Reader, filePath string, estimatedNo
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, time.Time{}, 0, 0, NewFileError(filePath, "read", "error reading file", err)
+		return nil, nil, time.Time{}, 0, 0, NewFileError(filePath, "read", "error reading file", err)
 	}
 
-	return nodes, nodelistDate, dayNumber, fileCRC, nil
+	return nodes, points, nodelistDate, dayNumber, fileCRC, nil
 }
 
 // trackDuplicates checks for and tracks duplicate node entries within a file.

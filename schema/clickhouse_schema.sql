@@ -107,6 +107,11 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `vmodem_success` Bool,
     `vmodem_response_ms` UInt32,
     `vmodem_error` String,
+    `vmodem_variant` String DEFAULT '',
+    `vmodem_conformant` Bool DEFAULT false,
+    `vmodem_software` String DEFAULT '',
+    `vmodem_system_name` String DEFAULT '',
+    `vmodem_addresses` Array(String) DEFAULT [],
     `is_operational` Bool,
     `has_connectivity_issues` Bool,
     `address_validated` Bool,
@@ -313,6 +318,66 @@ SETTINGS index_granularity = 8192;
 -- NOTE: modem_caller_status and modem_test_queue tables have been removed.
 -- Server-controlled queue was replaced by direct CLI submission via POST /api/modem/results/direct.
 -- See migration 005_drop_modem_queue_tables.sql to drop these tables on existing installations.
+
+-- Points table - stores parsed pointlist (FTS-5002) data
+-- Overlapping sources (z2 aggregates the regionals) are stored verbatim;
+-- readers resolve overlap at query time via source_priority + latest issue
+-- per source within a staleness window.
+CREATE TABLE IF NOT EXISTS nodelistdb.points
+(
+    `domain`            LowCardinality(String) DEFAULT 'fidonet',
+    `zone`              Int32,
+    `net`               Int32,
+    `node`              Int32,
+    `point`             Int32,
+    `pointlist_date`    Date,
+    `day_number`        Int32,
+    `list_source`       LowCardinality(String),
+    `source_priority`   UInt8 DEFAULT 10,
+    `source_format`     LowCardinality(String),
+    `system_name`       String DEFAULT '',
+    `location`          String DEFAULT '',
+    `sysop_name`        String DEFAULT '',
+    `phone`             String DEFAULT '',
+    `max_speed`         UInt32 DEFAULT 0,
+    `is_cm`             Bool DEFAULT false,
+    `is_mo`             Bool DEFAULT false,
+    `has_inet`          Bool DEFAULT false,
+    `flags`             Array(String) DEFAULT [],
+    `modem_flags`       Array(String) DEFAULT [],
+    `internet_config`   String DEFAULT '',
+    `conflict_sequence` UInt16 DEFAULT 0,
+    `has_conflict`      Bool DEFAULT false,
+    `fts_id`            String,
+    `raw_line`          String DEFAULT '',
+    INDEX idx_pts_sysop  sysop_name     TYPE bloom_filter GRANULARITY 1,
+    INDEX idx_pts_system system_name    TYPE bloom_filter GRANULARITY 1,
+    INDEX idx_pts_loc    location       TYPE bloom_filter GRANULARITY 1,
+    INDEX idx_pts_fts    fts_id         TYPE bloom_filter GRANULARITY 1,
+    INDEX idx_pts_date   pointlist_date TYPE minmax GRANULARITY 1
+)
+ENGINE = MergeTree
+PARTITION BY zone
+ORDER BY (domain, zone, net, node, point, pointlist_date, conflict_sequence)
+SETTINGS index_granularity = 8192;
+
+-- Pointlist files table - import gate: a pointlist file counts as imported
+-- only when its row exists here (registered after all point rows landed)
+CREATE TABLE IF NOT EXISTS nodelistdb.pointlist_files
+(
+    `domain`          LowCardinality(String),
+    `list_source`     LowCardinality(String),
+    `pointlist_date`  Date,
+    `day_number`      Int32,
+    `filename`        String,
+    `source_format`   LowCardinality(String),
+    `points_count`    UInt32,
+    `bosses_count`    UInt32,
+    `imported_at`     DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(imported_at)
+ORDER BY (domain, list_source, pointlist_date)
+SETTINGS index_granularity = 8192;
 
 -- Domain WHOIS cache table
 -- Stores WHOIS lookup results for domains used by FidoNet nodes

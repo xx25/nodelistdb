@@ -200,6 +200,90 @@ func parseNodeFilter(r *http.Request) (database.NodeFilter, bool, error) {
 	return filter, hasConstraint, nil
 }
 
+// parsePointFilter builds a PointFilter from query parameters.
+// Returns the filter and a boolean indicating if any specific constraint was provided.
+func parsePointFilter(r *http.Request) (database.PointFilter, bool, error) {
+	filter := database.PointFilter{}
+	query := r.URL.Query()
+	hasConstraint := false
+
+	// FTN network filter (does not count as a constraint on its own)
+	if domain, ok := parseStringParam(query, "domain", 1); ok {
+		domain = strings.ToLower(domain)
+		filter.Domain = &domain
+	}
+
+	// Zone, Net, Node, Point
+	if zone, ok := parseIntParam(query, "zone"); ok {
+		filter.Zone = &zone
+		hasConstraint = true
+	}
+
+	if net, ok := parseIntParam(query, "net"); ok {
+		filter.Net = &net
+		hasConstraint = true
+	}
+
+	if node, ok := parseIntParam(query, "node"); ok {
+		filter.Node = &node
+		hasConstraint = true
+	}
+
+	if point, ok := parseIntParam(query, "point"); ok {
+		filter.PointNum = &point
+		hasConstraint = true
+	}
+
+	// Pointlist series filter (r24, z2, ...)
+	if source, ok := parseStringParam(query, "list_source", 1); ok {
+		source = strings.ToLower(source)
+		filter.ListSource = &source
+		hasConstraint = true
+	}
+
+	// String fields with minimum length validation
+	for _, sf := range []struct {
+		key  string
+		dest **string
+	}{
+		{"system_name", &filter.SystemName},
+		{"location", &filter.Location},
+		{"sysop_name", &filter.SysopName},
+	} {
+		if val, ok := parseStringParam(query, sf.key, 2); ok {
+			*sf.dest = &val
+			hasConstraint = true
+		} else if query.Get(sf.key) != "" {
+			return filter, false, &ParamError{
+				Field:   sf.key,
+				Value:   query.Get(sf.key),
+				Message: sf.key + " must be at least 2 characters long",
+			}
+		}
+	}
+
+	// Date range
+	if dateFrom, ok := parseDateParam(query, "date_from"); ok {
+		filter.DateFrom = &dateFrom
+		hasConstraint = true
+	}
+
+	if dateTo, ok := parseDateParam(query, "date_to"); ok {
+		filter.DateTo = &dateTo
+		hasConstraint = true
+	}
+
+	// Latest only filter (snapshot semantics)
+	if latestOnly, ok := parseBoolParam(query, "latest_only"); ok {
+		filter.LatestOnly = &latestOnly
+	}
+
+	// Pagination with defaults
+	filter.Limit, filter.Offset = parsePaginationParams(query, 100, 500)
+
+	return filter, hasConstraint, nil
+}
+
 // ParamError represents a parameter parsing error.
 type ParamError struct {
 	Field   string

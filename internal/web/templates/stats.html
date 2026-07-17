@@ -93,6 +93,23 @@
     </div>
 </section>
 
+{{if .PointStats}}{{if .PointStats.TotalPoints}}
+<section class="card">
+    <div class="section-heading">
+        <p class="section-tag">Pointlists</p>
+        <h2>Points</h2>
+        <p class="muted">Pointlist snapshot as of {{.PointStats.AsOf.Format "January 2, 2006"}} &mdash; per series the latest issue on or before the nodelist date, overlap resolved by source authority.</p>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-card"><h3>{{.PointStats.TotalPoints}}</h3><p>Total Points</p></div>
+        <div class="stat-card"><h3>{{.PointStats.TotalBosses}}</h3><p>Boss Nodes</p></div>
+        {{range .PointStats.Zones}}
+        <div class="stat-card"><h3>{{.Points}}</h3><p>Zone {{.Zone}} Points</p></div>
+        {{end}}
+    </div>
+</section>
+{{end}}{{end}}
+
 {{if .Stats.ZoneDistribution}}
 <section class="card">
     <div class="section-heading">

@@ -8,6 +8,7 @@ import (
 
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/flags"
+	"github.com/nodelistdb/internal/logging"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 )
@@ -15,9 +16,11 @@ import (
 // SearchHandler handles unified node and sysop search
 func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	var nodes []storage.NodeSummary
+	var points []storage.PointSummary
 	var count int
 	var searchErr error
 	var sysopName string
+	includePoints := false
 	isRootPage := r.URL.Path == "/"
 
 	// Only perform search on POST
@@ -25,6 +28,19 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			searchErr = fmt.Errorf("Failed to parse form: %v", err)
 		} else {
+			// A 4-D address (2:5001/100.7) is a point — route it to the point
+			// page instead of discarding the point suffix.
+			if fullAddress := r.FormValue("full_address"); fullAddress != "" {
+				if zone, net, node, point, hasPoint, err := parseFullAddress(fullAddress); err == nil && hasPoint {
+					target := fmt.Sprintf("/points/%d/%d/%d/%d", zone, net, node, point)
+					if domain := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); domain != "" && domain != database.DefaultDomain {
+						target += "?domain=" + domain
+					}
+					http.Redirect(w, r, target, http.StatusSeeOther)
+					return
+				}
+			}
+
 			// Check if sysop_name field is filled
 			sysopName = r.FormValue("sysop_name")
 
@@ -37,31 +53,51 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 				// Perform node search
 				nodes, count, searchErr = s.performNodeSearchWithLifetime(r)
 			}
+
+			// Same criteria against the points table, shown as a separate
+			// labeled section. A points-side failure must not kill the node
+			// results, but it is a real error, not "0 points" — log it.
+			includePoints = r.FormValue("include_points") == "1"
+			if includePoints && searchErr == nil {
+				if pointFilter, ok := buildPointFilterFromForm(r); ok {
+					var pointErr error
+					points, pointErr = s.storage.SearchPointsWithLifetime(pointFilter)
+					if pointErr != nil {
+						logging.Warnf("point search failed: %v", pointErr)
+					}
+				}
+			}
 		}
 	}
 
 	networks, _ := s.storage.GetDomains()
 
 	data := struct {
-		Title      string
-		ActivePage string
-		Nodes      []storage.NodeSummary
-		Count      int
-		Error      error
-		SysopName  string
-		IsRootPage bool
-		Version    string
-		Networks   []storage.DomainInfo
+		Title         string
+		ActivePage    string
+		Nodes         []storage.NodeSummary
+		Points        []storage.PointSummary
+		PointCount    int
+		IncludePoints bool
+		Count         int
+		Error         error
+		SysopName     string
+		IsRootPage    bool
+		Version       string
+		Networks      []storage.DomainInfo
 	}{
-		Title:      "Search",
-		ActivePage: "search",
-		Nodes:      nodes,
-		Count:      count,
-		Error:      searchErr,
-		SysopName:  sysopName,
-		IsRootPage: isRootPage,
-		Version:    version.GetVersionInfo(),
-		Networks:   networks,
+		Title:         "Search",
+		ActivePage:    "search",
+		Nodes:         nodes,
+		Points:        points,
+		PointCount:    len(points),
+		IncludePoints: includePoints,
+		Count:         count,
+		Error:         searchErr,
+		SysopName:     sysopName,
+		IsRootPage:    isRootPage,
+		Version:       version.GetVersionInfo(),
+		Networks:      networks,
 	}
 
 	if isRootPage {
@@ -167,6 +203,9 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		resolvedDomain = history[0].Domain
 	}
 
+	// Pointlist snapshot under this boss (empty for the vast majority of nodes)
+	points, _ := s.storage.GetPointsByBoss(resolvedDomain, zone, net, node, nil)
+
 	data := struct {
 		Title            string
 		Address          string
@@ -174,6 +213,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		AvailableDomains []string
 		History          []database.Node
 		Changes          []database.NodeChange
+		Points           []database.Point
 		FirstDate        time.Time
 		LastDate         time.Time
 		CurrentlyActive  bool
@@ -187,6 +227,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		AvailableDomains: availableDomains,
 		History:          history,
 		Changes:          changes,
+		Points:           points,
 		FirstDate:        activityInfo.FirstDate,
 		LastDate:         activityInfo.LastDate,
 		CurrentlyActive:  activityInfo.CurrentlyActive,

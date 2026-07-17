@@ -1,0 +1,138 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Title}} - {{.Address}}{{end}}
+
+{{define "page_title"}}{{.Title}} - {{.Address}}{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Pointlist entries for FidoNet point</p>
+{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/tooltip.js"></script>
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+            <div class="card">
+                <h2>Point Information</h2>
+                <p><strong>Address:</strong> {{.Address}}{{if and .Domain (ne .Domain "fidonet")}} <span class="badge badge-info">{{.Domain}}</span>{{end}}</p>
+                <p><strong>Boss Node:</strong> <a href="/node/{{.Latest.Zone}}/{{.Latest.Net}}/{{.Latest.Node}}{{if ne .Domain "fidonet"}}?domain={{.Domain}}{{end}}">{{.BossAddress}}</a></p>
+                {{if gt (len .AvailableDomains) 1}}
+                <p><strong>Networks:</strong>
+                    {{$current := .Domain}}
+                    {{range .AvailableDomains}}
+                    {{if eq . $current}}<strong>{{.}}</strong>{{else}}<a href="?domain={{.}}">{{.}}</a>{{end}}
+                    {{end}}
+                </p>
+                {{end}}
+                <p><strong>Listed Period:</strong> {{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}</p>
+                <p><strong>Total Entries:</strong> {{len .History}}</p>
+                <div class="node-info" style="margin-top: 1rem;">
+                    <div class="info-item">
+                        <strong>System Name</strong>
+                        {{if .Latest.SystemName}}{{replaceUnderscores .Latest.SystemName}}{{else}}<em>-</em>{{end}}
+                    </div>
+                    <div class="info-item">
+                        <strong>Location</strong>
+                        {{if .Latest.Location}}{{replaceUnderscores .Latest.Location}}{{else}}<em>-</em>{{end}}
+                    </div>
+                    <div class="info-item">
+                        <strong>Sysop</strong>
+                        {{if .Latest.SysopName}}{{replaceUnderscores .Latest.SysopName}}{{else}}<em>-</em>{{end}}
+                    </div>
+                    <div class="info-item">
+                        <strong>Phone</strong>
+                        {{if .Latest.Phone}}{{.Latest.Phone}}{{else}}<em>-</em>{{end}}
+                    </div>
+                    <div class="info-item">
+                        <strong>Max Speed</strong>
+                        {{if .Latest.MaxSpeed}}{{.Latest.MaxSpeed}}{{else}}<em>-</em>{{end}}
+                    </div>
+                    <div class="info-item">
+                        <strong>Latest Source</strong>
+                        <span class="badge badge-info">{{.Latest.ListSource}}</span> {{.Latest.PointlistDate.Format "2006-01-02"}}
+                    </div>
+                    <div class="info-item">
+                        <strong>Capabilities</strong>
+                        <div style="margin-top: 0.5rem;">
+                            {{if .Latest.IsCM}}<span class="badge badge-success">CM</span>{{end}}
+                            {{if .Latest.IsMO}}<span class="badge badge-success">MO</span>{{end}}
+                            {{if .Latest.HasInet}}<span class="badge badge-info">Internet</span>{{end}}
+                            {{if not (or .Latest.IsCM .Latest.IsMO .Latest.HasInet)}}<em>None specified</em>{{end}}
+                        </div>
+                    </div>
+                    {{if .Latest.Flags}}
+                    <div class="info-item" style="grid-column: span 2;">
+                        <strong>Flags</strong>
+                        <div style="margin-top: 0.5rem;">
+                            {{range .Latest.Flags}}
+                                {{$desc := getFlagDescription $.FlagDescriptions .}}
+                                {{if $desc}}
+                                    <span class="flag-tooltip">
+                                        <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
+                                        <span class="tooltip-text">{{$desc}}</span>
+                                    </span>
+                                {{else}}
+                                    <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
+                                {{end}}
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+                    {{if .Latest.ModemFlags}}
+                    <div class="info-item" style="grid-column: span 2;">
+                        <strong>Modem Flags</strong>
+                        <div style="margin-top: 0.5rem;">
+                            {{range .Latest.ModemFlags}}
+                                <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Pointlist History</h3>
+                <p class="muted">Every entry across all pointlist series. Overlapping series (a zone rollup republishes the regional lists) are shown side by side, labeled with their source.</p>
+                <div class="table-responsive">
+                    <table class="data-table sortable-table">
+                        <thead>
+                            <tr>
+                                <th data-sortable data-type="date" data-default-sort="desc">Date</th>
+                                <th data-sortable data-type="string">Source</th>
+                                <th data-sortable data-type="string">System Name</th>
+                                <th data-sortable data-type="string">Location</th>
+                                <th data-sortable data-type="string">Sysop</th>
+                                <th data-sortable data-type="string">Phone</th>
+                                <th>Flags</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{range .History}}
+                            <tr>
+                                <td data-value="{{.PointlistDate.Unix}}">{{.PointlistDate.Format "2006-01-02"}}</td>
+                                <td><span class="badge badge-info">{{.ListSource}}</span></td>
+                                <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
+                                <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
+                                <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
+                                <td>{{if .Phone}}{{.Phone}}{{else}}<em>-</em>{{end}}</td>
+                                <td>
+                                    {{range .Flags}}<span class="badge badge-info" style="margin-right: 0.25rem;">{{.}}</span>{{end}}
+                                    {{range .ModemFlags}}<span class="badge" style="margin-right: 0.25rem;">{{.}}</span>{{end}}
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Raw Pointlist Lines Section -->
+            <div class="card">
+                <h3>Raw Pointlist Lines</h3>
+                <pre style="font-size: 0.875rem; line-height: 1.4; overflow-x: auto;">{{$prevRawLine := ""}}{{range .History}}{{if ne .RawLine $prevRawLine}}{{if .RawLine}}<b>{{printf "%2d" .PointlistDate.Day}}&nbsp;{{.PointlistDate.Format "Jan"}}&nbsp;{{.PointlistDate.Year}}, {{.ListSource}}.{{printf "%03d" .DayNumber}}: </b>{{.RawLine}}
+{{$prevRawLine = .RawLine}}{{end}}{{end}}{{end}}</pre>
+            </div>
+{{end}}

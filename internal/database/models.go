@@ -123,6 +123,118 @@ type NodeFilter struct {
 	Offset int `json:"offset,omitempty"`
 }
 
+// Point represents one FTN pointlist entry (FTS-5002).
+// Points live in their own table: they have their own axes (list_source,
+// per-source cadence) and would otherwise pollute every node-level stat.
+type Point struct {
+	// 4D identity: boss node + point number
+	Zone     int `json:"zone"`
+	Net      int `json:"net"`
+	Node     int `json:"node"` // boss node number
+	PointNum int `json:"point"`
+
+	// FTN network this entry belongs to (fidonet, ...)
+	Domain string `json:"domain,omitempty"`
+
+	// Pointlist issue metadata
+	PointlistDate time.Time `json:"pointlist_date"`
+	DayNumber     int       `json:"day_number"`
+
+	// Source provenance: which pointlist series this row came from.
+	// Sources overlap (z2 aggregates the regionals) and publish on different
+	// days; every file's rows are stored verbatim and readers resolve overlap
+	// at query time via source_priority.
+	ListSource     string `json:"list_source"`     // 'r24', 'z2', 'net244', 'nodelist', ...
+	SourcePriority uint8  `json:"source_priority"` // 0 net-level, 10 regional, 20 zone rollup
+	SourceFormat   string `json:"source_format"`   // 'boss', 'poss', 'pvt', 'point', 'fakenet'
+
+	// Point information (same shape as a node line)
+	SystemName string `json:"system_name"`
+	Location   string `json:"location"`
+	SysopName  string `json:"sysop_name"`
+	Phone      string `json:"phone"`
+	MaxSpeed   uint32 `json:"max_speed"`
+
+	// Boolean flags (computed from raw flags)
+	IsCM    bool `json:"is_cm"`
+	IsMO    bool `json:"is_mo"`
+	HasInet bool `json:"has_inet"`
+
+	// Raw flag arrays
+	Flags      []string `json:"flags"`
+	ModemFlags []string `json:"modem_flags"`
+
+	// Internet configuration JSON
+	InternetConfig json.RawMessage `json:"internet_config,omitempty"`
+
+	// Conflict tracking (same 4D address twice in ONE file)
+	ConflictSequence int  `json:"conflict_sequence"`
+	HasConflict      bool `json:"has_conflict"`
+
+	// FTS identifier
+	FtsId string `json:"fts_id"`
+
+	// Raw pointlist line (decoded to UTF-8)
+	RawLine string `json:"raw_line,omitempty"`
+}
+
+// ComputeFtsId generates the FTS identifier for this point:
+// "z:n/n.p@date#seq", with an extra "@domain" suffix outside fidonet
+// (mirrors Node.ComputeFtsId).
+func (p *Point) ComputeFtsId() {
+	p.FtsId = fmt.Sprintf("%d:%d/%d.%d@%s#%d",
+		p.Zone, p.Net, p.Node, p.PointNum,
+		p.PointlistDate.Format("2006-01-02"),
+		p.ConflictSequence)
+	if p.Domain != "" && p.Domain != DefaultDomain {
+		p.FtsId += "@" + p.Domain
+	}
+}
+
+// PointFilter represents search criteria for points
+type PointFilter struct {
+	// Address filters
+	Zone     *int `json:"zone,omitempty"`
+	Net      *int `json:"net,omitempty"`
+	Node     *int `json:"node,omitempty"`
+	PointNum *int `json:"point,omitempty"`
+
+	// FTN network filter (nil = all networks)
+	Domain *string `json:"domain,omitempty"`
+
+	// Source filter
+	ListSource *string `json:"list_source,omitempty"`
+
+	// Date filters
+	DateFrom *time.Time `json:"date_from,omitempty"`
+	DateTo   *time.Time `json:"date_to,omitempty"`
+
+	// Text filters
+	SystemName *string `json:"system_name,omitempty"`
+	Location   *string `json:"location,omitempty"`
+	SysopName  *string `json:"sysop_name,omitempty"`
+
+	// Result options
+	LatestOnly *bool `json:"latest_only,omitempty"`
+
+	// Pagination
+	Limit  int `json:"limit,omitempty"`
+	Offset int `json:"offset,omitempty"`
+}
+
+// PointlistFile describes one imported pointlist file (the import gate row)
+type PointlistFile struct {
+	Domain        string    `json:"domain"`
+	ListSource    string    `json:"list_source"`
+	PointlistDate time.Time `json:"pointlist_date"`
+	DayNumber     int       `json:"day_number"`
+	Filename      string    `json:"filename"`
+	SourceFormat  string    `json:"source_format"`
+	PointsCount   uint32    `json:"points_count"`
+	BossesCount   uint32    `json:"bosses_count"`
+	ImportedAt    time.Time `json:"imported_at"`
+}
+
 // NetworkStats represents aggregated network statistics
 // RegionInfo holds information about a region
 type RegionInfo struct {

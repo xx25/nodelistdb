@@ -170,6 +170,14 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
     </div>
 </section>
 
+{{if .HasPointlists}}
+<section class="card">
+    <p class="section-tag">Pointlists</p>
+    <h2>Pointlist archive</h2>
+    <p class="muted">Weekly FTS-5002 pointlists, archived per series and year: <a href="/pointlists">browse the pointlist archive</a>.</p>
+</section>
+{{end}}
+
 {{if .Networks}}
 <section class="card">
     <p class="section-tag">Other FTN networks</p>

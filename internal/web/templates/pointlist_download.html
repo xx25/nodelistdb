@@ -1,0 +1,42 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "page_title"}}Pointlist archive{{end}}
+
+{{define "page_subtitle"}}
+<p class="subtitle">Weekly FidoNet pointlists (FTS-5002), archived per series and year.</p>
+{{end}}
+
+{{define "content"}}
+{{if .Sources}}
+{{range .Sources}}
+<section class="card">
+    <div class="results-header">
+        <div>
+            <p class="section-tag">{{.Network}}</p>
+            <h2>{{.Source}}</h2>
+            <p class="muted">{{.Count}} file{{if ne .Count 1}}s{{end}}, {{(index .Years (sub (len .Years) 1)).Year}}&ndash;{{(index .Years 0).Year}}</p>
+        </div>
+        <div class="button-row">
+            <span class="badge badge-info">{{len .Years}} year{{if ne (len .Years) 1}}s{{end}}</span>
+        </div>
+    </div>
+    <div class="button-row" style="flex-wrap: wrap; gap: 0.5rem;">
+        {{$network := .Network}}{{$source := .Source}}
+        {{range .Years}}
+        <a href="/pointlists/{{$network}}/{{$source}}/{{.Year}}" class="btn btn-secondary btn-sm">{{.Year}} ({{.Count}})</a>
+        {{end}}
+    </div>
+</section>
+{{end}}
+{{else}}
+<section class="card">
+    <p class="muted">No archived pointlist files found.</p>
+</section>
+{{end}}
+
+<section class="card">
+    <p class="muted">Looking for nodelists? See the <a href="/nodelists">nodelist archive</a>. Point data is also browsable per node and searchable as <span class="mono">zone:net/node.point</span> addresses.</p>
+</section>
+{{end}}

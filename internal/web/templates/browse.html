@@ -196,6 +196,7 @@
             <thead>
                 <tr>
                     <th data-sortable data-type="address" style="width: 1%; white-space: nowrap;">Address</th>
+                    {{if .PointCounts}}<th data-sortable data-type="number" style="width: 1%; white-space: nowrap;">Points</th>{{end}}
                     <th style="width: auto; min-width: 0;">Nodelist entry</th>
                 </tr>
             </thead>
@@ -203,6 +204,7 @@
                 {{range .Nodes}}
                 <tr>
                     <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}" style="width: 1%; white-space: nowrap; vertical-align: top;"><strong><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if ne $.Domain "fidonet"}}?domain={{$.Domain}}{{end}}">{{.Zone}}:{{.Net}}/{{.Node}}</a></strong></td>
+                    {{if $.PointCounts}}{{$pc := index $.PointCounts .Node}}<td data-value="{{$pc}}" style="width: 1%; white-space: nowrap; text-align: right; vertical-align: top;">{{if $pc}}<a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if ne $.Domain "fidonet"}}?domain={{$.Domain}}{{end}}#points">{{$pc}}</a>{{else}}<span class="muted">-</span>{{end}}</td>{{end}}
                     <td class="mono" style="width: auto; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere;">{{if .RawLine}}{{.RawLine}}{{else}}<em class="muted">(raw line not stored)</em>{{end}}</td>
                 </tr>
                 {{end}}

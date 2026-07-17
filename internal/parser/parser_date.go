@@ -99,6 +99,13 @@ func (p *Parser) extractDateFromLine(line string) (time.Time, int, error) {
 	return time.Time{}, 0, fmt.Errorf("no date pattern found in line")
 }
 
+// ExtractDateFromFilename derives the nodelist date without parsing the file
+// body (filename patterns, then header). Used by callers that want a cheap
+// pre-check before a full parse (e.g. the -extract-points gate).
+func (p *Parser) ExtractDateFromFilename(filePath string) (time.Time, int, error) {
+	return p.extractDateFromFile(filePath)
+}
+
 // extractDateFromFile extracts the nodelist date from the filename or file header.
 // It tries multiple filename patterns and falls back to reading the file header.
 func (p *Parser) extractDateFromFile(filePath string) (time.Time, int, error) {

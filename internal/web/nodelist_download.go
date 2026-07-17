@@ -311,26 +311,28 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		Title       string
-		ActivePage  string
-		Years       []NodelistYear
-		Networks    []NodelistNetwork
-		RecentFiles []NodelistFile
-		TotalFiles  int
-		Error       error
-		Latest      *NodelistFile
-		BaseURL     string
-		Version     string
+		Title         string
+		ActivePage    string
+		Years         []NodelistYear
+		Networks      []NodelistNetwork
+		RecentFiles   []NodelistFile
+		TotalFiles    int
+		Error         error
+		Latest        *NodelistFile
+		BaseURL       string
+		Version       string
+		HasPointlists bool
 	}{
-		Title:       "Downloads",
-		ActivePage:  "nodelists",
-		Years:       years,
-		Networks:    listNodelistNetworks(),
-		RecentFiles: recentFiles,
-		TotalFiles:  totalNodelistFiles(years),
-		Error:       err,
-		BaseURL:     baseURL,
-		Version:     version.GetVersionInfo(),
+		Title:         "Downloads",
+		ActivePage:    "nodelists",
+		Years:         years,
+		Networks:      listNodelistNetworks(),
+		RecentFiles:   recentFiles,
+		TotalFiles:    totalNodelistFiles(years),
+		Error:         err,
+		BaseURL:       baseURL,
+		Version:       version.GetVersionInfo(),
+		HasPointlists: len(listPointlistSources()) > 0,
 	}
 
 	// Find latest nodelist
@@ -657,6 +659,15 @@ func (s *Server) URLListHandler(w http.ResponseWriter, r *http.Request) {
 		for _, year := range network.Years {
 			for _, file := range year.Files {
 				fmt.Fprintf(w, "%s/download/nodelist/%s/%s/%s\n", baseURL, network.Name, year.Year, file.Name)
+			}
+		}
+	}
+
+	// Archived pointlists
+	for _, source := range listPointlistSources() {
+		for _, year := range source.Years {
+			for _, file := range year.Files {
+				fmt.Fprintf(w, "%s/download/pointlist/%s/%s/%s/%s\n", baseURL, source.Network, source.Source, year.Year, file.Name)
 			}
 		}
 	}
