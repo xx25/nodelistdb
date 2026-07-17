@@ -170,7 +170,7 @@ func (so *SearchOperations) equalStringSlices(a, b []string) bool {
 // An empty domain returns dates across all networks.
 func (so *SearchOperations) getAllNodelistDates(domain string) ([]time.Time, error) {
 	conn := so.db.Conn()
-	query := "SELECT DISTINCT nodelist_date FROM nodes WHERE " + domainFilterSQL + " ORDER BY nodelist_date"
+	query := "SELECT DISTINCT nodelist_date FROM nodes WHERE " + optionalDomainSQL + " ORDER BY nodelist_date"
 
 	rows, err := conn.Query(query, domain, domain)
 	if err != nil {

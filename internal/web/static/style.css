@@ -1501,6 +1501,41 @@ nav a.active {
     box-shadow: none;
 }
 
+.nav-network {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-left: auto;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid #dbe3ec;
+    border-radius: 14px;
+    background: #f8fafc;
+}
+
+.nav-network-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary, #64748b);
+}
+
+.nav-network select {
+    border: none;
+    background: transparent;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0.2rem 0.1rem;
+}
+
+.nav-network select:focus {
+    outline: 2px solid rgba(15, 118, 110, 0.4);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
 .nav-label {
     font-size: 0.95rem;
     font-weight: 700;

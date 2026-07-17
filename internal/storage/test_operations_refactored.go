@@ -62,157 +62,157 @@ func (to *TestOperationsRefactored) GetNodeReachabilityStats(zone, net, node int
 }
 
 // GetReachabilityTrendsAllTime gets all-time daily reachability trends from pre-aggregated stats
-func (to *TestOperationsRefactored) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
-	return to.reachabilityOps.GetReachabilityTrendsAllTime()
+func (to *TestOperationsRefactored) GetReachabilityTrendsAllTime(domain string) ([]ReachabilityTrend, error) {
+	return to.reachabilityOps.GetReachabilityTrendsAllTime(domain)
 }
 
 // GetReachabilityTrends gets daily reachability trends
-func (to *TestOperationsRefactored) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
-	return to.reachabilityOps.GetReachabilityTrends(days)
+func (to *TestOperationsRefactored) GetReachabilityTrends(days int, domain string) ([]ReachabilityTrend, error) {
+	return to.reachabilityOps.GetReachabilityTrends(days, domain)
 }
 
 // SearchNodesByReachability searches for nodes by reachability status
-func (to *TestOperationsRefactored) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
-	return to.reachabilityOps.SearchNodesByReachability(operational, limit, days)
+func (to *TestOperationsRefactored) SearchNodesByReachability(operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
+	return to.reachabilityOps.SearchNodesByReachability(operational, limit, days, domain)
 }
 
 // ===== Protocol Operations (delegated to ProtocolQueryOperations) =====
 
 // GetBinkPEnabledNodes returns nodes that have been successfully tested with BinkP
-func (to *TestOperationsRefactored) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.protocolOps.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.protocolOps.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetIfcicoEnabledNodes returns nodes that have been successfully tested with IFCICO
-func (to *TestOperationsRefactored) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.protocolOps.GetIfcicoEnabledNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.protocolOps.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetTelnetEnabledNodes returns nodes that have been successfully tested with Telnet
-func (to *TestOperationsRefactored) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.protocolOps.GetTelnetEnabledNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.protocolOps.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetVModemEnabledNodes returns nodes that have been successfully tested with VModem
-func (to *TestOperationsRefactored) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.protocolOps.GetVModemEnabledNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.protocolOps.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetFTPEnabledNodes returns nodes that have been successfully tested with FTP
-func (to *TestOperationsRefactored) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.protocolOps.GetFTPEnabledNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.protocolOps.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 // ===== Software Analytics Operations (delegated to SoftwareAnalyticsOperations) =====
 
 // GetBinkPSoftwareDistribution returns BinkP software distribution statistics
-func (to *TestOperationsRefactored) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	return to.softwareOps.GetBinkPSoftwareDistribution(days)
+func (to *TestOperationsRefactored) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
+	return to.softwareOps.GetBinkPSoftwareDistribution(days, domain)
 }
 
 // GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics
-func (to *TestOperationsRefactored) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	return to.softwareOps.GetIFCICOSoftwareDistribution(days)
+func (to *TestOperationsRefactored) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
+	return to.softwareOps.GetIFCICOSoftwareDistribution(days, domain)
 }
 
 // GetBinkdDetailedStats returns detailed binkd statistics
-func (to *TestOperationsRefactored) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
-	return to.softwareOps.GetBinkdDetailedStats(days)
+func (to *TestOperationsRefactored) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
+	return to.softwareOps.GetBinkdDetailedStats(days, domain)
 }
 
 // ===== Geo Analytics Operations (delegated to GeoAnalyticsOperations) =====
 
 // GetGeoHostingDistribution returns geographic hosting distribution statistics
-func (to *TestOperationsRefactored) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error) {
-	return to.geoOps.GetGeoHostingDistribution(days)
+func (to *TestOperationsRefactored) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
+	return to.geoOps.GetGeoHostingDistribution(days, domain)
 }
 
 // GetNodesByCountry returns all operational nodes for a specific country
-func (to *TestOperationsRefactored) GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error) {
-	return to.geoOps.GetNodesByCountry(countryCode, days)
+func (to *TestOperationsRefactored) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
+	return to.geoOps.GetNodesByCountry(countryCode, days, domain)
 }
 
 // GetNodesByProvider returns all operational nodes for a specific provider
-func (to *TestOperationsRefactored) GetNodesByProvider(isp string, days int) ([]NodeTestResult, error) {
-	return to.geoOps.GetNodesByProvider(isp, days)
+func (to *TestOperationsRefactored) GetNodesByProvider(isp string, days int, domain string) ([]NodeTestResult, error) {
+	return to.geoOps.GetNodesByProvider(isp, days, domain)
 }
 
 // ===== IPv6 Operations (delegated to IPv6QueryOperations) =====
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6
-func (to *TestOperationsRefactored) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.ipv6Ops.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.ipv6Ops.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetIPv6NonWorkingNodes returns nodes that have IPv6 addresses but no working IPv6 services
-func (to *TestOperationsRefactored) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.ipv6Ops.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.ipv6Ops.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetIPv6AdvertisedIPv4OnlyNodes returns nodes that advertise IPv6 addresses but are only accessible via IPv4
-func (to *TestOperationsRefactored) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.ipv6Ops.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.ipv6Ops.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetIPv6OnlyNodes returns nodes that have working IPv6 services but NO working IPv4 services
-func (to *TestOperationsRefactored) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.ipv6Ops.GetIPv6OnlyNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.ipv6Ops.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetPureIPv6OnlyNodes returns nodes that ONLY advertise IPv6 addresses (no IPv4 addresses at all)
-func (to *TestOperationsRefactored) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.ipv6Ops.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.ipv6Ops.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetIPv6NodeList returns verified working IPv6 nodes for the node list report (Michiel's format)
-func (to *TestOperationsRefactored) GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error) {
-	return to.ipv6Ops.GetIPv6NodeList(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
+	return to.ipv6Ops.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
 }
 
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes
-func (to *TestOperationsRefactored) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
-	return to.ipv6Ops.GetIPv6WeeklyNews(limit, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
+	return to.ipv6Ops.GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
 }
 
 // ===== AKA Mismatch Operations (delegated to AKAMismatchOperations) =====
 
 // GetAKAMismatchNodes returns nodes where announced AKA doesn't match expected nodelist address
-func (to *TestOperationsRefactored) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return to.akaMismatchOps.GetAKAMismatchNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.akaMismatchOps.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetIPv6IncorrectIPv4CorrectNodes returns nodes where IPv6 AKA is incorrect but IPv4 AKA is correct
-func (to *TestOperationsRefactored) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
-	return to.akaMismatchOps.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+	return to.akaMismatchOps.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetIPv4IncorrectIPv6CorrectNodes returns nodes where IPv4 AKA is incorrect but IPv6 AKA is correct
-func (to *TestOperationsRefactored) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
-	return to.akaMismatchOps.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+	return to.akaMismatchOps.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
 }
 
 // ===== Other Networks Operations (delegated to OtherNetworksOperations) =====
 
 // GetOtherNetworksSummary returns a summary of non-FidoNet networks found in AKAs
-func (to *TestOperationsRefactored) GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error) {
-	return to.otherNetworksOps.GetOtherNetworksSummary(days)
+func (to *TestOperationsRefactored) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
+	return to.otherNetworksOps.GetOtherNetworksSummary(days, domain)
 }
 
 // GetNodesInNetwork returns nodes that announce AKAs in a specific network
-func (to *TestOperationsRefactored) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
-	return to.otherNetworksOps.GetNodesInNetwork(networkName, limit, days)
+func (to *TestOperationsRefactored) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
+	return to.otherNetworksOps.GetNodesInNetwork(networkName, limit, days, domain)
 }
 
 // ===== Modem Operations (delegated to ModemQueryOperations) =====
 
 // GetModemAccessibleNodes returns nodes successfully reached via modem tests
-func (to *TestOperationsRefactored) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
-	return to.modemOps.GetModemAccessibleNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
+	return to.modemOps.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetModemNoAnswerNodes returns nodes tested via modem that never answered
-func (to *TestOperationsRefactored) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error) {
-	return to.modemOps.GetModemNoAnswerNodes(limit, days, includeZeroNodes)
+func (to *TestOperationsRefactored) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
+	return to.modemOps.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
 }
 
 // GetRecentModemSuccessPhones returns phone numbers successfully tested via modem within N days

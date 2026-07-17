@@ -4,7 +4,15 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 )
+
+// softwareQueryDomain returns the optional ?domain= FTN network filter.
+// Unlike queryDomain it does NOT default to fidonet: the pre-multi-network
+// behavior of these endpoints was to aggregate every network.
+func softwareQueryDomain(r *http.Request) string {
+	return strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
+}
 
 // GetBinkPSoftwareStats returns BinkP software distribution statistics
 func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
@@ -16,7 +24,7 @@ func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.TestOps().GetBinkPSoftwareDistribution(days)
+	dist, err := s.storage.TestOps().GetBinkPSoftwareDistribution(days, softwareQueryDomain(r))
 	if err != nil {
 		log.Printf("ERROR: GetBinkPSoftwareDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get BinkP software distribution", http.StatusInternalServerError)
@@ -36,7 +44,7 @@ func (s *Server) GetIFCICOSoftwareStats(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.TestOps().GetIFCICOSoftwareDistribution(days)
+	dist, err := s.storage.TestOps().GetIFCICOSoftwareDistribution(days, softwareQueryDomain(r))
 	if err != nil {
 		log.Printf("ERROR: GetIFCICOSoftwareDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get IFCICO software distribution", http.StatusInternalServerError)
@@ -56,7 +64,7 @@ func (s *Server) GetBinkdDetailedStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.TestOps().GetBinkdDetailedStats(days)
+	dist, err := s.storage.TestOps().GetBinkdDetailedStats(days, softwareQueryDomain(r))
 	if err != nil {
 		log.Printf("ERROR: GetBinkdDetailedStats failed: %v", err)
 		WriteJSONError(w, "Failed to get detailed binkd statistics", http.StatusInternalServerError)

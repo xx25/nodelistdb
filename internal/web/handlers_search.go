@@ -3,7 +3,6 @@ package web
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -33,7 +32,12 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 			if fullAddress := r.FormValue("full_address"); fullAddress != "" {
 				if zone, net, node, point, hasPoint, err := parseFullAddress(fullAddress); err == nil && hasPoint {
 					target := fmt.Sprintf("/points/%d/%d/%d/%d", zone, net, node, point)
-					if domain := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); domain != "" && domain != database.DefaultDomain {
+					// Only an EXPLICIT domain is forwarded — forwarding the
+					// switcher cookie would pin the point page to a network
+					// the point may not exist in; with no param the point
+					// page resolves the network itself (cookie preferred,
+					// cross-network fallback).
+					if domain := explicitDomain(r); domain != "" {
 						target += "?domain=" + domain
 					}
 					http.Redirect(w, r, target, http.StatusSeeOther)
@@ -45,9 +49,8 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 			sysopName = r.FormValue("sysop_name")
 
 			if sysopName != "" {
-				// Perform sysop search (scoped to the selected network, if any)
-				searchDomain := strings.ToLower(strings.TrimSpace(r.FormValue("domain")))
-				nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 100, searchDomain)
+				// Perform sysop search, scoped to the selected network
+				nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 100, requestDomain(r))
 				count = len(nodes)
 			} else {
 				// Perform node search
@@ -70,8 +73,6 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	networks, _ := s.storage.GetDomains()
-
 	data := struct {
 		Title         string
 		ActivePage    string
@@ -84,7 +85,6 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		SysopName     string
 		IsRootPage    bool
 		Version       string
-		Networks      []storage.DomainInfo
 	}{
 		Title:         "Search",
 		ActivePage:    "search",
@@ -97,7 +97,6 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		SysopName:     sysopName,
 		IsRootPage:    isRootPage,
 		Version:       version.GetVersionInfo(),
-		Networks:      networks,
 	}
 
 	if isRootPage {
@@ -128,8 +127,9 @@ func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeS
 		if err != nil {
 			return nil, 0, fmt.Errorf("Invalid address format: %v", err)
 		}
-		// Honor the network selector for full-address searches too
-		if domain := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); domain != "" {
+		// A full address is looked up across ALL networks (the result rows
+		// carry a per-network badge); only an explicit ?domain= scopes it.
+		if domain := explicitDomain(r); domain != "" {
 			filter.Domain = &domain
 		}
 	} else {
@@ -158,26 +158,10 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve the network: explicit ?domain= wins; otherwise use the only
-	// network the address exists in, preferring fidonet when ambiguous
-	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
+	// Resolve the network: explicit ?domain= wins, then the global switcher,
+	// then the network(s) the address actually exists in
 	availableDomains, _ := s.storage.NodeOps().GetNodeDomains(zone, net, node)
-	if domain == "" {
-		switch len(availableDomains) {
-		case 0:
-			domain = database.DefaultDomain
-		case 1:
-			domain = availableDomains[0]
-		default:
-			domain = availableDomains[0]
-			for _, d := range availableDomains {
-				if d == database.DefaultDomain {
-					domain = d
-					break
-				}
-			}
-		}
-	}
+	domain := resolveEntityDomain(r, availableDomains)
 	history, err := s.storage.GetNodeHistory(zone, net, node, domain)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error retrieving node history: %v", err), http.StatusInternalServerError)

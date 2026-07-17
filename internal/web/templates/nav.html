@@ -33,6 +33,12 @@
             <span class="nav-label">API</span>
             <span class="nav-meta">HTTP endpoints</span>
         </a>
+        <div class="nav-network" id="network-switch" hidden>
+            <label for="network-switch-select" class="nav-network-label">Network</label>
+            <select id="network-switch-select" aria-label="Active FTN network"></select>
+        </div>
+        <noscript><span class="nav-network"><span class="nav-network-label">Network</span>&nbsp;switching needs JavaScript &mdash; append ?domain=&lt;name&gt; to the URL (names at /api/networks)</span></noscript>
     </div>
 </nav>
+<script src="/static/network-switch.js" defer></script>
 {{end}}

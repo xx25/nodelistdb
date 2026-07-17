@@ -20,6 +20,7 @@ type analyticsParams struct {
 	Days             int
 	Limit            int
 	IncludeZeroNodes bool
+	Domain           string // globally selected FTN network
 	ValidationError  string
 }
 
@@ -55,6 +56,7 @@ func parseAnalyticsParams(r *http.Request) analyticsParams {
 		Days:             days,
 		Limit:            limit,
 		IncludeZeroNodes: includeZeroNodes,
+		Domain:           requestDomain(r),
 		ValidationError:  validationError,
 	}
 }
@@ -74,7 +76,7 @@ type protocolAnalyticsData struct {
 }
 
 // protocolNodesFetcher is a function type for fetching protocol-specific nodes
-type protocolNodesFetcher func(limit, days int, includeZeroNodes bool) ([]storage.NodeTestResult, error)
+type protocolNodesFetcher func(limit, days int, includeZeroNodes bool, domain string) ([]storage.NodeTestResult, error)
 
 // renderProtocolAnalytics is a generic handler for protocol analytics pages
 // Updated to use ProtocolPageConfig for configuration-driven rendering
@@ -88,7 +90,7 @@ func (s *Server) renderProtocolAnalytics(
 	params := parseAnalyticsParams(r)
 
 	// Fetch protocol nodes
-	protocolNodes, err := fetcher(params.Limit, params.Days, params.IncludeZeroNodes)
+	protocolNodes, err := fetcher(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
 	var displayError error
 
 	if err != nil {
@@ -311,7 +313,7 @@ func (s *Server) renderIPv6Analytics(
 	params := parseAnalyticsParams(r)
 
 	// Fetch IPv6 nodes
-	ipv6Nodes, err := fetcher(params.Limit, params.Days, params.IncludeZeroNodes)
+	ipv6Nodes, err := fetcher(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
 	var displayError error
 
 	if err != nil {
@@ -475,8 +477,16 @@ type softwareAnalyticsData struct {
 	Config     SoftwarePageConfig
 }
 
-// renderSoftwareAnalytics is a generic handler for software analytics pages
-func (s *Server) renderSoftwareAnalytics(w http.ResponseWriter, config SoftwarePageConfig) {
+// renderSoftwareAnalytics is a generic handler for software analytics pages.
+// The page fetches its data client-side from the configured API endpoints, so
+// the globally selected network is baked into those URLs here.
+func (s *Server) renderSoftwareAnalytics(w http.ResponseWriter, r *http.Request, config SoftwarePageConfig) {
+	domainSuffix := "?domain=" + requestDomain(r)
+	config.APIEndpoint += domainSuffix
+	if config.DetailAPIEndpoint != "" {
+		config.DetailAPIEndpoint += domainSuffix
+	}
+
 	data := softwareAnalyticsData{
 		Title:      config.PageTitle,
 		ActivePage: "analytics",
@@ -499,7 +509,7 @@ func (s *Server) renderSoftwareAnalytics(w http.ResponseWriter, config SoftwareP
 
 // BinkPSoftwareHandler shows BinkP software distribution analytics
 func (s *Server) BinkPSoftwareHandler(w http.ResponseWriter, r *http.Request) {
-	s.renderSoftwareAnalytics(w, SoftwarePageConfig{
+	s.renderSoftwareAnalytics(w, r, SoftwarePageConfig{
 		PageTitle:           "BinkP Software Distribution",
 		PageSubtitle:        "Analysis of BinkP protocol implementations across FTN networks",
 		APIEndpoint:         "/api/software/binkp",
@@ -517,7 +527,7 @@ func (s *Server) BinkPSoftwareHandler(w http.ResponseWriter, r *http.Request) {
 
 // IfcicoSoftwareHandler shows IFCICO software distribution analytics
 func (s *Server) IfcicoSoftwareHandler(w http.ResponseWriter, r *http.Request) {
-	s.renderSoftwareAnalytics(w, SoftwarePageConfig{
+	s.renderSoftwareAnalytics(w, r, SoftwarePageConfig{
 		PageTitle:            "IFCICO/EMSI Software Distribution",
 		PageSubtitle:         "Analysis of IFCICO/EMSI protocol implementations across FTN networks",
 		APIEndpoint:          "/api/software/ifcico",
@@ -618,7 +628,7 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	params := parseAnalyticsParams(r)
 
 	// Fetch mismatch nodes
-	mismatchNodes, err := s.storage.GetAKAMismatchNodes(params.Limit, params.Days, params.IncludeZeroNodes)
+	mismatchNodes, err := s.storage.GetAKAMismatchNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -633,13 +643,13 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	var ipv6IncorrectNodes []storage.AKAIPVersionMismatchNode
 	var ipv4IncorrectNodes []storage.AKAIPVersionMismatchNode
 
-	if ipv6Inc, err := s.storage.GetIPv6IncorrectIPv4CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes); err != nil {
+	if ipv6Inc, err := s.storage.GetIPv6IncorrectIPv4CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r)); err != nil {
 		logging.Errorf("AKA Mismatch Analytics: Error fetching IPv6 incorrect nodes: %v", err)
 	} else {
 		ipv6IncorrectNodes = ipv6Inc
 	}
 
-	if ipv4Inc, err := s.storage.GetIPv4IncorrectIPv6CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes); err != nil {
+	if ipv4Inc, err := s.storage.GetIPv4IncorrectIPv6CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r)); err != nil {
 		logging.Errorf("AKA Mismatch Analytics: Error fetching IPv4 incorrect nodes: %v", err)
 	} else {
 		ipv4IncorrectNodes = ipv4Inc
@@ -708,7 +718,7 @@ func (s *Server) OtherNetworksAnalyticsHandler(w http.ResponseWriter, r *http.Re
 	params := parseAnalyticsParams(r)
 
 	// Fetch networks summary
-	networks, err := s.storage.GetOtherNetworksSummary(params.Days)
+	networks, err := s.storage.GetOtherNetworksSummary(params.Days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -786,7 +796,7 @@ func (s *Server) OtherNetworkNodesHandler(w http.ResponseWriter, r *http.Request
 	params := parseAnalyticsParams(r)
 
 	// Fetch nodes in network
-	nodes, err := s.storage.GetNodesInNetwork(networkName, params.Limit, params.Days)
+	nodes, err := s.storage.GetNodesInNetwork(networkName, params.Limit, params.Days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -873,7 +883,7 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	limit := parseLimit(r, 5000, 10000)
 
 	// Fetch ALL PSTN nodes (CM and non-CM) from latest nodelist
-	pstnNodes, err := s.storage.GetPSTNNodes(limit, 0)
+	pstnNodes, err := s.storage.GetPSTNNodes(limit, 0, requestDomain(r))
 	var displayError error
 	if err != nil {
 		logging.Errorf("PSTN Analytics: Error fetching nodes: %v", err)
@@ -1050,7 +1060,7 @@ func sortedModemZoneCounts(m map[int]int) []ModemAccessibleZoneCount {
 func (s *Server) ModemAccessibleAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	params := parseAnalyticsParams(r)
 
-	nodes, err := s.storage.GetModemAccessibleNodes(params.Limit, params.Days, params.IncludeZeroNodes)
+	nodes, err := s.storage.GetModemAccessibleNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
 	var displayError error
 	if err != nil {
 		logging.Errorf("Modem Accessible Analytics: Error fetching nodes: %v", err)
@@ -1159,7 +1169,7 @@ func computeModemNoAnswerStats(nodes []storage.ModemNoAnswerNode) ModemNoAnswerS
 func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	params := parseAnalyticsParams(r)
 
-	nodes, err := s.storage.GetModemNoAnswerNodes(params.Limit, params.Days, params.IncludeZeroNodes)
+	nodes, err := s.storage.GetModemNoAnswerNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
 	var displayError error
 	if err != nil {
 		logging.Errorf("Modem No Answer Analytics: Error fetching nodes: %v", err)
@@ -1310,7 +1320,7 @@ func (s *Server) FileRequestAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	limit := parseLimit(r, 5000, 10000)
 
 	// Fetch file request nodes
-	fileRequestNodes, err := s.storage.GetFileRequestNodes(limit)
+	fileRequestNodes, err := s.storage.GetFileRequestNodes(limit, requestDomain(r))
 	var displayError error
 	if err != nil {
 		logging.Errorf("File Request Analytics: Error fetching nodes: %v", err)
@@ -1378,7 +1388,7 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 	includeZeroNodes := query.Get("includeZero") == "true"
 
 	// Fetch weekly news (uses cached version if CachedStorage is in use)
-	news, err := s.storage.GetIPv6WeeklyNews(limit, includeZeroNodes)
+	news, err := s.storage.GetIPv6WeeklyNews(limit, includeZeroNodes, requestDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -1445,7 +1455,7 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Get geo distribution
-	dist, err := s.storage.GetGeoHostingDistribution(days)
+	dist, err := s.storage.GetGeoHostingDistribution(days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -1507,7 +1517,7 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get nodes for country
-	nodes, err := s.storage.GetNodesByCountry(countryCode, days)
+	nodes, err := s.storage.GetNodesByCountry(countryCode, days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -1589,7 +1599,7 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get nodes for provider
-	nodes, err := s.storage.GetNodesByProvider(provider, days)
+	nodes, err := s.storage.GetNodesByProvider(provider, days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -1671,7 +1681,7 @@ func (s *Server) OnThisDayHandler(w http.ResponseWriter, r *http.Request) {
 	activeOnly := query.Get("active") != "0"
 
 	// Fetch on this day nodes
-	nodes, err := s.storage.GetOnThisDayNodes(month, day, limit, activeOnly)
+	nodes, err := s.storage.GetOnThisDayNodes(month, day, limit, activeOnly, requestDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -1758,7 +1768,7 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("invalid zone or region parameters")
 		} else {
 			// Get pioneers for this zone:region (default to 50)
-			pioneers, err = s.storage.GetPioneersByRegion(zone, region, 50)
+			pioneers, err = s.storage.GetPioneersByRegion(zone, region, 50, requestDomain(r))
 		}
 	}
 
@@ -1808,7 +1818,7 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 	params := parseAnalyticsParams(r)
 
-	nodes, err := s.storage.GetIPv6NodeList(params.Limit, params.Days, params.IncludeZeroNodes)
+	nodes, err := s.storage.GetIPv6NodeList(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
 
 	// Handle text format
 	if r.URL.Query().Get("format") == "text" {

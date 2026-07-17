@@ -363,10 +363,10 @@ func (no *NodeOperations) CountNodes(date time.Time, domain string) (int, error)
 	var args []interface{}
 
 	if date.IsZero() {
-		query = "SELECT COUNT(*) FROM nodes WHERE " + domainFilterSQL
+		query = "SELECT COUNT(*) FROM nodes WHERE " + optionalDomainSQL
 		args = []interface{}{domain, domain}
 	} else {
-		query = "SELECT COUNT(*) FROM nodes WHERE nodelist_date = ? AND " + domainFilterSQL
+		query = "SELECT COUNT(*) FROM nodes WHERE nodelist_date = ? AND " + optionalDomainSQL
 		args = []interface{}{date, domain, domain}
 	}
 

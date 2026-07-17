@@ -72,17 +72,6 @@
                 <input type="text" id="sysop_name" name="sysop_name" value="{{.SysopName}}" placeholder="e.g. John Doe">
             </div>
 
-            <div class="form-group form-group--half">
-                <label for="domain">Network</label>
-                <select id="domain" name="domain">
-                    <option value="">All networks</option>
-                    <option value="fidonet">fidonet</option>
-                    {{range .Networks}}{{if ne .Domain "fidonet"}}
-                    <option value="{{.Domain}}">{{.Domain}}</option>
-                    {{end}}{{end}}
-                </select>
-            </div>
-
             <div class="form-group form-group--half form-group--checkbox">
                 <label class="checkbox-field" for="include_historical">
                     <input type="checkbox" id="include_historical" name="include_historical" value="1" checked>

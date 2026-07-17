@@ -20,7 +20,8 @@ func NewModemQueryOperations(db database.DatabaseInterface) *ModemQueryOperation
 
 // GetModemAccessibleNodes returns nodes that have been successfully reached via modem tests
 // within the specified time range. Returns the latest successful modem test per node.
-func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
+// An empty domain means all FTN networks; otherwise results are scoped to that network.
+func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
 	mq.mu.RLock()
 	defer mq.mu.RUnlock()
 
@@ -56,6 +57,7 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 				AND modem_tested = true
 				AND modem_success = true
 				%s
+				%s
 		)
 		SELECT
 			zone, net, node, address, test_time,
@@ -67,7 +69,7 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 		FROM ranked_modem_tests
 		WHERE rn = 1
 		ORDER BY test_time DESC
-		LIMIT ?`, nodeFilter)
+		LIMIT ?`, nodeFilter, domainFilterSQL(domain, ""))
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -101,7 +103,8 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 
 // GetModemNoAnswerNodes returns nodes that have been tested via modem but never answered
 // within the specified time range. Only includes nodes with zero successful modem connections.
-func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error) {
+// An empty domain means all FTN networks; otherwise results are scoped to that network.
+func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
 	mq.mu.RLock()
 	defer mq.mu.RUnlock()
 
@@ -118,6 +121,8 @@ func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, inclu
 	if !includeZeroNodes {
 		nodeFilter = "AND node != 0"
 	}
+
+	domainFilter := domainFilterSQL(domain, "")
 
 	query := fmt.Sprintf(`
 		WITH failed_only AS (
@@ -137,7 +142,9 @@ func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, inclu
 					SELECT zone, net, node FROM node_test_results
 					WHERE test_time >= now() - INTERVAL ? DAY
 						AND modem_tested = true AND modem_success = true
+						%s
 				)
+				%s
 				%s
 		)
 		SELECT
@@ -147,7 +154,7 @@ func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, inclu
 		FROM failed_only
 		WHERE rn = 1
 		ORDER BY attempt_count DESC, test_time DESC
-		LIMIT ?`, nodeFilter)
+		LIMIT ?`, domainFilter, nodeFilter, domainFilter)
 
 	rows, err := conn.Query(query, days, days, limit)
 	if err != nil {

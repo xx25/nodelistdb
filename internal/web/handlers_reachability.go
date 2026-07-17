@@ -44,13 +44,16 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Scope everything to the globally selected network
+	domain := requestDomain(r)
+
 	// Get overall trends
 	var trends []storage.ReachabilityTrend
 	var err error
 	if trendsPeriodFilter == 0 {
-		trends, err = s.storage.GetReachabilityTrendsAllTime()
+		trends, err = s.storage.GetReachabilityTrendsAllTime(domain)
 	} else {
-		trends, err = s.storage.GetReachabilityTrends(trendsPeriodFilter)
+		trends, err = s.storage.GetReachabilityTrends(trendsPeriodFilter, domain)
 	}
 	if err != nil {
 		log.Printf("Error getting reachability trends: %v", err)
@@ -72,7 +75,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	// Always show data by default - get recently tested nodes for the last day
 	// If filters are applied, get filtered results
 	if statusFilter != "" || protocolFilter != "" || query.Get("nodes_period") != "" || query.Get("limit") != "" {
-		filteredNodes, err := s.getFilteredReachabilityNodes(statusFilter, protocolFilter, nodesPeriodFilter, limitFilter)
+		filteredNodes, err := s.getFilteredReachabilityNodes(statusFilter, protocolFilter, nodesPeriodFilter, limitFilter, domain)
 		if err != nil {
 			log.Printf("Error getting filtered nodes: %v", err)
 			filteredNodes = []storage.NodeTestResult{}
@@ -80,13 +83,13 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		data["FilteredNodes"] = filteredNodes
 	} else {
 		// Default behavior - get recently tested nodes (both operational and failed) for the last day
-		operational, err := s.storage.SearchNodesByReachability(true, 10, nodesPeriodFilter)
+		operational, err := s.storage.SearchNodesByReachability(true, 10, nodesPeriodFilter, domain)
 		if err != nil {
 			log.Printf("Error getting operational nodes: %v", err)
 			operational = []storage.NodeTestResult{}
 		}
 
-		failed, err := s.storage.SearchNodesByReachability(false, 10, nodesPeriodFilter)
+		failed, err := s.storage.SearchNodesByReachability(false, 10, nodesPeriodFilter, domain)
 		if err != nil {
 			log.Printf("Error getting failed nodes: %v", err)
 			failed = []storage.NodeTestResult{}
@@ -102,7 +105,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // getFilteredReachabilityNodes retrieves nodes based on the applied filters
-func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter string, periodFilter, limitFilter int) ([]storage.NodeTestResult, error) {
+func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter string, periodFilter, limitFilter int, domain string) ([]storage.NodeTestResult, error) {
 	// For now, use the existing SearchNodesByReachability method and apply additional filtering
 	// This could be optimized by adding dedicated database queries for these filters
 
@@ -110,13 +113,13 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 
 	switch statusFilter {
 	case "operational":
-		nodes, err := s.storage.SearchNodesByReachability(true, limitFilter*2, periodFilter) // Get more than needed for protocol filtering
+		nodes, err := s.storage.SearchNodesByReachability(true, limitFilter*2, periodFilter, domain) // Get more than needed for protocol filtering
 		if err != nil {
 			return nil, err
 		}
 		allNodes = nodes
 	case "failed":
-		nodes, err := s.storage.SearchNodesByReachability(false, limitFilter*2, periodFilter)
+		nodes, err := s.storage.SearchNodesByReachability(false, limitFilter*2, periodFilter, domain)
 		if err != nil {
 			return nil, err
 		}
@@ -126,11 +129,11 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 		// When status=all, we want to show a mix of both operational and failed
 		// Fetch more than needed to account for protocol filtering
 		fetchLimit := limitFilter * 2
-		operational, err := s.storage.SearchNodesByReachability(true, fetchLimit, periodFilter)
+		operational, err := s.storage.SearchNodesByReachability(true, fetchLimit, periodFilter, domain)
 		if err != nil {
 			return nil, err
 		}
-		failed, err := s.storage.SearchNodesByReachability(false, fetchLimit, periodFilter)
+		failed, err := s.storage.SearchNodesByReachability(false, fetchLimit, periodFilter, domain)
 		if err != nil {
 			return nil, err
 		}
@@ -156,6 +159,14 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 			}
 		case "telnet":
 			if node.TelnetSuccess {
+				filteredNodes = append(filteredNodes, node)
+			}
+		case "ftp":
+			if node.FTPSuccess {
+				filteredNodes = append(filteredNodes, node)
+			}
+		case "vmodem":
+			if node.VModemSuccess {
 				filteredNodes = append(filteredNodes, node)
 			}
 		default: // "any" or empty
@@ -261,8 +272,12 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Get test history
-	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
+	// Resolve the network like the node page: explicit ?domain= wins, then
+	// the global switcher when the address exists there, then wherever the
+	// address actually lives — so the page never silently merges test
+	// history from several networks sharing one zone:net/node.
+	availableDomains, _ := s.storage.NodeOps().GetNodeDomains(zone, net, node)
+	domain := resolveEntityDomain(r, availableDomains)
 	history, err := s.storage.GetNodeTestHistory(zone, net, node, days, domain)
 	if err != nil {
 		log.Printf("Error getting node test history: %v", err)
@@ -339,8 +354,8 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 		log.Printf("Error getting node reachability stats: %v", err)
 	}
 
-	// Get node info from main database
-	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))))
+	// Get node info from main database (same resolved network)
+	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, domain)
 	var nodeInfo *database.Node
 	if err == nil && len(nodeHistory) > 0 {
 		// Get the most recent entry

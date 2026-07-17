@@ -362,7 +362,9 @@ func (s *Server) GetPSTNNodesHandler(w http.ResponseWriter, r *http.Request) {
 		limit = parsed
 	}
 
-	nodes, err := s.storage.GetPSTNNodes(limit, zone)
+	// queryDomain defaults to fidonet, preserving this endpoint's original
+	// fidonet-only behavior for the modem-test CLI
+	nodes, err := s.storage.GetPSTNNodes(limit, zone, queryDomain(r))
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to fetch PSTN nodes: %v", err), http.StatusInternalServerError)
 		return

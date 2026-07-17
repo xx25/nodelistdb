@@ -535,7 +535,7 @@ func (qb *QueryBuilder) NodeHistorySQL() string {
 		   flags, modem_flags,
 		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
 	FROM nodes
-	WHERE zone = ? AND net = ? AND node = ? AND ` + domainFilterSQL + `
+	WHERE zone = ? AND net = ? AND node = ? AND ` + optionalDomainSQL + `
 	ORDER BY nodelist_date ASC, conflict_sequence ASC`
 }
 
@@ -545,7 +545,7 @@ func (qb *QueryBuilder) NodeDateRangeSQL() string {
 	return `
 	SELECT MIN(nodelist_date) as first_date, MAX(nodelist_date) as last_date
 	FROM nodes
-	WHERE zone = ? AND net = ? AND node = ? AND ` + domainFilterSQL
+	WHERE zone = ? AND net = ? AND node = ? AND ` + optionalDomainSQL
 }
 
 // NodeDomainsSQL returns SQL listing the domains a 3D address exists in.

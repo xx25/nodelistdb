@@ -268,7 +268,7 @@ func (so *StatisticsOperations) GetDateRangeStats(startDate, endDate time.Time, 
 
 	// Get all dates in the range first
 	query := `SELECT DISTINCT nodelist_date FROM nodes
-		WHERE nodelist_date >= ? AND nodelist_date <= ? AND ` + domainFilterSQL + `
+		WHERE nodelist_date >= ? AND nodelist_date <= ? AND ` + optionalDomainSQL + `
 		ORDER BY nodelist_date ASC`
 
 	rows, err := conn.Query(query, startDate, endDate, domain, domain)
@@ -357,7 +357,7 @@ func (so *StatisticsOperations) GetNodeCountHistory(domain string) ([]NodeCountB
 	rows, err := conn.Query(`
 		SELECT nodelist_date, count(*) AS total_nodes
 		FROM nodes
-		WHERE `+domainFilterSQL+`
+		WHERE `+optionalDomainSQL+`
 		GROUP BY nodelist_date
 		ORDER BY nodelist_date ASC
 	`, domain, domain)

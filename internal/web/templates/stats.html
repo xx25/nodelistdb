@@ -39,17 +39,6 @@
     <strong>Error:</strong> {{.Error}}
 </div>
 {{else if .Stats}}
-{{if .Networks}}
-{{if gt (len .Networks) 1}}
-<div class="breadcrumb" style="margin-bottom: 1rem;">
-    Network:
-    {{$current := .Domain}}
-    {{range .Networks}}
-    {{if eq .Domain $current}}<strong>{{.Domain}}</strong>{{else}}<a href="/stats{{if ne .Domain "fidonet"}}?domain={{.Domain}}{{end}}">{{.Domain}}</a>{{end}}
-    {{end}}
-</div>
-{{end}}
-{{end}}
 <section class="card">
     <div class="panel-header">
         <div class="section-heading">

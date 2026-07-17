@@ -80,38 +80,40 @@ func (r *ReachabilityOperations) GetNodeReachabilityStats(zone, net, node int, d
 // GetReachabilityTrendsAllTime returns trends from the first test date to now.
 // Uses the same correct CROSS JOIN + lookback query as GetReachabilityTrends
 // but computes the day range dynamically from the earliest test result.
-func (r *ReachabilityOperations) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
+func (r *ReachabilityOperations) GetReachabilityTrendsAllTime(domain string) ([]ReachabilityTrend, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	conn := r.db.Conn()
 
-	// Find how many days back the earliest test is
+	// Find how many days back the earliest test is (within the selected
+	// network, if any)
 	var days int
 	err := conn.QueryRow(`
 		SELECT toUInt32(dateDiff('day', min(test_date), today()))
 		FROM node_test_results
 		WHERE test_date >= '2025-09-18'
-	`).Scan(&days)
+		AND (? = '' OR domain = ?)
+	`, domain, domain).Scan(&days)
 	if err != nil || days == 0 {
 		days = 90 // fallback
 	}
 
-	return r.queryTrends(conn, days)
+	return r.queryTrends(conn, days, domain)
 }
 
 // GetReachabilityTrends gets daily reachability trends
-func (r *ReachabilityOperations) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
+func (r *ReachabilityOperations) GetReachabilityTrends(days int, domain string) ([]ReachabilityTrend, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.queryTrends(r.db.Conn(), days)
+	return r.queryTrends(r.db.Conn(), days, domain)
 }
 
-func (r *ReachabilityOperations) queryTrends(conn *sql.DB, days int) ([]ReachabilityTrend, error) {
+func (r *ReachabilityOperations) queryTrends(conn *sql.DB, days int, domain string) ([]ReachabilityTrend, error) {
 	query := r.queryBuilder.BuildReachabilityTrendsQuery()
 
-	rows, err := conn.Query(query, days)
+	rows, err := conn.Query(query, days, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query reachability trends: %w", err)
 	}
@@ -137,15 +139,16 @@ func (r *ReachabilityOperations) queryTrends(conn *sql.DB, days int) ([]Reachabi
 	return trends, nil
 }
 
-// SearchNodesByReachability searches for nodes by reachability status
-func (r *ReachabilityOperations) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
+// SearchNodesByReachability searches for nodes by reachability status.
+// An empty domain matches every network.
+func (r *ReachabilityOperations) SearchNodesByReachability(operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	conn := r.db.Conn()
 	query := r.queryBuilder.BuildSearchByReachabilityQuery()
 
-	rows, err := conn.Query(query, days, operational, limit)
+	rows, err := conn.Query(query, days, domain, domain, operational, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search nodes by reachability: %w", err)
 	}

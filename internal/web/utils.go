@@ -10,17 +10,65 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// requestDomain returns the FTN network selected via the ?domain= query (or
-// form) parameter, defaulting to fidonet so pre-multi-network URLs are
-// unchanged.
-func requestDomain(r *http.Request) string {
+// networkCookieName holds the globally selected FTN network. It is written by
+// the nav switcher JS (static/network-switch.js), so it is deliberately not
+// HttpOnly.
+const networkCookieName = "ftn_network"
+
+// domainNameRe limits cookie-supplied network names to the same shape as
+// nodelist_download.go's networkNameRe; anything else is ignored.
+var domainNameRe = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
+
+// explicitDomain returns the domain the request itself names (?domain= query
+// or form field), or "". The global switcher cookie is deliberately NOT
+// consulted — use requestDomain for that.
+func explicitDomain(r *http.Request) string {
 	if d := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))); d != "" {
 		return d
 	}
-	if d := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); d != "" {
+	return strings.ToLower(strings.TrimSpace(r.FormValue("domain")))
+}
+
+// requestDomain returns the FTN network for this request: an explicit
+// ?domain= query (or form) parameter wins so pre-multi-network URLs and deep
+// links are unchanged, then the global switcher cookie, then fidonet.
+func requestDomain(r *http.Request) string {
+	if d := explicitDomain(r); d != "" {
 		return d
 	}
+	return cookieDomain(r)
+}
+
+// cookieDomain returns the network from the global switcher cookie, or
+// fidonet when the cookie is absent or malformed.
+func cookieDomain(r *http.Request) string {
+	if c, err := r.Cookie(networkCookieName); err == nil {
+		if d := strings.ToLower(strings.TrimSpace(c.Value)); domainNameRe.MatchString(d) {
+			return d
+		}
+	}
 	return database.DefaultDomain
+}
+
+// resolveEntityDomain picks the network for a node/point detail page: an
+// explicit ?domain= wins; otherwise the globally selected network when the
+// address exists there, then fidonet, then the first network it exists in —
+// so cross-network address lookups keep working whatever the switcher says.
+func resolveEntityDomain(r *http.Request, availableDomains []string) string {
+	if d := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))); d != "" {
+		return d
+	}
+	if len(availableDomains) == 0 {
+		return cookieDomain(r)
+	}
+	for _, preferred := range []string{cookieDomain(r), database.DefaultDomain} {
+		for _, d := range availableDomains {
+			if d == preferred {
+				return d
+			}
+		}
+	}
+	return availableDomains[0]
 }
 
 // domainQuerySuffix returns "" for the default network and "?domain=<name>"
@@ -101,9 +149,9 @@ func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 	filter := database.PointFilter{Limit: 100}
 	hasConstraint := false
 
-	if domain := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); domain != "" {
-		filter.Domain = &domain
-	}
+	// Scope to the globally selected network (explicit ?domain= still wins)
+	domain := requestDomain(r)
+	filter.Domain = &domain
 
 	// Sysop mode searches by operator, nothing else — checked FIRST because
 	// the node side routes to SearchNodesBySysop whenever the sysop field is
@@ -116,11 +164,16 @@ func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 		return filter, true
 	}
 
-	// A full 3-D address searches the points under that boss, nothing else
+	// A full 3-D address searches the points under that boss, nothing else.
+	// Like the node side, a full address spans ALL networks unless the
+	// request names one explicitly — the switcher cookie does not scope it.
 	if fullAddress := r.FormValue("full_address"); fullAddress != "" {
 		zone, net, node, _, _, err := parseFullAddress(fullAddress)
 		if err != nil {
 			return filter, false
+		}
+		if explicitDomain(r) == "" {
+			filter.Domain = nil
 		}
 		filter.Zone, filter.Net, filter.Node = &zone, &net, &node
 		return filter, true
@@ -222,9 +275,9 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 		}
 	}
 
-	if domain := strings.ToLower(strings.TrimSpace(r.FormValue("domain"))); domain != "" {
-		filter.Domain = &domain
-	}
+	// Scope to the globally selected network (explicit ?domain= still wins)
+	domain := requestDomain(r)
+	filter.Domain = &domain
 
 	// Return empty filter for resource-intensive searches to prevent OOM
 	if !hasSpecificConstraint {

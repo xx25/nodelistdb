@@ -25,7 +25,8 @@ func NewAKAMismatchOperations(db database.DatabaseInterface, queryBuilder *TestQ
 }
 
 // GetAKAMismatchNodes retrieves nodes where the announced AKA doesn't match the expected nodelist address
-func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+// An empty domain means all FTN networks (no filtering).
+func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
 
@@ -36,7 +37,7 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 		nodeFilter = "AND node != 0"
 	}
 
-	query := am.buildAKAMismatchQuery(nodeFilter)
+	query := am.buildAKAMismatchQuery(nodeFilter, domain)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -64,7 +65,10 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 // buildAKAMismatchQuery builds the query for nodes with AKA mismatches
 // Only shows nodes where the LATEST test has a mismatch (excludes historical mismatches that were fixed)
 // Excludes aggregated results since they don't track address_validated
-func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string {
+// An empty domain means all FTN networks (no filtering).
+func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain string) string {
+	domainFilter := domainFilterSQL(domain, "")
+	domainFilterR := domainFilterSQL(domain, "r.")
 	return fmt.Sprintf(`
 		WITH
 		-- First, find the latest test time for each node (regardless of mismatch status)
@@ -78,6 +82,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
+				%s
 				%s
 			GROUP BY domain, zone, net, node
 		),
@@ -96,6 +101,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string
 			WHERE r.is_aggregated = false
 				AND r.is_operational = true
 				AND (r.binkp_success = true OR r.ifcico_success = true)
+				%s
 		)
 		SELECT
 			r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -126,8 +132,9 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string) string
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
 		WHERE r.address_validated = false
 			AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
+			%s
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter)
+		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, domainFilterR)
 }
 
 // AKAIPVersionMismatchNode holds a node where IPv4 and IPv6 AKA validation results differ
@@ -142,23 +149,27 @@ type AKAIPVersionMismatchNode struct {
 }
 
 // GetIPv6IncorrectIPv4CorrectNodes retrieves nodes where IPv6 AKA is incorrect but IPv4 AKA is correct
-func (am *AKAMismatchOperations) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+// An empty domain means all FTN networks (no filtering).
+func (am *AKAMismatchOperations) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
 	return am.getIPVersionMismatchNodes(limit, days, includeZeroNodes,
 		"r.address_validated_ipv4 = true AND r.address_validated_ipv6 = false",
 		"(r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true) AND (length(r.binkp_ipv6_addresses) + length(r.ifcico_ipv6_addresses)) > 0",
+		domain,
 	)
 }
 
 // GetIPv4IncorrectIPv6CorrectNodes retrieves nodes where IPv4 AKA is incorrect but IPv6 AKA is correct
-func (am *AKAMismatchOperations) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+// An empty domain means all FTN networks (no filtering).
+func (am *AKAMismatchOperations) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
 	return am.getIPVersionMismatchNodes(limit, days, includeZeroNodes,
 		"r.address_validated_ipv6 = true AND r.address_validated_ipv4 = false",
 		"(r.binkp_ipv4_success = true OR r.ifcico_ipv4_success = true) AND (length(r.binkp_ipv4_addresses) + length(r.ifcico_ipv4_addresses)) > 0",
+		domain,
 	)
 }
 
 // getIPVersionMismatchNodes is a shared helper for querying IPv4/IPv6 AKA discrepancies
-func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, includeZeroNodes bool, validationFilter string, protocolFilter string) ([]AKAIPVersionMismatchNode, error) {
+func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, includeZeroNodes bool, validationFilter string, protocolFilter string, domain string) ([]AKAIPVersionMismatchNode, error) {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
 
@@ -169,7 +180,7 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 		nodeFilter = "AND node != 0"
 	}
 
-	query := am.buildIPVersionMismatchQuery(nodeFilter, validationFilter, protocolFilter)
+	query := am.buildIPVersionMismatchQuery(nodeFilter, validationFilter, protocolFilter, domain)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -224,7 +235,10 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 }
 
 // buildIPVersionMismatchQuery builds the query for nodes with IPv4/IPv6 AKA discrepancies
-func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, validationFilter string, protocolFilter string) string {
+// An empty domain means all FTN networks (no filtering).
+func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, validationFilter string, protocolFilter string, domain string) string {
+	domainFilter := domainFilterSQL(domain, "")
+	domainFilterR := domainFilterSQL(domain, "r.")
 	return fmt.Sprintf(`
 		WITH
 		latest_tests AS (
@@ -236,6 +250,7 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
+				%s
 				%s
 			GROUP BY domain, zone, net, node
 		),
@@ -251,6 +266,7 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 			WHERE r.is_aggregated = false
 				AND r.is_operational = true
 				AND (r.binkp_success = true OR r.ifcico_success = true)
+				%s
 				AND %s
 				AND %s
 		)
@@ -285,5 +301,5 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 		FROM node_test_results r
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter, validationFilter, protocolFilter)
+		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, validationFilter, protocolFilter)
 }

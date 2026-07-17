@@ -25,9 +25,9 @@ type browseData struct {
 	DateAdjusted   bool   // true if the requested date was snapped to a nearby one
 	DateQuery      string // "" or "?date=...&domain=..." suffix carried on nav links
 
-	// Multi-network support.
-	Domain   string               // selected FTN network (always set)
-	Networks []storage.DomainInfo // all networks, for the selector on the top level
+	// Multi-network support: the selected FTN network (always set; explicit
+	// ?domain= wins over the global switcher cookie).
+	Domain string
 
 	// Breadcrumb context.
 	Zone       int
@@ -128,9 +128,6 @@ func (s *Server) BrowseZonesHandler(w http.ResponseWriter, r *http.Request) {
 		s.renderBrowse(w, data)
 		return
 	}
-
-	// The top level also lists all networks so users can switch between them
-	data.Networks, _ = s.storage.GetDomains()
 
 	zones, err := s.storage.GetBrowseZones(actualDate, data.Domain)
 	if err != nil {

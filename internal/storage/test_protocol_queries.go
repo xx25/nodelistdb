@@ -27,7 +27,8 @@ func NewProtocolQueryOperations(db database.DatabaseInterface, queryBuilder *Tes
 
 // GetProtocolEnabledNodes retrieves nodes that have successfully tested with a specific protocol
 // This is the generic implementation that replaces 6 duplicate methods
-func (pq *ProtocolQueryOperations) GetProtocolEnabledNodes(protocol string, limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+// An empty domain means all FTN networks (no filtering).
+func (pq *ProtocolQueryOperations) GetProtocolEnabledNodes(protocol string, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	pq.mu.RLock()
 	defer pq.mu.RUnlock()
 
@@ -39,7 +40,7 @@ func (pq *ProtocolQueryOperations) GetProtocolEnabledNodes(protocol string, limi
 		nodeFilter = "AND node != 0"
 	}
 
-	query := pq.queryBuilder.BuildProtocolEnabledQuery(protocol, nodeFilter)
+	query := pq.queryBuilder.BuildProtocolEnabledQuery(protocol, nodeFilter, domainFilterSQL(domain, ""))
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -61,26 +62,26 @@ func (pq *ProtocolQueryOperations) GetProtocolEnabledNodes(protocol string, limi
 }
 
 // GetBinkPEnabledNodes returns nodes that have been successfully tested with BinkP
-func (pq *ProtocolQueryOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return pq.GetProtocolEnabledNodes("binkp", limit, days, includeZeroNodes)
+func (pq *ProtocolQueryOperations) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return pq.GetProtocolEnabledNodes("binkp", limit, days, includeZeroNodes, domain)
 }
 
 // GetIfcicoEnabledNodes returns nodes that have been successfully tested with IFCICO
-func (pq *ProtocolQueryOperations) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return pq.GetProtocolEnabledNodes("ifcico", limit, days, includeZeroNodes)
+func (pq *ProtocolQueryOperations) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return pq.GetProtocolEnabledNodes("ifcico", limit, days, includeZeroNodes, domain)
 }
 
 // GetTelnetEnabledNodes returns nodes that have been successfully tested with Telnet
-func (pq *ProtocolQueryOperations) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return pq.GetProtocolEnabledNodes("telnet", limit, days, includeZeroNodes)
+func (pq *ProtocolQueryOperations) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return pq.GetProtocolEnabledNodes("telnet", limit, days, includeZeroNodes, domain)
 }
 
 // GetVModemEnabledNodes returns nodes that have been successfully tested with VModem
-func (pq *ProtocolQueryOperations) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return pq.GetProtocolEnabledNodes("vmodem", limit, days, includeZeroNodes)
+func (pq *ProtocolQueryOperations) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return pq.GetProtocolEnabledNodes("vmodem", limit, days, includeZeroNodes, domain)
 }
 
 // GetFTPEnabledNodes returns nodes that have been successfully tested with FTP
-func (pq *ProtocolQueryOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return pq.GetProtocolEnabledNodes("ftp", limit, days, includeZeroNodes)
+func (pq *ProtocolQueryOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return pq.GetProtocolEnabledNodes("ftp", limit, days, includeZeroNodes, domain)
 }

@@ -36,18 +36,6 @@
     {{end}}
 </div>
 
-{{if and (eq .Level "zones") .Networks}}
-{{if gt (len .Networks) 1}}
-<div class="breadcrumb" style="margin-bottom: 1rem;">
-    Network:
-    {{$current := .Domain}}
-    {{range .Networks}}
-    {{if eq .Domain $current}}<strong>{{.Domain}}</strong>{{else}}<a href="/browse{{if ne .Domain "fidonet"}}?domain={{.Domain}}{{end}}">{{.Domain}}</a>{{end}}
-    {{end}}
-</div>
-{{end}}
-{{end}}
-
 {{if .AvailableDates}}
 <div class="form-group" style="margin-bottom: 1rem; max-width: 20rem;">
     <label>Nodelist date</label>

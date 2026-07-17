@@ -66,24 +66,8 @@ func (s *Server) PointHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// Resolve the network like the node page does, but against the points
 	// table: the address may exist only in a network the node-level heuristic
 	// would not pick.
-	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
 	availableDomains, _ := s.storage.GetPointDomains(zone, net, node, &point)
-	if domain == "" {
-		switch len(availableDomains) {
-		case 0:
-			domain = database.DefaultDomain
-		case 1:
-			domain = availableDomains[0]
-		default:
-			domain = availableDomains[0]
-			for _, d := range availableDomains {
-				if d == database.DefaultDomain {
-					domain = d
-					break
-				}
-			}
-		}
-	}
+	domain := resolveEntityDomain(r, availableDomains)
 
 	history, err := s.storage.GetPointHistory(domain, zone, net, node, point)
 	if err != nil {

@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/logging"
@@ -17,7 +18,7 @@ type IPv6WeeklyNews struct {
 }
 
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes
-func (ipv6 *IPv6QueryOperations) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -25,28 +26,28 @@ func (ipv6 *IPv6QueryOperations) GetIPv6WeeklyNews(limit int, includeZeroNodes b
 	var err error
 
 	// Get new nodes with working IPv6
-	news.NewNodesWorking, err = ipv6.getNewNodesWithWorkingIPv6(limit, includeZeroNodes)
+	news.NewNodesWorking, err = ipv6.getNewNodesWithWorkingIPv6(limit, includeZeroNodes, domain)
 	if err != nil {
 		logging.Error("GetIPv6WeeklyNews: Failed to get new nodes with working IPv6", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to get new nodes with working IPv6: %w", err)
 	}
 
 	// Get new nodes with non-working IPv6
-	news.NewNodesNonWorking, err = ipv6.getNewNodesWithNonWorkingIPv6(limit, includeZeroNodes)
+	news.NewNodesNonWorking, err = ipv6.getNewNodesWithNonWorkingIPv6(limit, includeZeroNodes, domain)
 	if err != nil {
 		logging.Error("GetIPv6WeeklyNews: Failed to get new nodes with non-working IPv6", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to get new nodes with non-working IPv6: %w", err)
 	}
 
 	// Get old nodes that lost IPv6
-	news.OldNodesLostIPv6, err = ipv6.getOldNodesThatLostIPv6(limit, includeZeroNodes)
+	news.OldNodesLostIPv6, err = ipv6.getOldNodesThatLostIPv6(limit, includeZeroNodes, domain)
 	if err != nil {
 		logging.Error("GetIPv6WeeklyNews: Failed to get old nodes that lost IPv6", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to get old nodes that lost IPv6: %w", err)
 	}
 
 	// Get old nodes that gained IPv6
-	news.OldNodesGainedIPv6, err = ipv6.getOldNodesThatGainedIPv6(limit, includeZeroNodes)
+	news.OldNodesGainedIPv6, err = ipv6.getOldNodesThatGainedIPv6(limit, includeZeroNodes, domain)
 	if err != nil {
 		logging.Error("GetIPv6WeeklyNews: Failed to get old nodes that gained IPv6", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to get old nodes that gained IPv6: %w", err)
@@ -57,7 +58,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6WeeklyNews(limit int, includeZeroNodes b
 
 // getNewNodesWithWorkingIPv6 returns nodes that appeared in nodelist in the last 7 days
 // (were not in nodelist 7-14 days ago) and have working IPv6 services
-func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	conn := ipv6.db.Conn()
 
 	nodeFilter := ""
@@ -75,6 +76,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 				FROM nodes
 				WHERE nodelist_date >= now() - INTERVAL 14 DAY
 					AND nodelist_date < now() - INTERVAL 7 DAY
+					{{DOMAIN_FILTER}}
 			),
 			-- Nodes that ARE in nodelist in last 7 days (new arrivals)
 			recent_nodes AS (
@@ -83,6 +85,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 				WHERE nodelist_date >= now() - INTERVAL 7 DAY
 					AND (zone, net, node) NOT IN (SELECT zone, net, node FROM old_period_nodes)
 					%s
+					{{DOMAIN_FILTER}}
 			),
 			-- Get latest test results for these new nodes with working IPv6
 			latest_tests AS (
@@ -95,6 +98,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 					AND is_operational = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true OR ftp_success = true)
 					AND (zone, net, node) IN (SELECT zone, net, node FROM recent_nodes)
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -171,6 +175,8 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
 	}
 
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+
 	rows, err := conn.Query(query, limit)
 	if err != nil {
 		logging.Error("getNewNodesWithWorkingIPv6: Query failed", slog.Any("error", err))
@@ -183,7 +189,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 
 // getNewNodesWithNonWorkingIPv6 returns nodes that appeared in nodelist in the last 7 days
 // but have IPv6 addresses with non-working services
-func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	conn := ipv6.db.Conn()
 
 	nodeFilter := ""
@@ -201,6 +207,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 				FROM nodes
 				WHERE nodelist_date >= now() - INTERVAL 14 DAY
 					AND nodelist_date < now() - INTERVAL 7 DAY
+					{{DOMAIN_FILTER}}
 			),
 			-- Nodes that ARE in nodelist in last 7 days (new arrivals)
 			recent_nodes AS (
@@ -209,6 +216,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 				WHERE nodelist_date >= now() - INTERVAL 7 DAY
 					AND (zone, net, node) NOT IN (SELECT zone, net, node FROM old_period_nodes)
 					%s
+					{{DOMAIN_FILTER}}
 			),
 			-- Nodes with IPv6 but no working services
 			nodes_with_ipv6 AS (
@@ -218,6 +226,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
 					AND (zone, net, node) IN (SELECT zone, net, node FROM recent_nodes)
+					{{DOMAIN_FILTER}}
 			),
 			-- Count successful IPv6 tests
 			ipv6_success_counts AS (
@@ -227,6 +236,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successes
@@ -241,6 +251,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 					WHERE success_count = 0
 				)
 				AND test_time >= now() - INTERVAL 7 DAY
+				{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -317,6 +328,8 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
 	}
 
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+
 	rows, err := conn.Query(query, limit)
 	if err != nil {
 		logging.Error("getNewNodesWithNonWorkingIPv6: Query failed", slog.Any("error", err))
@@ -329,7 +342,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 
 // getOldNodesThatLostIPv6 returns nodes that have been in nodelist for >14 days
 // had IPv6 7-14 days ago, but lost it in the last 7 days
-func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	conn := ipv6.db.Conn()
 
 	nodeFilter := ""
@@ -347,6 +360,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 				FROM nodes
 				WHERE nodelist_date < now() - INTERVAL 14 DAY
 					%s
+					{{DOMAIN_FILTER}}
 			),
 			-- Nodes with working IPv6 in 7-14 days ago period
 			had_ipv6_before AS (
@@ -357,6 +371,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					AND (zone, net, node) IN (SELECT zone, net, node FROM old_nodes)
+					{{DOMAIN_FILTER}}
 			),
 			-- Nodes without working IPv6 in last 7 days
 			no_ipv6_now AS (
@@ -368,6 +383,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 					FROM node_test_results
 					WHERE test_time >= now() - INTERVAL 7 DAY
 						AND (zone, net, node) IN (SELECT zone, net, node FROM had_ipv6_before)
+						{{DOMAIN_FILTER}}
 					GROUP BY domain, zone, net, node
 				)
 				WHERE ipv6_success_count = 0
@@ -380,6 +396,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM no_ipv6_now)
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -455,6 +472,8 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 	} else {
 		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
 	}
+
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {
@@ -468,7 +487,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 
 // getOldNodesThatGainedIPv6 returns nodes that have been in nodelist for >14 days
 // did not have working IPv6 7-14 days ago, but gained it in the last 7 days
-func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	conn := ipv6.db.Conn()
 
 	nodeFilter := ""
@@ -486,6 +505,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 				FROM nodes
 				WHERE nodelist_date < now() - INTERVAL 14 DAY
 					%s
+					{{DOMAIN_FILTER}}
 			),
 			-- Nodes tested 7-14 days ago (to check previous state)
 			tested_before AS (
@@ -494,6 +514,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 				WHERE test_time >= now() - INTERVAL 14 DAY
 					AND test_time < now() - INTERVAL 7 DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM old_nodes)
+					{{DOMAIN_FILTER}}
 			),
 			-- Nodes without working IPv6 in 7-14 days ago period
 			no_ipv6_before AS (
@@ -506,6 +527,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 					WHERE test_time >= now() - INTERVAL 14 DAY
 						AND test_time < now() - INTERVAL 7 DAY
 						AND (zone, net, node) IN (SELECT zone, net, node FROM tested_before)
+						{{DOMAIN_FILTER}}
 					GROUP BY domain, zone, net, node
 				)
 				WHERE ipv6_success_count = 0
@@ -518,6 +540,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					AND (zone, net, node) IN (SELECT zone, net, node FROM no_ipv6_before)
+					{{DOMAIN_FILTER}}
 			),
 			-- Get latest test results
 			latest_tests AS (
@@ -527,6 +550,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM has_ipv6_now)
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -603,6 +627,8 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
 	}
 
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+
 	rows, err := conn.Query(query, limit)
 	if err != nil {
 		logging.Error("getOldNodesThatGainedIPv6: Query failed", slog.Any("error", err))
@@ -614,7 +640,10 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 }
 
 // parseTestResults is a helper to parse test result rows
-func (ipv6 *IPv6QueryOperations) parseTestResults(rows interface{ Next() bool; Scan(dest ...interface{}) error }) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) parseTestResults(rows interface {
+	Next() bool
+	Scan(dest ...interface{}) error
+}) ([]NodeTestResult, error) {
 	var results []NodeTestResult
 	rowCount := 0
 	for rows.Next() {

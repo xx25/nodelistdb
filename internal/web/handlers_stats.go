@@ -167,9 +167,6 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	// Get historical node count for chart
 	nodeHistory, _ := s.storage.GetNodeCountHistory(domain)
 
-	// List all networks for the selector
-	networks, _ := s.storage.GetDomains()
-
 	// Pointlist snapshot companion (zero TotalPoints hides the tile). For the
 	// current view (no explicit ?date=) anchor at the newest imported
 	// pointlist — the pointlist feed can lag far behind the daily nodelist
@@ -194,7 +191,6 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		Version        string
 		NodeHistory    []storage.NodeCountByDate
 		Domain         string
-		Networks       []storage.DomainInfo
 		PointStats     *storage.PointStats
 	}{
 		Title:          "Network Statistics",
@@ -209,7 +205,6 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		Version:        version.GetVersionInfo(),
 		NodeHistory:    nodeHistory,
 		Domain:         domain,
-		Networks:       networks,
 		PointStats:     pointStats,
 	}
 

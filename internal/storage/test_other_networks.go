@@ -42,15 +42,20 @@ func escapeLikePattern(s string) string {
 	return s
 }
 
-// GetOtherNetworksSummary retrieves a summary of all non-FidoNet networks found in AKAs
-func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error) {
+// GetOtherNetworksSummary retrieves a summary of all non-FidoNet networks found in AKAs.
+// The domain parameter scopes which tested nodes are considered (their
+// node_test_results.domain); empty means all networks. It does not affect the
+// announced network_name extraction or the imported-networks check.
+func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
 	on.mu.RLock()
 	defer on.mu.RUnlock()
 
 	conn := on.db.Conn()
 
 	// This query extracts network names from addresses with @ suffix
-	// and counts unique nodes for each network
+	// and counts unique nodes for each network.
+	// Domain filters are injected via marker replacement (not fmt.Sprintf)
+	// because the query contains literal % characters in LIKE patterns.
 	query := `
 		WITH
 		-- Get latest test per node with successful BinkP or IFCICO
@@ -63,6 +68,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNet
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
+				{DOMAIN_FILTER}
 			GROUP BY domain, zone, net, node
 		),
 		-- Get addresses from latest tests, pick one row per node (lowest hostname_index)
@@ -77,6 +83,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNet
 			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
 			WHERE r.is_aggregated = false
 				AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
+				{DOMAIN_FILTER_R}
 		),
 		-- Extract network names from addresses with @ suffix
 		network_addresses AS (
@@ -96,6 +103,8 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNet
 		GROUP BY network_name
 		ORDER BY node_count DESC, network_name ASC
 	`
+	query = strings.ReplaceAll(query, "{DOMAIN_FILTER}", domainFilterSQL(domain, ""))
+	query = strings.ReplaceAll(query, "{DOMAIN_FILTER_R}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days)
 	if err != nil {
@@ -119,8 +128,11 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int) ([]OtherNet
 	return results, nil
 }
 
-// GetNodesInNetwork retrieves nodes that announce AKAs in a specific network
-func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
+// GetNodesInNetwork retrieves nodes that announce AKAs in a specific network.
+// The domain parameter scopes which tested nodes are considered (their
+// node_test_results.domain); empty means all networks. It is independent of
+// networkName, which matches the announced AKA suffix.
+func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
 	on.mu.RLock()
 	defer on.mu.RUnlock()
 
@@ -129,6 +141,8 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 	// Escape LIKE wildcards in the network name to prevent pattern injection
 	escapedName := escapeLikePattern(networkName)
 
+	// Domain filters are injected via marker replacement (not fmt.Sprintf)
+	// because the query contains literal % characters in LIKE patterns.
 	query := `
 		WITH
 		-- Get latest test per node with successful BinkP or IFCICO
@@ -141,6 +155,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
+				{DOMAIN_FILTER}
 			GROUP BY domain, zone, net, node
 		),
 		-- Find nodes with addresses in the target network, one row per node
@@ -159,6 +174,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 					arrayExists(addr -> lower(addr) LIKE '%@' || lower(?) || '%', r.binkp_addresses)
 					OR arrayExists(addr -> lower(addr) LIKE '%@' || lower(?) || '%', r.ifcico_addresses)
 				)
+				{DOMAIN_FILTER_R}
 		)
 		SELECT
 			r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -191,9 +207,12 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 		JOIN best_rows br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node
 			AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
 		WHERE r.is_aggregated = false
+			{DOMAIN_FILTER_R}
 		ORDER BY r.zone, r.net, r.node
 		LIMIT ?
 	`
+	query = strings.ReplaceAll(query, "{DOMAIN_FILTER}", domainFilterSQL(domain, ""))
+	query = strings.ReplaceAll(query, "{DOMAIN_FILTER_R}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, escapedName, escapedName, escapedName, limit)
 	if err != nil {

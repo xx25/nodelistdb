@@ -11,12 +11,12 @@ import (
 // Test result analytics caching operations (IPv6, protocols, weekly news)
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6 (cached)
-func (cs *CachedStorage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.IPv6EnabledNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.IPv6EnabledNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -30,7 +30,7 @@ func (cs *CachedStorage) GetIPv6EnabledNodes(limit int, days int, includeZeroNod
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -46,12 +46,12 @@ func (cs *CachedStorage) GetIPv6EnabledNodes(limit int, days int, includeZeroNod
 }
 
 // GetIPv6NonWorkingNodes returns nodes with IPv6 but non-working services (cached)
-func (cs *CachedStorage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.IPv6NonWorkingNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.IPv6NonWorkingNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -65,7 +65,7 @@ func (cs *CachedStorage) GetIPv6NonWorkingNodes(limit int, days int, includeZero
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -81,12 +81,12 @@ func (cs *CachedStorage) GetIPv6NonWorkingNodes(limit int, days int, includeZero
 }
 
 // GetIPv6AdvertisedIPv4OnlyNodes returns nodes advertising IPv6 but only accessible via IPv4 (cached)
-func (cs *CachedStorage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.IPv6AdvertisedIPv4OnlyNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.IPv6AdvertisedIPv4OnlyNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -100,7 +100,7 @@ func (cs *CachedStorage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, inc
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +116,12 @@ func (cs *CachedStorage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, inc
 }
 
 // GetBinkPEnabledNodes returns nodes with working BinkP protocol (cached)
-func (cs *CachedStorage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.BinkPEnabledNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.BinkPEnabledNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -135,7 +135,7 @@ func (cs *CachedStorage) GetBinkPEnabledNodes(limit int, days int, includeZeroNo
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -151,12 +151,12 @@ func (cs *CachedStorage) GetBinkPEnabledNodes(limit int, days int, includeZeroNo
 }
 
 // GetIfcicoEnabledNodes returns nodes with working IFCICO protocol (cached)
-func (cs *CachedStorage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIfcicoEnabledNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.IfcicoEnabledNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.IfcicoEnabledNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -170,7 +170,7 @@ func (cs *CachedStorage) GetIfcicoEnabledNodes(limit int, days int, includeZeroN
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetIfcicoEnabledNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -186,12 +186,12 @@ func (cs *CachedStorage) GetIfcicoEnabledNodes(limit int, days int, includeZeroN
 }
 
 // GetTelnetEnabledNodes returns nodes with working Telnet protocol (cached)
-func (cs *CachedStorage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetTelnetEnabledNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.TelnetEnabledNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.TelnetEnabledNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -205,7 +205,7 @@ func (cs *CachedStorage) GetTelnetEnabledNodes(limit int, days int, includeZeroN
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetTelnetEnabledNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -221,12 +221,12 @@ func (cs *CachedStorage) GetTelnetEnabledNodes(limit int, days int, includeZeroN
 }
 
 // GetVModemEnabledNodes returns nodes with working VModem protocol (cached)
-func (cs *CachedStorage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetVModemEnabledNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.VModemEnabledNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.VModemEnabledNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -240,7 +240,7 @@ func (cs *CachedStorage) GetVModemEnabledNodes(limit int, days int, includeZeroN
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetVModemEnabledNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -256,12 +256,12 @@ func (cs *CachedStorage) GetVModemEnabledNodes(limit int, days int, includeZeroN
 }
 
 // GetFTPEnabledNodes returns nodes with working FTP protocol (cached)
-func (cs *CachedStorage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetFTPEnabledNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.FTPEnabledNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.FTPEnabledNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -275,7 +275,7 @@ func (cs *CachedStorage) GetFTPEnabledNodes(limit int, days int, includeZeroNode
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetFTPEnabledNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -291,12 +291,12 @@ func (cs *CachedStorage) GetFTPEnabledNodes(limit int, days int, includeZeroNode
 }
 
 // GetBinkPSoftwareDistribution returns BinkP software distribution statistics (cached)
-func (cs *CachedStorage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+func (cs *CachedStorage) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetBinkPSoftwareDistribution(days)
+		return cs.Storage.GetBinkPSoftwareDistribution(days, domain)
 	}
 
-	key := cs.keyGen.BinkPSoftwareDistributionKey(days)
+	key := cs.keyGen.BinkPSoftwareDistributionKey(days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -310,7 +310,7 @@ func (cs *CachedStorage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistri
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	distribution, err := cs.Storage.GetBinkPSoftwareDistribution(days)
+	distribution, err := cs.Storage.GetBinkPSoftwareDistribution(days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -326,12 +326,12 @@ func (cs *CachedStorage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistri
 }
 
 // GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics (cached)
-func (cs *CachedStorage) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+func (cs *CachedStorage) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIFCICOSoftwareDistribution(days)
+		return cs.Storage.GetIFCICOSoftwareDistribution(days, domain)
 	}
 
-	key := cs.keyGen.IFCICOSoftwareDistributionKey(days)
+	key := cs.keyGen.IFCICOSoftwareDistributionKey(days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -345,7 +345,7 @@ func (cs *CachedStorage) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistr
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	distribution, err := cs.Storage.GetIFCICOSoftwareDistribution(days)
+	distribution, err := cs.Storage.GetIFCICOSoftwareDistribution(days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -361,12 +361,12 @@ func (cs *CachedStorage) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistr
 }
 
 // GetBinkdDetailedStats returns detailed Binkd statistics (cached)
-func (cs *CachedStorage) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
+func (cs *CachedStorage) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetBinkdDetailedStats(days)
+		return cs.Storage.GetBinkdDetailedStats(days, domain)
 	}
 
-	key := cs.keyGen.BinkdDetailedStatsKey(days)
+	key := cs.keyGen.BinkdDetailedStatsKey(days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -380,7 +380,7 @@ func (cs *CachedStorage) GetBinkdDetailedStats(days int) (*SoftwareDistribution,
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	stats, err := cs.Storage.GetBinkdDetailedStats(days)
+	stats, err := cs.Storage.GetBinkdDetailedStats(days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -396,14 +396,14 @@ func (cs *CachedStorage) GetBinkdDetailedStats(days int) (*SoftwareDistribution,
 }
 
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes (cached)
-// This is accessed via TestOps().GetIPv6WeeklyNews() in handlers,
+// This is accessed via TestOps().GetIPv6WeeklyNews(domain) in handlers,
 // but we provide a direct cached wrapper for it
-func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
+func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.TestOps().GetIPv6WeeklyNews(limit, includeZeroNodes)
+		return cs.Storage.TestOps().GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.IPv6WeeklyNewsKey(limit, includeZeroNodes)
+	key := cs.keyGen.IPv6WeeklyNewsKey(limit, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -417,7 +417,7 @@ func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*I
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	news, err := cs.Storage.TestOps().GetIPv6WeeklyNews(limit, includeZeroNodes)
+	news, err := cs.Storage.TestOps().GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -433,12 +433,12 @@ func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*I
 }
 
 // GetIPv6OnlyNodes returns nodes with working IPv6 but no working IPv4 (cached)
-func (cs *CachedStorage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.IPv6OnlyNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.IPv6OnlyNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -452,7 +452,7 @@ func (cs *CachedStorage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -468,12 +468,12 @@ func (cs *CachedStorage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes 
 }
 
 // GetPureIPv6OnlyNodes returns nodes that only advertise IPv6 addresses (cached)
-func (cs *CachedStorage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.PureIPv6OnlyNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.PureIPv6OnlyNodesKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -487,7 +487,7 @@ func (cs *CachedStorage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNo
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -503,12 +503,12 @@ func (cs *CachedStorage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNo
 }
 
 // GetIPv6NodeList returns verified working IPv6 nodes for the node list report (cached)
-func (cs *CachedStorage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error) {
+func (cs *CachedStorage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes)
+		return cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.IPv6NodeListKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.IPv6NodeListKey(limit, days, includeZeroNodes, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -522,7 +522,7 @@ func (cs *CachedStorage) GetIPv6NodeList(limit int, days int, includeZeroNodes b
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -538,12 +538,12 @@ func (cs *CachedStorage) GetIPv6NodeList(limit int, days int, includeZeroNodes b
 }
 
 // GetGeoHostingDistribution returns geographic hosting distribution (cached)
-func (cs *CachedStorage) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error) {
+func (cs *CachedStorage) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetGeoHostingDistribution(days)
+		return cs.Storage.GetGeoHostingDistribution(days, domain)
 	}
 
-	key := cs.keyGen.GeoHostingDistributionKey(days)
+	key := cs.keyGen.GeoHostingDistributionKey(days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -557,7 +557,7 @@ func (cs *CachedStorage) GetGeoHostingDistribution(days int) (*GeoHostingDistrib
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	dist, err := cs.Storage.GetGeoHostingDistribution(days)
+	dist, err := cs.Storage.GetGeoHostingDistribution(days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -573,12 +573,12 @@ func (cs *CachedStorage) GetGeoHostingDistribution(days int) (*GeoHostingDistrib
 }
 
 // GetNodesByCountry returns nodes for a specific country (cached)
-func (cs *CachedStorage) GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodesByCountry(countryCode, days)
+		return cs.Storage.GetNodesByCountry(countryCode, days, domain)
 	}
 
-	key := cs.keyGen.NodesByCountryKey(countryCode, days)
+	key := cs.keyGen.NodesByCountryKey(countryCode, days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -592,7 +592,7 @@ func (cs *CachedStorage) GetNodesByCountry(countryCode string, days int) ([]Node
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetNodesByCountry(countryCode, days)
+	results, err := cs.Storage.GetNodesByCountry(countryCode, days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -608,12 +608,12 @@ func (cs *CachedStorage) GetNodesByCountry(countryCode string, days int) ([]Node
 }
 
 // GetNodesByProvider returns nodes for a specific provider (cached)
-func (cs *CachedStorage) GetNodesByProvider(provider string, days int) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetNodesByProvider(provider string, days int, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodesByProvider(provider, days)
+		return cs.Storage.GetNodesByProvider(provider, days, domain)
 	}
 
-	key := cs.keyGen.NodesByProviderKey(provider, days)
+	key := cs.keyGen.NodesByProviderKey(provider, days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -627,7 +627,7 @@ func (cs *CachedStorage) GetNodesByProvider(provider string, days int) ([]NodeTe
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetNodesByProvider(provider, days)
+	results, err := cs.Storage.GetNodesByProvider(provider, days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -643,12 +643,12 @@ func (cs *CachedStorage) GetNodesByProvider(provider string, days int) ([]NodeTe
 }
 
 // GetOnThisDayNodes returns nodes first added on this day in previous years (cached)
-func (cs *CachedStorage) GetOnThisDayNodes(month, day, limit int, activeOnly bool) ([]OnThisDayNode, error) {
+func (cs *CachedStorage) GetOnThisDayNodes(month, day, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly)
+		return cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly, domain)
 	}
 
-	key := cs.keyGen.OnThisDayNodesKey(month, day, limit, activeOnly)
+	key := cs.keyGen.OnThisDayNodesKey(month, day, limit, activeOnly, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -662,7 +662,7 @@ func (cs *CachedStorage) GetOnThisDayNodes(month, day, limit int, activeOnly boo
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly)
+	results, err := cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -678,12 +678,12 @@ func (cs *CachedStorage) GetOnThisDayNodes(month, day, limit int, activeOnly boo
 }
 
 // GetPioneersByRegion returns first sysops in a FidoNet region (cached)
-func (cs *CachedStorage) GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error) {
+func (cs *CachedStorage) GetPioneersByRegion(zone, region, limit int, domain string) ([]PioneerNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetPioneersByRegion(zone, region, limit)
+		return cs.Storage.GetPioneersByRegion(zone, region, limit, domain)
 	}
 
-	key := cs.keyGen.PioneersByRegionKey(zone, region, limit)
+	key := cs.keyGen.PioneersByRegionKey(zone, region, limit, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -697,7 +697,7 @@ func (cs *CachedStorage) GetPioneersByRegion(zone, region, limit int) ([]Pioneer
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetPioneersByRegion(zone, region, limit)
+	results, err := cs.Storage.GetPioneersByRegion(zone, region, limit, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -713,12 +713,12 @@ func (cs *CachedStorage) GetPioneersByRegion(zone, region, limit int) ([]Pioneer
 }
 
 // GetOtherNetworksSummary returns a summary of non-FidoNet networks found in AKAs (cached)
-func (cs *CachedStorage) GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error) {
+func (cs *CachedStorage) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetOtherNetworksSummary(days)
+		return cs.Storage.GetOtherNetworksSummary(days, domain)
 	}
 
-	key := fmt.Sprintf("other_networks_summary:%d", days)
+	key := fmt.Sprintf("other_networks_summary:%d:%s", days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -732,7 +732,7 @@ func (cs *CachedStorage) GetOtherNetworksSummary(days int) ([]OtherNetworkSummar
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetOtherNetworksSummary(days)
+	results, err := cs.Storage.GetOtherNetworksSummary(days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -748,12 +748,12 @@ func (cs *CachedStorage) GetOtherNetworksSummary(days int) ([]OtherNetworkSummar
 }
 
 // GetNodesInNetwork returns nodes that announce AKAs in a specific network (cached)
-func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := fmt.Sprintf("ipv6_incorrect_ipv4_correct:%d:%d:%v", limit, days, includeZeroNodes)
+	key := fmt.Sprintf("ipv6_incorrect_ipv4_correct:%d:%d:%v:%s", limit, days, includeZeroNodes, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []AKAIPVersionMismatchNode
@@ -765,7 +765,7 @@ func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, i
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -779,12 +779,12 @@ func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, i
 	return results, nil
 }
 
-func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
+func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := fmt.Sprintf("ipv4_incorrect_ipv6_correct:%d:%d:%v", limit, days, includeZeroNodes)
+	key := fmt.Sprintf("ipv4_incorrect_ipv6_correct:%d:%d:%v:%s", limit, days, includeZeroNodes, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []AKAIPVersionMismatchNode
@@ -796,7 +796,7 @@ func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, i
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -810,12 +810,12 @@ func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, i
 	return results, nil
 }
 
-func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
+func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetNodesInNetwork(networkName, limit, days)
+		return cs.Storage.GetNodesInNetwork(networkName, limit, days, domain)
 	}
 
-	key := fmt.Sprintf("nodes_in_network:%s:%d:%d", networkName, limit, days)
+	key := fmt.Sprintf("nodes_in_network:%s:%d:%d:%s", networkName, limit, days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -829,7 +829,7 @@ func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days i
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetNodesInNetwork(networkName, limit, days)
+	results, err := cs.Storage.GetNodesInNetwork(networkName, limit, days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -845,12 +845,12 @@ func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days i
 }
 
 // GetModemAccessibleNodes returns nodes successfully reached via modem tests (cached)
-func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
+func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.ModemAccessibleNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.ModemAccessibleNodesKey(limit, days, includeZeroNodes, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []ModemAccessibleNode
@@ -862,7 +862,7 @@ func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZer
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -877,12 +877,12 @@ func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZer
 }
 
 // GetModemNoAnswerNodes returns nodes tested via modem that never answered (cached)
-func (cs *CachedStorage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error) {
+func (cs *CachedStorage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.ModemNoAnswerNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.ModemNoAnswerNodesKey(limit, days, includeZeroNodes, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []ModemNoAnswerNode
@@ -894,7 +894,7 @@ func (cs *CachedStorage) GetModemNoAnswerNodes(limit int, days int, includeZeroN
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -978,12 +978,12 @@ func (cs *CachedStorage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 }
 
 // GetPSTNNodes returns PSTN nodes (cached)
-func (cs *CachedStorage) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
+func (cs *CachedStorage) GetPSTNNodes(limit int, zone int, domain string) ([]PSTNNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetPSTNNodes(limit, zone)
+		return cs.Storage.GetPSTNNodes(limit, zone, domain)
 	}
 
-	key := cs.keyGen.PSTNNodesKey(limit, zone)
+	key := cs.keyGen.PSTNNodesKey(limit, zone, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []PSTNNode
@@ -995,7 +995,7 @@ func (cs *CachedStorage) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetPSTNNodes(limit, zone)
+	results, err := cs.Storage.GetPSTNNodes(limit, zone, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -1010,12 +1010,12 @@ func (cs *CachedStorage) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
 }
 
 // GetFileRequestNodes returns file request capable nodes (cached)
-func (cs *CachedStorage) GetFileRequestNodes(limit int) ([]FileRequestNode, error) {
+func (cs *CachedStorage) GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetFileRequestNodes(limit)
+		return cs.Storage.GetFileRequestNodes(limit, domain)
 	}
 
-	key := cs.keyGen.FileRequestNodesKey(limit)
+	key := cs.keyGen.FileRequestNodesKey(limit, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []FileRequestNode
@@ -1027,7 +1027,7 @@ func (cs *CachedStorage) GetFileRequestNodes(limit int) ([]FileRequestNode, erro
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetFileRequestNodes(limit)
+	results, err := cs.Storage.GetFileRequestNodes(limit, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -1042,12 +1042,12 @@ func (cs *CachedStorage) GetFileRequestNodes(limit int) ([]FileRequestNode, erro
 }
 
 // GetAKAMismatchNodes returns AKA mismatch nodes (cached)
-func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes)
+		return cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := cs.keyGen.AKAMismatchNodesKey(limit, days, includeZeroNodes)
+	key := cs.keyGen.AKAMismatchNodesKey(limit, days, includeZeroNodes, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []NodeTestResult
@@ -1059,7 +1059,7 @@ func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNod
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes)
+	results, err := cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -1076,12 +1076,12 @@ func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNod
 // ===== Reachability Operations (cached) =====
 
 // GetReachabilityTrends returns reachability trend data (cached)
-func (cs *CachedStorage) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
+func (cs *CachedStorage) GetReachabilityTrends(days int, domain string) ([]ReachabilityTrend, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetReachabilityTrends(days)
+		return cs.Storage.GetReachabilityTrends(days, domain)
 	}
 
-	key := cs.keyGen.ReachabilityTrendsKey(days)
+	key := cs.keyGen.ReachabilityTrendsKey(days, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []ReachabilityTrend
@@ -1093,7 +1093,7 @@ func (cs *CachedStorage) GetReachabilityTrends(days int) ([]ReachabilityTrend, e
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetReachabilityTrends(days)
+	results, err := cs.Storage.GetReachabilityTrends(days, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -1108,12 +1108,12 @@ func (cs *CachedStorage) GetReachabilityTrends(days int) ([]ReachabilityTrend, e
 }
 
 // GetReachabilityTrendsAllTime returns all-time reachability trend data (cached)
-func (cs *CachedStorage) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
+func (cs *CachedStorage) GetReachabilityTrendsAllTime(domain string) ([]ReachabilityTrend, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetReachabilityTrendsAllTime()
+		return cs.Storage.GetReachabilityTrendsAllTime(domain)
 	}
 
-	key := cs.keyGen.ReachabilityTrendsKey(0)
+	key := cs.keyGen.ReachabilityTrendsKey(0, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []ReachabilityTrend
@@ -1125,7 +1125,7 @@ func (cs *CachedStorage) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, er
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.GetReachabilityTrendsAllTime()
+	results, err := cs.Storage.GetReachabilityTrendsAllTime(domain)
 	if err != nil {
 		return nil, err
 	}
@@ -1140,12 +1140,12 @@ func (cs *CachedStorage) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, er
 }
 
 // SearchNodesByReachability returns nodes filtered by reachability status (cached)
-func (cs *CachedStorage) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
+func (cs *CachedStorage) SearchNodesByReachability(operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.SearchNodesByReachability(operational, limit, days)
+		return cs.Storage.SearchNodesByReachability(operational, limit, days, domain)
 	}
 
-	key := cs.keyGen.SearchNodesByReachabilityKey(operational, limit, days)
+	key := cs.keyGen.SearchNodesByReachabilityKey(operational, limit, days, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []NodeTestResult
@@ -1157,7 +1157,7 @@ func (cs *CachedStorage) SearchNodesByReachability(operational bool, limit int, 
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	results, err := cs.Storage.SearchNodesByReachability(operational, limit, days)
+	results, err := cs.Storage.SearchNodesByReachability(operational, limit, days, domain)
 	if err != nil {
 		return nil, err
 	}

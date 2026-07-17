@@ -31,24 +31,24 @@ type FlagUsageByYear struct {
 
 // NetworkAppearance represents a continuous period when a network was active
 type NetworkAppearance struct {
-	StartDate    time.Time `json:"start_date"`
-	EndDate      time.Time `json:"end_date"`
-	StartDayNum  int       `json:"start_day_num"`
-	EndDayNum    int       `json:"end_day_num"`
-	DurationDays int       `json:"duration_days"`
-	NodelistCount int      `json:"nodelist_count"`
+	StartDate     time.Time `json:"start_date"`
+	EndDate       time.Time `json:"end_date"`
+	StartDayNum   int       `json:"start_day_num"`
+	EndDayNum     int       `json:"end_day_num"`
+	DurationDays  int       `json:"duration_days"`
+	NodelistCount int       `json:"nodelist_count"`
 }
 
 // NetworkHistory represents the complete history of a network
 type NetworkHistory struct {
-	Zone         int                 `json:"zone"`
-	Net          int                 `json:"net"`
-	NetworkName  string              `json:"network_name"`
-	FirstSeen    time.Time           `json:"first_seen"`
-	LastSeen     time.Time           `json:"last_seen"`
-	TotalDays    int                 `json:"total_days"`
-	ActiveDays   int                 `json:"active_days"`
-	Appearances  []NetworkAppearance `json:"appearances"`
+	Zone        int                 `json:"zone"`
+	Net         int                 `json:"net"`
+	NetworkName string              `json:"network_name"`
+	FirstSeen   time.Time           `json:"first_seen"`
+	LastSeen    time.Time           `json:"last_seen"`
+	TotalDays   int                 `json:"total_days"`
+	ActiveDays  int                 `json:"active_days"`
+	Appearances []NetworkAppearance `json:"appearances"`
 }
 
 // AnalyticsOperations handles analytics-related database operations
@@ -397,11 +397,14 @@ func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time, doma
 // GetOnThisDayNodes finds nodes that were first added on this day (month/day) in previous years
 // A node is considered "new" when a sysop first appears with that node address
 // YearsActive is calculated from first appearance to final disappearance (ignoring temporary gaps)
-func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, activeOnly bool) ([]OnThisDayNode, error) {
+func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
 	conn := ao.db.Conn()
+
+	// Scope both nodes scans to one FTN network ("" = all networks)
+	domainFilter := domainFilterSQL(domain, "")
 
 	// Build the active filter clause
 	activeFilter := ""
@@ -424,7 +427,7 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 		WITH
 		-- Latest nodelist date per network, to determine if a node is still active
 		max_date AS (
-			SELECT domain, max(nodelist_date) as latest_date FROM nodes GROUP BY domain
+			SELECT domain, max(nodelist_date) as latest_date FROM nodes WHERE 1 = 1 %s GROUP BY domain
 		),
 		-- Get first and last appearance for each (domain, zone, net, node, sysop_name) combination
 		node_lifetimes AS (
@@ -454,6 +457,7 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 					nodelist_date
 				) as raw_line
 			FROM nodes
+			WHERE 1 = 1 %s
 			GROUP BY domain, zone, net, node, sysop_name
 		)
 		SELECT
@@ -476,7 +480,7 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 		  %s
 		ORDER BY nl.first_appeared DESC, nl.zone, nl.net, nl.node
 		%s
-	`, activeFilter, limitClause)
+	`, domainFilter, domainFilter, activeFilter, limitClause)
 
 	rows, err := conn.Query(query, month, day)
 	if err != nil {
@@ -633,8 +637,8 @@ func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 // GetPSTNNodes returns ALL nodes from the latest nodelist that have valid phone numbers.
 // Unlike GetPSTNCMNodes, this includes both CM and non-CM nodes.
 // Excludes Down/Hold nodes, coordinators (node=0), and unpublished/invalid phones.
-// zone=0 returns all zones.
-func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
+// zone=0 returns all zones. An empty domain searches all FTN networks.
+func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int, domain string) ([]PSTNNode, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -647,10 +651,13 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, er
 
 	conn := ao.db.Conn()
 
-	query := `
-		WITH latest_date AS (
-			SELECT MAX(nodelist_date) as max_date FROM nodes WHERE domain = 'fidonet'
-		)
+	domainFilter := domainFilterSQL(domain, "")
+
+	// "Latest nodelist" is resolved PER NETWORK: with an empty domain a
+	// single global MAX(nodelist_date) would silently drop every network
+	// whose newest import is older than the newest overall (weekly fsxNet
+	// vs daily fidonet). Same pattern as GetFileRequestNodes.
+	query := fmt.Sprintf(`
 		SELECT
 			zone,
 			net,
@@ -666,14 +673,16 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, er
 			flags,
 			modem_flags
 		FROM nodes
-		WHERE domain = 'fidonet'
-		  AND nodelist_date = (SELECT max_date FROM latest_date)
+		WHERE (domain, nodelist_date) IN (
+			SELECT domain, MAX(nodelist_date) FROM nodes WHERE 1 = 1 %s GROUP BY domain
+		  )
+		  %s
 		  AND conflict_sequence = 0
 		  AND phone != ''
 		  AND phone != '-Unpublished-'
 		  AND phone != '000-000-000-000'
 		  AND node != 0
-		  AND node_type NOT IN ('Down', 'Hold')`
+		  AND node_type NOT IN ('Down', 'Hold')`, domainFilter, domainFilter)
 
 	args := []interface{}{}
 	if zone > 0 {
@@ -722,8 +731,11 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, er
 		return nil, fmt.Errorf("error iterating PSTN rows: %w", err)
 	}
 
-	// Enrich with PSTN dead status
-	if ao.pstnDeadOps != nil {
+	// Enrich with PSTN dead status. The dead-node table is keyed by bare
+	// zone:net/node with no domain column, and markers have only ever been
+	// recorded for fidonet — so skip the enrichment for other networks
+	// rather than mislabel an unrelated address that reuses the same 3-D key.
+	if ao.pstnDeadOps != nil && (domain == "" || domain == "fidonet") {
 		deadSet, err := ao.pstnDeadOps.GetDeadNodeSet()
 		if err == nil && len(deadSet) > 0 {
 			for i := range results {
@@ -740,8 +752,9 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int) ([]PSTNNode, er
 }
 
 // GetFileRequestNodes returns nodes from the latest nodelist that have file request flags (XA-XX)
-// Excludes Down/Hold nodes, coordinators (node=0), and conflict duplicates
-func (ao *AnalyticsOperations) GetFileRequestNodes(limit int) ([]FileRequestNode, error) {
+// Excludes Down/Hold nodes, coordinators (node=0), and conflict duplicates.
+// An empty domain searches all FTN networks.
+func (ao *AnalyticsOperations) GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -754,7 +767,9 @@ func (ao *AnalyticsOperations) GetFileRequestNodes(limit int) ([]FileRequestNode
 
 	conn := ao.db.Conn()
 
-	query := `
+	domainFilter := domainFilterSQL(domain, "")
+
+	query := fmt.Sprintf(`
 		SELECT
 			zone,
 			net,
@@ -767,13 +782,14 @@ func (ao *AnalyticsOperations) GetFileRequestNodes(limit int) ([]FileRequestNode
 			node_type,
 			flags
 		FROM nodes
-		WHERE (domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes GROUP BY domain)
+		WHERE (domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes WHERE 1 = 1 %s GROUP BY domain)
+		  %s
 		  AND conflict_sequence = 0
 		  AND hasAny(flags, ['XA', 'XB', 'XC', 'XP', 'XR', 'XW', 'XX'])
 		  AND node != 0
 		  AND node_type NOT IN ('Down', 'Hold')
 		ORDER BY zone, net, node
-		LIMIT ?`
+		LIMIT ?`, domainFilter, domainFilter)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {

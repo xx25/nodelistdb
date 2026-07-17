@@ -227,8 +227,9 @@ type PioneerNode struct {
 
 // GetPioneersByRegion retrieves the first N unique sysops that appeared in a specific FidoNet region
 // A region is identified by zone:region (e.g., zone=2, region=50 means Region 50 in Zone 2)
-// Each sysop appears only once, showing their first node in the region
-func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int) ([]PioneerNode, error) {
+// Each sysop appears only once, showing their first node in the region.
+// An empty domain searches all FTN networks.
+func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int, domain string) ([]PioneerNode, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
@@ -263,12 +264,15 @@ func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int)
 				) as raw_line,
 				ROW_NUMBER() OVER (PARTITION BY sysop_name ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
 			FROM nodes
-			WHERE zone = ? AND region = ?
+			WHERE zone = ? AND region = ? /*DOMAIN_FILTER*/
 		) AS first_appearances
 		WHERE rn = 1
 		ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC
 		LIMIT ?
 	`
+	// Marker replacement instead of fmt.Sprintf: the query contains literal
+	// '%' characters (formatDateTime pattern) that Sprintf would mangle.
+	query = strings.ReplaceAll(query, "/*DOMAIN_FILTER*/", domainFilterSQL(domain, ""))
 
 	rows, err := so.db.Conn().Query(query, zone, region, limit)
 	if err != nil {

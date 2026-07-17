@@ -121,121 +121,121 @@ func (kg *KeyGenerator) NetworkHistoryKey(zone, net int) string {
 }
 
 // Test result analytics keys
-func (kg *KeyGenerator) IPv6EnabledNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ipv6:enabled:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) IPv6EnabledNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ipv6:enabled:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) IPv6NonWorkingNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ipv6:nonworking:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) IPv6NonWorkingNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ipv6:nonworking:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) IPv6AdvertisedIPv4OnlyNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ipv6:ipv4only:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) IPv6AdvertisedIPv4OnlyNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ipv6:ipv4only:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) BinkPEnabledNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:binkp:enabled:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) BinkPEnabledNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:binkp:enabled:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) IfcicoEnabledNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ifcico:enabled:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) IfcicoEnabledNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ifcico:enabled:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) TelnetEnabledNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:telnet:enabled:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) TelnetEnabledNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:telnet:enabled:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) VModemEnabledNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:vmodem:enabled:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) VModemEnabledNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:vmodem:enabled:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) FTPEnabledNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ftp:enabled:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) FTPEnabledNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ftp:enabled:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) BinkPSoftwareDistributionKey(days int) string {
-	return fmt.Sprintf("%s:analytics:binkp:software:%d", kg.Prefix, days)
+func (kg *KeyGenerator) BinkPSoftwareDistributionKey(days int, domain string) string {
+	return fmt.Sprintf("%s:analytics:binkp:software:%d:%s", kg.Prefix, days, domain)
 }
 
-func (kg *KeyGenerator) IFCICOSoftwareDistributionKey(days int) string {
-	return fmt.Sprintf("%s:analytics:ifcico:software:%d", kg.Prefix, days)
+func (kg *KeyGenerator) IFCICOSoftwareDistributionKey(days int, domain string) string {
+	return fmt.Sprintf("%s:analytics:ifcico:software:%d:%s", kg.Prefix, days, domain)
 }
 
-func (kg *KeyGenerator) BinkdDetailedStatsKey(days int) string {
-	return fmt.Sprintf("%s:analytics:binkd:stats:%d", kg.Prefix, days)
+func (kg *KeyGenerator) BinkdDetailedStatsKey(days int, domain string) string {
+	return fmt.Sprintf("%s:analytics:binkd:stats:%d:%s", kg.Prefix, days, domain)
 }
 
-func (kg *KeyGenerator) IPv6WeeklyNewsKey(limit int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ipv6:weeklynews:%d:%t", kg.Prefix, limit, includeZeroNodes)
+func (kg *KeyGenerator) IPv6WeeklyNewsKey(limit int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ipv6:weeklynews:%d:%t:%s", kg.Prefix, limit, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) IPv6OnlyNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ipv6:only:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) IPv6OnlyNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ipv6:only:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) PureIPv6OnlyNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ipv6:pureonly:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) PureIPv6OnlyNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ipv6:pureonly:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) IPv6NodeListKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:ipv6:nodelist:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) IPv6NodeListKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:ipv6:nodelist:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) GeoHostingDistributionKey(days int) string {
-	return fmt.Sprintf("%s:analytics:geo:hosting:%d", kg.Prefix, days)
+func (kg *KeyGenerator) GeoHostingDistributionKey(days int, domain string) string {
+	return fmt.Sprintf("%s:analytics:geo:hosting:%d:%s", kg.Prefix, days, domain)
 }
 
-func (kg *KeyGenerator) NodesByCountryKey(countryCode string, days int) string {
-	return fmt.Sprintf("%s:analytics:geo:country:%s:%d", kg.Prefix, countryCode, days)
+func (kg *KeyGenerator) NodesByCountryKey(countryCode string, days int, domain string) string {
+	return fmt.Sprintf("%s:analytics:geo:country:%s:%d:%s", kg.Prefix, countryCode, days, domain)
 }
 
-func (kg *KeyGenerator) NodesByProviderKey(provider string, days int) string {
+func (kg *KeyGenerator) NodesByProviderKey(provider string, days int, domain string) string {
 	hash := md5.Sum([]byte(provider))
-	return fmt.Sprintf("%s:analytics:geo:provider:%s:%d", kg.Prefix, hex.EncodeToString(hash[:8]), days)
+	return fmt.Sprintf("%s:analytics:geo:provider:%s:%d:%s", kg.Prefix, hex.EncodeToString(hash[:8]), days, domain)
 }
 
-func (kg *KeyGenerator) OnThisDayNodesKey(month, day, limit int, activeOnly bool) string {
-	return fmt.Sprintf("%s:analytics:onthisday:%d:%d:%d:%t", kg.Prefix, month, day, limit, activeOnly)
+func (kg *KeyGenerator) OnThisDayNodesKey(month, day, limit int, activeOnly bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:onthisday:%d:%d:%d:%t:%s", kg.Prefix, month, day, limit, activeOnly, domain)
 }
 
-func (kg *KeyGenerator) PioneersByRegionKey(zone, region, limit int) string {
-	return fmt.Sprintf("%s:analytics:pioneers:%d:%d:%d", kg.Prefix, zone, region, limit)
+func (kg *KeyGenerator) PioneersByRegionKey(zone, region, limit int, domain string) string {
+	return fmt.Sprintf("%s:analytics:pioneers:%d:%d:%d:%s", kg.Prefix, zone, region, limit, domain)
 }
 
 func (kg *KeyGenerator) PSTNCMNodesKey(limit int) string {
 	return fmt.Sprintf("%s:analytics:pstn:cm:%d", kg.Prefix, limit)
 }
 
-func (kg *KeyGenerator) PSTNNodesKey(limit, zone int) string {
-	return fmt.Sprintf("%s:analytics:pstn:nodes:%d:%d", kg.Prefix, limit, zone)
+func (kg *KeyGenerator) PSTNNodesKey(limit, zone int, domain string) string {
+	return fmt.Sprintf("%s:analytics:pstn:nodes:%d:%d:%s", kg.Prefix, limit, zone, domain)
 }
 
-func (kg *KeyGenerator) FileRequestNodesKey(limit int) string {
-	return fmt.Sprintf("%s:analytics:filerequest:%d", kg.Prefix, limit)
+func (kg *KeyGenerator) FileRequestNodesKey(limit int, domain string) string {
+	return fmt.Sprintf("%s:analytics:filerequest:%d:%s", kg.Prefix, limit, domain)
 }
 
-func (kg *KeyGenerator) AKAMismatchNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:aka:mismatch:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) AKAMismatchNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:aka:mismatch:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) ModemAccessibleNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:modem:accessible:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) ModemAccessibleNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:modem:accessible:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
-func (kg *KeyGenerator) ModemNoAnswerNodesKey(limit, days int, includeZeroNodes bool) string {
-	return fmt.Sprintf("%s:analytics:modem:noanswer:%d:%d:%t", kg.Prefix, limit, days, includeZeroNodes)
+func (kg *KeyGenerator) ModemNoAnswerNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:modem:noanswer:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
 func (kg *KeyGenerator) ModemTestDetailKey(zone, net, node int, testTime string) string {
 	return fmt.Sprintf("%s:analytics:modem:detail:%d:%d:%d:%s", kg.Prefix, zone, net, node, testTime)
 }
 
-func (kg *KeyGenerator) ReachabilityTrendsKey(days int) string {
-	return fmt.Sprintf("%s:reachability:trends:%d", kg.Prefix, days)
+func (kg *KeyGenerator) ReachabilityTrendsKey(days int, domain string) string {
+	return fmt.Sprintf("%s:reachability:trends:%d:%s", kg.Prefix, days, domain)
 }
 
-func (kg *KeyGenerator) SearchNodesByReachabilityKey(operational bool, limit, days int) string {
-	return fmt.Sprintf("%s:reachability:search:%t:%d:%d", kg.Prefix, operational, limit, days)
+func (kg *KeyGenerator) SearchNodesByReachabilityKey(operational bool, limit, days int, domain string) string {
+	return fmt.Sprintf("%s:reachability:search:%t:%d:%d:%s", kg.Prefix, operational, limit, days, domain)
 }
 
 func (kg *KeyGenerator) NodeTestHistoryKey(zone, net, node, days int) string {

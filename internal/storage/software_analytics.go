@@ -34,8 +34,9 @@ func NewSoftwareAnalyticsOperations(db database.DatabaseInterface) *SoftwareAnal
 	}
 }
 
-// GetBinkPSoftwareDistribution returns BinkP software distribution statistics
-func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+// GetBinkPSoftwareDistribution returns BinkP software distribution statistics.
+// An empty domain covers all FTN networks.
+func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
 
@@ -54,7 +55,7 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int) (
 	conn := sao.db.Conn()
 
 	// Get latest test result per node, then count software distribution
-	query := `
+	query := fmt.Sprintf(`
 		SELECT
 			binkp_version,
 			COUNT(*) as count
@@ -66,12 +67,13 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int) (
 			WHERE binkp_tested = true
 				AND binkp_success = true
 				AND test_date >= today() - ?
+				%s
 			GROUP BY zone, net, node
 			HAVING binkp_version <> ''
 		) AS latest_tests
 		GROUP BY binkp_version
 		ORDER BY count DESC
-	`
+	`, domainFilterSQL(domain, ""))
 
 	rows, err := conn.Query(query, days)
 	if err != nil {
@@ -133,8 +135,9 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int) (
 	return dist, nil
 }
 
-// GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics
-func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
+// GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics.
+// An empty domain covers all FTN networks.
+func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
 
@@ -153,7 +156,7 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int) 
 	conn := sao.db.Conn()
 
 	// Get latest test result per node, then count software distribution
-	query := `
+	query := fmt.Sprintf(`
 		SELECT
 			ifcico_mailer_info,
 			COUNT(*) as count
@@ -165,12 +168,13 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int) 
 			WHERE ifcico_tested = true
 				AND ifcico_success = true
 				AND test_date >= today() - ?
+				%s
 			GROUP BY zone, net, node
 			HAVING ifcico_mailer_info <> ''
 		) AS latest_tests
 		GROUP BY ifcico_mailer_info
 		ORDER BY count DESC
-	`
+	`, domainFilterSQL(domain, ""))
 
 	rows, err := conn.Query(query, days)
 	if err != nil {
@@ -228,8 +232,9 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int) 
 	return dist, nil
 }
 
-// GetBinkdDetailedStats returns detailed binkd statistics
-func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
+// GetBinkdDetailedStats returns detailed binkd statistics.
+// An empty domain covers all FTN networks.
+func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
 
@@ -260,12 +265,16 @@ func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int) (*Softwa
 			WHERE binkp_tested = true
 				AND binkp_success = true
 				AND test_date >= today() - ?
+				/*DOMAIN_FILTER*/
 			GROUP BY zone, net, node
 			HAVING binkp_version LIKE 'binkd/%'
 		) AS latest_tests
 		GROUP BY binkp_version
 		ORDER BY count DESC
 	`
+	// Marker replacement instead of fmt.Sprintf: the query contains a literal
+	// '%' character (LIKE pattern) that Sprintf would mangle.
+	query = strings.ReplaceAll(query, "/*DOMAIN_FILTER*/", domainFilterSQL(domain, ""))
 
 	rows, err := conn.Query(query, days)
 	if err != nil {

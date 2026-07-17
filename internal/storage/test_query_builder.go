@@ -180,6 +180,7 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 			FROM date_series d
 			CROSS JOIN node_test_results r
 			WHERE r.test_time <= d.report_date + INTERVAL 1 DAY
+			AND (? = '' OR r.domain = ?)
 			GROUP BY d.report_date, r.domain, r.zone, r.net, r.node
 		)
 		SELECT
@@ -217,7 +218,8 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsFromDailyStatsQuery() string
 
 // BuildProtocolEnabledQuery builds a query for nodes with a specific protocol enabled (ClickHouse)
 // protocol should be one of: "binkp", "ifcico", "telnet", "ftp", "vmodem"
-func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter string) string {
+// domainFilter is a ready-made SQL clause (see domainFilterSQL); "" means all FTN networks.
+func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, domainFilter string) string {
 	protocolMap := map[string]string{
 		"binkp":  "binkp_success",
 		"ifcico": "ifcico_success",
@@ -240,6 +242,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter stri
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND %s = true
 				AND is_operational = true
+				%s
 				%s
 			GROUP BY domain, zone, net, node
 		),
@@ -288,7 +291,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter stri
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
 		LEFT JOIN latest_nodes ln ON r.domain = ln.domain AND r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
 		ORDER BY r.test_time DESC
-		LIMIT ?`, protocolColumn, nodeFilter)
+		LIMIT ?`, protocolColumn, nodeFilter, domainFilter)
 }
 
 // BuildSearchByReachabilityQuery builds a query to search nodes by reachability status (ClickHouse)
@@ -324,6 +327,7 @@ func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
 			SELECT *, row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY test_time DESC) as rn
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
+			AND (? = '' OR domain = ?)
 		)
 		WHERE rn = 1 AND is_operational = ?
 		ORDER BY test_time DESC

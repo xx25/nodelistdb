@@ -27,8 +27,11 @@ func NewIPv6QueryOperations(db database.DatabaseInterface, queryBuilder *TestQue
 	}
 }
 
-// getAllHostnamesForNode fetches all tested hostnames for a specific node that have IPv6
-func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, days int) ([]string, error) {
+// getAllHostnamesForNode fetches all tested hostnames for a specific node
+// that have IPv6, within one FTN network ("" = any). Callers pass the result
+// row's own domain so a scoped report never mixes in another network's
+// hostnames for a colliding zone:net/node.
+func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, days int, domain string) ([]string, error) {
 	conn := ipv6.db.Conn()
 
 	var query string
@@ -38,6 +41,7 @@ func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, day
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ?
 				AND test_time >= now() - INTERVAL ? DAY
+				AND (? = '' OR domain = ?)
 				AND length(tested_hostname) > 0
 				AND hostname_index >= 0
 				AND length(resolved_ipv6) > 0
@@ -48,13 +52,14 @@ func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, day
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ?
 				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+				AND (? = '' OR domain = ?)
 				AND length(tested_hostname) > 0
 				AND hostname_index >= 0
 				AND array_length(resolved_ipv6) > 0
 			ORDER BY hostname_index`
 	}
 
-	rows, err := conn.Query(query, zone, net, node, days)
+	rows, err := conn.Query(query, zone, net, node, days, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hostnames: %w", err)
 	}
@@ -75,7 +80,7 @@ func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, day
 }
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6
-func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -100,6 +105,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					AND is_operational = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -184,6 +190,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					AND is_operational = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -221,6 +228,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 			LIMIT ?`, nodeFilter)
 	}
 
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
 		logging.Error("GetIPv6EnabledNodes: Query failed", slog.Any("error", err))
@@ -243,7 +252,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
+		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -259,7 +268,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 }
 
 // GetIPv6NonWorkingNodes returns nodes that have IPv6 addresses but no working IPv6 services
-func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -283,6 +292,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
 					%s
+					{{DOMAIN_FILTER}}
 			),
 			-- Count successful IPv6 tests per node in the period
 			ipv6_success_counts AS (
@@ -292,6 +302,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successful IPv6 tests
@@ -306,6 +317,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					WHERE success_count = 0
 				)
 				AND test_time >= now() - INTERVAL ? DAY
+				{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -389,6 +401,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					AND array_length(resolved_ipv6) > 0
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
 					%s
+					{{DOMAIN_FILTER}}
 			),
 			-- Count successful IPv6 tests per node in the period
 			ipv6_success_counts AS (
@@ -398,6 +411,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 				FROM node_test_results
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successful IPv6 tests
@@ -412,6 +426,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					WHERE success_count = 0
 				)
 				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+				{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -449,6 +464,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 			LIMIT ?`, nodeFilter)
 	}
 
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+
 	rows, err := conn.Query(query, days, days, days, limit)
 	if err != nil {
 		logging.Error("GetIPv6NonWorkingNodes: Query failed", slog.Any("error", err))
@@ -471,7 +488,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
+		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -488,7 +505,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 
 // GetIPv6AdvertisedIPv4OnlyNodes returns nodes that advertise IPv6 addresses but are only accessible via IPv4
 // (IPv4 services work, but IPv6 services don't work despite having IPv6 addresses)
-func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -513,6 +530,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					AND is_operational = true
 					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
 					%s
+					{{DOMAIN_FILTER}}
 			),
 			-- Count successful IPv6 tests per node in the period
 			ipv6_success_counts AS (
@@ -523,6 +541,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_working_ipv4)
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successful IPv6 tests but working IPv4
@@ -537,6 +556,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					WHERE success_count = 0
 				)
 				AND test_time >= now() - INTERVAL ? DAY
+				{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -576,6 +596,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				FROM node_test_results r
 				INNER JOIN latest_ipv4_only_tests lit ON r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
 					AND r.test_time = lit.latest_test_time
+				WHERE 1 = 1 {{DOMAIN_FILTER_R}}
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
@@ -621,6 +642,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					AND is_operational = true
 					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
 					%s
+					{{DOMAIN_FILTER}}
 			),
 			-- Count successful IPv6 tests per node in the period
 			ipv6_success_counts AS (
@@ -631,6 +653,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
 					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_working_ipv4)
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			-- Get latest test for nodes with zero successful IPv6 tests but working IPv4
@@ -645,6 +668,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					WHERE success_count = 0
 				)
 				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
+				{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -678,9 +702,13 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 			INNER JOIN latest_ipv4_only_tests lit ON r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
 				AND r.test_time = lit.latest_test_time
 			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
+			WHERE 1 = 1 {{DOMAIN_FILTER_R}}
 			ORDER BY r.zone, r.net, r.node, r.test_time DESC
 			LIMIT ?`, nodeFilter)
 	}
+
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, days, days, limit)
 	if err != nil {
@@ -704,7 +732,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
+		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -722,7 +750,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 // GetIPv6OnlyNodes returns nodes that have working IPv6 services but NO working IPv4 services
 // This shows nodes with IPv6 connectivity where IPv4 services failed or were not tested
 // (These nodes may still have IPv4 addresses configured, but IPv4 protocols don't work)
-func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -747,6 +775,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					AND NOT (binkp_ipv4_success = true OR ifcico_ipv4_success = true OR telnet_ipv4_success = true)
 					%s
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -831,6 +860,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					AND NOT (binkp_ipv4_success = true OR ifcico_ipv4_success = true OR telnet_ipv4_success = true)
 					%s
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -868,6 +898,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 			LIMIT ?`, nodeFilter)
 	}
 
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
 		logging.Error("GetIPv6OnlyNodes: Query failed", slog.Any("error", err))
@@ -890,7 +922,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
+		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -907,7 +939,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 
 // GetPureIPv6OnlyNodes returns nodes that ONLY advertise IPv6 addresses (no IPv4 addresses at all)
 // This is different from GetIPv6OnlyNodes which includes nodes with IPv4 addresses but non-working IPv4 services
-func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -932,6 +964,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					AND length(resolved_ipv4) = 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -1016,6 +1049,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					AND array_length(resolved_ipv4) = 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					%s
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			latest_nodes AS (
@@ -1053,6 +1087,8 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 			LIMIT ?`, nodeFilter)
 	}
 
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
 		logging.Error("GetPureIPv6OnlyNodes: Query failed", slog.Any("error", err))
@@ -1075,7 +1111,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days)
+		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -1095,7 +1131,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 // Uses the general address_validated field (populated for all tests) rather than address_validated_ipv6
 // (only populated after the per-IPv4/IPv6 AKA split was deployed). As the daemon re-tests nodes,
 // address_validated_ipv6 will gradually be populated; this can be switched later if needed.
-func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -1115,12 +1151,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true)
 				AND address_validated = true
 				%s
+				{{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
 		),
 		latest_nodes AS (
 			SELECT zone, net, node,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
+			WHERE 1 = 1 {{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
 		),
 		stability AS (
@@ -1135,6 +1173,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 				)
 				AND NOT (binkp_ipv6_success = true OR ifcico_ipv6_success = true)
 				%s
+				{{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
 		),
 		best_results AS (
@@ -1149,6 +1188,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 			WHERE r.is_aggregated = false
 				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true)
 				AND r.address_validated = true
+				{{DOMAIN_FILTER_R}}
 		)
 		SELECT br.test_time, br.zone, br.net, br.node,
 			COALESCE(n.sysop_name, '') as sysop_name,
@@ -1161,6 +1201,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 		WHERE br.rn = 1
 		ORDER BY br.zone, br.net, br.node
 		LIMIT ?`, nodeFilter, nodeFilter)
+
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {

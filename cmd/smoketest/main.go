@@ -82,7 +82,7 @@ func main() {
 	check("GetUniqueSysops", err)
 	_, err = s.GetNodeChanges(21, 1, 100, "fsxnet")
 	check("GetNodeChanges fsxnet", err)
-	_, err = s.GetPioneersByRegion(2, 50, 3)
+	_, err = s.GetPioneersByRegion(2, 50, 3, "")
 	check("GetPioneersByRegion", err)
 
 	// --- Stats / browse
@@ -116,13 +116,13 @@ func main() {
 	check("GetFlagUsageByYear", err)
 	_, err = s.GetNetworkHistory(2, 5001, "fidonet")
 	check("GetNetworkHistory", err)
-	_, err = s.GetPSTNNodes(5, 0)
+	_, err = s.GetPSTNNodes(5, 0, "fidonet")
 	check("GetPSTNNodes", err)
 	_, err = s.GetPSTNCMNodes(5)
 	check("GetPSTNCMNodes", err)
-	_, err = s.GetFileRequestNodes(5)
+	_, err = s.GetFileRequestNodes(5, "")
 	check("GetFileRequestNodes", err)
-	_, err = s.GetOnThisDayNodes(7, 17, 5, false)
+	_, err = s.GetOnThisDayNodes(7, 17, 5, false, "")
 	check("GetOnThisDayNodes", err)
 
 	// --- Test results / reachability
@@ -134,15 +134,15 @@ func main() {
 	check("GetNodeReachabilityStats", err)
 	_, err = s.GetDetailedTestResult(2, 5001, 100, "2026-07-16 00:00:00", "")
 	check("GetDetailedTestResult", err)
-	_, err = s.GetReachabilityTrends(90)
+	_, err = s.GetReachabilityTrends(90, "")
 	check("GetReachabilityTrends", err)
-	_, err = s.GetReachabilityTrendsAllTime()
+	_, err = s.GetReachabilityTrendsAllTime("")
 	check("GetReachabilityTrendsAllTime", err)
-	_, err = s.SearchNodesByReachability(true, 5, 7)
+	_, err = s.SearchNodesByReachability(true, 5, 7, "")
 	check("SearchNodesByReachability", err)
 
 	// --- Protocol / IPv6 analytics
-	type f func(int, int, bool) ([]storage.NodeTestResult, error)
+	type f func(int, int, bool, string) ([]storage.NodeTestResult, error)
 	for name, fn := range map[string]f{
 		"GetBinkPEnabledNodes":           s.GetBinkPEnabledNodes,
 		"GetIfcicoEnabledNodes":          s.GetIfcicoEnabledNodes,
@@ -156,32 +156,32 @@ func main() {
 		"GetPureIPv6OnlyNodes":           s.GetPureIPv6OnlyNodes,
 		"GetAKAMismatchNodes":            s.GetAKAMismatchNodes,
 	} {
-		_, err = fn(5, 7, false)
+		_, err = fn(5, 7, false, "")
 		check(name, err)
 	}
-	_, err = s.GetIPv6NodeList(5, 7, false)
+	_, err = s.GetIPv6NodeList(5, 7, false, "")
 	check("GetIPv6NodeList", err)
-	_, err = s.GetIPv6WeeklyNews(5, false)
+	_, err = s.GetIPv6WeeklyNews(5, false, "")
 	check("GetIPv6WeeklyNews", err)
-	_, err = s.GetIPv6IncorrectIPv4CorrectNodes(5, 7, false)
+	_, err = s.GetIPv6IncorrectIPv4CorrectNodes(5, 7, false, "")
 	check("GetIPv6IncorrectIPv4CorrectNodes", err)
-	_, err = s.GetIPv4IncorrectIPv6CorrectNodes(5, 7, false)
+	_, err = s.GetIPv4IncorrectIPv6CorrectNodes(5, 7, false, "")
 	check("GetIPv4IncorrectIPv6CorrectNodes", err)
 
 	// --- Other networks / geo / software / whois / modem
-	_, err = s.GetOtherNetworksSummary(7)
+	_, err = s.GetOtherNetworksSummary(7, "")
 	check("GetOtherNetworksSummary", err)
-	_, err = s.GetNodesInNetwork("fsxnet", 5, 7)
+	_, err = s.GetNodesInNetwork("fsxnet", 5, 7, "")
 	check("GetNodesInNetwork", err)
-	_, err = s.GetGeoHostingDistribution(7)
+	_, err = s.GetGeoHostingDistribution(7, "")
 	check("GetGeoHostingDistribution", err)
-	_, err = s.GetNodesByCountry("US", 7)
+	_, err = s.GetNodesByCountry("US", 7, "")
 	check("GetNodesByCountry", err)
-	_, err = s.GetBinkPSoftwareDistribution(7)
+	_, err = s.GetBinkPSoftwareDistribution(7, "")
 	check("GetBinkPSoftwareDistribution", err)
-	_, err = s.GetModemAccessibleNodes(5, 30, false)
+	_, err = s.GetModemAccessibleNodes(5, 30, false, "")
 	check("GetModemAccessibleNodes", err)
-	_, err = s.GetModemNoAnswerNodes(5, 30, false)
+	_, err = s.GetModemNoAnswerNodes(5, 30, false, "")
 	check("GetModemNoAnswerNodes", err)
 	_, err = s.GetAllWhoisResults()
 	check("GetAllWhoisResults", err)

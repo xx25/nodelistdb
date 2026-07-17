@@ -374,6 +374,8 @@
                             <option value="binkp" {{if eq .ProtocolFilter "binkp"}}selected{{end}}>BinkP Only</option>
                             <option value="ifcico" {{if eq .ProtocolFilter "ifcico"}}selected{{end}}>IFCICO Only</option>
                             <option value="telnet" {{if eq .ProtocolFilter "telnet"}}selected{{end}}>Telnet Only</option>
+                            <option value="ftp" {{if eq .ProtocolFilter "ftp"}}selected{{end}}>FTP Only</option>
+                            <option value="vmodem" {{if eq .ProtocolFilter "vmodem"}}selected{{end}}>VModem (IVM) Only</option>
                         </select>
 
                         <label style="font-weight: bold;">Limit:</label>
@@ -393,7 +395,7 @@
                     {{range .FilteredNodes}}
                     <div class="node-item">
                         <div>
-                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="node-address">
+                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="node-address">
                                 {{.Zone}}:{{.Net}}/{{.Node}}
                             </a>
                             {{if .Hostname}}
@@ -418,6 +420,12 @@
                             {{if .TelnetSuccess}}
                             <span class="protocol-status success">Telnet</span>
                             {{end}}
+                            {{if .FTPSuccess}}
+                            <span class="protocol-status success">FTP</span>
+                            {{end}}
+                            {{if .VModemSuccess}}
+                            <span class="protocol-status success">VModem</span>
+                            {{end}}
                             <span class="response-time">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                         </div>
                     </div>
@@ -437,7 +445,7 @@
                     {{range .OperationalNodes}}
                     <div class="node-item">
                         <div>
-                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="node-address">
+                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="node-address">
                                 {{.Zone}}:{{.Net}}/{{.Node}}
                             </a>
                             {{if .Hostname}}
@@ -454,6 +462,12 @@
                             {{if .TelnetSuccess}}
                             <span class="protocol-status success">Telnet</span>
                             {{end}}
+                            {{if .FTPSuccess}}
+                            <span class="protocol-status success">FTP</span>
+                            {{end}}
+                            {{if .VModemSuccess}}
+                            <span class="protocol-status success">VModem</span>
+                            {{end}}
                             <span class="response-time">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                         </div>
                     </div>
@@ -467,7 +481,7 @@
                     {{range .FailedNodes}}
                     <div class="node-item">
                         <div>
-                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="node-address">
+                            <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="node-address">
                                 {{.Zone}}:{{.Net}}/{{.Node}}
                             </a>
                             {{if .Hostname}}
@@ -730,7 +744,7 @@
                         <tbody>
                             {{range .History}}
                             <tr>
-                                <td data-value="{{.TestTime.Unix}}"><a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05Z07:00"}}" style="text-decoration: none; color: #007bff;">{{.TestTime.Format "2006-01-02 15:04:05"}}</a></td>
+                                <td data-value="{{.TestTime.Unix}}"><a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05Z07:00"}}{{if .Domain}}&domain={{.Domain}}{{end}}" style="text-decoration: none; color: #007bff;">{{.TestTime.Format "2006-01-02 15:04:05"}}</a></td>
                                 <td>
                                     {{if .IsOperational}}
                                     <span class="status-badge operational">Operational</span>

@@ -22,8 +22,9 @@ func NewGeoAnalyticsOperations(db database.DatabaseInterface) *GeoAnalyticsOpera
 	}
 }
 
-// GetGeoHostingDistribution returns geographic hosting distribution statistics
-func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error) {
+// GetGeoHostingDistribution returns geographic hosting distribution statistics.
+// An empty domain means all FTN networks; otherwise results are scoped to that network.
+func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
 
@@ -41,8 +42,10 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int) (*GeoHost
 
 	conn := gao.db.Conn()
 
+	domainFilter := domainFilterSQL(domain, "")
+
 	// Get country distribution
-	countryQuery := `
+	countryQuery := fmt.Sprintf(`
 		SELECT
 			country,
 			country_code,
@@ -55,12 +58,13 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int) (*GeoHost
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
+				%s
 			GROUP BY zone, net, node
 			HAVING country <> ''
 		) AS latest_operational_nodes
 		GROUP BY country, country_code
 		ORDER BY count DESC
-	`
+	`, domainFilter)
 
 	rows, err := conn.Query(countryQuery, days)
 	if err != nil {
@@ -88,7 +92,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int) (*GeoHost
 	}
 
 	// Get provider distribution with countries
-	providerQuery := `
+	providerQuery := fmt.Sprintf(`
 		SELECT
 			isp,
 			org,
@@ -105,12 +109,13 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int) (*GeoHost
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
+				%s
 			GROUP BY zone, net, node
 			HAVING isp <> ''
 		) AS latest_operational_nodes
 		GROUP BY isp, org, asn
 		ORDER BY count DESC
-	`
+	`, domainFilter)
 
 	rows2, err := conn.Query(providerQuery, days)
 	if err != nil {
@@ -182,8 +187,9 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int) (*GeoHost
 	}, nil
 }
 
-// GetNodesByCountry returns all operational nodes for a specific country
-func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error) {
+// GetNodesByCountry returns all operational nodes for a specific country.
+// An empty domain means all FTN networks; otherwise results are scoped to that network.
+func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
 
@@ -194,13 +200,17 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 
 	conn := gao.db.Conn()
 
-	query := `
+	domainFilter := domainFilterSQL(domain, "")
+
+	query := fmt.Sprintf(`
 		WITH latest_nodes AS (
 			SELECT
 				zone, net, node,
 				argMax(system_name, nodelist_date) as system_name,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
+			WHERE 1 = 1
+				%s
 			GROUP BY zone, net, node
 		)
 		SELECT
@@ -237,12 +247,13 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
+				%s
 			GROUP BY zone, net, node
 		) AS r
 		LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
 		WHERE r.country_code = ?
 		ORDER BY r.zone, r.net, r.node
-	`
+	`, domainFilter, domainFilter)
 
 	rows, err := conn.Query(query, days, countryCode)
 	if err != nil {
@@ -277,8 +288,9 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 	return results, nil
 }
 
-// GetNodesByProvider returns all operational nodes for a specific provider
-func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int) ([]NodeTestResult, error) {
+// GetNodesByProvider returns all operational nodes for a specific provider.
+// An empty domain means all FTN networks; otherwise results are scoped to that network.
+func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, domain string) ([]NodeTestResult, error) {
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
 
@@ -289,13 +301,17 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int) ([]N
 
 	conn := gao.db.Conn()
 
-	query := `
+	domainFilter := domainFilterSQL(domain, "")
+
+	query := fmt.Sprintf(`
 		WITH latest_nodes AS (
 			SELECT
 				zone, net, node,
 				argMax(system_name, nodelist_date) as system_name,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
+			WHERE 1 = 1
+				%s
 			GROUP BY zone, net, node
 		)
 		SELECT
@@ -332,12 +348,13 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int) ([]N
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
+				%s
 			GROUP BY zone, net, node
 		) AS r
 		LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
 		WHERE r.isp = ?
 		ORDER BY r.zone, r.net, r.node
-	`
+	`, domainFilter, domainFilter)
 
 	rows, err := conn.Query(query, days, isp)
 	if err != nil {

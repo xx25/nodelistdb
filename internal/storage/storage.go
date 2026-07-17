@@ -275,124 +275,124 @@ func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int, domain
 	return s.testOperations.GetNodeReachabilityStats(zone, net, node, days, domain)
 }
 
-func (s *Storage) GetReachabilityTrendsAllTime() ([]ReachabilityTrend, error) {
-	return s.testOperations.GetReachabilityTrendsAllTime()
+func (s *Storage) GetReachabilityTrendsAllTime(domain string) ([]ReachabilityTrend, error) {
+	return s.testOperations.GetReachabilityTrendsAllTime(domain)
 }
 
-func (s *Storage) GetReachabilityTrends(days int) ([]ReachabilityTrend, error) {
-	return s.testOperations.GetReachabilityTrends(days)
+func (s *Storage) GetReachabilityTrends(days int, domain string) ([]ReachabilityTrend, error) {
+	return s.testOperations.GetReachabilityTrends(days, domain)
 }
 
-func (s *Storage) SearchNodesByReachability(operational bool, limit int, days int) ([]NodeTestResult, error) {
-	return s.testOperations.SearchNodesByReachability(operational, limit, days)
+func (s *Storage) SearchNodesByReachability(operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.SearchNodesByReachability(operational, limit, days, domain)
 }
 
-func (s *Storage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6EnabledNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6OnlyNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool) ([]IPv6NodeListEntry, error) {
-	return s.testOperations.GetIPv6NodeList(limit, days, includeZeroNodes)
+func (s *Storage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
+	return s.testOperations.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool) (*IPv6WeeklyNews, error) {
-	return s.testOperations.GetIPv6WeeklyNews(limit, includeZeroNodes)
+func (s *Storage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
+	return s.testOperations.GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetIfcicoEnabledNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetTelnetEnabledNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool) ([]NodeTestResult, error) {
-	return s.testOperations.GetAKAMismatchNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
-	return s.testOperations.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+	return s.testOperations.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool) ([]AKAIPVersionMismatchNode, error) {
-	return s.testOperations.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+	return s.testOperations.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetOtherNetworksSummary(days int) ([]OtherNetworkSummary, error) {
-	return s.testOperations.GetOtherNetworksSummary(days)
+func (s *Storage) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
+	return s.testOperations.GetOtherNetworksSummary(days, domain)
 }
 
-func (s *Storage) GetNodesInNetwork(networkName string, limit int, days int) ([]OtherNetworkNode, error) {
-	return s.testOperations.GetNodesInNetwork(networkName, limit, days)
+func (s *Storage) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
+	return s.testOperations.GetNodesInNetwork(networkName, limit, days, domain)
 }
 
-func (s *Storage) GetBinkPSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	return s.testOperations.GetBinkPSoftwareDistribution(days)
+func (s *Storage) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
+	return s.testOperations.GetBinkPSoftwareDistribution(days, domain)
 }
 
-func (s *Storage) GetIFCICOSoftwareDistribution(days int) (*SoftwareDistribution, error) {
-	return s.testOperations.GetIFCICOSoftwareDistribution(days)
+func (s *Storage) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
+	return s.testOperations.GetIFCICOSoftwareDistribution(days, domain)
 }
 
-func (s *Storage) GetBinkdDetailedStats(days int) (*SoftwareDistribution, error) {
-	return s.testOperations.GetBinkdDetailedStats(days)
+func (s *Storage) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
+	return s.testOperations.GetBinkdDetailedStats(days, domain)
 }
 
-func (s *Storage) GetGeoHostingDistribution(days int) (*GeoHostingDistribution, error) {
-	return s.testOperations.GetGeoHostingDistribution(days)
+func (s *Storage) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
+	return s.testOperations.GetGeoHostingDistribution(days, domain)
 }
 
-func (s *Storage) GetNodesByCountry(countryCode string, days int) ([]NodeTestResult, error) {
-	return s.testOperations.GetNodesByCountry(countryCode, days)
+func (s *Storage) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetNodesByCountry(countryCode, days, domain)
 }
 
-func (s *Storage) GetNodesByProvider(provider string, days int) ([]NodeTestResult, error) {
-	return s.testOperations.GetNodesByProvider(provider, days)
+func (s *Storage) GetNodesByProvider(provider string, days int, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetNodesByProvider(provider, days, domain)
 }
 
-func (s *Storage) GetOnThisDayNodes(month, day, limit int, activeOnly bool) ([]OnThisDayNode, error) {
-	return s.analyticsOperations.GetOnThisDayNodes(month, day, limit, activeOnly)
+func (s *Storage) GetOnThisDayNodes(month, day, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
+	return s.analyticsOperations.GetOnThisDayNodes(month, day, limit, activeOnly, domain)
 }
 
-func (s *Storage) GetPioneersByRegion(zone, region, limit int) ([]PioneerNode, error) {
-	return s.searchOperations.GetPioneersByRegion(zone, region, limit)
+func (s *Storage) GetPioneersByRegion(zone, region, limit int, domain string) ([]PioneerNode, error) {
+	return s.searchOperations.GetPioneersByRegion(zone, region, limit, domain)
 }
 
 func (s *Storage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 	return s.analyticsOperations.GetPSTNCMNodes(limit)
 }
 
-func (s *Storage) GetPSTNNodes(limit int, zone int) ([]PSTNNode, error) {
-	return s.analyticsOperations.GetPSTNNodes(limit, zone)
+func (s *Storage) GetPSTNNodes(limit int, zone int, domain string) ([]PSTNNode, error) {
+	return s.analyticsOperations.GetPSTNNodes(limit, zone, domain)
 }
 
 func (s *Storage) MarkPSTNDead(zone, net, node int, reason, markedBy string) error {
@@ -407,16 +407,16 @@ func (s *Storage) GetPSTNDeadNodes() ([]PSTNDeadNode, error) {
 	return s.pstnDeadOperations.GetAllDeadNodes()
 }
 
-func (s *Storage) GetFileRequestNodes(limit int) ([]FileRequestNode, error) {
-	return s.analyticsOperations.GetFileRequestNodes(limit)
+func (s *Storage) GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error) {
+	return s.analyticsOperations.GetFileRequestNodes(limit, domain)
 }
 
-func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool) ([]ModemAccessibleNode, error) {
-	return s.testOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
+	return s.testOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool) ([]ModemNoAnswerNode, error) {
-	return s.testOperations.GetModemNoAnswerNodes(limit, days, includeZeroNodes)
+func (s *Storage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
+	return s.testOperations.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetRecentModemSuccessPhones(days int) ([]string, error) {

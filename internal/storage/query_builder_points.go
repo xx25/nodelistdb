@@ -94,7 +94,7 @@ func (qb *QueryBuilder) PointlistSourcesSQL() string {
 			COUNT(*) AS file_count,
 			SUM(points_count) AS total_points
 		FROM pointlist_files FINAL
-		WHERE ` + domainFilterSQL + `
+		WHERE ` + optionalDomainSQL + `
 		GROUP BY domain, list_source
 		ORDER BY domain, list_source`
 }
@@ -123,11 +123,11 @@ const PointSnapshotStalenessDays = 60
 func (qb *QueryBuilder) pointSnapshotInnerSQL(innerWhere string) string {
 	q := `SELECT ` + pointsColumnsSQL + `
 	FROM points
-	WHERE ` + domainFilterSQL + `
+	WHERE ` + optionalDomainSQL + `
 	  AND (domain, list_source, pointlist_date) IN (
 		SELECT domain, list_source, max(pointlist_date)
 		FROM pointlist_files FINAL
-		WHERE ` + domainFilterSQL + `
+		WHERE ` + optionalDomainSQL + `
 		  AND pointlist_date <= toDate(?)
 		  AND pointlist_date > toDate(?) - INTERVAL ` + fmt.Sprintf("%d", PointSnapshotStalenessDays) + ` DAY
 		GROUP BY domain, list_source
@@ -188,7 +188,7 @@ const pointGatedIssuesSQL = `(domain, list_source, pointlist_date) IN (
 // Binds: domain, domain, zone, net, node, point.
 func (qb *QueryBuilder) PointHistorySQL() string {
 	return `SELECT ` + pointsColumnsSQL + ` FROM points
-	WHERE ` + domainFilterSQL + ` AND zone = ? AND net = ? AND node = ? AND point = ?
+	WHERE ` + optionalDomainSQL + ` AND zone = ? AND net = ? AND node = ? AND point = ?
 	  AND ` + pointGatedIssuesSQL + `
 	ORDER BY pointlist_date DESC, source_priority ASC, list_source, conflict_sequence ASC`
 }
@@ -206,7 +206,7 @@ func (qb *QueryBuilder) PointDomainsSQL() string {
 // filter (epoch when nothing is imported — caller detects).
 // Binds: domain, domain.
 func (qb *QueryBuilder) LatestPointlistDateSQL() string {
-	return `SELECT max(pointlist_date) FROM pointlist_files FINAL WHERE ` + domainFilterSQL
+	return `SELECT max(pointlist_date) FROM pointlist_files FINAL WHERE ` + optionalDomainSQL
 }
 
 // PointlistDatesSQL lists imported pointlist files (gate rows), newest first.
@@ -215,7 +215,7 @@ func (qb *QueryBuilder) PointlistDatesSQL() string {
 	return `SELECT domain, list_source, pointlist_date, day_number, filename,
 			source_format, points_count, bosses_count, imported_at
 	FROM pointlist_files FINAL
-	WHERE ` + domainFilterSQL + ` AND (? = '' OR list_source = ?)
+	WHERE ` + optionalDomainSQL + ` AND (? = '' OR list_source = ?)
 	ORDER BY pointlist_date DESC, domain, list_source`
 }
 
@@ -281,7 +281,7 @@ func (qb *QueryBuilder) BuildPointFilterConditions(filter database.PointFilter) 
 // Binds: domain, domain, [extraWhere binds], limit, offset.
 func (qb *QueryBuilder) SearchPointsHistorySQL(extraWhere string) string {
 	q := `SELECT ` + pointsColumnsSQL + ` FROM points
-	WHERE ` + domainFilterSQL + ` AND ` + pointGatedIssuesSQL
+	WHERE ` + optionalDomainSQL + ` AND ` + pointGatedIssuesSQL
 	if extraWhere != "" {
 		q += ` AND ` + extraWhere
 	}
@@ -309,7 +309,7 @@ func (qb *QueryBuilder) SearchPointsLifetimeSQL(extraWhere string) string {
 		min(pointlist_date) AS first_date,
 		max(pointlist_date) AS last_date
 	FROM points
-	WHERE ` + domainFilterSQL + ` AND ` + pointGatedIssuesSQL
+	WHERE ` + optionalDomainSQL + ` AND ` + pointGatedIssuesSQL
 	if extraWhere != "" {
 		q += ` AND ` + extraWhere
 	}
