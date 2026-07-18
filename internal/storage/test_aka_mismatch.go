@@ -114,6 +114,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 			r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
 			r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
 			r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+			r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name, r.vmodem_addresses,
 			r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
 			r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
 			r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
