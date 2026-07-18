@@ -1501,39 +1501,131 @@ nav a.active {
     box-shadow: none;
 }
 
+/* Global FTN network filter: a persistently blue "capsule" (not another teal
+   nav-destination pill), reusing the existing badge-primary tint and the
+   sitewide form-focus convention. */
 .nav-network {
+    box-sizing: border-box;
     display: flex;
-    align-items: center;
-    gap: 0.45rem;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
     margin-left: auto;
-    padding: 0.35rem 0.6rem;
-    border: 1px solid #dbe3ec;
+    padding: 0;
+    color: #1e40af;
+    background: #dbeafe;
+    border: 1px solid #bfdbfe;
     border-radius: 14px;
-    background: #f8fafc;
+    white-space: nowrap;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.nav-network[hidden] {
+    display: none;
 }
 
 .nav-network-label {
-    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 0 0.65rem 0 0.8rem;
+    color: #1e40af;
+    font-size: 0.75rem;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-secondary, #64748b);
+    line-height: 1;
+    letter-spacing: 0.01em;
 }
 
 .nav-network select {
-    border: none;
-    background: transparent;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text-primary);
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    min-width: 6rem;
+    margin: 0;
+    padding: 0.72rem 2.2rem 0.72rem 0.65rem;
+    color: #1e40af;
+    background-color: transparent;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%231e40af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.72rem center;
+    background-size: 1rem;
+    border: 0;
+    border-left: 1px solid #bfdbfe;
+    border-radius: 0 13px 13px 0;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
     cursor: pointer;
-    padding: 0.2rem 0.1rem;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.2;
+    transition: border-color 0.18s ease;
 }
 
-.nav-network select:focus {
-    outline: 2px solid rgba(15, 118, 110, 0.4);
-    outline-offset: 2px;
-    border-radius: 6px;
+.nav-network select option {
+    color: #1e40af;
+    background: #ffffff;
+}
+
+.nav-network:not(.nav-network-fallback):hover {
+    transform: translateY(-1px);
+    border-color: var(--primary-color);
+}
+
+.nav-network:not(.nav-network-fallback):hover select {
+    border-left-color: var(--primary-color);
+}
+
+.nav-network:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+}
+
+.nav-network:focus-within select {
+    border-left-color: var(--primary-color);
+}
+
+.nav-network-fallback {
+    align-items: center;
+    gap: 0.65rem;
+    max-width: 34rem;
+    padding: 0.65rem 0.8rem;
+    white-space: normal;
+}
+
+.nav-network-fallback .nav-network-label {
+    padding-left: 0;
+}
+
+.nav-network-message {
+    color: #1e40af;
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: 1.35;
+}
+
+.nav-network-message code {
+    color: inherit;
+    font-size: 0.92em;
+}
+
+@media (max-width: 768px) {
+    .nav-network {
+        flex: 1 1 100%;
+        margin-left: 0;
+    }
+
+    .nav-network select {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .nav-network-fallback {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.35rem;
+        max-width: none;
+    }
 }
 
 .nav-label {
