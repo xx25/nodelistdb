@@ -251,17 +251,23 @@ func (qb *QueryBuilder) BuildPointFilterConditions(filter database.PointFilter) 
 		identityArgs = append(identityArgs, *filter.ListSource)
 	}
 
+	// Text matches are written as lowerUTF8(col) LIKE lowerUTF8(pattern), NOT
+	// col ILIKE pattern, so the ngrambf_v1 skip indexes (defined over the same
+	// lowerUTF8 expressions, migration 010) can prune granules — ClickHouse
+	// never consults a skip index for ILIKE. lowerUTF8 (not lower) keeps
+	// ILIKE's Unicode case folding: Cyrillic pointlist entries must still
+	// match case-insensitively.
 	if filter.SystemName != nil && *filter.SystemName != "" {
-		attrs = append(attrs, "system_name ILIKE ?")
+		attrs = append(attrs, "lowerUTF8(system_name) LIKE lowerUTF8(?)")
 		attrArgs = append(attrArgs, "%"+*filter.SystemName+"%")
 	}
 	if filter.Location != nil && *filter.Location != "" {
-		attrs = append(attrs, "location ILIKE ?")
+		attrs = append(attrs, "lowerUTF8(location) LIKE lowerUTF8(?)")
 		attrArgs = append(attrArgs, "%"+*filter.Location+"%")
 	}
 	if filter.SysopName != nil && *filter.SysopName != "" {
 		// Sysop names store spaces as underscores; match either form.
-		attrs = append(attrs, "replaceAll(sysop_name, '_', ' ') ILIKE concat('%', replaceAll(?, '_', ' '), '%')")
+		attrs = append(attrs, "lowerUTF8(replaceAll(sysop_name, '_', ' ')) LIKE lowerUTF8(concat('%', replaceAll(?, '_', ' '), '%'))")
 		attrArgs = append(attrArgs, *filter.SysopName)
 	}
 	if filter.DateFrom != nil {
@@ -295,27 +301,47 @@ func (qb *QueryBuilder) SearchPointsHistorySQL(extraWhere string) string {
 // summary per 4-D address (mirrors the node search's lifetime view — raw
 // weekly rows would flood the result set). Identity fields come from the
 // newest row, most authoritative source on ties.
-// Binds: domain, domain, [extraWhere binds], limit, offset.
+//
+// Two-phase shape: the inner DISTINCT picks the first LIMIT identities in
+// primary-key order (read-in-order short-circuits instead of grouping the
+// whole match set), the outer aggregation then only touches those
+// identities' rows via primary-key pruning on the tuple IN. A broad
+// identity-only search (bare zone) would otherwise GROUP BY millions of
+// historical rows just to discard everything past row 100 — measured 13.5s
+// vs 1.0s on the production table. The full WHERE is repeated in both
+// phases: the outer one must keep the text predicates, or first/last dates
+// and argMax picks would suddenly aggregate over the identity's NON-matching
+// rows too, changing result semantics. OFFSET belongs to the inner phase
+// only; the outer LIMIT is defensive (the IN already caps the group count).
+//
+// Binds: the WHERE binds twice — domain, domain, [extraWhere binds],
+// then domain, domain, [extraWhere binds] again (inner), then limit,
+// offset (inner), limit (outer).
 func (qb *QueryBuilder) SearchPointsLifetimeSQL(extraWhere string) string {
+	where := optionalDomainSQL + ` AND ` + pointGatedIssuesSQL
+	if extraWhere != "" {
+		where += ` AND ` + extraWhere
+	}
 	// Aliases must NOT shadow the source column names: ClickHouse substitutes
-	// SELECT aliases into WHERE, and "system_name ILIKE ?" would then refer
-	// to the aggregate (error 184) instead of the column. The -conflict_
+	// SELECT aliases into WHERE, and "lowerUTF8(system_name) LIKE ?" would
+	// then refer to the aggregate (error 184) instead of the column. The -conflict_
 	// sequence tiebreaker keeps all three argMax picks on the same physical
 	// row when a duplicate address ties on date and priority.
-	q := `SELECT domain, zone, net, node, point,
+	return `SELECT domain, zone, net, node, point,
 		argMax(system_name, (pointlist_date, 255 - source_priority, -conflict_sequence)) AS latest_system_name,
 		argMax(location, (pointlist_date, 255 - source_priority, -conflict_sequence)) AS latest_location,
 		argMax(sysop_name, (pointlist_date, 255 - source_priority, -conflict_sequence)) AS latest_sysop_name,
 		min(pointlist_date) AS first_date,
 		max(pointlist_date) AS last_date
 	FROM points
-	WHERE ` + optionalDomainSQL + ` AND ` + pointGatedIssuesSQL
-	if extraWhere != "" {
-		q += ` AND ` + extraWhere
-	}
-	q += `
+	WHERE ` + where + `
+		AND (domain, zone, net, node, point) IN (
+			SELECT DISTINCT domain, zone, net, node, point
+			FROM points
+			WHERE ` + where + `
+			ORDER BY domain, zone, net, node, point
+			LIMIT ? OFFSET ?)
 	GROUP BY domain, zone, net, node, point
 	ORDER BY domain, zone, net, node, point
-	LIMIT ? OFFSET ?`
-	return q
+	LIMIT ?`
 }

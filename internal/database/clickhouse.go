@@ -330,9 +330,9 @@ func (db *ClickHouseDB) CreateSchema() error {
 		has_conflict      Bool DEFAULT false,
 		fts_id            String,
 		raw_line          String DEFAULT '',
-		INDEX idx_pts_sysop  sysop_name     TYPE bloom_filter GRANULARITY 1,
-		INDEX idx_pts_system system_name    TYPE bloom_filter GRANULARITY 1,
-		INDEX idx_pts_loc    location       TYPE bloom_filter GRANULARITY 1,
+		INDEX idx_pts_sysop_ngram  lowerUTF8(replaceAll(sysop_name, '_', ' ')) TYPE ngrambf_v1(3, 8192, 3, 0) GRANULARITY 1,
+		INDEX idx_pts_system_ngram lowerUTF8(system_name) TYPE ngrambf_v1(3, 8192, 3, 0) GRANULARITY 1,
+		INDEX idx_pts_loc_ngram    lowerUTF8(location)    TYPE ngrambf_v1(3, 8192, 3, 0) GRANULARITY 1,
 		INDEX idx_pts_fts    fts_id         TYPE bloom_filter GRANULARITY 1,
 		INDEX idx_pts_date   pointlist_date TYPE minmax GRANULARITY 1
 	) ENGINE = MergeTree()

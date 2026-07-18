@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -159,8 +160,8 @@ func (s *Storage) SearchPoints(filter database.PointFilter) ([]database.Point, e
 	return s.pointOperations.SearchPoints(filter)
 }
 
-func (s *Storage) SearchPointsWithLifetime(filter database.PointFilter) ([]PointSummary, error) {
-	return s.pointOperations.SearchPointsWithLifetime(filter)
+func (s *Storage) SearchPointsWithLifetime(ctx context.Context, filter database.PointFilter) ([]PointSummary, error) {
+	return s.pointOperations.SearchPointsWithLifetime(ctx, filter)
 }
 
 func (s *Storage) GetPointStats(domain string, asOf *time.Time) (*PointStats, error) {

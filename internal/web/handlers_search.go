@@ -19,7 +19,6 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	var count int
 	var searchErr error
 	var sysopName string
-	includePoints := false
 	isRootPage := r.URL.Path == "/"
 
 	// Only perform search on POST
@@ -60,11 +59,10 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 			// Same criteria against the points table, shown as a separate
 			// labeled section. A points-side failure must not kill the node
 			// results, but it is a real error, not "0 points" — log it.
-			includePoints = r.FormValue("include_points") == "1"
-			if includePoints && searchErr == nil {
+			if searchErr == nil {
 				if pointFilter, ok := buildPointFilterFromForm(r); ok {
 					var pointErr error
-					points, pointErr = s.storage.SearchPointsWithLifetime(pointFilter)
+					points, pointErr = s.storage.SearchPointsWithLifetime(r.Context(), pointFilter)
 					if pointErr != nil {
 						logging.Warnf("point search failed: %v", pointErr)
 					}
@@ -74,29 +72,27 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		Title         string
-		ActivePage    string
-		Nodes         []storage.NodeSummary
-		Points        []storage.PointSummary
-		PointCount    int
-		IncludePoints bool
-		Count         int
-		Error         error
-		SysopName     string
-		IsRootPage    bool
-		Version       string
+		Title      string
+		ActivePage string
+		Nodes      []storage.NodeSummary
+		Points     []storage.PointSummary
+		PointCount int
+		Count      int
+		Error      error
+		SysopName  string
+		IsRootPage bool
+		Version    string
 	}{
-		Title:         "Search",
-		ActivePage:    "search",
-		Nodes:         nodes,
-		Points:        points,
-		PointCount:    len(points),
-		IncludePoints: includePoints,
-		Count:         count,
-		Error:         searchErr,
-		SysopName:     sysopName,
-		IsRootPage:    isRootPage,
-		Version:       version.GetVersionInfo(),
+		Title:      "Search",
+		ActivePage: "search",
+		Nodes:      nodes,
+		Points:     points,
+		PointCount: len(points),
+		Count:      count,
+		Error:      searchErr,
+		SysopName:  sysopName,
+		IsRootPage: isRootPage,
+		Version:    version.GetVersionInfo(),
 	}
 
 	if isRootPage {

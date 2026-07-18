@@ -82,16 +82,6 @@
                 </label>
             </div>
 
-            <div class="form-group form-group--half form-group--checkbox">
-                <label class="checkbox-field" for="include_points">
-                    <input type="checkbox" id="include_points" name="include_points" value="1"{{if .IncludePoints}} checked{{end}}>
-                    <span>
-                        <strong>Include points</strong>
-                        <small>Also search pointlist entries (4-D addresses), shown as a separate result list.</small>
-                    </span>
-                </label>
-            </div>
-
             <div class="form-actions">
                 <button type="submit" class="btn">Search Nodes</button>
             </div>
@@ -174,7 +164,7 @@
 </section>
 {{end}}
 
-{{if .IncludePoints}}
+{{if .Points}}
 <section class="card">
     <div class="results-header">
         <div>
@@ -187,7 +177,6 @@
         <span class="badge badge-info">{{.PointCount}} results</span>
     </div>
 
-    {{if .Points}}
     <div class="table-container">
         <table>
             <thead>
@@ -222,9 +211,6 @@
             </tbody>
         </table>
     </div>
-    {{else}}
-    <p class="muted">No matching pointlist entries.</p>
-    {{end}}
 </section>
 {{end}}
 {{end}}

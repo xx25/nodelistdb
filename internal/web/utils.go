@@ -137,6 +137,15 @@ func buildNodeFilterFromAddress(address string) (database.NodeFilter, error) {
 	}, nil
 }
 
+// pointTextSearchMinLen is the shortest text term the points search accepts.
+// The points table's ngrambf_v1 skip indexes are trigram-based (migration
+// 010): a shorter LIKE pattern yields no trigrams, so ClickHouse would fall
+// back to a full scan of the 76M-row table — and this query runs on every
+// web search. (Byte length, matching the node side's length checks; a
+// 2-character Cyrillic term passes, which is fine — the floor exists to stop
+// cheap accidental scans, not as a hard index guarantee.)
+const pointTextSearchMinLen = 3
+
 // buildPointFilterFromForm creates a point filter from the search form fields,
 // mirroring the node search's branch semantics exactly so the two result
 // sections answer the same question: a full address uses ONLY the address
@@ -144,7 +153,8 @@ func buildNodeFilterFromAddress(address string) (database.NodeFilter, error) {
 // ONLY the sysop (like SearchNodesBySysop); otherwise the individual fields
 // combine. The result is always lifetime-aggregated — the node side's
 // lifetime search ignores the "include historical" checkbox too.
-// ok is false when no usable constraint was given.
+// ok is false when no usable constraint was given (including any provided
+// text term below pointTextSearchMinLen).
 func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 	filter := database.PointFilter{Limit: 100}
 	hasConstraint := false
@@ -157,7 +167,7 @@ func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 	// the node side routes to SearchNodesBySysop whenever the sysop field is
 	// filled, even alongside a full address.
 	if sysop := r.FormValue("sysop_name"); strings.TrimSpace(sysop) != "" {
-		if len(strings.TrimSpace(sysop)) < 2 {
+		if len(strings.TrimSpace(sysop)) < pointTextSearchMinLen {
 			return filter, false
 		}
 		filter.SysopName = &sysop
@@ -209,7 +219,14 @@ func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 		{"system_name", &filter.SystemName},
 		{"location", &filter.Location},
 	} {
-		if v := r.FormValue(tf.field); len(strings.TrimSpace(v)) >= 2 {
+		if v := r.FormValue(tf.field); strings.TrimSpace(v) != "" {
+			// A provided-but-too-short text term skips the points search
+			// entirely rather than being dropped from the filter — running
+			// the remaining constraints would show points that ignore the
+			// user's text, diverging from the node section above it.
+			if len(strings.TrimSpace(v)) < pointTextSearchMinLen {
+				return filter, false
+			}
 			val := v
 			*tf.dest = &val
 			hasConstraint = true

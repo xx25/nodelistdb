@@ -199,12 +199,24 @@ the node-level heuristic does not prefer.
   labeled history + raw lines.
 - **Node page**: a "Points" section (snapshot under the boss) when non-empty.
 - **Search**: a 4-D address (`2:5001/100.7`) routes to the point page instead
-  of silently dropping the point suffix. An "Include points" toggle adds a
+  of silently dropping the point suffix. Every search also runs against the
+  points table, shown (when non-empty) as a
   separately-labeled Points result section driven by the same form criteria
   (mirroring the node search's branch precedence: sysop mode > full address >
   individual fields), lifetime-aggregated per 4-D address with an
   Active/Historical badge. History-shaped point queries only see fully
   imported issues (gate-table predicate), like the snapshot path.
+  Because this query now fires on every search, it is defended on four
+  fronts: text predicates are written as `lowerUTF8(col) LIKE
+  lowerUTF8(pattern)` (NOT `ILIKE`, which skip indexes never accelerate)
+  against ngrambf_v1 indexes over the same expressions (migration 010); the
+  lifetime SQL is two-phase (an inner DISTINCT picks the first LIMIT
+  identities in primary-key order, so a bare-zone search does not GROUP BY
+  millions of rows — 13.5s → 1.0s measured); text terms under 3 bytes skip
+  the points search entirely (`pointTextSearchMinLen` — below the trigram
+  floor they would full-scan, and dropping the term instead would show
+  points that ignore it); and the query is cancelled with the request
+  context if the client disconnects.
 - **Browse net page**: per-boss point-count column (explicit `?date=` =
   snapshot as of that date; the current view anchors at the newest imported
   pointlist so a lagging pointlist feed does not blank the column).

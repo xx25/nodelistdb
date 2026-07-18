@@ -80,13 +80,13 @@ func (cs *CachedStorage) SearchPoints(filter database.PointFilter) ([]database.P
 }
 
 // SearchPointsWithLifetime with caching
-func (cs *CachedStorage) SearchPointsWithLifetime(filter database.PointFilter) ([]PointSummary, error) {
+func (cs *CachedStorage) SearchPointsWithLifetime(ctx context.Context, filter database.PointFilter) ([]PointSummary, error) {
 	if filter.Limit > cs.config.MaxSearchResults {
-		return cs.Storage.PointOps().SearchPointsWithLifetime(filter)
+		return cs.Storage.PointOps().SearchPointsWithLifetime(ctx, filter)
 	}
 	key := cs.keyGen.SearchKey(filter) + ":pointsum"
 	return cachedPointFetch(cs, key, cs.config.SearchTTL, func() ([]PointSummary, error) {
-		return cs.Storage.PointOps().SearchPointsWithLifetime(filter)
+		return cs.Storage.PointOps().SearchPointsWithLifetime(ctx, filter)
 	})
 }
 

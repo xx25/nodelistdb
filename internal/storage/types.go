@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -319,7 +320,7 @@ type Operations interface {
 	GetPointsByBoss(domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error)
 	GetPointHistory(domain string, zone, net, node, point int) ([]database.Point, error)
 	SearchPoints(filter database.PointFilter) ([]database.Point, error)
-	SearchPointsWithLifetime(filter database.PointFilter) ([]PointSummary, error)
+	SearchPointsWithLifetime(ctx context.Context, filter database.PointFilter) ([]PointSummary, error)
 	GetPointStats(domain string, asOf *time.Time) (*PointStats, error)
 	GetPointCountsByNet(domain string, zone, net int, asOf *time.Time) (map[int]uint64, error)
 	GetPointDomains(zone, net, node int, point *int) ([]string, error)

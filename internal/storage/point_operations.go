@@ -440,8 +440,10 @@ func (po *PointOperations) SearchPoints(filter database.PointFilter) ([]database
 // address. LatestOnly restricts to the current snapshot (listed period =
 // snapshot issue date); otherwise the whole history is aggregated, with
 // CurrentlyActive meaning "still listed within the staleness window of the
-// domain's newest issue".
-func (po *PointOperations) SearchPointsWithLifetime(filter database.PointFilter) ([]PointSummary, error) {
+// domain's newest issue". The context cancels the aggregation query — this
+// runs on every web search, so an abandoned request must not keep occupying
+// a pool connection.
+func (po *PointOperations) SearchPointsWithLifetime(ctx context.Context, filter database.PointFilter) ([]PointSummary, error) {
 	if filter.LatestOnly != nil && *filter.LatestOnly {
 		points, err := po.SearchPoints(filter)
 		if err != nil {
@@ -489,11 +491,16 @@ func (po *PointOperations) SearchPointsWithLifetime(filter database.PointFilter)
 			where = attrWhere
 		}
 	}
-	args := append([]interface{}{domain, domain}, identityArgs...)
-	args = append(args, attrArgs...)
-	args = append(args, limit, offset)
+	// The two-phase lifetime SQL repeats the WHERE (outer aggregation +
+	// inner identity-selection subquery), so the WHERE binds go in twice.
+	whereArgs := append([]interface{}{domain, domain}, identityArgs...)
+	whereArgs = append(whereArgs, attrArgs...)
+	args := make([]interface{}, 0, 2*len(whereArgs)+3)
+	args = append(args, whereArgs...)
+	args = append(args, whereArgs...)
+	args = append(args, limit, offset, limit)
 
-	rows, err := po.db.Conn().Query(po.queryBuilder.SearchPointsLifetimeSQL(where), args...)
+	rows, err := po.db.Conn().QueryContext(ctx, po.queryBuilder.SearchPointsLifetimeSQL(where), args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search points: %w", err)
 	}
