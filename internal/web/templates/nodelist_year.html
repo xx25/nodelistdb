@@ -18,7 +18,7 @@
         </div>
         <div class="button-row">
             <span class="badge badge-info">{{.Year.Count}} files</span>
-            <a href="/download/year/{{.Year.Year}}.tar.gz" class="btn btn-secondary btn-sm">Download year archive</a>
+            <a href="{{.Year.ArchiveURL}}" class="btn btn-secondary btn-sm">Download year archive</a>
             <a href="/nodelists" class="btn btn-secondary btn-sm">← All years</a>
         </div>
     </div>
@@ -38,13 +38,13 @@
                 <tr>
                     <td data-value="{{.Name}}">
                         <div class="download-file">
-                            <a href="/download/nodelist/{{if $.Network}}{{$.Network}}/{{end}}{{.Year}}/{{.Name}}" class="download-file-link">{{.Name}}</a>
+                            <a href="{{.DownloadURL}}" class="download-file-link">{{.Name}}</a>
                         </div>
                     </td>
                     <td data-value="{{.Date.Unix}}">{{.Date.Format "2006-01-02"}}</td>
                     <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
                     <td class="downloads-table-actions">
-                        <a href="/download/nodelist/{{if $.Network}}{{$.Network}}/{{end}}{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
+                        <a href="{{.DownloadURL}}" class="btn btn-secondary btn-sm">Download</a>
                     </td>
                 </tr>
                 {{end}}

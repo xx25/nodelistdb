@@ -23,7 +23,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/pointlists/", varyByCookie(s.PointlistIndexHandler))
 	mux.HandleFunc("/download/nodelist/", s.NodelistDownloadHandler)
 	mux.HandleFunc("/download/pointlist/", s.PointlistDownloadHandler)
-	mux.HandleFunc("/download/latest", s.LatestNodelistHandler)
+	mux.HandleFunc("/download/latest", varyByCookie(s.LatestNodelistHandler))
 	mux.HandleFunc("/download/year/", s.YearArchiveHandler)
 	mux.HandleFunc("/download/urls.txt", s.URLListHandler)
 	mux.HandleFunc("/api/help", s.APIHelpHandler)

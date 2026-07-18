@@ -27,9 +27,12 @@ type NodelistNetwork struct {
 	Years []NodelistYear
 }
 
-// NodelistFile represents a nodelist file with metadata
+// NodelistFile represents a nodelist file with metadata. Network is empty for
+// fidonet (whose files live at the archive root) and the network name for
+// other FTN networks.
 type NodelistFile struct {
 	Name         string
+	Network      string
 	Year         string
 	DayNumber    int
 	Date         time.Time
@@ -38,14 +41,47 @@ type NodelistFile struct {
 	IsCompressed bool
 }
 
+// DownloadURL returns the direct download path for this file.
+func (f NodelistFile) DownloadURL() string {
+	if f.Network != "" {
+		return "/download/nodelist/" + f.Network + "/" + f.Year + "/" + f.Name
+	}
+	return "/download/nodelist/" + f.Year + "/" + f.Name
+}
+
+// YearArchiveURL returns the tar.gz archive path for this file's year.
+func (f NodelistFile) YearArchiveURL() string {
+	if f.Network != "" {
+		return "/download/year/" + f.Network + "/" + f.Year + ".tar.gz"
+	}
+	return "/download/year/" + f.Year + ".tar.gz"
+}
+
 // NodelistYear represents a year's worth of nodelist files
 type NodelistYear struct {
 	Year         string
+	Network      string
 	Files        []NodelistFile
 	PreviewFiles []NodelistFile
 	NewestFile   NodelistFile
 	OldestFile   NodelistFile
 	Count        int
+}
+
+// BrowseURL returns the per-year file listing page for this year.
+func (y NodelistYear) BrowseURL() string {
+	if y.Network != "" {
+		return "/nodelists/" + y.Network + "/" + y.Year
+	}
+	return "/nodelists/" + y.Year
+}
+
+// ArchiveURL returns the tar.gz archive path for this year.
+func (y NodelistYear) ArchiveURL() string {
+	if y.Network != "" {
+		return "/download/year/" + y.Network + "/" + y.Year + ".tar.gz"
+	}
+	return "/download/year/" + y.Year + ".tar.gz"
 }
 
 const recentNodelistLimit = 40
@@ -64,11 +100,20 @@ func getNodelistPath() string {
 	return filepath.Join(home, "nodelists")
 }
 
+// normalizeNetwork maps the default domain (fidonet) to the empty string used
+// throughout this file for the root-level fidonet archive layout.
+func normalizeNetwork(network string) string {
+	if network == database.DefaultDomain {
+		return ""
+	}
+	return network
+}
+
 // scanNodelistDirectory scans the fidonet nodelist directory (year directories
 // directly under the root, for backward compatibility) and returns organized
 // files by year.
 func scanNodelistDirectory() ([]NodelistYear, error) {
-	return scanNetworkDirectory(getNodelistPath(), "nodelist.")
+	return scanNetworkDirectory(getNodelistPath(), "nodelist.", "")
 }
 
 // scanNetworkNodelistDirectory scans a non-fidonet network's nodelists located
@@ -77,7 +122,7 @@ func scanNetworkNodelistDirectory(network string) ([]NodelistYear, error) {
 	if !networkNameRe.MatchString(network) {
 		return nil, fmt.Errorf("invalid network name")
 	}
-	return scanNetworkDirectory(filepath.Join(getNodelistPath(), network), network+".")
+	return scanNetworkDirectory(filepath.Join(getNodelistPath(), network), network+".", network)
 }
 
 // listNodelistNetworks returns the non-fidonet networks that have nodelist
@@ -115,7 +160,9 @@ func listNodelistNetworks() []NodelistNetwork {
 
 // scanNetworkDirectory scans year directories under basePath for files whose
 // lowercase name starts with filePrefix, and returns them organized by year.
-func scanNetworkDirectory(basePath, filePrefix string) ([]NodelistYear, error) {
+// network is stamped onto every file/year ("" = fidonet) so templates can
+// build network-aware URLs.
+func scanNetworkDirectory(basePath, filePrefix, network string) ([]NodelistYear, error) {
 
 	// Read year directories
 	yearDirs, err := os.ReadDir(basePath)
@@ -193,6 +240,7 @@ func scanNetworkDirectory(basePath, filePrefix string) ([]NodelistYear, error) {
 
 			nodelistFile := NodelistFile{
 				Name:         displayName,
+				Network:      network,
 				Year:         yearName,
 				DayNumber:    dayNum,
 				Date:         date,
@@ -212,6 +260,7 @@ func scanNetworkDirectory(basePath, filePrefix string) ([]NodelistYear, error) {
 
 			years = append(years, NodelistYear{
 				Year:         yearName,
+				Network:      network,
 				Files:        nodelistFiles,
 				PreviewFiles: append([]NodelistFile(nil), nodelistFiles[:min(3, len(nodelistFiles))]...),
 				NewestFile:   nodelistFiles[0],
@@ -229,9 +278,16 @@ func scanNetworkDirectory(basePath, filePrefix string) ([]NodelistYear, error) {
 	return years, nil
 }
 
-// findLatestNodelist finds the latest nodelist file across all years
-func findLatestNodelist() (*NodelistFile, error) {
-	years, err := scanNodelistDirectory()
+// findLatestNodelist finds the latest nodelist file across all years of the
+// given network ("" = fidonet).
+func findLatestNodelist(network string) (*NodelistFile, error) {
+	var years []NodelistYear
+	var err error
+	if network == "" {
+		years, err = scanNodelistDirectory()
+	} else {
+		years, err = scanNetworkNodelistDirectory(network)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -286,9 +342,45 @@ func selectNodelistYear(years []NodelistYear, selectedYear string) (NodelistYear
 	return NodelistYear{}, false
 }
 
-// NodelistHandler shows the nodelist download page
+// requestNodelistNetwork resolves the network the downloads pages should be
+// scoped to: explicit ?domain= wins, then the global switcher cookie, then
+// fidonet — normalized so "" means the root-level fidonet archive.
+func requestNodelistNetwork(r *http.Request) string {
+	network := normalizeNetwork(requestDomain(r))
+	if network != "" && !networkNameRe.MatchString(network) {
+		return ""
+	}
+	return network
+}
+
+// NodelistHandler shows the nodelist download page, scoped to the globally
+// selected FTN network.
 func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
-	years, err := scanNodelistDirectory()
+	network := requestNodelistNetwork(r)
+
+	var years []NodelistYear
+	var err error
+	if network == "" {
+		years, err = scanNodelistDirectory()
+	} else {
+		// A selected network with no archived files (or no directory yet) is
+		// not an error — render the empty state plus the other networks.
+		years, _ = scanNetworkNodelistDirectory(network)
+	}
+
+	// Other networks' archives: everything except the selected one; when a
+	// non-fidonet network is selected, fidonet joins this list.
+	networks := make([]NodelistNetwork, 0, 4)
+	if network != "" {
+		if fidoYears, ferr := scanNodelistDirectory(); ferr == nil && len(fidoYears) > 0 {
+			networks = append(networks, NodelistNetwork{Name: database.DefaultDomain, Years: fidoYears})
+		}
+	}
+	for _, n := range listNodelistNetworks() {
+		if n.Name != network {
+			networks = append(networks, n)
+		}
+	}
 
 	// Get base URL from request
 	scheme := "http"
@@ -313,6 +405,7 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Title         string
 		ActivePage    string
+		Network       string
 		Years         []NodelistYear
 		Networks      []NodelistNetwork
 		RecentFiles   []NodelistFile
@@ -325,8 +418,9 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 	}{
 		Title:         "Downloads",
 		ActivePage:    "nodelists",
+		Network:       network,
 		Years:         years,
-		Networks:      listNodelistNetworks(),
+		Networks:      networks,
 		RecentFiles:   recentFiles,
 		TotalFiles:    totalNodelistFiles(years),
 		Error:         err,
@@ -356,7 +450,8 @@ func (s *Server) NodelistYearHandler(w http.ResponseWriter, r *http.Request) {
 	case 1:
 		year = segments[0]
 	case 2:
-		network = strings.ToLower(segments[0])
+		// /nodelists/fidonet/{year} is an alias for the root fidonet layout
+		network = normalizeNetwork(strings.ToLower(segments[0]))
 		year = segments[1]
 	default:
 		http.NotFound(w, r)
@@ -433,6 +528,8 @@ func (s *Server) NodelistDownloadHandler(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "Invalid network", http.StatusBadRequest)
 			return
 		}
+		// /download/nodelist/fidonet/... is an alias for the root layout
+		network = normalizeNetwork(network)
 	default:
 		http.Error(w, "Invalid download path", http.StatusBadRequest)
 		return
@@ -445,6 +542,14 @@ func (s *Server) NodelistDownloadHandler(w http.ResponseWriter, r *http.Request)
 	}
 	if _, err := strconv.Atoi(year); err != nil {
 		http.Error(w, "Invalid year", http.StatusBadRequest)
+		return
+	}
+
+	// Filenames are always a single path element — SplitN leaves any extra
+	// slashes in the trailing part, so reject separators and dot-dot outright
+	// (blocks path traversal).
+	if strings.ContainsAny(filename, "/\\") || strings.Contains(filename, "..") {
+		http.Error(w, "Invalid filename", http.StatusBadRequest)
 		return
 	}
 
@@ -480,9 +585,12 @@ func (s *Server) NodelistDownloadHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Security check - ensure the path is within the nodelist directory
+	// Security check - ensure the path is within the nodelist directory.
+	// Require a path-separator boundary so a sibling like <base>-other can't
+	// satisfy a bare string prefix.
 	cleanPath := filepath.Clean(actualPath)
-	if !strings.HasPrefix(cleanPath, filepath.Clean(basePath)) {
+	cleanBase := filepath.Clean(basePath)
+	if cleanPath != cleanBase && !strings.HasPrefix(cleanPath, cleanBase+string(os.PathSeparator)) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -529,24 +637,44 @@ func (s *Server) NodelistDownloadHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// LatestNodelistHandler redirects to the latest nodelist download
+// LatestNodelistHandler redirects to the latest nodelist download of the
+// selected network (?domain= or the global switcher cookie; default fidonet,
+// which also covers cookie-less scripted use).
 func (s *Server) LatestNodelistHandler(w http.ResponseWriter, r *http.Request) {
-	latest, err := findLatestNodelist()
+	latest, err := findLatestNodelist(requestNodelistNetwork(r))
 	if err != nil {
 		http.Error(w, "No nodelist files found", http.StatusNotFound)
 		return
 	}
 
-	// Redirect to the download URL
-	downloadURL := fmt.Sprintf("/download/nodelist/%s/%s", latest.Year, latest.Name)
-	http.Redirect(w, r, downloadURL, http.StatusFound)
+	http.Redirect(w, r, latest.DownloadURL(), http.StatusFound)
 }
 
-// YearArchiveHandler creates and serves a tar.gz archive of all nodelists for a specific year
+// YearArchiveHandler creates and serves a tar.gz archive of all nodelists for
+// a specific year. Paths: /download/year/{year}.tar.gz (fidonet) or
+// /download/year/{network}/{year}.tar.gz
 func (s *Server) YearArchiveHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract year from URL: /download/year/2024.tar.gz
 	path := strings.TrimPrefix(r.URL.Path, "/download/year/")
-	year := strings.TrimSuffix(path, ".tar.gz")
+	path = strings.TrimSuffix(path, ".tar.gz")
+	segments := strings.Split(path, "/")
+
+	network := ""
+	year := ""
+	switch len(segments) {
+	case 1:
+		year = segments[0]
+	case 2:
+		network = strings.ToLower(segments[0])
+		if !networkNameRe.MatchString(network) {
+			http.Error(w, "Invalid network", http.StatusBadRequest)
+			return
+		}
+		network = normalizeNetwork(network)
+		year = segments[1]
+	default:
+		http.Error(w, "Invalid archive path", http.StatusBadRequest)
+		return
+	}
 
 	// Validate year
 	if len(year) != 4 {
@@ -560,6 +688,13 @@ func (s *Server) YearArchiveHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get base path and year directory
 	basePath := getNodelistPath()
+	filePrefix := "nodelist."
+	archiveName := fmt.Sprintf("nodelists-%s.tar.gz", year)
+	if network != "" {
+		basePath = filepath.Join(basePath, network)
+		filePrefix = network + "."
+		archiveName = fmt.Sprintf("%s-nodelists-%s.tar.gz", network, year)
+	}
 	yearPath := filepath.Join(basePath, year)
 
 	// Check if year directory exists
@@ -570,7 +705,7 @@ func (s *Server) YearArchiveHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Set headers for download
 	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"nodelists-%s.tar.gz\"", year))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", archiveName))
 
 	// Create gzip writer
 	gw := gzip.NewWriter(w)
@@ -591,9 +726,9 @@ func (s *Server) YearArchiveHandler(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 
-		// Only include nodelist files
+		// Only include this network's nodelist files
 		name := info.Name()
-		if !strings.HasPrefix(strings.ToLower(name), "nodelist.") {
+		if !strings.HasPrefix(strings.ToLower(name), filePrefix) {
 			return nil
 		}
 

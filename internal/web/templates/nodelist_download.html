@@ -5,7 +5,7 @@
 {{define "page_title"}}{{.Title}}{{end}}
 
 {{define "page_subtitle"}}
-<p class="subtitle">Direct downloads, recent files, and year archives for the FidoNet nodelist collection.</p>
+<p class="subtitle">Direct downloads, recent files, and year archives for the {{if .Network}}{{.Network}}{{else}}FidoNet{{end}} nodelist collection.</p>
 {{end}}
 
 {{define "content"}}
@@ -15,9 +15,10 @@
 </div>
 {{else if not .Years}}
 <div class="alert alert-warning">
-    No nodelist files were found in the configured archive directory.
+    No archived nodelist files were found for {{if .Network}}{{.Network}}{{else}}FidoNet{{end}}.
 </div>
-{{else}}
+{{end}}
+{{if .Years}}
 <section class="downloads-overview">
     {{if .Latest}}
     <article class="card downloads-feature-card">
@@ -39,8 +40,8 @@
         </dl>
 
         <div class="button-row">
-            <a href="/download/latest" class="btn">Download Latest</a>
-            <a href="/download/year/{{.Latest.Year}}.tar.gz" class="btn btn-secondary">Archive {{.Latest.Year}}</a>
+            <a href="{{.Latest.DownloadURL}}" class="btn">Download Latest</a>
+            <a href="{{.Latest.YearArchiveURL}}" class="btn btn-secondary">Archive {{.Latest.Year}}</a>
             <a href="/download/urls.txt" class="btn btn-secondary">URL List</a>
         </div>
     </article>
@@ -59,26 +60,26 @@
                     <strong>Latest URL</strong>
                     <p class="muted">Stable endpoint for the newest nodelist.</p>
                 </div>
-                <code>{{.BaseURL}}/download/latest</code>
+                <code>{{.BaseURL}}/download/latest{{if .Network}}?domain={{.Network}}{{end}}</code>
             </li>
             <li>
                 <div>
                     <strong>Direct file pattern</strong>
                     <p class="muted">Download a specific file by year and name.</p>
                 </div>
-                <code>{{.BaseURL}}/download/nodelist/{year}/{filename}</code>
+                <code>{{.BaseURL}}/download/nodelist/{{if .Network}}{{.Network}}/{{end}}{year}/{filename}</code>
             </li>
             <li>
                 <div>
                     <strong>Bulk list</strong>
-                    <p class="muted">Machine-friendly URL inventory for `wget -i`.</p>
+                    <p class="muted">Machine-friendly URL inventory for `wget -i` (all networks).</p>
                 </div>
                 <code>{{.BaseURL}}/download/urls.txt</code>
             </li>
         </ul>
 
         <pre class="command-block"><code>wget -nc -i {{.BaseURL}}/download/urls.txt
-curl -O {{.BaseURL}}/download/latest</code></pre>
+curl -O {{.BaseURL}}/download/latest{{if .Network}}?domain={{.Network}}{{end}}</code></pre>
     </aside>
 </section>
 
@@ -108,7 +109,7 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
                 <tr>
                     <td data-value="{{.Name}}">
                         <div class="download-file">
-                            <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="download-file-link">{{.Name}}</a>
+                            <a href="{{.DownloadURL}}" class="download-file-link">{{.Name}}</a>
                             <span class="download-file-note">{{.Year}} archive</span>
                         </div>
                     </td>
@@ -116,7 +117,7 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
                     <td data-value="{{.Year}}">{{.Year}}</td>
                     <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
                     <td class="downloads-table-actions">
-                        <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
+                        <a href="{{.DownloadURL}}" class="btn btn-secondary btn-sm">Download</a>
                     </td>
                 </tr>
                 {{end}}
@@ -153,14 +154,14 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
             </dl>
 
             <div class="button-row">
-                <a href="/nodelists/{{.Year}}" class="btn btn-secondary btn-sm">Browse files</a>
-                <a href="/download/year/{{.Year}}.tar.gz" class="btn btn-secondary btn-sm">Download year archive</a>
+                <a href="{{.BrowseURL}}" class="btn btn-secondary btn-sm">Browse files</a>
+                <a href="{{.ArchiveURL}}" class="btn btn-secondary btn-sm">Download year archive</a>
             </div>
 
             <ul class="archive-preview-list">
                 {{range .PreviewFiles}}
                 <li>
-                    <a href="/download/nodelist/{{.Year}}/{{.Name}}" class="download-file-link">{{.Name}}</a>
+                    <a href="{{.DownloadURL}}" class="download-file-link">{{.Name}}</a>
                     <span class="download-file-note">{{.Date.Format "2006-01-02"}}</span>
                 </li>
                 {{end}}
@@ -169,6 +170,7 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
         {{end}}
     </div>
 </section>
+{{end}}
 
 {{if .HasPointlists}}
 <section class="card">
@@ -182,9 +184,9 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
 <section class="card">
     <p class="section-tag">Other FTN networks</p>
     <h2>Network nodelists</h2>
+    <p class="muted">Use the network switcher in the top navigation to make one of these the main view.</p>
     <div class="archive-year-grid">
         {{range .Networks}}
-        {{$network := .Name}}
         <article class="archive-year-card">
             <div class="archive-year-head">
                 <div>
@@ -195,7 +197,7 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
             <ul class="archive-preview-list">
                 {{range .Years}}
                 <li>
-                    <a href="/nodelists/{{$network}}/{{.Year}}" class="download-file-link">{{.Year}}</a>
+                    <a href="{{.BrowseURL}}" class="download-file-link">{{.Year}}</a>
                     <span class="download-file-note">{{.Count}} files, newest {{.NewestFile.Name}}</span>
                 </li>
                 {{end}}
@@ -204,7 +206,6 @@ curl -O {{.BaseURL}}/download/latest</code></pre>
         {{end}}
     </div>
 </section>
-{{end}}
 {{end}}
 {{end}}
 
