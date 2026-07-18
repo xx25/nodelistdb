@@ -92,11 +92,29 @@ deploy_oracle_main() {
 }
 
 # Server 2: nodelist.5001.ru (x86_64, server only)
+#
+# The direct link from here to 5001 is frequently congested (SSH sessions
+# stall, large transfers time out), so by default we route through the
+# moscow-server jumphost via SSH ProxyJump — a fast, low-latency path to 5001.
+# Override the jumphost with DEPLOY_5001_JUMPHOST, or set it empty for a direct
+# connection:
+#   DEPLOY_5001_JUMPHOST=""            bash deploy.sh --5001   # direct
+#   DEPLOY_5001_JUMPHOST=me@host       bash deploy.sh --5001   # custom jump
 deploy_5001() {
     echo -e "${YELLOW}[2/2] Deploying to nodelist.5001.ru (x86_64)...${NC}"
 
     HOST="root@nodelist.5001.ru"
     REMOTE_PATH="/opt/nodelistdb"
+    # Unset -> default jumphost; explicitly empty -> direct connection.
+    local jumphost="${DEPLOY_5001_JUMPHOST-dp@192.168.89.5}"
+
+    # Keepalives so a stalled link fails fast rather than hanging; ProxyJump
+    # unless disabled.
+    local ssh_opts=(-o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=6)
+    if [[ -n "$jumphost" ]]; then
+        ssh_opts+=(-J "$jumphost")
+        echo "  Routing via jumphost: $jumphost"
+    fi
 
     # Check binary exists
     if [[ ! -f "$BIN_DIR/server-amd64" ]]; then
@@ -104,31 +122,59 @@ deploy_5001() {
         exit 1
     fi
 
-    # Copy binary
+    # Copy binary — prefer rsync (resumes across drops), retry a few times.
     echo "  Copying server..."
-    scp -q "$BIN_DIR/server-amd64" "$HOST:/tmp/server-new"
+    local copied=""
+    for i in $(seq 1 5); do
+        if command -v rsync >/dev/null 2>&1; then
+            if rsync --partial --append-verify -z --timeout=120 \
+                -e "ssh ${ssh_opts[*]}" \
+                "$BIN_DIR/server-amd64" "$HOST:/tmp/server-new"; then
+                copied=1; break
+            fi
+        else
+            if scp "${ssh_opts[@]}" -q "$BIN_DIR/server-amd64" "$HOST:/tmp/server-new"; then
+                copied=1; break
+            fi
+        fi
+        echo "  copy attempt $i failed; retrying..."
+        sleep 5
+    done
+    if [[ -z "$copied" ]]; then
+        echo -e "  ${RED}✗ Failed to copy binary after retries${NC}"
+        exit 1
+    fi
 
-    # Deploy and restart service
-    echo "  Stopping service..."
-    ssh "$HOST" "systemctl stop nodelistdb"
+    # Verify the upload before touching the running service.
+    echo "  Verifying checksum..."
+    local lsha rsha
+    lsha=$(sha256sum "$BIN_DIR/server-amd64" | awk '{print $1}')
+    rsha=$(ssh "${ssh_opts[@]}" "$HOST" "sha256sum /tmp/server-new | awk '{print \$1}'")
+    if [[ "$lsha" != "$rsha" ]]; then
+        echo -e "  ${RED}✗ Checksum mismatch (local=$lsha remote=$rsha) — aborting${NC}"
+        exit 1
+    fi
 
-    echo "  Installing binary..."
-    ssh "$HOST" "cp /tmp/server-new $REMOTE_PATH/server"
+    # Swap without a downtime gap: stage into the target dir then atomic rename
+    # (in-place cp over the running binary fails with "Text file busy").
+    echo "  Installing binary and restarting..."
+    ssh "${ssh_opts[@]}" "$HOST" "cp /tmp/server-new $REMOTE_PATH/server.new && chmod 755 $REMOTE_PATH/server.new && mv -f $REMOTE_PATH/server.new $REMOTE_PATH/server && systemctl restart nodelistdb && rm -f /tmp/server-new"
 
-    echo "  Starting service..."
-    ssh "$HOST" "systemctl start nodelistdb"
-
-    echo "  Cleaning up..."
-    ssh "$HOST" "rm -f /tmp/server-new"
-
-    # Verify service is running
-    echo "  Verifying..."
-    sleep 2
-    if ssh "$HOST" "systemctl is-active --quiet nodelistdb"; then
+    # Verify — 5001 talks to a REMOTE ClickHouse, so startup takes ~45s and
+    # systemd may log a restart or two before it settles. Poll for up to ~60s.
+    echo "  Verifying (allowing for slow ClickHouse startup)..."
+    local ok=""
+    for i in $(seq 1 12); do
+        sleep 5
+        if ssh "${ssh_opts[@]}" "$HOST" "systemctl is-active --quiet nodelistdb"; then
+            ok=1; break
+        fi
+    done
+    if [[ -n "$ok" ]]; then
         echo -e "  ${GREEN}✓ nodelist.5001.ru deployed successfully${NC}"
     else
         echo -e "  ${RED}✗ Service verification failed!${NC}"
-        ssh "$HOST" "systemctl status nodelistdb"
+        ssh "${ssh_opts[@]}" "$HOST" "systemctl status nodelistdb --no-pager -n 15"
         exit 1
     fi
     echo ""
@@ -171,7 +217,11 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Servers:"
             echo "  oracle-main.thodin.net  ARM64, parser + server + testdaemon"
-            echo "  nodelist.5001.ru        x86_64, server only"
+            echo "  nodelist.5001.ru        x86_64, server only (via jumphost by default)"
+            echo ""
+            echo "Environment:"
+            echo "  DEPLOY_5001_JUMPHOST    SSH jumphost for 5001 (default: dp@192.168.89.5;"
+            echo "                          set empty for a direct connection)"
             exit 0
             ;;
         *)
