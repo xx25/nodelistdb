@@ -8,9 +8,11 @@ import (
 )
 
 // buildPointFilterFromForm gates the points query that runs on every search:
-// too-short text terms must SKIP the search (the trigram indexes can't prune
-// them, and dropping the term from the filter would show points that ignore
-// the user's text), never broaden it.
+// unindexable text terms must SKIP the search (the trigram indexes can't
+// prune them, and dropping the term from the filter would show points that
+// ignore the user's text), never broaden it. Indexability follows the
+// ClickHouse ngram tokenizer: code points, not bytes, with runs reset at
+// LIKE wildcards.
 func TestBuildPointFilterFromFormTextMinLength(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -25,7 +27,12 @@ func TestBuildPointFilterFromFormTextMinLength(t *testing.T) {
 		{"3-char location searches", url.Values{"location": {"NYC"}}, true},
 		{"2-char sysop skips points search", url.Values{"sysop_name": {"Jo"}}, false},
 		{"3-char sysop searches", url.Values{"sysop_name": {"Joe"}}, true},
-		{"2-char Cyrillic term passes the byte-length floor", url.Values{"location": {"Мо"}}, true},
+		{"2-codepoint Cyrillic term skips (4 bytes but 2 runes)", url.Values{"location": {"Мо"}}, false},
+		{"3-codepoint Cyrillic term searches", url.Values{"location": {"Мос"}}, true},
+		{"wildcard-padded short term skips", url.Values{"system_name": {"%zz"}}, false},
+		{"wildcard between long runs searches", url.Values{"system_name": {"ab%cdef"}}, true},
+		{"underscore breaks system-name runs", url.Values{"system_name": {"a_b"}}, false},
+		{"underscore is literal in sysop terms", url.Values{"sysop_name": {"J_D"}}, true},
 	}
 
 	for _, tc := range cases {

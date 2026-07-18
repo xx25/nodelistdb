@@ -212,11 +212,12 @@ the node-level heuristic does not prefer.
   against ngrambf_v1 indexes over the same expressions (migration 010); the
   lifetime SQL is two-phase (an inner DISTINCT picks the first LIMIT
   identities in primary-key order, so a bare-zone search does not GROUP BY
-  millions of rows — 13.5s → 1.0s measured); text terms under 3 bytes skip
-  the points search entirely (`pointTextSearchMinLen` — below the trigram
-  floor they would full-scan, and dropping the term instead would show
-  points that ignore it); and the query is cancelled with the request
-  context if the client disconnects.
+  millions of rows — 13.5s → 1.0s measured); text terms the trigram indexes
+  cannot prune skip the points search entirely (`pointTextTermIndexable`:
+  needs a run of ≥3 literal code points between LIKE wildcards, matching the
+  ClickHouse ngram tokenizer — full-scanning would be worse, and dropping
+  the term instead would show points that ignore it); and the query is
+  cancelled with the request context if the client disconnects.
 - **Browse net page**: per-boss point-count column (explicit `?date=` =
   snapshot as of that date; the current view anchors at the newest imported
   pointlist so a lagging pointlist feed does not blank the column).

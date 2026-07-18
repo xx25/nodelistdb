@@ -337,8 +337,8 @@ func snapshotArgs(domain string, asOf time.Time, extra ...interface{}) []interfa
 }
 
 // queryPoints runs a points SELECT and parses rows via ParsePointRow.
-func (po *PointOperations) queryPoints(query string, args ...interface{}) ([]database.Point, error) {
-	rows, err := po.db.Conn().Query(query, args...)
+func (po *PointOperations) queryPoints(ctx context.Context, query string, args ...interface{}) ([]database.Point, error) {
+	rows, err := po.db.Conn().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query points: %w", err)
 	}
@@ -367,7 +367,7 @@ func (po *PointOperations) GetPointsByBoss(domain string, zone, net, node int, a
 	}
 
 	query := po.queryBuilder.PointSnapshotSQL("zone = ? AND net = ? AND node = ?", "", false)
-	return po.queryPoints(query, snapshotArgs(domain, anchor, zone, net, node)...)
+	return po.queryPoints(context.Background(), query, snapshotArgs(domain, anchor, zone, net, node)...)
 }
 
 // GetPointHistory returns every stored row of one 4-D address across all
@@ -376,13 +376,20 @@ func (po *PointOperations) GetPointHistory(domain string, zone, net, node, point
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
-	return po.queryPoints(po.queryBuilder.PointHistorySQL(), domain, domain, zone, net, node, point)
+	return po.queryPoints(context.Background(), po.queryBuilder.PointHistorySQL(), domain, domain, zone, net, node, point)
 }
 
 // SearchPoints searches points by filter. LatestOnly applies snapshot
 // semantics (DateTo doubles as the as-of anchor); otherwise every matching
 // historical row is returned, newest first.
 func (po *PointOperations) SearchPoints(filter database.PointFilter) ([]database.Point, error) {
+	return po.searchPoints(context.Background(), filter)
+}
+
+// searchPoints is SearchPoints with an explicit context, shared with
+// SearchPointsWithLifetime's LatestOnly branch so its cancellation reaches
+// the snapshot query too.
+func (po *PointOperations) searchPoints(ctx context.Context, filter database.PointFilter) ([]database.Point, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
@@ -418,7 +425,7 @@ func (po *PointOperations) SearchPoints(filter database.PointFilter) ([]database
 		args := snapshotArgs(domain, anchor, identityArgs...)
 		args = append(args, attrArgs...)
 		args = append(args, limit, offset)
-		return po.queryPoints(po.queryBuilder.PointSnapshotSQL(identityWhere, attrWhere, true), args...)
+		return po.queryPoints(ctx, po.queryBuilder.PointSnapshotSQL(identityWhere, attrWhere, true), args...)
 	}
 
 	identityWhere, identityArgs, attrWhere, attrArgs := po.queryBuilder.BuildPointFilterConditions(filter)
@@ -433,19 +440,19 @@ func (po *PointOperations) SearchPoints(filter database.PointFilter) ([]database
 	args := append([]interface{}{domain, domain}, identityArgs...)
 	args = append(args, attrArgs...)
 	args = append(args, limit, offset)
-	return po.queryPoints(po.queryBuilder.SearchPointsHistorySQL(where), args...)
+	return po.queryPoints(ctx, po.queryBuilder.SearchPointsHistorySQL(where), args...)
 }
 
 // SearchPointsWithLifetime searches points and returns one summary per 4-D
 // address. LatestOnly restricts to the current snapshot (listed period =
 // snapshot issue date); otherwise the whole history is aggregated, with
 // CurrentlyActive meaning "still listed within the staleness window of the
-// domain's newest issue". The context cancels the aggregation query — this
-// runs on every web search, so an abandoned request must not keep occupying
-// a pool connection.
+// domain's newest issue". The context cancels the underlying query in either
+// branch — this runs on every web search, so an abandoned request must not
+// keep occupying a pool connection.
 func (po *PointOperations) SearchPointsWithLifetime(ctx context.Context, filter database.PointFilter) ([]PointSummary, error) {
 	if filter.LatestOnly != nil && *filter.LatestOnly {
-		points, err := po.SearchPoints(filter)
+		points, err := po.searchPoints(ctx, filter)
 		if err != nil {
 			return nil, err
 		}

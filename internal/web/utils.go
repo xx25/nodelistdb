@@ -141,10 +141,31 @@ func buildNodeFilterFromAddress(address string) (database.NodeFilter, error) {
 // The points table's ngrambf_v1 skip indexes are trigram-based (migration
 // 010): a shorter LIKE pattern yields no trigrams, so ClickHouse would fall
 // back to a full scan of the 76M-row table — and this query runs on every
-// web search. (Byte length, matching the node side's length checks; a
-// 2-character Cyrillic term passes, which is fine — the floor exists to stop
-// cheap accidental scans, not as a hard index guarantee.)
+// web search.
 const pointTextSearchMinLen = 3
+
+// pointTextTermIndexable reports whether a term can be pruned by those
+// trigram indexes. ClickHouse's ngram tokenizer counts UTF-8 code points
+// (not bytes) and restarts at every unescaped LIKE wildcard, so the term
+// needs a run of at least pointTextSearchMinLen literal code points between
+// wildcards ("Мо" is 4 bytes but 2 code points; "%zz" has no 3-run).
+// underscoreIsWildcard says whether '_' reaches LIKE as a wildcard: true for
+// system/location (the raw term is embedded in the pattern), false for the
+// sysop field, whose SQL rewrites '_' to a literal space first.
+func pointTextTermIndexable(term string, underscoreIsWildcard bool) bool {
+	run := 0
+	for _, r := range term {
+		if r == '%' || (underscoreIsWildcard && r == '_') {
+			run = 0
+			continue
+		}
+		run++
+		if run >= pointTextSearchMinLen {
+			return true
+		}
+	}
+	return false
+}
 
 // buildPointFilterFromForm creates a point filter from the search form fields,
 // mirroring the node search's branch semantics exactly so the two result
@@ -154,7 +175,7 @@ const pointTextSearchMinLen = 3
 // combine. The result is always lifetime-aggregated — the node side's
 // lifetime search ignores the "include historical" checkbox too.
 // ok is false when no usable constraint was given (including any provided
-// text term below pointTextSearchMinLen).
+// text term pointTextTermIndexable rejects).
 func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 	filter := database.PointFilter{Limit: 100}
 	hasConstraint := false
@@ -167,7 +188,7 @@ func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 	// the node side routes to SearchNodesBySysop whenever the sysop field is
 	// filled, even alongside a full address.
 	if sysop := r.FormValue("sysop_name"); strings.TrimSpace(sysop) != "" {
-		if len(strings.TrimSpace(sysop)) < pointTextSearchMinLen {
+		if !pointTextTermIndexable(strings.TrimSpace(sysop), false) {
 			return filter, false
 		}
 		filter.SysopName = &sysop
@@ -220,11 +241,11 @@ func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 		{"location", &filter.Location},
 	} {
 		if v := r.FormValue(tf.field); strings.TrimSpace(v) != "" {
-			// A provided-but-too-short text term skips the points search
+			// A provided-but-unindexable text term skips the points search
 			// entirely rather than being dropped from the filter — running
 			// the remaining constraints would show points that ignore the
 			// user's text, diverging from the node section above it.
-			if len(strings.TrimSpace(v)) < pointTextSearchMinLen {
+			if !pointTextTermIndexable(strings.TrimSpace(v), true) {
 				return filter, false
 			}
 			val := v
