@@ -1,0 +1,174 @@
+{{template "base" .}}
+
+{{define "title"}}Domain Registrars{{end}}
+
+{{define "page_title"}}Domain Registrars{{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">WHOIS-based registrar usage for domains referenced by FidoNet nodes</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "content"}}
+{{if .Error}}
+<div class="alert alert-danger">
+    <strong>Error:</strong> {{.Error}}
+</div>
+{{end}}
+
+{{if .SelectedRegistrar}}
+
+<p><a href="/analytics/registrars">&larr; All registrars</a></p>
+
+<h2 style="margin-bottom: 1rem;">Domains registered with {{.SelectedRegistrar}}</h2>
+
+{{if .SelectedDomains}}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h3>{{len .SelectedDomains}}</h3>
+        <p>Domains</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.SelectedNodeCount}}</h3>
+        <p>Nodes</p>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="string">Domain</th>
+                <th data-sortable data-type="date">Expiration Date</th>
+                <th data-sortable data-type="date">Creation Date</th>
+                <th data-sortable data-type="number">Nodes</th>
+                <th data-sortable data-type="number">Status</th>
+                <th data-sortable data-type="date">Last Checked</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .SelectedDomains}}
+            <tr>
+                <td><a href="/analytics/domain-expiration/nodes?domain={{.Domain}}&from_registrar={{$.SelectedRegistrar}}"><strong>{{.Domain}}</strong></a></td>
+
+                {{if .ExpirationDate}}
+                <td data-value="{{.ExpirationDate.Unix}}"
+                    {{if .ExpirationDate.Before $.Now}}style="color: #dc3545; font-weight: bold;"
+                    {{else if .ExpirationDate.Before ($.Now.AddDate 0 0 30)}}style="color: #b8860b; font-weight: bold;"
+                    {{end}}>
+                    {{.ExpirationDate.Format "2006-01-02"}}
+                </td>
+                {{else}}
+                <td data-value="0"><span class="text-muted">Unknown</span></td>
+                {{end}}
+
+                {{if .CreationDate}}
+                <td data-value="{{.CreationDate.Unix}}">{{.CreationDate.Format "2006-01-02"}}</td>
+                {{else}}
+                <td data-value="0"><span class="text-muted">Unknown</span></td>
+                {{end}}
+
+                <td>{{if gt .NodeCount 0}}<a href="/analytics/domain-expiration/nodes?domain={{.Domain}}&from_registrar={{$.SelectedRegistrar}}">{{.NodeCount}}</a>{{else}}{{.NodeCount}}{{end}}</td>
+
+                {{if eq .CheckError "domain not found"}}
+                <td data-value="1"><span class="badge badge-danger" title="Domain is no longer registered">Not Registered</span></td>
+                {{else if .CheckError}}
+                <td data-value="2"><span class="badge badge-secondary" title="{{.CheckError}}">Error</span></td>
+                {{else if not .ExpirationDate}}
+                    {{if eq .WhoisStatus "Active"}}
+                <td data-value="5"><span class="badge badge-success" title="No expiration date published by registry">Active</span></td>
+                    {{else if .WhoisStatus}}
+                <td data-value="2"><span class="badge badge-warning" title="Registry reports a non-active status">{{.WhoisStatus}}</span></td>
+                    {{else}}
+                <td data-value="5"><span class="badge badge-success" title="No expiration date published by registry">Active</span></td>
+                    {{end}}
+                {{else if .ExpirationDate.Before $.Now}}
+                <td data-value="1"><span class="badge badge-danger">Expired</span></td>
+                {{else if .ExpirationDate.Before ($.Now.AddDate 0 0 30)}}
+                <td data-value="2"><span class="badge badge-warning">Expiring Soon</span></td>
+                {{else}}
+                <td data-value="5"><span class="badge badge-success">Active</span></td>
+                {{end}}
+
+                <td data-value="{{.CheckTime.Unix}}">
+                    <span class="text-muted">{{.CheckTime.Format "2006-01-02 15:04"}}</span>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{else}}
+<div class="alert alert-warning">
+    <strong>No domains found for this registrar.</strong><br>
+    The registrar name may have changed in newer WHOIS data. See the full list on the <a href="/analytics/registrars">registrars page</a>.
+</div>
+{{end}}
+
+{{else}}
+
+{{if gt .TotalDomains 0}}
+<!-- Summary Statistics -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h3>{{.TotalDomains}}</h3>
+        <p>Total Domains</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.RegistrarCount}}</h3>
+        <p>Registrars</p>
+    </div>
+    <div class="stats-box">
+        <h3 style="color: #6c757d;">{{.UnknownCount}}</h3>
+        <p>Unknown Registrar</p>
+    </div>
+</div>
+
+<!-- Registrar Table -->
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="string">Registrar</th>
+                <th data-sortable data-type="number">Domains</th>
+                <th data-sortable data-type="number">% of Domains</th>
+                <th data-sortable data-type="number">Nodes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Stats}}
+            <tr>
+                <td><a href="/analytics/registrars?registrar={{.Registrar}}"><strong>{{.Registrar}}</strong></a></td>
+                <td>{{.DomainCount}}</td>
+                <td data-value="{{printf "%.1f" .Percent}}">{{printf "%.1f" .Percent}}%</td>
+                <td>{{.NodeCount}}</td>
+            </tr>
+            {{end}}
+            {{if gt .UnknownCount 0}}
+            <tr>
+                <td><span class="text-muted">Unknown / not published</span></td>
+                <td>{{.UnknownCount}}</td>
+                <td data-value="0">&mdash;</td>
+                <td>&mdash;</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>About Domain Registrars:</strong> This report shows which registrars the domains used by FidoNet nodes are registered with, based on WHOIS data collected by the testing daemon.</p>
+    <p><strong>Unknown registrar:</strong> Many registries (especially ccTLDs and GDPR-redacted registrations) do not publish the registrar name via WHOIS. Those domains are counted as "Unknown / not published".</p>
+    <p><strong>Nodes:</strong> The number of FidoNet nodes using hostnames under the registrar's domains (based on the last 30 days of test data).</p>
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>No registrar data available yet.</strong><br>
+    Domain WHOIS data is collected by the testing daemon during node tests. Data will appear here once the daemon has completed its first test cycle.
+</div>
+{{end}}
+
+{{end}}
+{{end}}

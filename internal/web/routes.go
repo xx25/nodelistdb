@@ -64,6 +64,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/pioneers", varyByCookie(s.PioneersHandler))
 	mux.HandleFunc("/analytics/domain-expiration", s.DomainExpirationHandler)
 	mux.HandleFunc("/analytics/domain-expiration/nodes", s.DomainNodesHandler)
+	mux.HandleFunc("/analytics/registrars", s.RegistrarsHandler)
 	mux.HandleFunc("/analytics/on-this-day", varyByCookie(s.OnThisDayHandler))
 	mux.HandleFunc("/reachability", varyByCookie(s.ReachabilityHandler))
 	mux.HandleFunc("/reachability/node", varyByCookie(s.ReachabilityNodeHandler))

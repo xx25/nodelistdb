@@ -20,7 +20,9 @@
 
 {{define "content"}}
 <div class="info-actions">
-    {{if eq .Config.ViewType "domain"}}
+    {{if .Config.BackURL}}
+    <a href="{{.Config.BackURL}}" class="btn">← {{.Config.BackLabel}}</a>
+    {{else if eq .Config.ViewType "domain"}}
     <a href="/analytics/domain-expiration" class="btn">← Back to Domain Expiration Report</a>
     {{else}}
     <a href="/analytics/geo-hosting?days={{.Days}}" class="btn">← Back to Geographic Distribution</a>

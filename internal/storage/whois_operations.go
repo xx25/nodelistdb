@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ type DomainWhoisResult struct {
 	CheckTime      time.Time  `json:"check_time"`
 	CheckError     string     `json:"check_error"`
 	NodeCount      int        `json:"node_count"`
+	NodeKeys       []string   `json:"node_keys,omitempty"` // "zone:net/node" keys behind NodeCount, for cross-domain dedup
 }
 
 // WhoisOperations handles WHOIS cache database operations (server-side reads)
@@ -71,6 +73,12 @@ func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 	for i := range whoisResults {
 		if nodes, ok := domainNodes[whoisResults[i].Domain]; ok {
 			whoisResults[i].NodeCount = len(nodes)
+			keys := make([]string, 0, len(nodes))
+			for k := range nodes {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			whoisResults[i].NodeKeys = keys
 		}
 	}
 

@@ -251,7 +251,8 @@ func (kg *KeyGenerator) DetailedTestResultKey(zone, net, node int, testTime stri
 }
 
 func (kg *KeyGenerator) WhoisResultsKey() string {
-	return fmt.Sprintf("%s:analytics:whois:results", kg.Prefix)
+	// v2: entries carry node_keys for registrar-level node dedup
+	return fmt.Sprintf("%s:analytics:whois:results:v2", kg.Prefix)
 }
 
 func (kg *KeyGenerator) NodesByDomainKey(domain string, days int) string {

@@ -72,9 +72,11 @@
     }
 
     // On the domain-expiration analytics pages ?domain= is a DNS hostname, not
-    // an FTN network — leave it alone there.
+    // an FTN network, and the registrars page is not network-scoped at all —
+    // leave the URL alone there.
     function isDNSDomainPage() {
-        return window.location.pathname.indexOf('/analytics/domain-expiration') === 0;
+        return window.location.pathname.indexOf('/analytics/domain-expiration') === 0 ||
+            window.location.pathname.indexOf('/analytics/registrars') === 0;
     }
 
     function switchTo(network) {

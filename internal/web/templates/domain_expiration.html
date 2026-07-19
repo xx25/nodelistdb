@@ -83,10 +83,12 @@
                 {{else if .CheckError}}
                 <td data-value="2"><span class="badge badge-secondary" title="{{.CheckError}}">Error</span></td>
                 {{else if not .ExpirationDate}}
-                    {{if and .Registrar (not .WhoisStatus)}}
+                    {{if eq .WhoisStatus "Active"}}
                 <td data-value="5"><span class="badge badge-success" title="No expiration date published by registry">Active</span></td>
                     {{else if .WhoisStatus}}
-                <td data-value="5"><span class="badge badge-success" title="No expiration date published by registry">{{.WhoisStatus}}</span></td>
+                <td data-value="2"><span class="badge badge-warning" title="Registry reports a non-active status">{{.WhoisStatus}}</span></td>
+                    {{else if .Registrar}}
+                <td data-value="5"><span class="badge badge-success" title="No expiration date published by registry">Active</span></td>
                     {{else}}
                 <td data-value="3"><span class="badge badge-secondary">Unknown</span></td>
                     {{end}}

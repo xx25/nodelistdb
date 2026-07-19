@@ -128,6 +128,8 @@ type GeoPageConfig struct {
 	CountryCode     string        // ISO country code (for country view)
 	CountryName     string        // Full country name (for country view)
 	ProviderName    string        // ISP/provider name (for provider view)
+	BackURL         string        // Back-link target (domain view)
+	BackLabel       string        // Back-link text (domain view)
 	Days            int           // Time range in days
 	InfoText        []string      // Info paragraphs
 	EmptyStateTitle string        // Title when no results found
