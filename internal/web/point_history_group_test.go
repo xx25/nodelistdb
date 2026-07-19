@@ -180,4 +180,14 @@ func TestPointHistoryPageRendersPeriods(t *testing.T) {
 	if got := strings.Count(out, "Olga"); got != 1 {
 		t.Errorf("expected the older sysop once in the table, got %d occurrences", got)
 	}
+
+	// Flags in the history table carry description tooltips, same as the
+	// node page (MO has a static description).
+	start, end := strings.Index(out, "<tbody>"), strings.Index(out, "</tbody>")
+	if start < 0 || end < start {
+		t.Fatal("history table body not found in render")
+	}
+	if !strings.Contains(out[start:end], "flag-tooltip") {
+		t.Error("history table flags missing tooltip markup")
+	}
 }

@@ -127,37 +127,13 @@
                                 {{if .NewNode.Flags}}
                                 <div class="info-item" style="grid-column: span 2;">
                                     <strong>Flags</strong>
-                                    <div style="margin-top: 0.5rem;">
-                                        {{range .NewNode.Flags}}
-                                            {{$desc := getFlagDescription $.FlagDescriptions .}}
-                                            {{if $desc}}
-                                                <span class="flag-tooltip">
-                                                    <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                                                    <span class="tooltip-text">{{$desc}}</span>
-                                                </span>
-                                            {{else}}
-                                                <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                                            {{end}}
-                                        {{end}}
-                                    </div>
+                                    <div style="margin-top: 0.5rem;">{{flagBadges $.FlagDescriptions .NewNode.Flags}}</div>
                                 </div>
                                 {{end}}
                                 {{if .NewNode.ModemFlags}}
                                 <div class="info-item" style="grid-column: span 2;">
                                     <strong>Modem Flags</strong>
-                                    <div style="margin-top: 0.5rem;">
-                                        {{range .NewNode.ModemFlags}}
-                                            {{$desc := getFlagDescription $.FlagDescriptions .}}
-                                            {{if $desc}}
-                                                <span class="flag-tooltip">
-                                                    <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                                                    <span class="tooltip-text">{{$desc}}</span>
-                                                </span>
-                                            {{else}}
-                                                <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                                            {{end}}
-                                        {{end}}
-                                    </div>
+                                    <div style="margin-top: 0.5rem;">{{flagBadges $.FlagDescriptions .NewNode.ModemFlags}}</div>
                                 </div>
                                 {{end}}
                                 {{$protocols := getInternetProtocols .NewNode.InternetConfig}}

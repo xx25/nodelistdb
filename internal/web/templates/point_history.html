@@ -65,29 +65,13 @@
                     {{if .Latest.Flags}}
                     <div class="info-item" style="grid-column: span 2;">
                         <strong>Flags</strong>
-                        <div style="margin-top: 0.5rem;">
-                            {{range .Latest.Flags}}
-                                {{$desc := getFlagDescription $.FlagDescriptions .}}
-                                {{if $desc}}
-                                    <span class="flag-tooltip">
-                                        <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                                        <span class="tooltip-text">{{$desc}}</span>
-                                    </span>
-                                {{else}}
-                                    <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                                {{end}}
-                            {{end}}
-                        </div>
+                        <div style="margin-top: 0.5rem;">{{flagBadges .FlagDescriptions .Latest.Flags}}</div>
                     </div>
                     {{end}}
                     {{if .Latest.ModemFlags}}
                     <div class="info-item" style="grid-column: span 2;">
                         <strong>Modem Flags</strong>
-                        <div style="margin-top: 0.5rem;">
-                            {{range .Latest.ModemFlags}}
-                                <span class="badge badge-info" style="margin-right: 0.25rem; margin-bottom: 0.25rem;">{{.}}</span>
-                            {{end}}
-                        </div>
+                        <div style="margin-top: 0.5rem;">{{flagBadges .FlagDescriptions .Latest.ModemFlags}}</div>
                     </div>
                     {{end}}
                 </div>
@@ -123,9 +107,7 @@
                                 <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
                                 <td>{{if .Phone}}{{.Phone}}{{else}}<em>-</em>{{end}}</td>
                                 <td data-value="{{.MaxSpeed}}">{{if .MaxSpeed}}{{.MaxSpeed}}{{else}}<em>-</em>{{end}}</td>
-                                <td>
-                                    {{range .Flags}}<span class="badge badge-info" style="margin-right: 0.25rem;">{{.}}</span>{{end}}
-                                </td>
+                                <td>{{flagBadges $.FlagDescriptions .Flags}}</td>
                                 {{end}}
                             </tr>
                             {{end}}

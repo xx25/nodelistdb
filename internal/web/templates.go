@@ -22,17 +22,12 @@ func (s *Server) loadTemplates() {
 
 	// Create function map for template functions
 	funcMap := template.FuncMap{
-		"getFlagDescription": func(flagDescriptions map[string]flags.FlagInfo, flag string) string {
-			if info, exists := flagDescriptions[flag]; exists {
-				return info.Description
+		"flagBadges": func(flagDescriptions map[string]flags.FlagInfo, flagList []string) template.HTML {
+			var b strings.Builder
+			for _, flag := range flagList {
+				b.WriteString(renderFlagBadge(flagDescriptions, flag, "margin-right: 0.25rem; margin-bottom: 0.25rem;"))
 			}
-			// Check if it's a T-flag that needs dynamic generation
-			if len(flag) == 3 && flag[0] == 'T' {
-				if info, ok := flags.GetTFlagInfo(flag); ok {
-					return info.Description
-				}
-			}
-			return ""
+			return template.HTML(b.String())
 		},
 		"getFieldDescription": func(field string) string {
 			return GetFieldDescription(field)
@@ -508,6 +503,27 @@ func parseFlagList(flagString string) []string {
 	return strings.Fields(flagString)
 }
 
+// renderFlagBadge renders one flag as a badge with the given inline style,
+// wrapped in a tooltip span when a description is known (static map first,
+// then dynamically generated T-flags).
+func renderFlagBadge(flagDescriptions map[string]flags.FlagInfo, flag, style string) string {
+	desc := ""
+	if info, exists := flagDescriptions[flag]; exists {
+		desc = info.Description
+	}
+	if desc == "" && len(flag) == 3 && flag[0] == 'T' {
+		if info, ok := flags.GetTFlagInfo(flag); ok {
+			desc = info.Description
+		}
+	}
+
+	badge := fmt.Sprintf(`<span class="badge badge-info" style="%s">%s</span>`, style, template.HTMLEscapeString(flag))
+	if desc == "" {
+		return badge
+	}
+	return fmt.Sprintf(`<span class="flag-tooltip">%s<span class="tooltip-text">%s</span></span>`, badge, template.HTMLEscapeString(desc))
+}
+
 func renderFlagListWithTooltips(flagDescriptions map[string]flags.FlagInfo, flagList []string) string {
 	if len(flagList) == 0 {
 		return "[]"
@@ -515,31 +531,12 @@ func renderFlagListWithTooltips(flagDescriptions map[string]flags.FlagInfo, flag
 
 	var result strings.Builder
 	result.WriteString("[")
-
 	for i, flag := range flagList {
 		if i > 0 {
 			result.WriteString(" ")
 		}
-
-		// Check static descriptions first
-		if desc, exists := flagDescriptions[flag]; exists && desc.Description != "" {
-			// Render with tooltip
-			result.WriteString(fmt.Sprintf(`<span class="flag-tooltip"><span class="badge badge-info" style="margin: 0 1px;">%s</span><span class="tooltip-text">%s</span></span>`, flag, desc.Description))
-		} else if len(flag) == 3 && flag[0] == 'T' {
-			// Check if it's a T-flag that needs dynamic generation
-			if info, ok := flags.GetTFlagInfo(flag); ok && info.Description != "" {
-				// Render with tooltip
-				result.WriteString(fmt.Sprintf(`<span class="flag-tooltip"><span class="badge badge-info" style="margin: 0 1px;">%s</span><span class="tooltip-text">%s</span></span>`, flag, info.Description))
-			} else {
-				// Render without tooltip
-				result.WriteString(fmt.Sprintf(`<span class="badge badge-info" style="margin: 0 1px;">%s</span>`, flag))
-			}
-		} else {
-			// Render without tooltip
-			result.WriteString(fmt.Sprintf(`<span class="badge badge-info" style="margin: 0 1px;">%s</span>`, flag))
-		}
+		result.WriteString(renderFlagBadge(flagDescriptions, flag, "margin: 0 1px;"))
 	}
-
 	result.WriteString("]")
 	return result.String()
 }
