@@ -74,6 +74,22 @@ func TestVModemSectionRendersMismatch(t *testing.T) {
 	}
 }
 
+// Rows written by the pre-conformance tester have no variant recorded;
+// they must not be labeled "Not VMODEM".
+func TestVModemSectionRendersLegacyResult(t *testing.T) {
+	out := renderTestDetail(t, &storage.NodeTestResult{
+		Address:       "2:5001/100",
+		VModemTested:  true,
+		VModemSuccess: true,
+	})
+	if strings.Contains(out, "Not VMODEM") {
+		t.Error("legacy result must not be labeled Not VMODEM")
+	}
+	if !strings.Contains(out, "tested by the old tester") {
+		t.Error("legacy result should say it was tested by the old tester")
+	}
+}
+
 // A node that wasn't vmodem-tested must not render the section at all.
 func TestVModemSectionHiddenWhenUntested(t *testing.T) {
 	out := renderTestDetail(t, &storage.NodeTestResult{Address: "1:1/1", VModemTested: false})

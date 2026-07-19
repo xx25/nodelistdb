@@ -376,13 +376,13 @@
                     </span>
                     {{if .TestResult.VModemSuccess}}
                     <span class="detail-label">Conformance:</span>
-                    <span class="detail-value {{if .TestResult.VModemConformant}}success{{else}}failed{{end}}">
-                        {{if .TestResult.VModemConformant}}
-                        &#10003; Genuine VMODEM (VMP)
-                        {{else}}
-                        &#9888; Not VMODEM &mdash; actual protocol: {{if .TestResult.VModemVariant}}{{.TestResult.VModemVariant}}{{else}}unknown{{end}}
-                        {{end}}
-                    </span>
+                    {{if .TestResult.VModemConformant}}
+                    <span class="detail-value success">&#10003; Genuine VMODEM (VMP)</span>
+                    {{else if .TestResult.VModemVariant}}
+                    <span class="detail-value failed">&#9888; Not VMODEM &mdash; actual protocol: {{.TestResult.VModemVariant}}</span>
+                    {{else}}
+                    <span class="detail-value text-muted">Unknown &mdash; tested by the old tester, protocol was not recorded</span>
+                    {{end}}
                     {{if .TestResult.VModemVariant}}
                     <span class="detail-label">Protocol Detected:</span>
                     <span class="detail-value">{{.TestResult.VModemVariant}}</span>
