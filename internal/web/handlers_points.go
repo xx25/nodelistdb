@@ -1,8 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +14,69 @@ import (
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 )
+
+// pointHistoryPeriod is one row of the collapsed history table: a run of
+// consecutive issues (in newest-first history order) whose listed content is
+// identical.
+type pointHistoryPeriod struct {
+	Entry     database.Point // newest row of the run; supplies the content columns
+	FirstDate time.Time
+	LastDate  time.Time
+	Count     int      // distinct publications collapsed into this period
+	Sources   []string // distinct list_source values, in appearance order
+}
+
+// SourcesKey joins the period's sources for the client-side sorter, which
+// otherwise reads only the first badge of a cell.
+func (p pointHistoryPeriod) SourcesKey() string {
+	return strings.Join(p.Sources, ", ")
+}
+
+// samePointContent reports whether two rows carry the same listed content
+// (issue metadata and source provenance excluded). InternetConfig is part of
+// the key because recognized internet tokens (IBN, INA, ...) are stripped out
+// of Flags during parsing — an endpoint change is invisible to the flag slices.
+func samePointContent(a, b database.Point) bool {
+	return a.SystemName == b.SystemName &&
+		a.Location == b.Location &&
+		a.SysopName == b.SysopName &&
+		a.Phone == b.Phone &&
+		a.MaxSpeed == b.MaxSpeed &&
+		slices.Equal(a.Flags, b.Flags) &&
+		slices.Equal(a.ModemFlags, b.ModemFlags) &&
+		bytes.Equal(a.InternetConfig, b.InternetConfig)
+}
+
+// groupPointHistory collapses the newest-first history into periods of
+// unchanged content. Sources interleave (a zone rollup republishes the
+// regionals), so a period spans every series that carried the same entry; a
+// content change ends the run even if a later issue reverts it.
+func groupPointHistory(history []database.Point) []pointHistoryPeriod {
+	var periods []pointHistoryPeriod
+	for i, h := range history {
+		if n := len(periods); n > 0 && samePointContent(periods[n-1].Entry, h) {
+			p := &periods[n-1]
+			p.FirstDate = h.PointlistDate // history is newest-first
+			// Duplicate lines inside one file (conflict_sequence > 0) sort
+			// adjacent; count distinct publications, not stored rows.
+			if prev := history[i-1]; prev.ListSource != h.ListSource || !prev.PointlistDate.Equal(h.PointlistDate) {
+				p.Count++
+			}
+			if !slices.Contains(p.Sources, h.ListSource) {
+				p.Sources = append(p.Sources, h.ListSource)
+			}
+			continue
+		}
+		periods = append(periods, pointHistoryPeriod{
+			Entry:     h,
+			FirstDate: h.PointlistDate,
+			LastDate:  h.PointlistDate,
+			Count:     1,
+			Sources:   []string{h.ListSource},
+		})
+	}
+	return periods
+}
 
 // pickSnapshotEntry resolves a point's current entry from its full history
 // (newest first) with snapshot semantics: candidates are the rows within the
@@ -97,6 +162,7 @@ func (s *Server) PointHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		Domain           string
 		AvailableDomains []string
 		History          []database.Point
+		HistoryPeriods   []pointHistoryPeriod
 		Latest           database.Point
 		FirstDate        time.Time
 		LastDate         time.Time
@@ -111,6 +177,7 @@ func (s *Server) PointHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		Domain:           domain,
 		AvailableDomains: availableDomains,
 		History:          history,
+		HistoryPeriods:   groupPointHistory(history),
 		Latest:           latest,
 		FirstDate:        firstDate,
 		LastDate:         lastDate,

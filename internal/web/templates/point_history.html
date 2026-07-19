@@ -27,7 +27,7 @@
                 </p>
                 {{end}}
                 <p><strong>Listed Period:</strong> {{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}</p>
-                <p><strong>Total Entries:</strong> {{len .History}}</p>
+                <p><strong>Total Entries:</strong> {{len .History}}{{if lt (len .HistoryPeriods) (len .History)}} ({{len .HistoryPeriods}} unchanged-content period{{if gt (len .HistoryPeriods) 1}}s{{end}}){{end}}</p>
                 <div class="node-info" style="margin-top: 1rem;">
                     <div class="info-item">
                         <strong>System Name</strong>
@@ -95,33 +95,39 @@
 
             <div class="card">
                 <h3>Pointlist History</h3>
-                <p class="muted">Every entry across all pointlist series. Overlapping series (a zone rollup republishes the regional lists) are shown side by side, labeled with their source.</p>
+                <p class="muted">Consecutive issues with identical content are collapsed into one period. Overlapping series carrying the same entry (a zone rollup republishes the regional lists) share a row, labeled with their sources.</p>
                 <div class="table-responsive">
                     <table class="data-table sortable-table">
                         <thead>
                             <tr>
-                                <th data-sortable data-type="date" data-default-sort="desc">Date</th>
-                                <th data-sortable data-type="string">Source</th>
+                                <th data-sortable data-type="date" data-default-sort="desc">Period</th>
+                                <th data-sortable data-type="number">Issues</th>
+                                <th data-sortable data-type="string">Sources</th>
                                 <th data-sortable data-type="string">System Name</th>
                                 <th data-sortable data-type="string">Location</th>
                                 <th data-sortable data-type="string">Sysop</th>
                                 <th data-sortable data-type="string">Phone</th>
+                                <th data-sortable data-type="number">Speed</th>
                                 <th>Flags</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {{range .History}}
+                            {{range .HistoryPeriods}}
                             <tr>
-                                <td data-value="{{.PointlistDate.Unix}}">{{.PointlistDate.Format "2006-01-02"}}</td>
-                                <td><span class="badge badge-info">{{.ListSource}}</span></td>
+                                <td data-value="{{.LastDate.Unix}}" style="white-space: nowrap;">{{if .FirstDate.Equal .LastDate}}{{.LastDate.Format "2006-01-02"}}{{else}}{{.FirstDate.Format "2006-01-02"}} &ndash; {{.LastDate.Format "2006-01-02"}}{{end}}</td>
+                                <td>{{.Count}}</td>
+                                <td data-value="{{.SourcesKey}}">{{range .Sources}}<span class="badge badge-info" style="margin-right: 0.25rem;">{{.}}</span>{{end}}</td>
+                                {{with .Entry}}
                                 <td>{{if .SystemName}}{{replaceUnderscores .SystemName}}{{else}}<em>-</em>{{end}}</td>
                                 <td>{{if .Location}}{{replaceUnderscores .Location}}{{else}}<em>-</em>{{end}}</td>
                                 <td>{{if .SysopName}}{{replaceUnderscores .SysopName}}{{else}}<em>-</em>{{end}}</td>
                                 <td>{{if .Phone}}{{.Phone}}{{else}}<em>-</em>{{end}}</td>
+                                <td data-value="{{.MaxSpeed}}">{{if .MaxSpeed}}{{.MaxSpeed}}{{else}}<em>-</em>{{end}}</td>
                                 <td>
                                     {{range .Flags}}<span class="badge badge-info" style="margin-right: 0.25rem;">{{.}}</span>{{end}}
                                     {{range .ModemFlags}}<span class="badge" style="margin-right: 0.25rem;">{{.}}</span>{{end}}
                                 </td>
+                                {{end}}
                             </tr>
                             {{end}}
                         </tbody>
