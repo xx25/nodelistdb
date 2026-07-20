@@ -142,7 +142,12 @@ type DNSResult struct {
 	ResolutionMs int64
 }
 
-// WhoisResult holds the parsed WHOIS result for a domain
+// WhoisNoServerError marks a domain whose TLD publishes no WHOIS server
+// (RDAP-only registries after the ICANN WHOIS sunset). It is a stable outcome:
+// retries should be suppressed, but nothing is persisted since there is no data.
+const WhoisNoServerError = "no whois server"
+
+// WhoisResult holds the parsed WHOIS (or RDAP) result for a domain
 type WhoisResult struct {
 	Domain         string
 	ExpirationDate *time.Time
@@ -152,6 +157,13 @@ type WhoisResult struct {
 	Error          string
 	LookupTimeMs   int64
 	Cached         bool
+}
+
+// HasUsableData reports whether the result carries WHOIS/RDAP data worth
+// persisting. A registrar name, an expiration date, or a status line all count:
+// some registries (e.g. .nl) publish only a status with no expiration date.
+func (r *WhoisResult) HasUsableData() bool {
+	return r.Registrar != "" || r.ExpirationDate != nil || r.Status != ""
 }
 
 // GeolocationResult represents IP geolocation data

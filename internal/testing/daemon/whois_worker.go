@@ -116,10 +116,17 @@ func (w *WhoisWorker) processQueue(ctx context.Context) {
 			}
 
 			result := w.resolver.Resolve(ctx, domain)
+
+			shouldPersist, shouldMarkSeen := classifyWhoisResult(result)
+
 			if result.Cached {
+				// Already resolved recently (persistent or in-memory cache) — don't
+				// re-store, but honor the same seen rules so stable results keep
+				// suppressing retries and cached transient errors stay retryable.
+				if shouldMarkSeen {
+					w.seen.Store(domain, time.Now())
+				}
 				logging.Debugf("WHOIS cache hit for %s", domain)
-				// Mark seen — the cached result is valid
-				w.seen.Store(domain, time.Now())
 				continue
 			}
 
@@ -133,29 +140,14 @@ func (w *WhoisWorker) processQueue(ctx context.Context) {
 				logging.Infof("WHOIS for %s: expires %s, registrar %s", domain, expiryStr, result.Registrar)
 			}
 
-			// Determine what to persist and whether to mark as seen.
-			// Only persist to ClickHouse if we have meaningful data that won't
-			// overwrite good data in ReplacingMergeTree:
-			// - "domain not found" is stable and should be stored
-			// - Successful lookups WITH an expiration date should be stored
-			// - Successful lookups without expiration date are incomplete — skip
-			// - Transient errors should never overwrite known good data
-			shouldPersist := false
-			shouldMarkSeen := false
-
-			switch {
-			case result.Error == "domain not found":
-				shouldPersist = true
-				shouldMarkSeen = true
-			case result.Error == "":
-				shouldMarkSeen = true
-				shouldPersist = true
-			// Transient errors: don't persist, don't mark seen (allow retry)
-			}
-
 			if shouldPersist {
 				if err := w.storage.StoreWhoisResult(ctx, result); err != nil {
 					logging.Errorf("Failed to store WHOIS result for %s: %v", domain, err)
+					// The write failed — allow a retry rather than marking seen, and
+					// drop the resolver's in-memory cache entry so the retry actually
+					// re-resolves and re-persists instead of returning the cached hit.
+					shouldMarkSeen = false
+					w.resolver.InvalidateCache(domain)
 				}
 			}
 
@@ -163,6 +155,27 @@ func (w *WhoisWorker) processQueue(ctx context.Context) {
 				w.seen.Store(domain, time.Now())
 			}
 		}
+	}
+}
+
+// classifyWhoisResult decides whether a WHOIS/RDAP result should be persisted to
+// ClickHouse and/or marked "seen" (suppressing retries for seenTTL). The persist
+// gate protects the ReplacingMergeTree cache from overwriting good rows with junk:
+//   - success WITH usable data (registrar, expiry, or status) → persist + seen
+//   - success WITHOUT usable data (empty stub, e.g. DENIC)     → seen only
+//   - "domain not found" (stable)                             → persist + seen
+//   - "no whois server" (RDAP-only TLD, no data)              → seen only
+//   - transient errors                                        → neither (retry)
+func classifyWhoisResult(result *models.WhoisResult) (persist, markSeen bool) {
+	switch result.Error {
+	case "":
+		return result.HasUsableData(), true
+	case "domain not found":
+		return true, true
+	case models.WhoisNoServerError:
+		return false, true
+	default:
+		return false, false // transient — retry next cycle
 	}
 }
 

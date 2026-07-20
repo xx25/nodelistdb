@@ -24,6 +24,7 @@ type Daemon struct {
 	dnsResolver   *services.DNSResolver
 	geolocator    *services.Geolocation
 	whoisResolver *services.WhoisResolver
+	rdapResolver  *services.RDAPResolver
 	whoisWorker   *WhoisWorker
 
 	// Persistent cache (optional) - now uses unified cache interface
@@ -175,6 +176,11 @@ func New(cfg *Config) (*Daemon, error) {
 
 	// Initialize WHOIS resolver (10s timeout for WHOIS queries)
 	d.whoisResolver = services.NewWhoisResolver(10 * time.Second)
+
+	// RDAP fallback for TLDs with no port-43 WHOIS server or unusable stub data
+	// (the post-2025 WHOIS-to-RDAP sunset registries: .info/.dev/.app/.ch/... ).
+	d.rdapResolver = services.NewRDAPResolver(15 * time.Second)
+	d.whoisResolver.SetRDAPResolver(d.rdapResolver)
 
 	// Wire persistent cache to services if available
 	if d.persistentCache != nil {
@@ -402,6 +408,10 @@ func (d *Daemon) Close() error {
 
 	if d.whoisResolver != nil {
 		d.whoisResolver.Close()
+	}
+
+	if d.rdapResolver != nil {
+		d.rdapResolver.Close()
 	}
 
 	if d.persistentCache != nil {
