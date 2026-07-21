@@ -7,13 +7,15 @@ import (
 	"time"
 )
 
-// GetAllWhoisResults returns all WHOIS results with node counts (cached)
-func (cs *CachedStorage) GetAllWhoisResults() ([]DomainWhoisResult, error) {
+// GetAllWhoisResults returns all WHOIS results with node counts (cached),
+// scoped to the given FTN network ("" = all networks). The domain is part of
+// the cache key so each network keeps its own entry.
+func (cs *CachedStorage) GetAllWhoisResults(domain string) ([]DomainWhoisResult, error) {
 	if !cs.config.Enabled {
-		return cs.Storage.GetAllWhoisResults()
+		return cs.Storage.GetAllWhoisResults(domain)
 	}
 
-	key := cs.keyGen.WhoisResultsKey()
+	key := cs.keyGen.WhoisResultsKey(domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -27,7 +29,7 @@ func (cs *CachedStorage) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
 	// Fall back to database
-	results, err := cs.Storage.GetAllWhoisResults()
+	results, err := cs.Storage.GetAllWhoisResults(domain)
 	if err != nil {
 		return nil, err
 	}

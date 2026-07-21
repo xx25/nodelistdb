@@ -35,8 +35,15 @@ func NewWhoisOperations(db database.DatabaseInterface) *WhoisOperations {
 	return &WhoisOperations{db: db}
 }
 
-// GetAllWhoisResults returns all WHOIS results with node counts computed in Go
-func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
+// GetAllWhoisResults returns all WHOIS results with node counts computed in Go.
+// ftnDomain scopes the node counting to one FTN network ("" = all networks):
+// the WHOIS cache itself is keyed by DNS domain and network-agnostic, so the
+// scoping is applied when mapping hostnames back to the nodes that use them.
+// When a network is selected, WHOIS entries whose domain has no node in that
+// network are dropped, so the registrar/expiry tables reflect only that
+// network. (The parameter is named ftnDomain, not domain, to avoid shadowing
+// the imported domain package used below.)
+func (w *WhoisOperations) GetAllWhoisResults(ftnDomain string) ([]DomainWhoisResult, error) {
 	ctx := context.Background()
 
 	// Step 1: Get all WHOIS results from cache table
@@ -49,11 +56,18 @@ func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 		return whoisResults, nil
 	}
 
-	// Step 2: Get hostname→node mappings from recent test results
-	hostnameNodes, err := w.getHostnameNodeMappings(ctx, 30)
+	// Step 2: Get hostname→node mappings from recent test results, scoped to
+	// the selected FTN network.
+	hostnameNodes, err := w.getHostnameNodeMappings(ctx, 30, ftnDomain)
 	if err != nil {
-		// Return WHOIS results without node counts rather than failing
-		return whoisResults, nil
+		// The all-networks view can still show the raw WHOIS list without node
+		// counts; a network-scoped view cannot (it must drop domains with no
+		// node in that network), so surface the error rather than leaking
+		// other networks' domains.
+		if ftnDomain == "" {
+			return whoisResults, nil
+		}
+		return nil, err
 	}
 
 	// Step 3: Count unique nodes per domain in Go
@@ -82,6 +96,19 @@ func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 		}
 	}
 
+	// Step 5: When scoped to a network, keep only the domains that actually
+	// have a node in it — a WHOIS entry for another network's (or a retired)
+	// domain is not part of this view.
+	if ftnDomain != "" {
+		filtered := whoisResults[:0]
+		for _, r := range whoisResults {
+			if _, ok := domainNodes[r.Domain]; ok {
+				filtered = append(filtered, r)
+			}
+		}
+		whoisResults = filtered
+	}
+
 	return whoisResults, nil
 }
 
@@ -91,8 +118,10 @@ func (w *WhoisOperations) GetAllWhoisResults() ([]DomainWhoisResult, error) {
 func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]NodeTestResult, error) {
 	ctx := context.Background()
 
-	// Step 1: Get hostname→node mappings from recent test results
-	hostnameNodes, err := w.getHostnameNodeMappings(ctx, days)
+	// Step 1: Get hostname→node mappings from recent test results. This
+	// drill-down is DNS-domain-centric ("nodes using example.com"), so it
+	// spans all FTN networks regardless of the switcher.
+	hostnameNodes, err := w.getHostnameNodeMappings(ctx, days, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hostname mappings: %w", err)
 	}
@@ -266,13 +295,16 @@ type hostnameNode struct {
 	nodeKey  string // "zone:net/node" for dedup
 }
 
-// getHostnameNodeMappings fetches distinct (hostname, zone, net, node) tuples from recent test results
-func (w *WhoisOperations) getHostnameNodeMappings(ctx context.Context, days int) ([]hostnameNode, error) {
-	query := `SELECT DISTINCT hostname, zone, net, node
+// getHostnameNodeMappings fetches distinct (hostname, zone, net, node) tuples
+// from recent test results. ftnDomain scopes the results to one FTN network
+// ("" = all networks).
+func (w *WhoisOperations) getHostnameNodeMappings(ctx context.Context, days int, ftnDomain string) ([]hostnameNode, error) {
+	query := fmt.Sprintf(`SELECT DISTINCT hostname, zone, net, node
 		FROM node_test_results
 		WHERE hostname != ''
 		  AND is_aggregated = false
-		  AND test_date >= today() - ?`
+		  AND test_date >= today() - ?
+		  %s`, domainFilterSQL(ftnDomain, ""))
 
 	conn := w.db.Conn()
 	rows, err := conn.QueryContext(ctx, query, days)

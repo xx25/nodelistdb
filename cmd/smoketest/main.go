@@ -183,7 +183,7 @@ func main() {
 	check("GetModemAccessibleNodes", err)
 	_, err = s.GetModemNoAnswerNodes(5, 30, false, "")
 	check("GetModemNoAnswerNodes", err)
-	_, err = s.GetAllWhoisResults()
+	_, err = s.GetAllWhoisResults("")
 	check("GetAllWhoisResults", err)
 	_, err = s.GetNodesByDomain("example.com", 7)
 	check("GetNodesByDomain", err)

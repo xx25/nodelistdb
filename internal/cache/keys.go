@@ -250,9 +250,15 @@ func (kg *KeyGenerator) DetailedTestResultKey(zone, net, node int, testTime stri
 	return fmt.Sprintf("%s:reachability:detail:%d:%d:%d:%s", kg.Prefix, zone, net, node, testTime)
 }
 
-func (kg *KeyGenerator) WhoisResultsKey() string {
-	// v2: entries carry node_keys for registrar-level node dedup
-	return fmt.Sprintf("%s:analytics:whois:results:v2", kg.Prefix)
+func (kg *KeyGenerator) WhoisResultsKey(domain string) string {
+	// v3: entries carry node_keys for registrar-level node dedup AND are now
+	// scoped to one FTN network ("" = all networks). The all-networks sentinel
+	// is "*", which is outside the valid network-name charset ([a-z0-9_-]), so
+	// it can never collide with a network literally named e.g. "all".
+	if domain == "" {
+		domain = "*"
+	}
+	return fmt.Sprintf("%s:analytics:whois:results:v3:%s", kg.Prefix, domain)
 }
 
 func (kg *KeyGenerator) NodesByDomainKey(domain string, days int) string {

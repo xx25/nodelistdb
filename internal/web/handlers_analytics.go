@@ -1877,7 +1877,10 @@ func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 
 // DomainExpirationHandler shows WHOIS-based domain expiration analytics
 func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request) {
-	results, err := s.storage.GetAllWhoisResults()
+	// Scope the domain list to the globally selected FTN network. On this page
+	// ?domain= is a DNS hostname (drill-down), so the network comes from the
+	// switcher cookie only, never the URL.
+	results, err := s.storage.GetAllWhoisResults(cookieDomain(r))
 	var displayError error
 
 	if err != nil {
@@ -2123,7 +2126,10 @@ type RegistrarStat struct {
 // Without a ?registrar= parameter it renders the aggregate registrar table;
 // with one it renders the list of domains registered through that registrar.
 func (s *Server) RegistrarsHandler(w http.ResponseWriter, r *http.Request) {
-	results, err := s.storage.GetAllWhoisResults()
+	// Scope to the globally selected FTN network. This page uses ?domain= for
+	// the registrar drill-down family (a DNS hostname on the linked pages), so
+	// the network comes from the switcher cookie only, never the URL.
+	results, err := s.storage.GetAllWhoisResults(cookieDomain(r))
 	var displayError error
 
 	if err != nil {

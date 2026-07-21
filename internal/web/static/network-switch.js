@@ -71,9 +71,11 @@
             });
     }
 
-    // On the domain-expiration analytics pages ?domain= is a DNS hostname, not
-    // an FTN network, and the registrars page is not network-scoped at all —
-    // leave the URL alone there.
+    // The WHOIS analytics pages (domain-expiration + registrars) DO scope by
+    // the selected network, but they already use ?domain= for a DNS hostname
+    // (the drill-down links), so the switcher must not also write ?domain=
+    // here. It just sets the ftn_network cookie and reloads; the server reads
+    // the cookie. Leave the URL alone on these pages.
     function isDNSDomainPage() {
         return window.location.pathname.indexOf('/analytics/domain-expiration') === 0 ||
             window.location.pathname.indexOf('/analytics/registrars') === 0;

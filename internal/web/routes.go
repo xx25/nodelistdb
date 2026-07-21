@@ -62,9 +62,11 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/geo-hosting/country", varyByCookie(s.GeoCountryNodesHandler))
 	mux.HandleFunc("/analytics/geo-hosting/provider", varyByCookie(s.GeoProviderNodesHandler))
 	mux.HandleFunc("/analytics/pioneers", varyByCookie(s.PioneersHandler))
-	mux.HandleFunc("/analytics/domain-expiration", s.DomainExpirationHandler)
+	// The list pages scope by the ftn_network cookie, so their output varies
+	// by cookie; the /nodes drill-down keys on the ?domain= URL param instead.
+	mux.HandleFunc("/analytics/domain-expiration", varyByCookie(s.DomainExpirationHandler))
 	mux.HandleFunc("/analytics/domain-expiration/nodes", s.DomainNodesHandler)
-	mux.HandleFunc("/analytics/registrars", s.RegistrarsHandler)
+	mux.HandleFunc("/analytics/registrars", varyByCookie(s.RegistrarsHandler))
 	mux.HandleFunc("/analytics/on-this-day", varyByCookie(s.OnThisDayHandler))
 	mux.HandleFunc("/reachability", varyByCookie(s.ReachabilityHandler))
 	mux.HandleFunc("/reachability/node", varyByCookie(s.ReachabilityNodeHandler))

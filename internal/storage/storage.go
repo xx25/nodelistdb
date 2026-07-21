@@ -429,8 +429,8 @@ func (s *Storage) GetDetailedModemTestResult(zone, net, node int, testTime strin
 }
 
 // WHOIS Operations delegated methods
-func (s *Storage) GetAllWhoisResults() ([]DomainWhoisResult, error) {
-	return s.whoisOperations.GetAllWhoisResults()
+func (s *Storage) GetAllWhoisResults(domain string) ([]DomainWhoisResult, error) {
+	return s.whoisOperations.GetAllWhoisResults(domain)
 }
 
 func (s *Storage) GetNodesByDomain(domain string, days int) ([]NodeTestResult, error) {

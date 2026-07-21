@@ -397,7 +397,7 @@ type Operations interface {
 	GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error)
 
 	// WHOIS operations (delegated to WhoisOps())
-	GetAllWhoisResults() ([]DomainWhoisResult, error)
+	GetAllWhoisResults(domain string) ([]DomainWhoisResult, error)
 	GetNodesByDomain(domain string, days int) ([]NodeTestResult, error)
 	WhoisOps() *WhoisOperations
 
