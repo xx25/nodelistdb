@@ -25,6 +25,13 @@
                 </p>
                 {{end}}
                 <p><strong>Active Period:</strong> {{.FirstDate.Format "2006-01-02"}} - {{if .CurrentlyActive}}now{{else}}{{.LastDate.Format "2006-01-02"}}{{end}}</p>
+                {{if .History}}{{$latest := index .History (sub (len .History) 1)}}
+                {{$addresses := getInternetAddresses $latest.InternetConfig}}
+                {{if $addresses}}
+                <p><strong>Internet Addresses:</strong>
+                    {{range $default := $addresses}}{{range $i, $value := $default.Values}}{{if $i}}, {{end}}<span style="font-family: monospace;">{{$value}}</span>{{end}}{{end}}
+                </p>
+                {{end}}{{end}}
                 <p><strong>Total Entries:</strong> {{len .History}}</p>
                 <p><strong>Changes:</strong> {{len .Changes}}</p>
                 {{if .Points}}<p><strong>Points:</strong> <a href="#points">{{len .Points}}</a></p>{{end}}

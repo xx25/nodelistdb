@@ -85,6 +85,18 @@ func TestNodeHistoryRendersEveryINA(t *testing.T) {
 			t.Errorf("render missing %q", want)
 		}
 	}
+
+	// The node's current addresses belong in the summary card, not only in
+	// the timeline entry for the day it was added.
+	summary, _, found := strings.Cut(out, "Change History")
+	if !found {
+		t.Fatal("render has no Change History section to split on")
+	}
+	for _, want := range []string{"horris.now.im", "horris.privatedns.org"} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("Node Information card missing %q", want)
+		}
+	}
 }
 
 // Rows written before INA became a list hold a bare string.
