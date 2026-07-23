@@ -42,6 +42,19 @@ func compareProtocolArrays(a, b []database.InternetProtocolDetail) bool {
 	return formatProtocolDetails(a) == formatProtocolDetails(b)
 }
 
+// stringSlicesEqual checks if two string slices hold the same values in order
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // compareEmailArrays checks if two email protocol detail arrays are equal
 func compareEmailArrays(a, b []database.EmailProtocolDetail) bool {
 	if len(a) != len(b) {

@@ -81,10 +81,46 @@ type EmailProtocolDetail struct {
 	Email string `json:"email,omitempty"`
 }
 
+// DefaultAddresses maps a default-address flag (INA, IEM) to every value the
+// nodelist line carried for it. Nodelist lines may repeat such a flag
+// ("INA:a.example.org,INA:b.example.org"), and each value is a hostname the
+// node can actually be reached at, so all of them are kept.
+//
+// Rows written before this became a list stored a bare string, so unmarshalling
+// accepts both shapes; marshalling always emits a list.
+type DefaultAddresses map[string][]string
+
+// UnmarshalJSON accepts both the legacy scalar form ({"INA": "host"}) and the
+// current list form ({"INA": ["host1", "host2"]}).
+func (d *DefaultAddresses) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	result := make(DefaultAddresses, len(raw))
+	for key, value := range raw {
+		var list []string
+		if err := json.Unmarshal(value, &list); err == nil {
+			result[key] = list
+			continue
+		}
+
+		var single string
+		if err := json.Unmarshal(value, &single); err != nil {
+			return fmt.Errorf("defaults[%q]: expected string or array of strings", key)
+		}
+		result[key] = []string{single}
+	}
+
+	*d = result
+	return nil
+}
+
 // InternetConfiguration represents the structured internet config
 type InternetConfiguration struct {
 	Protocols      map[string][]InternetProtocolDetail `json:"protocols,omitempty"`
-	Defaults       map[string]string                   `json:"defaults,omitempty"`
+	Defaults       DefaultAddresses                    `json:"defaults,omitempty"`
 	EmailProtocols map[string][]EmailProtocolDetail    `json:"email_protocols,omitempty"`
 	InfoFlags      []string                            `json:"info_flags,omitempty"`
 }

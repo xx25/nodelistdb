@@ -1249,7 +1249,12 @@ components:
         # Internet array fields have been removed - data is now in internet_config JSON field
         internet_config:
           type: object
-          description: Parsed internet configuration
+          description: >-
+            Parsed internet configuration. Under `defaults`, INA and IEM are
+            lists of strings ("INA": ["a.example.org", "b.example.org"]) because
+            a nodelist line may carry the flag more than once. Rows imported
+            before that change hold a bare string instead, so clients should
+            accept either shape.
           additionalProperties: true
         conflict_sequence:
           type: integer
@@ -1341,7 +1346,12 @@ components:
           example: ["V34"]
         internet_config:
           type: object
-          description: Parsed internet configuration
+          description: >-
+            Parsed internet configuration. Under `defaults`, INA and IEM are
+            lists of strings ("INA": ["a.example.org", "b.example.org"]) because
+            a nodelist line may carry the flag more than once. Rows imported
+            before that change hold a bare string instead, so clients should
+            accept either shape.
           additionalProperties: true
         conflict_sequence:
           type: integer

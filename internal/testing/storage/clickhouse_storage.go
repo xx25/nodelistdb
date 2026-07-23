@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -30,7 +31,10 @@ type ClickHouseStorage struct {
 	db        *sql.DB
 	batchSize int
 
-	// Batch accumulator
+	// Batch accumulator. Test results arrive from the daemon's worker
+	// goroutines - a multi-hostname node stores one partial result per
+	// hostname inline, from inside the worker - so every access is guarded.
+	batchMu       sync.Mutex
 	resultsBatch  []*models.TestResult
 	lastFlush     time.Time
 	flushInterval time.Duration
@@ -154,12 +158,14 @@ func NewClickHouseStorageWithConfig(host string, port int, database, username, p
 // Close closes the database connection
 func (s *ClickHouseStorage) Close() error {
 	// Flush any pending results
+	s.batchMu.Lock()
 	if len(s.resultsBatch) > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
 		// Ignore flush errors during close - best effort
-		_ = s.flushBatch(ctx)
+		_ = s.flushBatchLocked(ctx)
+		cancel()
 	}
+	s.batchMu.Unlock()
 
 	if s.conn != nil {
 		if err := s.conn.Close(); err != nil {

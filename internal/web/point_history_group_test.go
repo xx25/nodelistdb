@@ -109,6 +109,34 @@ func TestGroupPointHistorySplitsOnInternetConfigChange(t *testing.T) {
 	}
 }
 
+// Rows stored before INA became a list hold {"INA":"host"}; newer imports of
+// the same unchanged entry hold {"INA":["host"]}. That reshape alone must not
+// split a continuous period.
+func TestGroupPointHistoryIgnoresINAShapeChange(t *testing.T) {
+	newer := phEntry("2003-08-08", "r50", "Oleg", "MO")
+	newer.InternetConfig = []byte(`{"protocols":{"IBN":[{"port":24554}]},"defaults":{"INA":["host.example.com"]}}`)
+	older := phEntry("2003-08-01", "r50", "Oleg", "MO")
+	older.InternetConfig = []byte(`{"protocols":{"IBN":[{"port":24554}]},"defaults":{"INA":"host.example.com"}}`)
+
+	periods := groupPointHistory([]database.Point{newer, older})
+	if len(periods) != 1 {
+		t.Fatalf("expected 1 period for an unchanged entry, got %d", len(periods))
+	}
+}
+
+// A genuine second INA is a real endpoint change and must still split.
+func TestGroupPointHistorySplitsOnAddedINA(t *testing.T) {
+	newer := phEntry("2003-08-08", "r50", "Oleg", "MO")
+	newer.InternetConfig = []byte(`{"defaults":{"INA":["host.example.com","backup.example.com"]}}`)
+	older := phEntry("2003-08-01", "r50", "Oleg", "MO")
+	older.InternetConfig = []byte(`{"defaults":{"INA":"host.example.com"}}`)
+
+	periods := groupPointHistory([]database.Point{newer, older})
+	if len(periods) != 2 {
+		t.Fatalf("expected 2 periods for an added INA, got %d", len(periods))
+	}
+}
+
 func TestGroupPointHistoryConflictRowsCountOnce(t *testing.T) {
 	// A duplicate line inside one file (conflict_sequence > 0) is one
 	// publication, not two issues.

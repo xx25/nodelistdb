@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
@@ -44,7 +45,41 @@ func samePointContent(a, b database.Point) bool {
 		a.MaxSpeed == b.MaxSpeed &&
 		slices.Equal(a.Flags, b.Flags) &&
 		slices.Equal(a.ModemFlags, b.ModemFlags) &&
-		bytes.Equal(a.InternetConfig, b.InternetConfig)
+		sameInternetConfig(a.InternetConfig, b.InternetConfig)
+}
+
+// sameInternetConfig reports whether two stored configs describe the same
+// endpoints. Comparing the raw bytes is not enough: rows written before INA
+// became a list hold {"INA":"host"} where newer ones hold {"INA":["host"]}, and
+// that reshape alone must not read as a content change. Unparseable values fall
+// back to a byte comparison.
+func sameInternetConfig(a, b []byte) bool {
+	if bytes.Equal(a, b) {
+		return true
+	}
+
+	canonical := func(raw []byte) ([]byte, bool) {
+		if len(raw) == 0 {
+			return nil, true
+		}
+		var config database.InternetConfiguration
+		if err := json.Unmarshal(raw, &config); err != nil {
+			return nil, false
+		}
+		// Map keys are marshalled in sorted order, so this is canonical.
+		encoded, err := json.Marshal(config)
+		if err != nil {
+			return nil, false
+		}
+		return encoded, true
+	}
+
+	canonicalA, okA := canonical(a)
+	canonicalB, okB := canonical(b)
+	if !okA || !okB {
+		return false
+	}
+	return bytes.Equal(canonicalA, canonicalB)
 }
 
 // groupPointHistory collapses the newest-first history into periods of

@@ -7,6 +7,7 @@ import (
 	"log"
 	"path"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,6 +16,13 @@ import (
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/testing/timeavail"
 )
+
+// InternetDefault is one default-address flag (INA, IEM) and every value the
+// node's nodelist line carried for it, for rendering on the node page.
+type InternetDefault struct {
+	Flag   string
+	Values []string
+}
 
 // loadTemplates loads HTML templates from files
 func (s *Server) loadTemplates() {
@@ -28,6 +36,9 @@ func (s *Server) loadTemplates() {
 				b.WriteString(renderFlagBadge(flagDescriptions, flag, "margin-right: 0.25rem; margin-bottom: 0.25rem;"))
 			}
 			return template.HTML(b.String())
+		},
+		"flagBadge": func(flagDescriptions map[string]flags.FlagInfo, flag string) template.HTML {
+			return template.HTML(renderFlagBadge(flagDescriptions, flag, ""))
 		},
 		"getFieldDescription": func(field string) string {
 			return GetFieldDescription(field)
@@ -236,12 +247,38 @@ func (s *Server) loadTemplates() {
 					}
 				}
 			}
+			// INA carries addresses too, and is the only hostname source for
+			// nodes whose protocol flags are bare ("IBN,INA:host").
+			for _, address := range internetConfig.Defaults["INA"] {
+				if address != "" {
+					hostnameMap[address] = true
+				}
+			}
 
 			var hostnames []string
 			for hostname := range hostnameMap {
 				hostnames = append(hostnames, hostname)
 			}
+			sort.Strings(hostnames)
 			return hostnames
+		},
+		// getInternetAddresses returns the default-address flags that name a
+		// host (INA). IEM lives in the same map but is an email address, so it
+		// is reported by getEmails instead.
+		"getInternetAddresses": func(config json.RawMessage) []InternetDefault {
+			if len(config) == 0 {
+				return nil
+			}
+
+			var internetConfig database.InternetConfiguration
+			if err := json.Unmarshal(config, &internetConfig); err != nil {
+				return nil
+			}
+
+			if values := internetConfig.Defaults["INA"]; len(values) > 0 {
+				return []InternetDefault{{Flag: "INA", Values: values}}
+			}
+			return nil
 		},
 		"getProtocolAddresses": func(config json.RawMessage, protocol string) []string {
 			if len(config) == 0 {
@@ -278,14 +315,26 @@ func (s *Server) loadTemplates() {
 				return nil
 			}
 
+			seen := make(map[string]bool)
 			var emails []string
-			for _, emailDetails := range internetConfig.EmailProtocols {
-				for _, detail := range emailDetails {
-					if detail.Email != "" {
-						emails = append(emails, detail.Email)
-					}
+			addEmail := func(email string) {
+				if email != "" && !seen[email] {
+					seen[email] = true
+					emails = append(emails, email)
 				}
 			}
+
+			for _, emailDetails := range internetConfig.EmailProtocols {
+				for _, detail := range emailDetails {
+					addEmail(detail.Email)
+				}
+			}
+			// IEM is the node's default email; it is stored alongside INA in
+			// defaults rather than under email_protocols.
+			for _, email := range internetConfig.Defaults["IEM"] {
+				addEmail(email)
+			}
+			sort.Strings(emails)
 			return emails
 		},
 		"add": func(a, b int) int {

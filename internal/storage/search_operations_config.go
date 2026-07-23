@@ -54,8 +54,8 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 				changes[fmt.Sprintf("inet_%s", proto)] = "Added"
 			}
 		}
-		for key, val := range currConfig.Defaults {
-			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", val)
+		for key, vals := range currConfig.Defaults {
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", strings.Join(vals, ", "))
 		}
 		for key, details := range currConfig.EmailProtocols {
 			// Handle array of email protocol details
@@ -94,8 +94,8 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 				changes[fmt.Sprintf("inet_%s", proto)] = "Removed"
 			}
 		}
-		for key, val := range prevConfig.Defaults {
-			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", val)
+		for key, vals := range prevConfig.Defaults {
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", strings.Join(vals, ", "))
 		}
 		for key, details := range prevConfig.EmailProtocols {
 			// Handle array of email protocol details
@@ -149,20 +149,23 @@ func (so *SearchOperations) detectInternetConfigChanges(prev, curr json.RawMessa
 		}
 	}
 
-	// Compare defaults
-	for key, currVal := range currConfig.Defaults {
-		prevVal, existed := prevConfig.Defaults[key]
+	// Compare defaults. Values are lists because a flag may repeat on one line;
+	// legacy scalar rows unmarshal to a single-element list, so a node whose
+	// config only changed shape reports no change.
+	for key, currVals := range currConfig.Defaults {
+		prevVals, existed := prevConfig.Defaults[key]
 		if !existed {
-			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", currVal)
-		} else if prevVal != currVal {
-			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("%s → %s", prevVal, currVal)
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Added %s", strings.Join(currVals, ", "))
+		} else if !stringSlicesEqual(prevVals, currVals) {
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("%s → %s",
+				strings.Join(prevVals, ", "), strings.Join(currVals, ", "))
 		}
 	}
 
 	// Check for removed defaults
-	for key, prevVal := range prevConfig.Defaults {
+	for key, prevVals := range prevConfig.Defaults {
 		if _, exists := currConfig.Defaults[key]; !exists {
-			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", prevVal)
+			changes[fmt.Sprintf("inet_%s", key)] = fmt.Sprintf("Removed %s", strings.Join(prevVals, ", "))
 		}
 	}
 
@@ -231,7 +234,7 @@ func (so *SearchOperations) parseInternetConfig(data json.RawMessage) (*database
 	// First try to unmarshal into a flexible structure that handles both string and int ports
 	var rawConfig struct {
 		Protocols      map[string]json.RawMessage `json:"protocols,omitempty"`
-		Defaults       map[string]string          `json:"defaults,omitempty"`
+		Defaults       database.DefaultAddresses  `json:"defaults,omitempty"`
 		EmailProtocols map[string]json.RawMessage `json:"email_protocols,omitempty"`
 		InfoFlags      []string                   `json:"info_flags,omitempty"`
 	}

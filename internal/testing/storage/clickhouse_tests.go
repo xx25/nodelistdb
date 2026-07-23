@@ -8,14 +8,19 @@ import (
 	"github.com/nodelistdb/internal/testing/models"
 )
 
-// StoreTestResult stores a single test result
+// StoreTestResult stores a single test result.
+// Safe for concurrent use: the daemon's worker goroutines call this directly,
+// once per hostname, while testing a multi-hostname node.
 func (s *ClickHouseStorage) StoreTestResult(ctx context.Context, result *models.TestResult) error {
+	s.batchMu.Lock()
+	defer s.batchMu.Unlock()
+
 	// Add to batch
 	s.resultsBatch = append(s.resultsBatch, result)
 
 	// Check if we should flush
 	if len(s.resultsBatch) >= s.batchSize || time.Since(s.lastFlush) > s.flushInterval {
-		return s.flushBatch(ctx)
+		return s.flushBatchLocked(ctx)
 	}
 
 	return nil
@@ -23,12 +28,15 @@ func (s *ClickHouseStorage) StoreTestResult(ctx context.Context, result *models.
 
 // StoreTestResults stores multiple test results
 func (s *ClickHouseStorage) StoreTestResults(ctx context.Context, results []*models.TestResult) error {
+	s.batchMu.Lock()
+	defer s.batchMu.Unlock()
+
 	// Add all to batch
 	s.resultsBatch = append(s.resultsBatch, results...)
 
 	// Always flush to ensure data is persisted
 	// This is called after each batch from the daemon, so we want to persist immediately
-	return s.flushBatch(ctx)
+	return s.flushBatchLocked(ctx)
 }
 
 // StoreBatchTestResults stores multiple test results as a batch (for per-hostname testing)
@@ -46,8 +54,9 @@ func (s *ClickHouseStorage) StoreBatchTestResults(ctx context.Context, results [
 	return s.StoreTestResults(ctx, results)
 }
 
-// flushBatch flushes the current batch to ClickHouse
-func (s *ClickHouseStorage) flushBatch(ctx context.Context) error {
+// flushBatchLocked flushes the current batch to ClickHouse.
+// The caller must hold batchMu.
+func (s *ClickHouseStorage) flushBatchLocked(ctx context.Context) error {
 	if len(s.resultsBatch) == 0 {
 		return nil
 	}

@@ -1112,8 +1112,39 @@ func TestParseFlagsWithConfigJSONContent(t *testing.T) {
 			t.Fatalf("failed to unmarshal config: %v", err)
 		}
 
-		if internetConfig.Defaults["INA"] != "node.fido.net" {
-			t.Errorf("INA default = %q, want %q", internetConfig.Defaults["INA"], "node.fido.net")
+		if got := internetConfig.Defaults["INA"]; len(got) != 1 || got[0] != "node.fido.net" {
+			t.Errorf("INA default = %q, want %q", got, []string{"node.fido.net"})
+		}
+	})
+
+	t.Run("repeated INA flags all kept", func(t *testing.T) {
+		_, config := p.parseFlagsWithConfig("IBN,INA:first.example.org,INA:second.example.org,INA:first.example.org")
+
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal(config, &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal config: %v", err)
+		}
+
+		want := []string{"first.example.org", "second.example.org"}
+		got := internetConfig.Defaults["INA"]
+		if len(got) != len(want) {
+			t.Fatalf("INA defaults = %q, want %q", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("INA default %d = %q, want %q", i, got[i], want[i])
+			}
+		}
+	})
+
+	t.Run("legacy scalar INA unmarshals as single-element list", func(t *testing.T) {
+		var internetConfig database.InternetConfiguration
+		if err := json.Unmarshal([]byte(`{"defaults":{"INA":"legacy.example.org"}}`), &internetConfig); err != nil {
+			t.Fatalf("failed to unmarshal legacy config: %v", err)
+		}
+
+		if got := internetConfig.Defaults["INA"]; len(got) != 1 || got[0] != "legacy.example.org" {
+			t.Errorf("legacy INA default = %q, want %q", got, []string{"legacy.example.org"})
 		}
 	})
 
@@ -1180,8 +1211,8 @@ func TestParseFlagsWithConfigJSONContent(t *testing.T) {
 			t.Fatalf("failed to unmarshal config: %v", err)
 		}
 
-		if internetConfig.Defaults["IEM"] != "sysop@example.com" {
-			t.Errorf("IEM default = %q, want %q", internetConfig.Defaults["IEM"], "sysop@example.com")
+		if got := internetConfig.Defaults["IEM"]; len(got) != 1 || got[0] != "sysop@example.com" {
+			t.Errorf("IEM default = %q, want %q", got, []string{"sysop@example.com"})
 		}
 	})
 

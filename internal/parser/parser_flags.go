@@ -24,7 +24,7 @@ func (p *Parser) parseFlagsWithConfig(flagsStr string) ([]string, []byte) {
 
 	// Create new maps for each node to avoid cross-contamination
 	protocols := make(map[string][]database.InternetProtocolDetail, 10)
-	defaults := make(map[string]string, 5)
+	defaults := make(database.DefaultAddresses, 5)
 	emailProtocols := make(map[string][]database.EmailProtocolDetail, 3)
 	infoFlags := make([]string, 0, 3)
 
@@ -60,7 +60,7 @@ func (p *Parser) parseFlagWithValue(
 	colonIndex int,
 	flags *[]string,
 	protocols map[string][]database.InternetProtocolDetail,
-	defaults map[string]string,
+	defaults database.DefaultAddresses,
 	emailProtocols map[string][]database.EmailProtocolDetail,
 ) {
 	flagName := strings.TrimSpace(part[:colonIndex])
@@ -73,15 +73,11 @@ func (p *Parser) parseFlagWithValue(
 
 	// Default internet address
 	case "INA":
-		if flagValue != "" {
-			defaults["INA"] = flagValue
-		}
+		addDefault(defaults, "INA", flagValue)
 
 	// Email protocols
 	case "IEM":
-		if flagValue != "" {
-			defaults["IEM"] = flagValue // Default email
-		}
+		addDefault(defaults, "IEM", flagValue) // Default email
 
 	case "IMI", "ITX", "ISE":
 		p.addEmailProtocol(flagName, flagValue, emailProtocols)
@@ -148,6 +144,21 @@ func (p *Parser) parseFlagWithoutValue(
 		// Regular flag
 		*flags = append(*flags, part)
 	}
+}
+
+// addDefault records a default-address value (INA, IEM), keeping every value a
+// line carries. A flag may legitimately repeat ("INA:a,INA:b"), so values are
+// appended rather than overwritten; exact repeats are dropped.
+func addDefault(defaults database.DefaultAddresses, flagName, flagValue string) {
+	if flagValue == "" {
+		return
+	}
+	for _, existing := range defaults[flagName] {
+		if existing == flagValue {
+			return
+		}
+	}
+	defaults[flagName] = append(defaults[flagName], flagValue)
 }
 
 // addProtocolDetail adds a protocol detail to the protocols map.
@@ -232,7 +243,7 @@ func (p *Parser) parseProtocolValue(value string) (address string, port int) {
 // buildInternetConfig builds the JSON configuration from parsed flag data.
 func (p *Parser) buildInternetConfig(
 	protocols map[string][]database.InternetProtocolDetail,
-	defaults map[string]string,
+	defaults database.DefaultAddresses,
 	emailProtocols map[string][]database.EmailProtocolDetail,
 	infoFlags []string,
 ) []byte {

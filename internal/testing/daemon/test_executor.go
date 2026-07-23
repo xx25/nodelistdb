@@ -85,10 +85,14 @@ func (te *TestExecutor) testMultipleHostnameNode(ctx context.Context, node *mode
 			result.HostnameIndex = int32(i)
 			result.IsAggregated = false
 
-			// Store the partial result
-			if err := te.daemon.storage.StoreTestResult(ctx, result); err != nil {
-				logging.Errorf("Failed to store partial test result for %s (hostname: %s): %v",
-					nodeAddr, hostname, err)
+			// Store the partial result. The aggregate is stored by the caller,
+			// which skips storage under -dry-run; these partials have to honour
+			// the same flag or a dry run would still write rows.
+			if !te.daemon.config.Daemon.DryRun {
+				if err := te.daemon.storage.StoreTestResult(ctx, result); err != nil {
+					logging.Errorf("Failed to store partial test result for %s (hostname: %s): %v",
+						nodeAddr, hostname, err)
+				}
 			}
 
 			results = append(results, result)

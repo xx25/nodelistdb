@@ -154,6 +154,22 @@
                                     </div>
                                 </div>
                                 {{end}}
+                                {{$defaults := getInternetAddresses .NewNode.InternetConfig}}
+                                {{if $defaults}}
+                                <div class="info-item" style="grid-column: span 2;">
+                                    <strong>Internet Addresses</strong>
+                                    <div style="margin-top: 0.5rem;">
+                                        {{range $default := $defaults}}
+                                            <div style="margin-bottom: 0.5rem;">
+                                                {{flagBadge $.FlagDescriptions $default.Flag}}
+                                                {{range $default.Values}}
+                                                    <span style="margin-left: 0.5rem; font-family: monospace;">{{.}}</span>
+                                                {{end}}
+                                            </div>
+                                        {{end}}
+                                    </div>
+                                </div>
+                                {{end}}
                                 {{$emails := getEmails .NewNode.InternetConfig}}
                                 {{if $emails}}
                                 <div class="info-item" style="grid-column: span 2;">
