@@ -12,6 +12,11 @@ import (
 	"github.com/nodelistdb/internal/logging"
 )
 
+// nativeConnProvider is an interface for database implementations that provide native connections
+type nativeConnProvider interface {
+	NativeConn() driver.Conn
+}
+
 // PointOperations handles all pointlist-related database operations.
 // Writers implement the gate protocol from the pointlist design: point rows
 // first, gate row (pointlist_files) registered last, so a crash mid-import

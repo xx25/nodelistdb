@@ -78,7 +78,7 @@ func (nqb *NodeQueryBuilder) UniqueSysopsWithFilter() string {
 }
 
 // InsertNodesInChunks performs optimized batch inserts.
-// Deprecated: Use ClickHouseNodeOperations.InsertNodes instead, which uses
+// Deprecated: Use NodeOperations.InsertNodes instead, which uses
 // the native ClickHouse batch API for better safety and performance.
 func (nqb *NodeQueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error {
 	return nqb.base.InsertNodesInChunks(db, nodes)
@@ -86,7 +86,7 @@ func (nqb *NodeQueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, 
 
 // BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT.
 // Deprecated: This method uses string interpolation which has SQL injection risks.
-// Use ClickHouseNodeOperations.InsertNodes instead, which uses parameterized batch inserts.
+// Use NodeOperations.InsertNodes instead, which uses parameterized batch inserts.
 func (nqb *NodeQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
 	return nqb.base.BuildDirectBatchInsertSQL(nodes, rp)
 }
@@ -95,7 +95,7 @@ func (nqb *NodeQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp
 
 // InsertNodesInChunks performs optimized batch inserts for ClickHouse with proper array formatting.
 // Deprecated: This method uses string interpolation via BuildDirectBatchInsertSQL.
-// Use ClickHouseNodeOperations.InsertNodes instead for safe parameterized inserts.
+// Use NodeOperations.InsertNodes instead for safe parameterized inserts.
 func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error {
 	if len(nodes) == 0 {
 		return nil
@@ -137,7 +137,7 @@ func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes
 
 // BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT for ClickHouse with proper array handling.
 // Deprecated: This method uses string interpolation with escapeSQL() which has incomplete escaping.
-// Use ClickHouseNodeOperations.InsertNodes instead, which uses the native batch API (PrepareBatch/Append).
+// Use NodeOperations.InsertNodes instead, which uses the native batch API (PrepareBatch/Append).
 func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
 	if len(nodes) == 0 {
 		return ""

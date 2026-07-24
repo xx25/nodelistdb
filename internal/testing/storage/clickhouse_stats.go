@@ -7,51 +7,6 @@ import (
 	"github.com/nodelistdb/internal/testing/models"
 )
 
-// GetStatistics returns basic statistics about nodes
-func (s *ClickHouseStorage) GetStatistics(ctx context.Context) (map[string]int, error) {
-	query := `
-		SELECT
-			count(*) as total_nodes,
-			countIf(has_inet = 1) as nodes_with_inet,
-			countIf(has(internet_protocols, 'IBN')) as nodes_with_binkp,
-			countIf(has(internet_protocols, 'IFC')) as nodes_with_ifcico,
-			countIf(has(internet_protocols, 'ITN')) as nodes_with_telnet,
-			countIf(has(internet_protocols, 'IFT')) as nodes_with_ftp
-		FROM nodes
-	`
-
-	var stats struct {
-		Total      int
-		WithInet   int
-		WithBinkP  int
-		WithIfcico int
-		WithTelnet int
-		WithFTP    int
-	}
-
-	row := s.db.QueryRowContext(ctx, query)
-	err := row.Scan(
-		&stats.Total,
-		&stats.WithInet,
-		&stats.WithBinkP,
-		&stats.WithIfcico,
-		&stats.WithTelnet,
-		&stats.WithFTP,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get statistics: %w", err)
-	}
-
-	return map[string]int{
-		"total_nodes":       stats.Total,
-		"nodes_with_inet":   stats.WithInet,
-		"nodes_with_binkp":  stats.WithBinkP,
-		"nodes_with_ifcico": stats.WithIfcico,
-		"nodes_with_telnet": stats.WithTelnet,
-		"nodes_with_ftp":    stats.WithFTP,
-	}, nil
-}
-
 // StoreDailyStats stores daily statistics
 func (s *ClickHouseStorage) StoreDailyStats(ctx context.Context, stats *models.TestStatistics) error {
 	// Use batch insert for proper Map type handling

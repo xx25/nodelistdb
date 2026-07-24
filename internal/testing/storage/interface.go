@@ -13,7 +13,6 @@ type Storage interface {
 	GetNodesWithInternet(ctx context.Context, limit int) ([]*models.Node, error)
 	GetNodesByZone(ctx context.Context, zone int) ([]*models.Node, error)
 	GetNodesByProtocol(ctx context.Context, protocol string, limit int) ([]*models.Node, error)
-	GetStatistics(ctx context.Context) (map[string]int, error)
 	GetLatestNodelistDate(ctx context.Context) (time.Time, error)
 	GetNodelistFingerprint(ctx context.Context) (string, error)
 	

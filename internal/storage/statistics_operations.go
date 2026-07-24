@@ -413,40 +413,6 @@ func (so *StatisticsOperations) GetNodeTypeDistribution(date time.Time) (map[str
 	return distribution, nil
 }
 
-// GetConnectivityStats returns connectivity statistics for a given date
-func (so *StatisticsOperations) GetConnectivityStats(date time.Time) (*ConnectivityStats, error) {
-	so.mu.RLock()
-	defer so.mu.RUnlock()
-
-	conn := so.db.Conn()
-
-	query := `SELECT 
-		COUNT(*) as total_nodes,
-		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.protocols.IBN') IS NOT NULL OR json_extract(internet_config, '$.protocols.BND') IS NOT NULL) as binkp_nodes,
-		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.protocols.ITN') IS NOT NULL) as telnet_nodes,
-		COUNT(*) FILTER (WHERE has_inet) as inet_nodes,
-		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.protocols') IS NOT NULL) as protocol_nodes,
-		COUNT(*) FILTER (WHERE json_extract(internet_config, '$.email_protocols') IS NOT NULL) as email_nodes
-	FROM nodes 
-	WHERE nodelist_date = ?`
-
-	var stats ConnectivityStats
-	err := conn.QueryRow(query, date).Scan(
-		&stats.TotalNodes,
-		&stats.BinkpNodes,
-		&stats.TelnetNodes,
-		&stats.InternetNodes,
-		&stats.ProtocolNodes,
-		&stats.EmailNodes,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get connectivity stats: %w", err)
-	}
-
-	stats.Date = date
-	return &stats, nil
-}
-
 // GetTopSysops returns the sysops managing the most nodes for a given date
 func (so *StatisticsOperations) GetTopSysops(date time.Time, limit int) ([]SysopStats, error) {
 	if limit <= 0 {
@@ -572,17 +538,6 @@ func (so *StatisticsOperations) GetCacheStats() map[string]interface{} {
 			"today_data":          "30 minutes",
 		},
 	}
-}
-
-// ConnectivityStats represents connectivity-related statistics
-type ConnectivityStats struct {
-	Date          time.Time `json:"date"`
-	TotalNodes    int       `json:"total_nodes"`
-	BinkpNodes    int       `json:"binkp_nodes"`
-	TelnetNodes   int       `json:"telnet_nodes"`
-	InternetNodes int       `json:"internet_nodes"`
-	ProtocolNodes int       `json:"protocol_nodes"`
-	EmailNodes    int       `json:"email_nodes"`
 }
 
 // SysopStats represents statistics for individual sysops
