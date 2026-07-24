@@ -217,7 +217,7 @@ func (qb *QueryBuilder) BrowseNodesSQL() string {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
+		conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL + `, fts_id, raw_line, domain
 	FROM nodes
 	WHERE nodelist_date = ? AND zone = ? AND net = ? AND (? = '' OR domain = ?)
 	ORDER BY node, conflict_sequence`

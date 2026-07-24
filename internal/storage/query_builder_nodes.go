@@ -228,7 +228,7 @@ func (qb *QueryBuilder) NodeSelectSQL() string {
 		system_name, location, sysop_name, phone, node_type, region, max_speed,
 		is_cm, is_mo,
 		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
+		conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL + `, fts_id, raw_line, domain
 	FROM nodes`
 }
 
@@ -287,7 +287,7 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 			   system_name, location, sysop_name, phone, node_type, region, max_speed,
 			   is_cm, is_mo,
 			   flags, modem_flags,
-			   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
+			   conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL + `, fts_id, raw_line, domain
 		FROM nodes
 		WHERE (domain, zone, net, node, nodelist_date) IN (
 			SELECT domain, zone, net, node, MAX(nodelist_date) as max_date
@@ -318,7 +318,7 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
 			is_cm, is_mo,
 			flags, modem_flags,
-			conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
+			conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL + `, fts_id, raw_line, domain
 		FROM (
 			SELECT *,
 				   row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
@@ -533,7 +533,7 @@ func (qb *QueryBuilder) NodeHistorySQL() string {
 		   system_name, location, sysop_name, phone, node_type, region, max_speed,
 		   is_cm, is_mo,
 		   flags, modem_flags,
-		   conflict_sequence, has_conflict, has_inet, internet_config, fts_id, raw_line, domain
+		   conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL + `, fts_id, raw_line, domain
 	FROM nodes
 	WHERE zone = ? AND net = ? AND node = ? AND ` + optionalDomainSQL + `
 	ORDER BY nodelist_date ASC, conflict_sequence ASC`
