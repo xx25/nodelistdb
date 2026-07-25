@@ -15,6 +15,87 @@ func NewTestAggregator() *TestAggregator {
 	return &TestAggregator{}
 }
 
+// mergeProtocolResult folds one hostname's per-IP-family result into the
+// aggregated summary, tracking IPv4 and IPv6 independently so a success on
+// one hostname's IPv6 test isn't lost when another hostname's IPv4 result is
+// merged in later (or vice versa), and so a per-family failure keeps its
+// real error message instead of being genericized.
+func mergeProtocolResult(dst, src *models.ProtocolTestResult) {
+	if src == nil {
+		return
+	}
+
+	if src.IPv4Tested {
+		dst.IPv4Tested = true
+		if src.IPv4Success {
+			if !dst.IPv4Success || src.IPv4ResponseMs < dst.IPv4ResponseMs {
+				dst.IPv4ResponseMs = src.IPv4ResponseMs
+				dst.IPv4Address = src.IPv4Address
+			}
+			dst.IPv4Success = true
+			dst.IPv4Error = ""
+		} else if !dst.IPv4Success && src.IPv4Error != "" {
+			dst.IPv4Error = src.IPv4Error
+		}
+	}
+
+	if src.IPv6Tested {
+		dst.IPv6Tested = true
+		if src.IPv6Success {
+			if !dst.IPv6Success || src.IPv6ResponseMs < dst.IPv6ResponseMs {
+				dst.IPv6ResponseMs = src.IPv6ResponseMs
+				dst.IPv6Address = src.IPv6Address
+			}
+			dst.IPv6Success = true
+			dst.IPv6Error = ""
+		} else if !dst.IPv6Success && src.IPv6Error != "" {
+			dst.IPv6Error = src.IPv6Error
+		}
+	}
+
+	// Details/software identification aren't per-family; keep the richest
+	// set, preferring the first hostname that fully succeeded.
+	if src.Success && dst.Details == nil {
+		dst.Details = src.Details
+		dst.SoftwareSource = src.SoftwareSource
+	}
+}
+
+// finalizeProtocolResult derives the overall Tested/Success/ResponseMs/Error
+// fields from the merged per-IP-family results, so a node that succeeded via
+// IPv6 on one hostname and failed IPv4 on another reports success overall,
+// and a protocol never actually attempted on any hostname is left untested
+// rather than mislabeled as failed.
+func finalizeProtocolResult(pr *models.ProtocolTestResult) {
+	if pr == nil {
+		return
+	}
+
+	pr.Tested = pr.IPv4Tested || pr.IPv6Tested
+	pr.Success = pr.IPv4Success || pr.IPv6Success
+
+	pr.ResponseMs = 0
+	if pr.IPv4Success {
+		pr.ResponseMs = pr.IPv4ResponseMs
+	}
+	if pr.IPv6Success && (pr.ResponseMs == 0 || pr.IPv6ResponseMs < pr.ResponseMs) {
+		pr.ResponseMs = pr.IPv6ResponseMs
+	}
+
+	switch {
+	case pr.Success:
+		pr.Error = ""
+	case pr.IPv4Error != "":
+		pr.Error = pr.IPv4Error
+	case pr.IPv6Error != "":
+		pr.Error = pr.IPv6Error
+	case pr.Tested:
+		pr.Error = "Failed on all hostnames"
+	default:
+		pr.Error = ""
+	}
+}
+
 // CreateAggregatedResult creates an aggregated test result from multiple hostname results
 func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*models.TestResult) *models.TestResult {
 	if len(results) == 0 {
@@ -46,13 +127,6 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 	var allIPv6s []string
 	ipv4Map := make(map[string]bool)
 	ipv6Map := make(map[string]bool)
-
-	// Track protocol successes across all hostnames
-	binkpSuccess := false
-	emsiSuccess := false
-	telnetSuccess := false
-	ftpSuccess := false
-	vmodemSuccess := false
 
 	// Process each result
 	for _, result := range results {
@@ -86,44 +160,56 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 			failedHostnames = append(failedHostnames, hostname)
 		}
 
-		// Protocol aggregation - track if ANY hostname succeeded
-		if result.BinkPResult != nil && result.BinkPResult.Tested && result.BinkPResult.Success {
-			binkpSuccess = true
-			hasAnyProtocolSuccess = true
-			if aggregated.BinkPResult == nil || !aggregated.BinkPResult.Success {
-				aggregated.BinkPResult = result.BinkPResult
+		// Protocol aggregation - merge per-IP-family results from every
+		// hostname instead of keeping only the first success (see
+		// mergeProtocolResult for why that used to hide/mislabel results).
+		if result.BinkPResult != nil {
+			if aggregated.BinkPResult == nil {
+				aggregated.BinkPResult = &models.ProtocolTestResult{}
+			}
+			mergeProtocolResult(aggregated.BinkPResult, result.BinkPResult)
+			if result.BinkPResult.Success {
+				hasAnyProtocolSuccess = true
 			}
 		}
 
-		if result.IfcicoResult != nil && result.IfcicoResult.Tested && result.IfcicoResult.Success {
-			emsiSuccess = true
-			hasAnyProtocolSuccess = true
-			if aggregated.IfcicoResult == nil || !aggregated.IfcicoResult.Success {
-				aggregated.IfcicoResult = result.IfcicoResult
+		if result.IfcicoResult != nil {
+			if aggregated.IfcicoResult == nil {
+				aggregated.IfcicoResult = &models.ProtocolTestResult{}
+			}
+			mergeProtocolResult(aggregated.IfcicoResult, result.IfcicoResult)
+			if result.IfcicoResult.Success {
+				hasAnyProtocolSuccess = true
 			}
 		}
 
-		if result.TelnetResult != nil && result.TelnetResult.Tested && result.TelnetResult.Success {
-			telnetSuccess = true
-			hasAnyProtocolSuccess = true
-			if aggregated.TelnetResult == nil || !aggregated.TelnetResult.Success {
-				aggregated.TelnetResult = result.TelnetResult
+		if result.TelnetResult != nil {
+			if aggregated.TelnetResult == nil {
+				aggregated.TelnetResult = &models.ProtocolTestResult{}
+			}
+			mergeProtocolResult(aggregated.TelnetResult, result.TelnetResult)
+			if result.TelnetResult.Success {
+				hasAnyProtocolSuccess = true
 			}
 		}
 
-		if result.FTPResult != nil && result.FTPResult.Tested && result.FTPResult.Success {
-			ftpSuccess = true
-			hasAnyProtocolSuccess = true
-			if aggregated.FTPResult == nil || !aggregated.FTPResult.Success {
-				aggregated.FTPResult = result.FTPResult
+		if result.FTPResult != nil {
+			if aggregated.FTPResult == nil {
+				aggregated.FTPResult = &models.ProtocolTestResult{}
+			}
+			mergeProtocolResult(aggregated.FTPResult, result.FTPResult)
+			if result.FTPResult.Success {
+				hasAnyProtocolSuccess = true
 			}
 		}
 
-		if result.VModemResult != nil && result.VModemResult.Tested && result.VModemResult.Success {
-			vmodemSuccess = true
-			hasAnyProtocolSuccess = true
-			if aggregated.VModemResult == nil || !aggregated.VModemResult.Success {
-				aggregated.VModemResult = result.VModemResult
+		if result.VModemResult != nil {
+			if aggregated.VModemResult == nil {
+				aggregated.VModemResult = &models.ProtocolTestResult{}
+			}
+			mergeProtocolResult(aggregated.VModemResult, result.VModemResult)
+			if result.VModemResult.Success {
+				hasAnyProtocolSuccess = true
 			}
 		}
 
@@ -165,46 +251,13 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 		aggregated.TestedHostname = successfulHostnames[0] // Primary DNS successful hostname
 	}
 
-	// Fill in protocol results with failure for those that didn't succeed
-	if node.HasProtocol("IBN") && !binkpSuccess && aggregated.BinkPResult == nil {
-		aggregated.BinkPResult = &models.ProtocolTestResult{
-			Tested:  true,
-			Success: false,
-			Error:   "Failed on all hostnames",
-		}
-	}
-
-	if node.HasProtocol("IFC") && !emsiSuccess && aggregated.IfcicoResult == nil {
-		aggregated.IfcicoResult = &models.ProtocolTestResult{
-			Tested:  true,
-			Success: false,
-			Error:   "Failed on all hostnames",
-		}
-	}
-
-	if node.HasProtocol("ITN") && !telnetSuccess && aggregated.TelnetResult == nil {
-		aggregated.TelnetResult = &models.ProtocolTestResult{
-			Tested:  true,
-			Success: false,
-			Error:   "Failed on all hostnames",
-		}
-	}
-
-	if node.HasProtocol("IFT") && !ftpSuccess && aggregated.FTPResult == nil {
-		aggregated.FTPResult = &models.ProtocolTestResult{
-			Tested:  true,
-			Success: false,
-			Error:   "Failed on all hostnames",
-		}
-	}
-
-	if node.HasProtocol("IVM") && !vmodemSuccess && aggregated.VModemResult == nil {
-		aggregated.VModemResult = &models.ProtocolTestResult{
-			Tested:  true,
-			Success: false,
-			Error:   "Failed on all hostnames",
-		}
-	}
+	// Derive each protocol's overall Tested/Success/ResponseMs/Error from the
+	// merged per-IP-family results now that every hostname has been folded in.
+	finalizeProtocolResult(aggregated.BinkPResult)
+	finalizeProtocolResult(aggregated.IfcicoResult)
+	finalizeProtocolResult(aggregated.TelnetResult)
+	finalizeProtocolResult(aggregated.FTPResult)
+	finalizeProtocolResult(aggregated.VModemResult)
 
 	// Determine overall status
 	if hasAnyProtocolSuccess {

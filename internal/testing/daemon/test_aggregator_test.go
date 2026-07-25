@@ -41,8 +41,11 @@ func TestCreateAggregatedResult_SingleHostname(t *testing.T) {
 		CountryCode:    "US",
 		City:           "New York",
 		BinkPResult: &models.ProtocolTestResult{
-			Tested:  true,
-			Success: true,
+			Tested:      true,
+			Success:     true,
+			IPv4Tested:  true,
+			IPv4Success: true,
+			IPv4Address: "192.168.1.1",
 		},
 	}
 
@@ -103,8 +106,11 @@ func TestCreateAggregatedResult_MultipleHostnames_AllSuccess(t *testing.T) {
 			IsOperational:  true,
 			Country:        "US",
 			BinkPResult: &models.ProtocolTestResult{
-				Tested:  true,
-				Success: true,
+				Tested:      true,
+				Success:     true,
+				IPv4Tested:  true,
+				IPv4Success: true,
+				IPv4Address: "192.168.1.1",
 			},
 		},
 		{
@@ -117,8 +123,11 @@ func TestCreateAggregatedResult_MultipleHostnames_AllSuccess(t *testing.T) {
 			ResolvedIPv6:   []string{"2001:db8::2"},
 			IsOperational:  true,
 			IfcicoResult: &models.ProtocolTestResult{
-				Tested:  true,
-				Success: true,
+				Tested:      true,
+				Success:     true,
+				IPv4Tested:  true,
+				IPv4Success: true,
+				IPv4Address: "192.168.1.2",
 			},
 		},
 	}
@@ -189,8 +198,11 @@ func TestCreateAggregatedResult_MultipleHostnames_PartialSuccess(t *testing.T) {
 			ResolvedIPv4:   []string{"192.168.1.1"},
 			IsOperational:  true,
 			BinkPResult: &models.ProtocolTestResult{
-				Tested:  true,
-				Success: true,
+				Tested:      true,
+				Success:     true,
+				IPv4Tested:  true,
+				IPv4Success: true,
+				IPv4Address: "192.168.1.1",
 			},
 		},
 		{
@@ -211,9 +223,11 @@ func TestCreateAggregatedResult_MultipleHostnames_PartialSuccess(t *testing.T) {
 			ResolvedIPv4:   []string{"192.168.1.3"},
 			IsOperational:  false,
 			BinkPResult: &models.ProtocolTestResult{
-				Tested:  true,
-				Success: false,
-				Error:   "Connection timeout",
+				Tested:     true,
+				Success:    false,
+				Error:      "Connection timeout",
+				IPv4Tested: true,
+				IPv4Error:  "Connection timeout",
 			},
 		},
 	}
@@ -304,10 +318,11 @@ func TestCreateAggregatedResult_AllHostnamesFail(t *testing.T) {
 		t.Error("Expected DNS error to be set")
 	}
 
-	if result.BinkPResult == nil {
-		t.Error("Expected BinkP result to be set (as failed)")
-	} else if result.BinkPResult.Success {
-		t.Error("Expected BinkP result to be failed")
+	// DNS failed on every hostname, so BinkP was never actually attempted on
+	// any of them. It should stay nil (untested) rather than being
+	// synthesized as a generic "failed" result.
+	if result.BinkPResult != nil {
+		t.Errorf("Expected BinkP result to stay nil (protocol never attempted), got %+v", result.BinkPResult)
 	}
 
 	if result.HostnamesOperational != 0 {
@@ -525,13 +540,18 @@ func TestCreateAggregatedResult_MultipleProtocols(t *testing.T) {
 			ResolvedIPv4:   []string{"192.168.1.1"},
 			IsOperational:  true,
 			BinkPResult: &models.ProtocolTestResult{
-				Tested:  true,
-				Success: true,
+				Tested:      true,
+				Success:     true,
+				IPv4Tested:  true,
+				IPv4Success: true,
+				IPv4Address: "192.168.1.1",
 			},
 			IfcicoResult: &models.ProtocolTestResult{
-				Tested:  true,
-				Success: false,
-				Error:   "Timeout",
+				Tested:     true,
+				Success:    false,
+				Error:      "Timeout",
+				IPv4Tested: true,
+				IPv4Error:  "Timeout",
 			},
 		},
 		{
@@ -542,12 +562,18 @@ func TestCreateAggregatedResult_MultipleProtocols(t *testing.T) {
 			ResolvedIPv4:   []string{"192.168.1.2"},
 			IsOperational:  true,
 			IfcicoResult: &models.ProtocolTestResult{
-				Tested:  true,
-				Success: true,
+				Tested:      true,
+				Success:     true,
+				IPv4Tested:  true,
+				IPv4Success: true,
+				IPv4Address: "192.168.1.2",
 			},
 			TelnetResult: &models.ProtocolTestResult{
-				Tested:  true,
-				Success: true,
+				Tested:      true,
+				Success:     true,
+				IPv4Tested:  true,
+				IPv4Success: true,
+				IPv4Address: "192.168.1.2",
 			},
 		},
 	}
@@ -572,5 +598,152 @@ func TestCreateAggregatedResult_MultipleProtocols(t *testing.T) {
 	// Telnet succeeded on host2
 	if result.TelnetResult == nil || !result.TelnetResult.Success {
 		t.Error("Expected successful Telnet result")
+	}
+}
+
+// TestCreateAggregatedResult_CrossFamilyMerge covers the reachability-page
+// bug where a node with an IPv4-only host and an IPv6-only host had the
+// second hostname's success dropped entirely, because the aggregator used
+// to keep only the first successful ProtocolTestResult wholesale instead of
+// merging IPv4/IPv6 results independently.
+func TestCreateAggregatedResult_CrossFamilyMerge(t *testing.T) {
+	node := &models.Node{
+		Zone:              2,
+		Net:               5020,
+		Node:              1042,
+		InternetHostnames: []string{"v4host.example.com", "v6host.example.com"},
+		InternetProtocols: []string{"IBN"},
+	}
+
+	results := []*models.TestResult{
+		{
+			Zone:           2,
+			Net:            5020,
+			Node:           1042,
+			TestedHostname: "v4host.example.com",
+			HostnameIndex:  0,
+			ResolvedIPv4:   []string{"192.168.1.1"},
+			IsOperational:  true,
+			BinkPResult: &models.ProtocolTestResult{
+				Tested:      true,
+				Success:     true,
+				IPv4Tested:  true,
+				IPv4Success: true,
+				IPv4Address: "192.168.1.1",
+			},
+		},
+		{
+			Zone:           2,
+			Net:            5020,
+			Node:           1042,
+			TestedHostname: "v6host.example.com",
+			HostnameIndex:  1,
+			ResolvedIPv6:   []string{"2001:db8::2"},
+			IsOperational:  true,
+			BinkPResult: &models.ProtocolTestResult{
+				Tested:      true,
+				Success:     true,
+				IPv6Tested:  true,
+				IPv6Success: true,
+				IPv6Address: "2001:db8::2",
+			},
+		},
+	}
+
+	aggregator := NewTestAggregator()
+	result := aggregator.CreateAggregatedResult(node, results)
+
+	if result == nil {
+		t.Fatal("Expected non-nil aggregated result")
+	}
+
+	if result.BinkPResult == nil {
+		t.Fatal("Expected non-nil BinkP result")
+	}
+
+	if !result.BinkPResult.IPv4Success {
+		t.Error("Expected IPv4Success to be true (from v4host), got false")
+	}
+
+	if !result.BinkPResult.IPv6Success {
+		t.Error("Expected IPv6Success to be true (from v6host), got false — the second hostname's success was dropped")
+	}
+
+	if !result.BinkPResult.Success {
+		t.Error("Expected overall Success to be true")
+	}
+}
+
+// TestCreateAggregatedResult_PerFamilyErrorPropagation covers the original
+// reported bug: on the /reachability/node page, a genuinely failed protocol
+// test on the aggregated summary row rendered as a gray "untested" chip
+// instead of a red "failed" chip, because the aggregator's synthetic
+// "Failed on all hostnames" placeholder never carried over the real
+// per-IP-family error text that the web template keys off of.
+func TestCreateAggregatedResult_PerFamilyErrorPropagation(t *testing.T) {
+	node := &models.Node{
+		Zone:              2,
+		Net:               5020,
+		Node:              1042,
+		InternetHostnames: []string{"host1.example.com", "host2.example.com"},
+		InternetProtocols: []string{"IBN"},
+	}
+
+	results := []*models.TestResult{
+		{
+			Zone:           2,
+			Net:            5020,
+			Node:           1042,
+			TestedHostname: "host1.example.com",
+			HostnameIndex:  0,
+			ResolvedIPv4:   []string{"192.168.1.1"},
+			IsOperational:  false,
+			BinkPResult: &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    false,
+				Error:      "connection refused",
+				IPv4Tested: true,
+				IPv4Error:  "connection refused",
+			},
+		},
+		{
+			Zone:           2,
+			Net:            5020,
+			Node:           1042,
+			TestedHostname: "host2.example.com",
+			HostnameIndex:  1,
+			ResolvedIPv4:   []string{"192.168.1.2"},
+			IsOperational:  false,
+			BinkPResult: &models.ProtocolTestResult{
+				Tested:     true,
+				Success:    false,
+				Error:      "timeout",
+				IPv4Tested: true,
+				IPv4Error:  "timeout",
+			},
+		},
+	}
+
+	aggregator := NewTestAggregator()
+	result := aggregator.CreateAggregatedResult(node, results)
+
+	if result == nil {
+		t.Fatal("Expected non-nil aggregated result")
+	}
+
+	if result.BinkPResult == nil {
+		t.Fatal("Expected non-nil BinkP result")
+	}
+
+	if result.BinkPResult.Success {
+		t.Error("Expected BinkP result to be failed")
+	}
+
+	if result.BinkPResult.IPv4Error == "" {
+		t.Error("Expected IPv4Error to be non-empty so the web UI renders a red failed chip instead of a gray untested one")
+	}
+
+	if result.BinkPResult.Error == "" {
+		t.Error("Expected overall Error to be non-empty")
 	}
 }
