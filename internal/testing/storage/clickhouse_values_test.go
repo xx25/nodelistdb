@@ -10,7 +10,7 @@ import (
 // flushBatchLocked. resultToValues must return exactly this many values in the same
 // order, or ClickHouse batch appends fail at runtime. If you add or remove a
 // column, update the INSERT list, resultToValues, AND this constant together.
-const resultToValuesColumns = 123
+const resultToValuesColumns = 128
 
 func TestResultToValuesColumnCount(t *testing.T) {
 	s := &ClickHouseStorage{}

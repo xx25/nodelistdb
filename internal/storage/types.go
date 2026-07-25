@@ -157,15 +157,20 @@ type NodeTestResult struct {
 	FTPAnonSuccess *bool  `json:"ftp_anon_success"` // nil=not attempted, true=success, false=rejected
 
 	// VModem Test Results
-	VModemTested     bool     `json:"vmodem_tested"`
-	VModemSuccess    bool     `json:"vmodem_success"`
-	VModemResponseMs uint32   `json:"vmodem_response_ms"`
-	VModemError      string   `json:"vmodem_error"`
-	VModemVariant    string   `json:"vmodem_variant"`     // protocol actually observed on the IVM port
-	VModemConformant bool     `json:"vmodem_conformant"`  // true only for a genuine VMODEM (VMP) responder
-	VModemSoftware   string   `json:"vmodem_software"`    // detected mailer/software
-	VModemSystemName string   `json:"vmodem_system_name"` // remote system name (EMSI)
-	VModemAddresses  []string `json:"vmodem_addresses"`   // remote FTN addresses (EMSI)
+	VModemTested      bool     `json:"vmodem_tested"`
+	VModemSuccess     bool     `json:"vmodem_success"`
+	VModemResponseMs  uint32   `json:"vmodem_response_ms"`
+	VModemError       string   `json:"vmodem_error"`
+	VModemVariant     string   `json:"vmodem_variant"`      // protocol actually observed on the IVM port
+	VModemConformant  bool     `json:"vmodem_conformant"`   // true only for a genuine VMODEM (VMP) responder
+	VModemSoftware    string   `json:"vmodem_software"`     // detected mailer/software
+	VModemSystemName  string   `json:"vmodem_system_name"`  // remote system name (EMSI)
+	VModemSysop       string   `json:"vmodem_sysop"`        // remote sysop name (EMSI)
+	VModemLocation    string   `json:"vmodem_location"`     // remote location (EMSI)
+	VModemAddresses   []string `json:"vmodem_addresses"`    // remote FTN addresses (EMSI)
+	VModemDetail      string   `json:"vmodem_detail"`       // human-readable note behind the variant (how a VMP call ended)
+	VModemCallOutcome string   `json:"vmodem_call_outcome"` // groupable outcome of a placed VMP call; "" when none was placed
+	VModemBanner      string   `json:"vmodem_banner"`       // raw greeting, for variants identified only by their banner
 
 	// IPv4-specific Test Results
 	BinkPIPv4Tested      bool   `json:"binkp_ipv4_tested"`

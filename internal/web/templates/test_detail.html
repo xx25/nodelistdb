@@ -51,6 +51,10 @@
             color: #dc3545;
             font-weight: bold;
         }
+        .warning {
+            color: #e0a800;
+            font-weight: bold;
+        }
         .untested {
             color: #6c757d;
         }
@@ -374,10 +378,12 @@
                         <span class="response-time">({{.TestResult.VModemResponseMs}}ms)</span>
                         {{end}}
                     </span>
-                    {{if .TestResult.VModemSuccess}}
+                    {{if or .TestResult.VModemSuccess .TestResult.VModemVariant}}
                     <span class="detail-label">Conformance:</span>
                     {{if .TestResult.VModemConformant}}
                     <span class="detail-value success">&#10003; Genuine VMODEM (VMP)</span>
+                    {{else if eq .TestResult.VModemVariant "vmp"}}
+                    <span class="detail-value warning">&#9888; VMODEM (VMP) responder, call not completed</span>
                     {{else if .TestResult.VModemVariant}}
                     <span class="detail-value failed">&#9888; Not VMODEM &mdash; actual protocol: {{.TestResult.VModemVariant}}</span>
                     {{else}}
@@ -395,6 +401,14 @@
                     <span class="detail-label">System Name:</span>
                     <span class="detail-value">{{.TestResult.VModemSystemName}}</span>
                     {{end}}
+                    {{if .TestResult.VModemSysop}}
+                    <span class="detail-label">Sysop:</span>
+                    <span class="detail-value">{{.TestResult.VModemSysop}}</span>
+                    {{end}}
+                    {{if .TestResult.VModemLocation}}
+                    <span class="detail-label">Location:</span>
+                    <span class="detail-value">{{.TestResult.VModemLocation}}</span>
+                    {{end}}
                     {{if .TestResult.VModemAddresses}}
                     <span class="detail-label">Addresses:</span>
                     <span class="detail-value">
@@ -405,6 +419,20 @@
                         </div>
                     </span>
                     {{end}}
+                    {{end}}
+                    {{if .TestResult.VModemCallOutcome}}
+                    <span class="detail-label">VMP Call:</span>
+                    <span class="detail-value">{{.TestResult.VModemCallOutcome}}</span>
+                    {{end}}
+                    {{if .TestResult.VModemDetail}}
+                    <span class="detail-label">Detail:</span>
+                    <span class="detail-value">{{.TestResult.VModemDetail}}</span>
+                    {{end}}
+                    {{if .TestResult.VModemBanner}}
+                    <span class="detail-label">Banner:</span>
+                    <span class="detail-value">
+                        <div class="error-details">{{.TestResult.VModemBanner}}</div>
+                    </span>
                     {{end}}
                     {{if .TestResult.VModemError}}
                     <span class="detail-label">Error:</span>

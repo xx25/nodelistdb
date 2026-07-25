@@ -23,14 +23,14 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 	if port == 0 {
 		port = d.config.Protocols.BinkP.Port
 	}
-	
+
 	// Initialize BinkP result
 	if result.BinkPResult == nil {
 		result.BinkPResult = &models.ProtocolTestResult{
 			Details: make(map[string]interface{}),
 		}
 	}
-	
+
 	// Test IPv6 first (if available)
 	if len(result.ResolvedIPv6) > 0 {
 		for _, ipv6 := range result.ResolvedIPv6 {
@@ -114,7 +114,7 @@ func (d *Daemon) testBinkP(ctx context.Context, node *models.Node, result *model
 	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
 		logging.Infof("[%s]   Skipping BinkP IPv4 test: node has INO4 flag", node.Address())
 	}
-	
+
 	// Update operational status if either IPv4 or IPv6 succeeded
 	if result.BinkPResult.Success && !result.IsOperational {
 		result.IsOperational = true
@@ -136,14 +136,14 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 	if port == 0 {
 		port = d.config.Protocols.Ifcico.Port
 	}
-	
+
 	// Initialize IFCICO result
 	if result.IfcicoResult == nil {
 		result.IfcicoResult = &models.ProtocolTestResult{
 			Details: make(map[string]interface{}),
 		}
 	}
-	
+
 	// Test IPv6 first (if available and allowed)
 	if len(result.ResolvedIPv6) > 0 {
 		for _, ipv6 := range result.ResolvedIPv6 {
@@ -223,7 +223,7 @@ func (d *Daemon) testIfcico(ctx context.Context, node *models.Node, result *mode
 	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
 		logging.Infof("[%s]   Skipping IFCICO IPv4 test: node has INO4 flag", node.Address())
 	}
-	
+
 	// Update operational status if either IPv4 or IPv6 succeeded
 	if result.IfcicoResult.Success && !result.IsOperational {
 		result.IsOperational = true
@@ -245,14 +245,14 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 	if port == 0 {
 		port = d.config.Protocols.Telnet.Port
 	}
-	
+
 	// Initialize Telnet result
 	if result.TelnetResult == nil {
 		result.TelnetResult = &models.ProtocolTestResult{
 			Details: make(map[string]interface{}),
 		}
 	}
-	
+
 	// Test IPv6 first (if available and allowed)
 	if len(result.ResolvedIPv6) > 0 {
 		for _, ipv6 := range result.ResolvedIPv6 {
@@ -298,7 +298,7 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
 		logging.Infof("[%s]   Skipping Telnet IPv4 test: node has INO4 flag", node.Address())
 	}
-	
+
 	// Update operational status if either IPv4 or IPv6 succeeded
 	if result.TelnetResult.Success && !result.IsOperational {
 		result.IsOperational = true
@@ -430,11 +430,24 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 		}
 	}
 
+	// A VMP call rings the remote sysop's mailer for real, so ring a node at
+	// most once here: the first address gets a call, every other address of the
+	// same node is probed without one. Reachability is still recorded per
+	// address family.
+	rung := false
+	probe := func(ip string) protocols.TestResult {
+		if rung {
+			return d.vmodemTester.TestWithoutCalling(ctx, ip, port, node.Address())
+		}
+		rung = true
+		return d.vmodemTester.Test(ctx, ip, port, node.Address())
+	}
+
 	// Test IPv6 first (if available)
 	if len(result.ResolvedIPv6) > 0 {
 		for _, ipv6 := range result.ResolvedIPv6 {
 			logging.Debugf("[%s]   Testing VModem IPv6 %s:%d", node.Address(), ipv6, port)
-			testResult := d.vmodemTester.Test(ctx, ipv6, port, node.Address())
+			testResult := probe(ipv6)
 
 			if vmodemResult, ok := testResult.(*protocols.VModemTestResult); ok {
 				result.VModemResult.SetIPv6Result(
@@ -444,9 +457,16 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 					vmodemResult.Error,
 				)
 
+				// Keep the first address's diagnosis, and upgrade to the first
+				// that succeeds. A failed probe is worth storing: variant, VMP
+				// call outcome and banner are exactly what a node that never
+				// completes a call leaves behind, and they used to be dropped.
+				if _, seen := result.VModemResult.Details["ipv6"]; !seen || vmodemResult.Success {
+					result.VModemResult.Details["ipv6"] = vmodemDetails(vmodemResult)
+				}
+
 				// Log success or failure
 				if vmodemResult.Success {
-					result.VModemResult.Details["ipv6"] = vmodemDetails(vmodemResult)
 					logging.Debugf("[%s]     VModem IPv6 success: variant=%s conformant=%v %s (%dms)",
 						node.Address(), vmodemResult.Variant, vmodemResult.Conformant, vmodemResult.Software, vmodemResult.ResponseMs)
 					break // First successful IPv6 is enough
@@ -463,7 +483,7 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 	if len(result.ResolvedIPv4) > 0 && node.ShouldTestIPv4() {
 		for _, ipv4 := range result.ResolvedIPv4 {
 			logging.Debugf("[%s]   Testing VModem IPv4 %s:%d", node.Address(), ipv4, port)
-			testResult := d.vmodemTester.Test(ctx, ipv4, port, node.Address())
+			testResult := probe(ipv4)
 
 			if vmodemResult, ok := testResult.(*protocols.VModemTestResult); ok {
 				result.VModemResult.SetIPv4Result(
@@ -473,9 +493,12 @@ func (d *Daemon) testVModem(ctx context.Context, node *models.Node, result *mode
 					vmodemResult.Error,
 				)
 
+				if _, seen := result.VModemResult.Details["ipv4"]; !seen || vmodemResult.Success {
+					result.VModemResult.Details["ipv4"] = vmodemDetails(vmodemResult)
+				}
+
 				// Log success or failure
 				if vmodemResult.Success {
-					result.VModemResult.Details["ipv4"] = vmodemDetails(vmodemResult)
 					logging.Debugf("[%s]     VModem IPv4 success: variant=%s conformant=%v %s (%dms)",
 						node.Address(), vmodemResult.Variant, vmodemResult.Conformant, vmodemResult.Software, vmodemResult.ResponseMs)
 					break // First successful IPv4 is enough
@@ -504,7 +527,12 @@ func vmodemDetails(r *protocols.VModemTestResult) *models.VModemTestDetails {
 		Conformant:   r.Conformant,
 		Software:     r.Software,
 		SystemName:   r.SystemName,
+		Sysop:        r.Sysop,
+		Location:     r.Location,
 		Addresses:    r.Addresses,
 		AddressValid: r.AddressValid,
+		Detail:       r.Detail,
+		CallOutcome:  r.CallOutcome,
+		Banner:       r.Banner,
 	}
 }

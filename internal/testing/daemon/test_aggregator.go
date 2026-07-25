@@ -61,6 +61,34 @@ func mergeProtocolResult(dst, src *models.ProtocolTestResult) {
 	}
 }
 
+// keepFailureDetails gives the aggregated row the diagnosis of a hostname that
+// FAILED, when no hostname has succeeded. mergeProtocolResult deliberately only
+// takes details from a success, which leaves an all-failed multi-hostname node
+// with an aggregated row that says nothing while its per-hostname rows explain
+// exactly what went wrong (the VModem tester records the variant it found and
+// how a VMP call ended even when the probe failed). Analytics read the
+// aggregated row, so it should carry that too — and a later successful hostname
+// still wins, because mergeProtocolResult runs first and overwrites nothing
+// only when a success already filled it in.
+func keepFailureDetails(dst, src *models.ProtocolTestResult, sawSuccess *bool) {
+	if src == nil || dst == nil {
+		return
+	}
+	if src.Success {
+		if !*sawSuccess && src.Details != nil {
+			// First successful hostname: replace whatever a failed one left.
+			dst.Details = src.Details
+			dst.SoftwareSource = src.SoftwareSource
+			*sawSuccess = true
+		}
+		return
+	}
+	if !*sawSuccess && dst.Details == nil && src.Details != nil {
+		dst.Details = src.Details
+		dst.SoftwareSource = src.SoftwareSource
+	}
+}
+
 // finalizeProtocolResult derives the overall Tested/Success/ResponseMs/Error
 // fields from the merged per-IP-family results, so a node that succeeded via
 // IPv6 on one hostname and failed IPv4 on another reports success overall,
@@ -121,6 +149,9 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 	var operationalHostnames []string  // Protocol successful hostnames
 	hasAnyDNSSuccess := false
 	hasAnyProtocolSuccess := false
+	// Tracks whether the VModem details on the aggregated row came from a
+	// hostname that succeeded; see keepFailureDetails.
+	vmodemDetailsFromSuccess := false
 
 	// Aggregate DNS results
 	var allIPv4s []string
@@ -208,6 +239,7 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 				aggregated.VModemResult = &models.ProtocolTestResult{}
 			}
 			mergeProtocolResult(aggregated.VModemResult, result.VModemResult)
+			keepFailureDetails(aggregated.VModemResult, result.VModemResult, &vmodemDetailsFromSuccess)
 			if result.VModemResult.Success {
 				hasAnyProtocolSuccess = true
 			}

@@ -74,7 +74,9 @@ func (s *ClickHouseStorage) flushBatchLocked(ctx context.Context) error {
 		telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 		ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 		vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-		vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name, vmodem_addresses,
+		vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
+		vmodem_sysop, vmodem_location, vmodem_addresses,
+		vmodem_detail, vmodem_call_outcome, vmodem_banner,
 		is_operational, has_connectivity_issues, address_validated,
 		ipv4_skipped,
 		binkp_ipv4_tested, binkp_ipv4_success, binkp_ipv4_response_ms, binkp_ipv4_address, binkp_ipv4_error,
@@ -133,7 +135,9 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name, vmodem_addresses,
+			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
+			vmodem_sysop, vmodem_location, vmodem_addresses,
+			vmodem_detail, vmodem_call_outcome, vmodem_banner,
 			is_operational, has_connectivity_issues, address_validated
 		FROM node_test_results
 		ORDER BY test_time DESC
@@ -157,7 +161,9 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 		var vmodemTested, vmodemSuccess bool
 		var vmodemConformant bool
 		var vmodemVariant, vmodemSoftware, vmodemSystemName string
+		var vmodemSysop, vmodemLocation string
 		var vmodemAddresses []string
+		var vmodemDetail, vmodemCallOutcome, vmodemBanner string
 		var binkpResponseMs, ifcicoResponseMs, telnetResponseMs uint32
 		var ftpResponseMs, vmodemResponseMs uint32
 		var binkpSystemName, binkpSysop, binkpLocation, binkpVersion string
@@ -180,7 +186,9 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 			&telnetTested, &telnetSuccess, &telnetResponseMs, &telnetError,
 			&ftpTested, &ftpSuccess, &ftpResponseMs, &ftpError,
 			&vmodemTested, &vmodemSuccess, &vmodemResponseMs, &vmodemError,
-			&vmodemVariant, &vmodemConformant, &vmodemSoftware, &vmodemSystemName, &vmodemAddresses,
+			&vmodemVariant, &vmodemConformant, &vmodemSoftware, &vmodemSystemName,
+			&vmodemSysop, &vmodemLocation, &vmodemAddresses,
+			&vmodemDetail, &vmodemCallOutcome, &vmodemBanner,
 			&r.IsOperational, &r.HasConnectivityIssues, &r.AddressValidated,
 		)
 		if err != nil {
@@ -277,6 +285,21 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 			if len(vmodemAddresses) > 0 {
 				r.VModemResult.Details["addresses"] = vmodemAddresses
 			}
+			if vmodemSysop != "" {
+				r.VModemResult.Details["sysop"] = vmodemSysop
+			}
+			if vmodemLocation != "" {
+				r.VModemResult.Details["location"] = vmodemLocation
+			}
+			if vmodemDetail != "" {
+				r.VModemResult.Details["detail"] = vmodemDetail
+			}
+			if vmodemCallOutcome != "" {
+				r.VModemResult.Details["call_outcome"] = vmodemCallOutcome
+			}
+			if vmodemBanner != "" {
+				r.VModemResult.Details["banner"] = vmodemBanner
+			}
 		}
 
 		results = append(results, r)
@@ -311,7 +334,9 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
 			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name, vmodem_addresses,
+			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
+			vmodem_sysop, vmodem_location, vmodem_addresses,
+			vmodem_detail, vmodem_call_outcome, vmodem_banner,
 			is_operational, has_connectivity_issues, address_validated,
 			tested_hostname, hostname_index, is_aggregated,
 			total_hostnames, hostnames_tested, hostnames_operational
@@ -343,7 +368,9 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 		var vmodemTested, vmodemSuccess bool
 		var vmodemConformant bool
 		var vmodemVariant, vmodemSoftware, vmodemSystemName string
+		var vmodemSysop, vmodemLocation string
 		var vmodemAddresses []string
+		var vmodemDetail, vmodemCallOutcome, vmodemBanner string
 		var binkpResponseMs, ifcicoResponseMs, telnetResponseMs uint32
 		var ftpResponseMs, vmodemResponseMs uint32
 		var binkpSystemName, binkpSysop, binkpLocation, binkpVersion string
@@ -366,7 +393,9 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 			&telnetTested, &telnetSuccess, &telnetResponseMs, &telnetError,
 			&ftpTested, &ftpSuccess, &ftpResponseMs, &ftpError,
 			&vmodemTested, &vmodemSuccess, &vmodemResponseMs, &vmodemError,
-			&vmodemVariant, &vmodemConformant, &vmodemSoftware, &vmodemSystemName, &vmodemAddresses,
+			&vmodemVariant, &vmodemConformant, &vmodemSoftware, &vmodemSystemName,
+			&vmodemSysop, &vmodemLocation, &vmodemAddresses,
+			&vmodemDetail, &vmodemCallOutcome, &vmodemBanner,
 			&r.IsOperational, &r.HasConnectivityIssues, &r.AddressValidated,
 			&r.TestedHostname, &r.HostnameIndex, &r.IsAggregated,
 			&r.TotalHostnames, &r.HostnamesTested, &r.HostnamesOperational,
@@ -463,6 +492,21 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 			}
 			if len(vmodemAddresses) > 0 {
 				r.VModemResult.Details["addresses"] = vmodemAddresses
+			}
+			if vmodemSysop != "" {
+				r.VModemResult.Details["sysop"] = vmodemSysop
+			}
+			if vmodemLocation != "" {
+				r.VModemResult.Details["location"] = vmodemLocation
+			}
+			if vmodemDetail != "" {
+				r.VModemResult.Details["detail"] = vmodemDetail
+			}
+			if vmodemCallOutcome != "" {
+				r.VModemResult.Details["call_outcome"] = vmodemCallOutcome
+			}
+			if vmodemBanner != "" {
+				r.VModemResult.Details["banner"] = vmodemBanner
 			}
 		}
 
@@ -626,7 +670,9 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 	var telnetError, ftpError, vmodemError string
 	var vmodemConformant bool
 	var vmodemVariant, vmodemSoftware, vmodemSystemName string
+	var vmodemSysop, vmodemLocation string
 	var vmodemAddresses []string
+	var vmodemDetail, vmodemCallOutcome, vmodemBanner string
 
 	if r.TelnetResult != nil {
 		telnetTested = r.TelnetResult.Tested
@@ -649,13 +695,29 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		vmodemError = r.VModemResult.Error
 
 		// Rich protocol-identification details are stored per IP version
-		// (IPv6 preferred, then IPv4), mirroring binkp/ifcico.
-		if d, ok := r.VModemResult.Details["ipv6"].(*models.VModemTestDetails); ok {
+		// (IPv6 preferred, then IPv4), mirroring binkp/ifcico. Details are now
+		// recorded for failed probes too, so prefer the family that actually
+		// worked and only then fall back to whichever family has a diagnosis —
+		// otherwise a failed IPv6 probe would mask a successful IPv4 one.
+		var d *models.VModemTestDetails
+		if r.VModemResult.IPv6Success {
+			d, _ = r.VModemResult.Details["ipv6"].(*models.VModemTestDetails)
+		}
+		if d == nil && r.VModemResult.IPv4Success {
+			d, _ = r.VModemResult.Details["ipv4"].(*models.VModemTestDetails)
+		}
+		if d == nil {
+			if v, ok := r.VModemResult.Details["ipv6"].(*models.VModemTestDetails); ok {
+				d = v
+			} else if v, ok := r.VModemResult.Details["ipv4"].(*models.VModemTestDetails); ok {
+				d = v
+			}
+		}
+		if d != nil {
 			vmodemVariant, vmodemConformant, vmodemSoftware, vmodemSystemName, vmodemAddresses =
 				d.Variant, d.Conformant, d.Software, d.SystemName, d.Addresses
-		} else if d, ok := r.VModemResult.Details["ipv4"].(*models.VModemTestDetails); ok {
-			vmodemVariant, vmodemConformant, vmodemSoftware, vmodemSystemName, vmodemAddresses =
-				d.Variant, d.Conformant, d.Software, d.SystemName, d.Addresses
+			vmodemSysop, vmodemLocation = d.Sysop, d.Location
+			vmodemDetail, vmodemCallOutcome, vmodemBanner = d.Detail, d.CallOutcome, d.Banner
 		}
 	}
 
@@ -803,7 +865,9 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		telnetTested, telnetSuccess, telnetResponseMs, telnetError,
 		ftpTested, ftpSuccess, ftpResponseMs, ftpError,
 		vmodemTested, vmodemSuccess, vmodemResponseMs, vmodemError,
-		vmodemVariant, vmodemConformant, vmodemSoftware, vmodemSystemName, vmodemAddresses,
+		vmodemVariant, vmodemConformant, vmodemSoftware, vmodemSystemName,
+		vmodemSysop, vmodemLocation, vmodemAddresses,
+		vmodemDetail, vmodemCallOutcome, vmodemBanner,
 		r.IsOperational, r.HasConnectivityIssues, r.AddressValidated,
 		// INO4 flag (FTS-1038)
 		r.IPv4Skipped,

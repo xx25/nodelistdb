@@ -208,19 +208,14 @@ func (f *Formatter) formatProtocolResult(name string, result *ProtocolResult) {
 		} else {
 			f.WriteError("Connection failed (no error details available)")
 		}
+		// A failed IVM probe still says what was on the port and how the VMP
+		// call ended — that diagnosis is the reason to run the test by hand, so
+		// print it rather than stopping at the error line.
+		f.writeVModemDiagnosis(result)
 		return
 	}
 
-	// VModem/IVM: report the protocol actually detected and whether it is a
-	// genuine VMODEM (VMP) responder.
-	if result.Variant != "" {
-		f.WriteKeyValue("Protocol Detected", result.Variant)
-		if result.Conformant {
-			f.WriteSuccess("Conformance: genuine VMODEM (VMP)")
-		} else {
-			f.WriteError(fmt.Sprintf("Conformance: NOT VMODEM - actual protocol is %s", result.Variant))
-		}
-	}
+	f.writeVModemDiagnosis(result)
 
 	if result.SystemName != "" {
 		f.WriteKeyValue("System Name", result.SystemName)
@@ -242,6 +237,34 @@ func (f *Formatter) formatProtocolResult(name string, result *ProtocolResult) {
 	}
 	if result.Port > 0 && result.Port != getDefaultPort(name) {
 		f.WriteKeyValue("Port", fmt.Sprintf("%d", result.Port))
+	}
+}
+
+// writeVModemDiagnosis reports what an IVM port actually turned out to be
+// running and why the probe ended as it did. Everything here is empty for the
+// other protocols, so it is a no-op for them.
+func (f *Formatter) writeVModemDiagnosis(result *ProtocolResult) {
+	if result.Variant != "" {
+		f.WriteKeyValue("Protocol Detected", result.Variant)
+		switch {
+		case result.Conformant:
+			f.WriteSuccess("Conformance: genuine VMODEM (VMP)")
+		case result.Variant == "vmp":
+			// A VMP responder we could not finish calling — the reason is in
+			// Detail. Calling it "not VMODEM" here would be exactly backwards.
+			f.WriteWarning("Conformance: VMODEM (VMP) responder, call not completed")
+		default:
+			f.WriteError(fmt.Sprintf("Conformance: NOT VMODEM - actual protocol is %s", result.Variant))
+		}
+	}
+	if result.CallOutcome != "" {
+		f.WriteKeyValue("VMP Call", result.CallOutcome)
+	}
+	if result.Detail != "" {
+		f.WriteKeyValue("Detail", result.Detail)
+	}
+	if result.Banner != "" {
+		f.WriteKeyValue("Banner", result.Banner)
 	}
 }
 

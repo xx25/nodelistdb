@@ -355,7 +355,7 @@ func TestCreateAggregatedResult_DuplicateIPs(t *testing.T) {
 			Node:           1024,
 			TestedHostname: "host2.example.com",
 			ResolvedIPv4:   []string{"192.168.1.1", "192.168.1.3"}, // 192.168.1.1 is duplicate
-			ResolvedIPv6:   []string{"2001:db8::1"},                 // Duplicate IPv6
+			ResolvedIPv6:   []string{"2001:db8::1"},                // Duplicate IPv6
 			IsOperational:  true,
 		},
 	}
@@ -745,5 +745,88 @@ func TestCreateAggregatedResult_PerFamilyErrorPropagation(t *testing.T) {
 
 	if result.BinkPResult.Error == "" {
 		t.Error("Expected overall Error to be non-empty")
+	}
+}
+
+// vmodemHostnameResult builds one hostname's VModem probe result for the
+// aggregation tests below.
+func vmodemHostnameResult(hostname string, index int32, success bool, detail string) *models.TestResult {
+	pr := &models.ProtocolTestResult{
+		Tested:     true,
+		Success:    success,
+		IPv4Tested: true,
+		Details:    map[string]interface{}{},
+	}
+	if success {
+		pr.IPv4Success = true
+	} else {
+		pr.IPv4Error = "no answer"
+	}
+	pr.Details["ipv4"] = &models.VModemTestDetails{Variant: "vmp", Conformant: true, Detail: detail}
+	return &models.TestResult{
+		Zone:           2,
+		Net:            450,
+		Node:           1024,
+		TestedHostname: hostname,
+		HostnameIndex:  index,
+		ResolvedIPv4:   []string{"192.0.2.1"},
+		IsOperational:  success,
+		VModemResult:   pr,
+	}
+}
+
+// A node whose every hostname failed still has something to say about WHY: the
+// VModem tester records the variant it found and how the VMP call ended. That
+// diagnosis has to survive onto the aggregated row, which is what analytics read.
+func TestCreateAggregatedResult_VModemFailureDetailsSurvive(t *testing.T) {
+	node := &models.Node{
+		Zone:              2,
+		Net:               450,
+		Node:              1024,
+		InternetHostnames: []string{"host1.example.com", "host2.example.com"},
+	}
+
+	results := []*models.TestResult{
+		vmodemHostnameResult("host1.example.com", 0, false, "remote could not reach our data channel"),
+		vmodemHostnameResult("host2.example.com", 1, false, "remote mailer did not answer"),
+	}
+
+	result := NewTestAggregator().CreateAggregatedResult(node, results)
+	if result == nil || result.VModemResult == nil {
+		t.Fatal("Expected an aggregated VModem result")
+	}
+	d, ok := result.VModemResult.Details["ipv4"].(*models.VModemTestDetails)
+	if !ok {
+		t.Fatalf("Expected the first failed hostname's details to be kept, got %+v", result.VModemResult.Details)
+	}
+	if d.Detail != "remote could not reach our data channel" {
+		t.Errorf("Expected the first hostname's diagnosis, got %q", d.Detail)
+	}
+}
+
+// A hostname that succeeds outranks one that failed, whichever order they arrive in.
+func TestCreateAggregatedResult_VModemSuccessOutranksFailure(t *testing.T) {
+	node := &models.Node{
+		Zone:              2,
+		Net:               450,
+		Node:              1024,
+		InternetHostnames: []string{"host1.example.com", "host2.example.com"},
+	}
+
+	results := []*models.TestResult{
+		vmodemHostnameResult("host1.example.com", 0, false, "remote mailer did not answer"),
+		vmodemHostnameResult("host2.example.com", 1, true, "VMP call established, mailer answered"),
+	}
+
+	result := NewTestAggregator().CreateAggregatedResult(node, results)
+	if result == nil || result.VModemResult == nil {
+		t.Fatal("Expected an aggregated VModem result")
+	}
+	d, ok := result.VModemResult.Details["ipv4"].(*models.VModemTestDetails)
+	if !ok {
+		t.Fatalf("Expected VModem details on the aggregated row, got %+v", result.VModemResult.Details)
+	}
+	if d.Detail != "VMP call established, mailer answered" {
+		t.Errorf("Expected the successful hostname's details to win, got %q", d.Detail)
 	}
 }

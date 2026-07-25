@@ -48,9 +48,13 @@ type ProtocolResult struct {
 	Capabilities []string
 
 	// VModem/IVM-specific: the protocol actually observed and whether it is a
-	// genuine VMODEM (VMP) responder.
-	Variant    string
-	Conformant bool
+	// genuine VMODEM (VMP) responder, plus why the probe came out that way —
+	// how a VMP call ended, and the greeting of a peer we could not identify.
+	Variant     string
+	Conformant  bool
+	Detail      string
+	CallOutcome string
+	Banner      string
 }
 
 type GeolocationInfo struct {
