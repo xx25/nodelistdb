@@ -451,7 +451,6 @@ func main() {
 		// (RTS/CTS), but this rig always ran without flow control — the
 		// pre-migration modem code never enabled CTS/RTS.
 		FlowControl:      modem.FlowNone,
-		InitString:       getFirstInitCommand(cfg.Modem.InitCommands),
 		InitCommands:     cfg.Modem.InitCommands,
 		DialPrefix:       cfg.Modem.DialPrefix,
 		HangupMethod:     cfg.Modem.HangupMethod,
@@ -515,13 +514,6 @@ func main() {
 		// Default: show modem info
 		runInfoMode(m, log)
 	}
-}
-
-func getFirstInitCommand(cmds []string) string {
-	if len(cmds) > 0 {
-		return cmds[0]
-	}
-	return "ATZ"
 }
 
 // filterCMOnly filters nodes to only include CM (24/7) nodes
@@ -1213,7 +1205,9 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 	}
 
 	emsiStart := time.Now()
-	emsiErr := session.Handshake()
+	// We placed the call, so run the FSC-0056 calling side: EMSI_REQ from the
+	// answering mailer is met with EMSI_INQ before our EMSI_DAT.
+	emsiErr := session.HandshakeCaller()
 	emsiTime := time.Since(emsiStart)
 
 	var testRes testResult

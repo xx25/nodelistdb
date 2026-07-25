@@ -110,7 +110,6 @@ func newModemWorker(
 		// (RTS/CTS), but this rig always ran without flow control — the
 		// pre-migration modem code never enabled CTS/RTS.
 		FlowControl:      modem.FlowNone,
-		InitString:       getFirstInitCommand(config.InitCommands),
 		InitCommands:     config.InitCommands,
 		DialPrefix:       config.DialPrefix,
 		HangupMethod:     config.HangupMethod,
@@ -684,7 +683,9 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 	}
 
 	emsiStart := time.Now()
-	emsiErr := session.Handshake()
+	// We placed the call, so run the FSC-0056 calling side: EMSI_REQ from the
+	// answering mailer is met with EMSI_INQ before our EMSI_DAT.
+	emsiErr := session.HandshakeCaller()
 	emsiTime := time.Since(emsiStart)
 
 	var testRes testResult

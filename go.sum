@@ -110,6 +110,8 @@ github.com/xdg-go/scram v1.1.1/go.mod h1:RaEWvsqvNKKvBPvcKeFjrG2cJqOkHTiyTpzz23n
 github.com/xdg-go/stringprep v1.0.3/go.mod h1:W3f5j4i+9rC0kuIEJL0ky1VpHXQU3ocBgklLGvcBnW8=
 github.com/xx25/fidomail v0.0.0-20260716185449-bde34e72d954 h1:dyOqiH9NrjRNYafoNR7AyjseuF1yXxBmbA3nRnekLkI=
 github.com/xx25/fidomail v0.0.0-20260716185449-bde34e72d954/go.mod h1:zxVTFTq5lH0uC9KGZDJqrBmE/GUT/jZMNsF/I4Zi2f0=
+github.com/xx25/fidomail v0.0.0-20260725215536-85840f17ba13 h1:ru9HDlT8Lf52bz4DTIB6Zc5KOmcJ7CvT30Lncm9+xUg=
+github.com/xx25/fidomail v0.0.0-20260725215536-85840f17ba13/go.mod h1:5xGuK0LlUJUrUqdkU3+68TFkhlkNRwBeD315AVBbSN8=
 github.com/xx25/go-serial/v2 v2.0.0-20260621135723-af8dce8aa671 h1:NE4+DXBTrDCQB8QUbzx158GUBdvb00ANpvsAsq4SypE=
 github.com/xx25/go-serial/v2 v2.0.0-20260621135723-af8dce8aa671/go.mod h1:ylUeCauuRTvijve0+EEouPGgyaEB9jn2eb1mTik0M5U=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=

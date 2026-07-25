@@ -159,7 +159,12 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	}
 	
 	handshakeStart := time.Now()
-	err = session.Handshake()
+	// We always dial, so run the FSC-0056 calling side explicitly: a peer that
+	// solicits with EMSI_REQ is answered with EMSI_INQ before our EMSI_DAT.
+	// Left to the bare default the library derives the answering side from the
+	// "wait" preamble, and a spec-strict answerer (The Brake! family) then
+	// discards our unsolicited DAT and re-sends EMSI_REQ until it gives up.
+	err = session.HandshakeCaller()
 	handshakeDuration := time.Since(handshakeStart)
 	
 	if err != nil {
@@ -201,7 +206,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		result.Addresses = remoteInfo.Addresses
 
 		// Determine software source
-		if remoteInfo.SystemName == "[Extracted from banner]" {
+		if remoteInfo.SystemName == emsiBannerPlaceholder {
 			result.SoftwareSource = "banner"
 			if t.debug {
 				logging.Debugf("IFCICO: Software info extracted from banner text")

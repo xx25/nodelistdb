@@ -16,7 +16,7 @@ require (
 	github.com/mfkenney/go-serial/v2 v2.0.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/afero v1.15.0
-	github.com/xx25/fidomail v0.0.0-20260716185449-bde34e72d954
+	github.com/xx25/fidomail v0.0.0-20260725215536-85840f17ba13
 	golang.org/x/net v0.48.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/text v0.32.0
