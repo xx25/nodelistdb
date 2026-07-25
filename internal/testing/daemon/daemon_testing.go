@@ -246,6 +246,8 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 			port = 23
 		case "ftp":
 			port = 21
+		case "vmodem":
+			port = 3141
 		default:
 			return fmt.Errorf("unsupported protocol: %s", protocol)
 		}
@@ -279,6 +281,8 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 		testNode.InternetProtocols = []string{"ITN"}
 	case "ftp":
 		testNode.InternetProtocols = []string{"IFT"}
+	case "vmodem":
+		testNode.InternetProtocols = []string{"IVM"}
 	}
 
 	// Run the test - but we need to handle the case where hostname is already an IP
@@ -356,6 +360,12 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 		if d.config.Protocols.FTP.Enabled && d.ftpTester != nil {
 			d.testFTP(ctx, testNode, result)
 		}
+	case "vmodem":
+		if d.config.Protocols.VModem.Enabled && d.vmodemTester != nil {
+			// A VMP call rings the remote sysop's mailer for real, which is
+			// exactly why this is worth having by hand: one node, on purpose.
+			d.testVModem(ctx, testNode, result)
+		}
 	}
 
 	// Display results
@@ -397,6 +407,42 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 			}
 		} else {
 			logging.Infof("  IFCICO: Failed - %s", result.IfcicoResult.Error)
+		}
+	}
+
+	if protocol == "vmodem" && result.VModemResult != nil {
+		det, _ := result.VModemResult.Details["ipv6"].(*models.VModemTestDetails)
+		if det == nil {
+			det, _ = result.VModemResult.Details["ipv4"].(*models.VModemTestDetails)
+		}
+		if result.VModemResult.Success {
+			logging.Infof("  VModem: Reachable")
+		} else {
+			logging.Infof("  VModem: Failed - %s", result.VModemResult.Error)
+		}
+		if det != nil {
+			logging.Infof("    Protocol: %s (conformant VMODEM: %v)", det.Variant, det.Conformant)
+			if det.CallOutcome != "" {
+				logging.Infof("    VMP call: %s", det.CallOutcome)
+			}
+			if det.Detail != "" {
+				logging.Infof("    Detail: %s", det.Detail)
+			}
+			if det.Software != "" {
+				logging.Infof("    Software: %s", det.Software)
+			}
+			if det.SystemName != "" {
+				logging.Infof("    System: %s", det.SystemName)
+			}
+			if det.Sysop != "" {
+				logging.Infof("    Sysop: %s", det.Sysop)
+			}
+			if len(det.Addresses) > 0 {
+				logging.Infof("    Addresses: %v (expected present: %v)", det.Addresses, det.AddressValid)
+			}
+			if det.Banner != "" {
+				logging.Infof("    Banner: %s", det.Banner)
+			}
 		}
 	}
 
