@@ -32,6 +32,7 @@ func main() {
 		testLimit  = flag.String("test-limit", "", "Limit testing to specific node(s) during cycles (e.g., '2:5001/100')")
 		vmpCall    = flag.Bool("vmp-call", false, "Place real VMP calls on IVM ports: rings the remote sysop's mailer, and needs this host reachable inbound on the callback port")
 		vmpPort    = flag.Int("vmp-port", 0, "Callback port to advertise for -vmp-call (0 = config, or 14592, which is what a real VMODEM asks for first)")
+		logFile    = flag.String("log-file", "", "Write this run's log here instead of the configured file, and mirror it to the console. A hand-run cannot share the service's log: that file belongs to the service user, and losing the rotation race silently drops every line.")
 	)
 
 	flag.Parse()
@@ -50,6 +51,10 @@ func main() {
 	// Override with command line flags
 	if *debugMode {
 		cfg.Logging.Level = "debug"
+	}
+	if *logFile != "" {
+		cfg.Logging.File = *logFile
+		cfg.Logging.Console = true
 	}
 	cfg.Daemon.RunOnce = *once
 	cfg.Daemon.DryRun = *dryRun
