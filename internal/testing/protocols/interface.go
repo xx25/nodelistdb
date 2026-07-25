@@ -104,8 +104,15 @@ type VModemTestResult struct {
 	Conformant   bool     // true iff a genuine VMODEM (VMP) responder was confirmed
 	Software     string   // detected mailer/software, when identifiable
 	SystemName   string   // remote system name (EMSI), when identifiable
+	Sysop        string   // remote sysop name (EMSI), when identifiable
+	Location     string   // remote location (EMSI), when identifiable
 	Addresses    []string // remote FTN addresses (EMSI), when identifiable
 	AddressValid bool     // expected address present in the remote's addresses
 	Detail       string   // human-readable note (e.g. "IVM announced, actual: emsi-telnet")
 	Banner       string   // raw banner text for unknown/named variants
+	// CallOutcome is the groupable token for a VMP call that was actually
+	// placed ("connected", "no-data-channel", "no-answer", ...); empty means no
+	// call was placed on this address, which is the normal case for every
+	// variant other than vmp.
+	CallOutcome string
 }

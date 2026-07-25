@@ -21,22 +21,22 @@ type TestResult struct {
 	DerivedFromAddress string
 
 	// DNS Resolution
-	Hostname     string   // Primary hostname attempted
+	Hostname       string // Primary hostname attempted
 	TestedHostname string // Actual hostname that was tested (may be primary or backup)
-	ResolvedIPv4 []string
-	ResolvedIPv6 []string
-	DNSError     string
+	ResolvedIPv4   []string
+	ResolvedIPv6   []string
+	DNSError       string
 
 	// Geolocation
-	Country      string
-	CountryCode  string
-	City         string
-	Region       string
-	Latitude     float32
-	Longitude    float32
-	ISP          string
-	Org          string
-	ASN          uint32
+	Country     string
+	CountryCode string
+	City        string
+	Region      string
+	Latitude    float32
+	Longitude   float32
+	ISP         string
+	Org         string
+	ASN         uint32
 
 	// Protocol Test Results
 	BinkPResult  *ProtocolTestResult
@@ -53,23 +53,23 @@ type TestResult struct {
 	AddressValidatedIPv6  bool
 
 	// IP version restrictions (FTS-1038)
-	IPv4Skipped           bool   // IPv4 testing skipped due to INO4 flag
+	IPv4Skipped bool // IPv4 testing skipped due to INO4 flag
 
 	// Per-hostname testing fields (simplified migration)
-	HostnameIndex         int32  // -1=legacy, 0=primary, 1+=backup
-	IsAggregated          bool   // false=per-hostname, true=summary
-	TotalHostnames        int32  // Total number of hostnames for this node
-	HostnamesTested       int32  // Number of hostnames actually tested
-	HostnamesOperational  int32  // Number of operational hostnames
+	HostnameIndex        int32 // -1=legacy, 0=primary, 1+=backup
+	IsAggregated         bool  // false=per-hostname, true=summary
+	TotalHostnames       int32 // Total number of hostnames for this node
+	HostnamesTested      int32 // Number of hostnames actually tested
+	HostnamesOperational int32 // Number of operational hostnames
 }
 
 // ProtocolTestResult represents test result for a specific protocol
 type ProtocolTestResult struct {
 	// Overall results (backward compatible)
-	Tested      bool
-	Success     bool   // Success on ANY IP version
-	ResponseMs  uint32 // Best response time from any IP version
-	Error       string
+	Tested     bool
+	Success    bool   // Success on ANY IP version
+	ResponseMs uint32 // Best response time from any IP version
+	Error      string
 
 	// IPv4 specific results
 	IPv4Tested     bool
@@ -119,8 +119,18 @@ type VModemTestDetails struct {
 	Conformant   bool
 	Software     string
 	SystemName   string
+	Sysop        string
+	Location     string
 	Addresses    []string
 	AddressValid bool
+	// Detail is the human-readable note behind Variant: how a VMP call ended,
+	// or which protocol was found instead of VMODEM. CallOutcome is the
+	// groupable form of the same thing for a call that was actually placed,
+	// empty otherwise. Banner is the raw greeting, kept so an unrecognized
+	// peer can still be identified later.
+	Detail      string
+	CallOutcome string
+	Banner      string
 }
 
 // AnnouncedAKARecord holds the AKA list one node identity announced during
@@ -135,11 +145,11 @@ type AnnouncedAKARecord struct {
 
 // DNSResult represents DNS resolution result
 type DNSResult struct {
-	Hostname     string
+	Hostname      string
 	IPv4Addresses []string
 	IPv6Addresses []string
-	Error        error
-	ResolutionMs int64
+	Error         error
+	ResolutionMs  int64
 }
 
 // WhoisNoServerError marks a domain whose TLD publishes no WHOIS server
@@ -233,9 +243,9 @@ type AggregatedTestResult struct {
 	HostnameResults map[string]*HostnameTestResult
 
 	// Aggregate summary
-	AnyHostnameOperational bool   // At least one hostname works
-	AllHostnamesTested     bool   // All available hostnames were tested
-	PrimaryHostname        string // The primary hostname configured
+	AnyHostnameOperational bool     // At least one hostname works
+	AllHostnamesTested     bool     // All available hostnames were tested
+	PrimaryHostname        string   // The primary hostname configured
 	WorkingHostnames       []string // List of operational hostnames
 	FailedHostnames        []string // List of non-operational hostnames
 
@@ -256,7 +266,7 @@ func NewTestResult(node *Node) *TestResult {
 		Domain:   node.EffectiveDomain(),
 		Hostname: node.GetPrimaryHostname(),
 		// Initialize per-hostname fields with legacy values
-		HostnameIndex:        -1,  // Mark as legacy by default
+		HostnameIndex:        -1,   // Mark as legacy by default
 		IsAggregated:         true, // Legacy results are aggregated
 		TotalHostnames:       1,
 		HostnamesTested:      1,
@@ -273,7 +283,7 @@ func (tr *TestResult) SetBinkPResult(success bool, responseMs uint32, details *B
 		Error:      err,
 		Details:    make(map[string]interface{}),
 	}
-	
+
 	if details != nil {
 		tr.BinkPResult.Details["system_name"] = details.SystemName
 		tr.BinkPResult.Details["sysop"] = details.Sysop
@@ -281,10 +291,10 @@ func (tr *TestResult) SetBinkPResult(success bool, responseMs uint32, details *B
 		tr.BinkPResult.Details["version"] = details.Version
 		tr.BinkPResult.Details["addresses"] = details.Addresses
 		tr.BinkPResult.Details["capabilities"] = details.Capabilities
-		
+
 		// Address validation is now handled by the BinkP tester which sets AddressValid flag
 	}
-	
+
 	if success {
 		tr.IsOperational = true
 	}
@@ -299,14 +309,14 @@ func (tr *TestResult) SetIfcicoResult(success bool, responseMs uint32, details *
 		Error:      err,
 		Details:    make(map[string]interface{}),
 	}
-	
+
 	if details != nil {
 		tr.IfcicoResult.Details["mailer_info"] = details.MailerInfo
 		tr.IfcicoResult.Details["system_name"] = details.SystemName
 		tr.IfcicoResult.Details["addresses"] = details.Addresses
 		tr.IfcicoResult.Details["response_type"] = details.ResponseType
 	}
-	
+
 	if success && !tr.IsOperational {
 		tr.IsOperational = true
 	}
@@ -317,10 +327,10 @@ func (tr *TestResult) SetDNSResult(result *DNSResult) {
 	if result == nil {
 		return
 	}
-	
+
 	tr.ResolvedIPv4 = result.IPv4Addresses
 	tr.ResolvedIPv6 = result.IPv6Addresses
-	
+
 	if result.Error != nil {
 		tr.DNSError = result.Error.Error()
 		// Don't set HasConnectivityIssues here - DNS issues are separate from connectivity issues
@@ -333,7 +343,7 @@ func (tr *TestResult) SetGeolocation(geo *GeolocationResult) {
 	if geo == nil {
 		return
 	}
-	
+
 	tr.Country = geo.Country
 	tr.CountryCode = geo.CountryCode
 	tr.City = geo.City
@@ -354,11 +364,11 @@ func (tr *TestResult) SetTelnetResult(success bool, responseMs uint32, banner st
 		Error:      err,
 		Details:    make(map[string]interface{}),
 	}
-	
+
 	if banner != "" {
 		tr.TelnetResult.Details["banner"] = banner
 	}
-	
+
 	if success && !tr.IsOperational {
 		tr.IsOperational = true
 	}
@@ -373,11 +383,11 @@ func (tr *TestResult) SetFTPResult(success bool, responseMs uint32, welcome stri
 		Error:      err,
 		Details:    make(map[string]interface{}),
 	}
-	
+
 	if welcome != "" {
 		tr.FTPResult.Details["welcome"] = welcome
 	}
-	
+
 	if success && !tr.IsOperational {
 		tr.IsOperational = true
 	}
@@ -392,7 +402,7 @@ func (tr *TestResult) SetVModemResult(success bool, responseMs uint32, err strin
 		Error:      err,
 		Details:    make(map[string]interface{}),
 	}
-	
+
 	if success && !tr.IsOperational {
 		tr.IsOperational = true
 	}
@@ -405,7 +415,7 @@ func (pr *ProtocolTestResult) SetIPv4Result(success bool, responseMs uint32, add
 	pr.IPv4ResponseMs = responseMs
 	pr.IPv4Address = address
 	pr.IPv4Error = err
-	
+
 	// Update overall success if IPv4 succeeded
 	if success {
 		pr.Success = true
@@ -424,7 +434,7 @@ func (pr *ProtocolTestResult) SetIPv6Result(success bool, responseMs uint32, add
 	pr.IPv6ResponseMs = responseMs
 	pr.IPv6Address = address
 	pr.IPv6Error = err
-	
+
 	// Update overall success if IPv6 succeeded
 	if success {
 		pr.Success = true

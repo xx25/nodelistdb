@@ -187,6 +187,42 @@ protocols:
     port: 3141                 # Default IVM port; per-node IVM:<port> overrides honored
     timeout: 10s
 
+    # Outgoing Virtual Modem Protocol calls.
+    #
+    # A real VMP call is the only way to read a VMODEM node's address, system
+    # name and sysop, but VMP is a two-connection protocol: after we ask to
+    # connect, the ANSWERING node dials a second binary data connection BACK to
+    # us, and only then rings its mailer. So this only works when the daemon
+    # host accepts inbound TCP from the nodes it tests. When it cannot, calls
+    # still identify the node as a VMODEM and report "could not reach our data
+    # channel" instead of an identity.
+    #
+    # Leave port_min/port_max at 0 for an ephemeral port (right when the whole
+    # ephemeral range is reachable). Set a range when a firewall rule has to
+    # name it — it needs at least as many ports as the daemon has workers,
+    # since tests run concurrently.
+    # Which port to advertise matters. VMODEM's own caller always tries 14592
+    # first, so a node whose firewall was ever set up "for VMODEM" permits that
+    # port and not much else: 2:371/52 refuses a callback to 50090 outright but
+    # completes the call on 14592.
+    #
+    # On oracle-main the VCN security list permits inbound only on 80/443,
+    # 14592 and 50000-50100; anything else is dropped at the cloud edge, where
+    # it is also invisible to tcpdump on the instance. Always verify the range
+    # from a third-party host, not just by binding locally.
+    # 14592 alone is the compatible choice, and costs little: only a handful of
+    # nodes in the whole nodelist answer VMP, so serializing them adds well
+    # under a minute to a cycle. Setting port_min/port_max as well allows
+    # concurrent calls, at the risk that a node which only permits 14592
+    # answers reason 4 when it gets handed a fallback port.
+    data_channel:
+      enabled: false
+      host: ""                 # bind address ("" = all interfaces)
+      preferred_port: 14592    # VMODEM's own first-choice callback port
+      port_min: 0              # no fallback range: one call at a time, always on 14592
+      port_max: 0
+      ring_timeout: 45s        # how long to let the remote ring its mailer
+
 # External Services
 # -----------------
 services:

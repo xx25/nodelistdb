@@ -11,17 +11,17 @@ import (
 
 // Config represents the complete daemon configuration
 type Config struct {
-	Daemon          DaemonConfig       `yaml:"daemon"`
-	ClickHouse      *ClickHouseConfig  `yaml:"clickhouse"`
-	Protocols       ProtocolsConfig    `yaml:"protocols"`
-	Services        ServicesConfig     `yaml:"services"`
-	Testing         TestingConfig      `yaml:"testing"` // Protocol-specific testing configurations
-	Cache           CacheConfig        `yaml:"cache"` // Not used by testdaemon
-	TestdaemonCache CacheConfig        `yaml:"testdaemon_cache"` // Required cache config for testdaemon
-	Logging         LoggingConfig      `yaml:"testdaemon_logging"` // Testdaemon-specific logging config
-	CLI             CLIConfig          `yaml:"cli"`
-	ConfigPath      string             `yaml:"-"` // Path to config file, set when loading
-	Version         string             `yaml:"-"` // Version string, set from main
+	Daemon          DaemonConfig      `yaml:"daemon"`
+	ClickHouse      *ClickHouseConfig `yaml:"clickhouse"`
+	Protocols       ProtocolsConfig   `yaml:"protocols"`
+	Services        ServicesConfig    `yaml:"services"`
+	Testing         TestingConfig     `yaml:"testing"`            // Protocol-specific testing configurations
+	Cache           CacheConfig       `yaml:"cache"`              // Not used by testdaemon
+	TestdaemonCache CacheConfig       `yaml:"testdaemon_cache"`   // Required cache config for testdaemon
+	Logging         LoggingConfig     `yaml:"testdaemon_logging"` // Testdaemon-specific logging config
+	CLI             CLIConfig         `yaml:"cli"`
+	ConfigPath      string            `yaml:"-"` // Path to config file, set when loading
+	Version         string            `yaml:"-"` // Version string, set from main
 }
 
 // TestingConfig contains protocol-specific testing configurations
@@ -44,15 +44,15 @@ type EMSITestingConfig struct {
 
 // DaemonConfig contains daemon-specific settings
 type DaemonConfig struct {
-	TestInterval      time.Duration `yaml:"test_interval"`
-	Workers           int           `yaml:"workers"`
-	BatchSize         int           `yaml:"batch_size"`
-	StaleTestThreshold time.Duration `yaml:"stale_test_threshold"` // Consider test stale after this duration (default: same as test_interval)
+	TestInterval        time.Duration `yaml:"test_interval"`
+	Workers             int           `yaml:"workers"`
+	BatchSize           int           `yaml:"batch_size"`
+	StaleTestThreshold  time.Duration `yaml:"stale_test_threshold"`  // Consider test stale after this duration (default: same as test_interval)
 	FailedRetryInterval time.Duration `yaml:"failed_retry_interval"` // Retry failed nodes after this duration (default: 24h)
-	RunOnce           bool          `yaml:"-"` // Set from command line
-	DryRun            bool          `yaml:"-"` // Set from command line
-	CLIOnly           bool          `yaml:"-"` // Set from command line - disable automatic testing
-	TestLimit         string        `yaml:"-"` // Set from command line - limit to specific node(s)
+	RunOnce             bool          `yaml:"-"`                     // Set from command line
+	DryRun              bool          `yaml:"-"`                     // Set from command line
+	CLIOnly             bool          `yaml:"-"`                     // Set from command line - disable automatic testing
+	TestLimit           string        `yaml:"-"`                     // Set from command line - limit to specific node(s)
 }
 
 // ClickHouseConfig for ClickHouse database
@@ -91,6 +91,32 @@ type ProtocolConfig struct {
 	SystemName string        `yaml:"system_name,omitempty"` // SYS field
 	Sysop      string        `yaml:"sysop,omitempty"`       // ZYZ field
 	Location   string        `yaml:"location,omitempty"`    // LOC field
+
+	// DataChannel configures the reverse connection a VMP call needs. Only
+	// meaningful for the vmodem protocol.
+	DataChannel VMPDataChannelConfig `yaml:"data_channel,omitempty"`
+}
+
+// VMPDataChannelConfig configures outgoing Virtual Modem Protocol calls.
+//
+// VMP is a two-connection protocol: after the caller asks to connect, the
+// answering node dials a second, binary data connection BACK to the caller, and
+// only then rings its mailer. So placing a real VMP call — the only way to read
+// a VMODEM node's address and sysop — requires this host to be reachable
+// inbound from the node under test. When it is not, calls still identify the
+// node as a VMODEM but end with "could not reach our data channel".
+//
+// Leave PortMin/PortMax at zero to use an ephemeral port, which is right when
+// the whole ephemeral range is reachable. Set a narrow range when a firewall
+// rule has to name it; tests run concurrently, so the range needs at least as
+// many ports as the daemon has workers.
+type VMPDataChannelConfig struct {
+	Enabled       bool          `yaml:"enabled"`
+	Host          string        `yaml:"host"`           // bind address ("" = all interfaces)
+	PreferredPort int           `yaml:"preferred_port"` // tried first; 14592 is VMODEM's own first choice
+	PortMin       int           `yaml:"port_min"`       // fallback range, 0 = ephemeral
+	PortMax       int           `yaml:"port_max"`       // fallback range, 0 = ephemeral
+	RingTimeout   time.Duration `yaml:"ring_timeout"`   // how long to let the remote ring its mailer
 }
 
 // ServicesConfig contains external service settings
@@ -153,7 +179,7 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
-	
+
 	// Store the config path for reloading
 	cfg.ConfigPath = path
 
@@ -165,7 +191,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Daemon.BatchSize = 100
 	}
 	if cfg.Daemon.TestInterval == 0 {
-		cfg.Daemon.TestInterval = 3600  // Will be converted to Duration later
+		cfg.Daemon.TestInterval = 3600 // Will be converted to Duration later
 	}
 	// Set StaleTestThreshold to same as TestInterval if not specified
 	if cfg.Daemon.StaleTestThreshold == 0 {
@@ -173,26 +199,26 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	// Set FailedRetryInterval to 24h if not specified
 	if cfg.Daemon.FailedRetryInterval == 0 {
-		cfg.Daemon.FailedRetryInterval = 24 * 3600  // 24 hours, will be converted to Duration later
+		cfg.Daemon.FailedRetryInterval = 24 * 3600 // 24 hours, will be converted to Duration later
 	}
-	
+
 	// ClickHouse-specific defaults
 	if cfg.ClickHouse != nil {
 		if cfg.ClickHouse.BatchSize == 0 {
 			cfg.ClickHouse.BatchSize = 1000
 		}
 		if cfg.ClickHouse.FlushInterval == 0 {
-			cfg.ClickHouse.FlushInterval = 30  // Will be converted to Duration later
+			cfg.ClickHouse.FlushInterval = 30 // Will be converted to Duration later
 		}
 	}
-	
+
 	if cfg.Services.DNS.Workers == 0 {
 		cfg.Services.DNS.Workers = 20
 	}
 	if cfg.Services.DNS.Timeout == 0 {
-		cfg.Services.DNS.Timeout = 5  // Will be converted to Duration later
+		cfg.Services.DNS.Timeout = 5 // Will be converted to Duration later
 	}
-	
+
 	// Set defaults for testdaemon_cache
 	if cfg.TestdaemonCache.Type == "" {
 		cfg.TestdaemonCache.Type = "badger"
@@ -200,7 +226,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.TestdaemonCache.Path == "" {
 		cfg.TestdaemonCache.Path = "./cache/badger-testdaemon"
 	}
-	
+
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"
 	}
@@ -219,7 +245,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Daemon.FailedRetryInterval < time.Duration(oneSecondInNanos) {
 		cfg.Daemon.FailedRetryInterval *= time.Second
 	}
-	
+
 	if cfg.ClickHouse != nil {
 		if cfg.ClickHouse.FlushInterval < time.Duration(oneSecondInNanos) {
 			cfg.ClickHouse.FlushInterval *= time.Second
@@ -239,7 +265,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Protocols.BinkP.Location == "" {
 		cfg.Protocols.BinkP.Location = "Test Location"
 	}
-	
+
 	if cfg.Protocols.Ifcico.Timeout < time.Duration(oneSecondInNanos) {
 		cfg.Protocols.Ifcico.Timeout *= time.Second
 	}
@@ -262,6 +288,26 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Protocols.VModem.Timeout < time.Duration(oneSecondInNanos) {
 		cfg.Protocols.VModem.Timeout *= time.Second
 	}
+	if cfg.Protocols.VModem.DataChannel.RingTimeout < time.Duration(oneSecondInNanos) {
+		cfg.Protocols.VModem.DataChannel.RingTimeout *= time.Second
+	}
+	if cfg.Protocols.VModem.DataChannel.RingTimeout == 0 {
+		// Long enough for a mailer set to answer on the third or fourth ring.
+		// Only a budget, not a protocol constant: how many rings a node sends
+		// before its mailer picks up is that node's business, and an answerer
+		// with a mailer already listening may connect on the first one.
+		cfg.Protocols.VModem.DataChannel.RingTimeout = 45 * time.Second
+	}
+	if cfg.Protocols.VModem.DataChannel.PreferredPort == 0 &&
+		cfg.Protocols.VModem.DataChannel.PortMin == 0 && cfg.Protocols.VModem.DataChannel.PortMax == 0 {
+		// A real VMODEM caller always asks to be called back on 14592 first, so
+		// a node whose firewall was ever opened "for VMODEM" is open for that
+		// port and little else — 2:371/52 refuses a callback to an ephemeral
+		// port with reason 4 but completes the call on 14592. Naming no port at
+		// all would ask for an ephemeral one, which is the choice least likely
+		// to be reachable.
+		cfg.Protocols.VModem.DataChannel.PreferredPort = 14592
+	}
 	if cfg.Services.Geolocation.CacheTTL < time.Duration(oneSecondInNanos) {
 		cfg.Services.Geolocation.CacheTTL *= time.Second
 	}
@@ -271,7 +317,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Services.DNS.CacheTTL < 1000 {
 		cfg.Services.DNS.CacheTTL *= time.Second
 	}
-	
+
 	// CLI defaults
 	if cfg.CLI.Host == "" {
 		cfg.CLI.Host = "127.0.0.1"
@@ -283,7 +329,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.CLI.MaxClients = 5
 	}
 	if cfg.CLI.Timeout == 0 {
-		cfg.CLI.Timeout = 300  // 300 seconds default
+		cfg.CLI.Timeout = 300 // 300 seconds default
 	}
 	// Convert CLI timeout to Duration if needed
 	if cfg.CLI.Timeout < 1000 {
@@ -367,13 +413,13 @@ func (c *Config) Validate() error {
 	if c.ClickHouse.Database == "" {
 		return fmt.Errorf("clickhouse.database is required")
 	}
-	
+
 	// Check if at least one protocol is enabled
 	if !c.Protocols.BinkP.Enabled && !c.Protocols.Ifcico.Enabled &&
 		!c.Protocols.Telnet.Enabled && !c.Protocols.FTP.Enabled &&
 		!c.Protocols.VModem.Enabled {
 		return fmt.Errorf("at least one protocol must be enabled")
 	}
-	
+
 	return nil
 }

@@ -106,10 +106,14 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 		vmSystem := firstNonEmpty(newCfg.Protocols.VModem.SystemName, newCfg.Protocols.Ifcico.SystemName)
 		vmSysop := firstNonEmpty(newCfg.Protocols.VModem.Sysop, newCfg.Protocols.Ifcico.Sysop)
 		vmLocation := firstNonEmpty(newCfg.Protocols.VModem.Location, newCfg.Protocols.Ifcico.Location)
-		d.vmodemTester = protocols.NewVModemTesterWithInfo(
+		vmodem := protocols.NewVModemTesterWithInfo(
 			newCfg.Protocols.VModem.Timeout,
 			vmOurAddr, vmSystem, vmSysop, vmLocation,
 		)
+		if dc := newCfg.Protocols.VModem.DataChannel; dc.Enabled {
+			vmodem.EnableVMPCalls(dc.Host, dc.PreferredPort, dc.PortMin, dc.PortMax, dc.RingTimeout)
+		}
+		d.vmodemTester = vmodem
 	} else {
 		d.vmodemTester = nil
 	}
@@ -140,9 +144,7 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 			}
 		}
 		if d.vmodemTester != nil {
-			if setter, ok := d.vmodemTester.(protocols.EMSIConfigSetter); ok {
-				setter.SetEMSIConfigManager(d.emsiConfigManager)
-			}
+			d.vmodemTester.SetEMSIConfigManager(d.emsiConfigManager)
 		}
 	} else {
 		// No EMSI config provided - clear ConfigManager to use legacy timeout behavior
@@ -153,9 +155,7 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 			}
 		}
 		if d.vmodemTester != nil {
-			if setter, ok := d.vmodemTester.(protocols.EMSIConfigSetter); ok {
-				setter.SetEMSIConfigManager(nil)
-			}
+			d.vmodemTester.SetEMSIConfigManager(nil)
 		}
 	}
 
@@ -240,9 +240,7 @@ func (d *Daemon) SetDebugMode(enabled bool) error {
 		}
 	}
 	if d.vmodemTester != nil {
-		if setter, ok := d.vmodemTester.(protocols.DebugSetter); ok {
-			setter.SetDebug(enabled)
-		}
+		d.vmodemTester.SetDebug(enabled)
 	}
 
 	if enabled {

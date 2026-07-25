@@ -10,9 +10,9 @@ import (
 	"github.com/nodelistdb/internal/cache"
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/protocols"
-	"github.com/xx25/fidomail/pkg/emsi"
 	"github.com/nodelistdb/internal/testing/services"
 	"github.com/nodelistdb/internal/testing/storage"
+	"github.com/xx25/fidomail/pkg/emsi"
 )
 
 // Daemon is the main testing daemon
@@ -38,7 +38,10 @@ type Daemon struct {
 	ifcicoTester protocols.Tester
 	telnetTester protocols.Tester
 	ftpTester    protocols.Tester
-	vmodemTester protocols.Tester
+	// Concrete type, not protocols.Tester: the VModem tester exposes
+	// TestWithoutCalling so a node whose mailer has already been rung this
+	// cycle is not rung again for its other addresses.
+	vmodemTester *protocols.VModemTester
 
 	// Worker pool
 	workerPool *WorkerPool
@@ -142,14 +145,14 @@ func New(cfg *Config) (*Daemon, error) {
 	// Now uses unified BadgerCache interface
 	if cfg.TestdaemonCache.Enabled && cfg.TestdaemonCache.Path != "" {
 		pCache, err := cache.NewBadgerCache(&cache.BadgerConfig{
-			Path:              cfg.TestdaemonCache.Path,
-			MaxMemoryMB:       256, // Default for testing daemon
-			ValueLogMaxMB:     100,
-			CompactL0OnClose:  true,
-			NumGoroutines:     4,
-			GCInterval:        10 * time.Minute,
-			GCDiscardRatio:    0.5,
-			MaxDiskMB:         512,
+			Path:             cfg.TestdaemonCache.Path,
+			MaxMemoryMB:      256, // Default for testing daemon
+			ValueLogMaxMB:    100,
+			CompactL0OnClose: true,
+			NumGoroutines:    4,
+			GCInterval:       10 * time.Minute,
+			GCDiscardRatio:   0.5,
+			MaxDiskMB:        512,
 		})
 		if err != nil {
 			logging.Warnf("Failed to initialize persistent cache: %v", err)
@@ -260,9 +263,24 @@ func New(cfg *Config) (*Daemon, error) {
 	}
 
 	if cfg.Protocols.VModem.Enabled {
-		d.vmodemTester = protocols.NewVModemTester(
+		// Mirror ReloadConfig: a VModem test runs a real EMSI handshake with a
+		// real mailer, so it must advertise a real identity from the first
+		// cycle, not only after a config reload.
+		vmodem := protocols.NewVModemTesterWithInfo(
 			cfg.Protocols.VModem.Timeout,
+			firstNonEmpty(cfg.Protocols.VModem.OurAddress, cfg.Protocols.Ifcico.OurAddress),
+			firstNonEmpty(cfg.Protocols.VModem.SystemName, cfg.Protocols.Ifcico.SystemName),
+			firstNonEmpty(cfg.Protocols.VModem.Sysop, cfg.Protocols.Ifcico.Sysop),
+			firstNonEmpty(cfg.Protocols.VModem.Location, cfg.Protocols.Ifcico.Location),
 		)
+		if d.emsiConfigManager != nil {
+			vmodem.SetEMSIConfigManager(d.emsiConfigManager)
+		}
+		vmodem.SetDebug(debugMode)
+		if dc := cfg.Protocols.VModem.DataChannel; dc.Enabled {
+			vmodem.EnableVMPCalls(dc.Host, dc.PreferredPort, dc.PortMin, dc.PortMax, dc.RingTimeout)
+		}
+		d.vmodemTester = vmodem
 	}
 
 	// Initialize worker pool

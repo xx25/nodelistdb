@@ -38,8 +38,10 @@ func TestHasEMSIMarker(t *testing.T) {
 	}{
 		{"**EMSI_REQA77E\r", true, true},
 		{"**EMSI_DAT...", false, true},
-		{"**EMSI_INQ\r", true, false}, // that's what we send
-		{"**EMSI_INQ\r", false, true}, // peer-originated
+		{string(emsiINQNudge), true, false}, // that's what we send
+		{string(emsiINQNudge), false, true}, // peer-originated
+		{"**EMSI_INQ\r", true, false},       // a bare INQ, ours
+		{"**EMSI_INQ\r", false, true},       // a bare INQ, peer-originated
 		{"login: ", false, false},
 	}
 	for _, c := range cases {
