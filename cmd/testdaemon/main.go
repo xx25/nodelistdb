@@ -28,8 +28,10 @@ func main() {
 		cliOnly    = flag.Bool("cli-only", false, "Disable automatic testing, only test via CLI commands")
 		showVer    = flag.Bool("version", false, "Show version and exit")
 		testNode   = flag.String("test-node", "", "Test specific node (format: address or host:port) and exit")
-		testProto  = flag.String("test-proto", "ifcico", "Protocol to test (binkp, ifcico, telnet)")
+		testProto  = flag.String("test-proto", "ifcico", "Protocol to test (binkp, ifcico, telnet, vmodem)")
 		testLimit  = flag.String("test-limit", "", "Limit testing to specific node(s) during cycles (e.g., '2:5001/100')")
+		vmpCall    = flag.Bool("vmp-call", false, "Place real VMP calls on IVM ports: rings the remote sysop's mailer, and needs this host reachable inbound on the callback port")
+		vmpPort    = flag.Int("vmp-port", 0, "Callback port to advertise for -vmp-call (0 = config, or 14592, which is what a real VMODEM asks for first)")
 	)
 
 	flag.Parse()
@@ -53,6 +55,17 @@ func main() {
 	cfg.Daemon.DryRun = *dryRun
 	cfg.Daemon.CLIOnly = *cliOnly
 	cfg.Daemon.TestLimit = *testLimit
+	if *vmpCall {
+		// A one-off run may call without the config saying so — placing calls
+		// every cycle rings the same sysops repeatedly, which is a decision for
+		// the config file, not a side effect of testing by hand.
+		cfg.Protocols.VModem.DataChannel.Enabled = true
+		if *vmpPort > 0 {
+			cfg.Protocols.VModem.DataChannel.PreferredPort = *vmpPort
+			cfg.Protocols.VModem.DataChannel.PortMin = 0
+			cfg.Protocols.VModem.DataChannel.PortMax = 0
+		}
+	}
 
 	// Initialize daemon with version info
 	cfg.Version = fmt.Sprintf("v%s (%s) built %s", version, commit, date)
