@@ -443,14 +443,23 @@ func (pr *ProtocolTestResult) SetIPv4Result(success bool, responseMs uint32, add
 	pr.IPv4Address = address
 	pr.IPv4Error = err
 
-	// Update overall success if IPv4 succeeded
+	// A probe happened, whatever came of it. Tested used to be set only on
+	// success, so a node that was tested and failed on every address was stored
+	// as "never tested" — indistinguishable from a protocol that was never
+	// attempted, and invisible to any query that filters on it.
+	pr.Tested = true
+
 	if success {
 		pr.Success = true
-		pr.Tested = true
+		pr.Error = ""
 		// Update overall response time to best (lowest) time
 		if pr.ResponseMs == 0 || responseMs < pr.ResponseMs {
 			pr.ResponseMs = responseMs
 		}
+	} else if !pr.Success && err != "" {
+		// Nothing has succeeded yet, so the overall error is this one — until a
+		// later address succeeds and clears it.
+		pr.Error = err
 	}
 }
 
@@ -462,14 +471,18 @@ func (pr *ProtocolTestResult) SetIPv6Result(success bool, responseMs uint32, add
 	pr.IPv6Address = address
 	pr.IPv6Error = err
 
-	// Update overall success if IPv6 succeeded
+	// See SetIPv4Result: an attempted probe counts as tested either way.
+	pr.Tested = true
+
 	if success {
 		pr.Success = true
-		pr.Tested = true
+		pr.Error = ""
 		// Update overall response time to best (lowest) time
 		if pr.ResponseMs == 0 || responseMs < pr.ResponseMs {
 			pr.ResponseMs = responseMs
 		}
+	} else if !pr.Success && err != "" {
+		pr.Error = err
 	}
 }
 

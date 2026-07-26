@@ -632,3 +632,35 @@ func TestVModemDetailsPrefersTheFamilyThatWorked(t *testing.T) {
 		t.Error("expected nil for a nil result")
 	}
 }
+
+// A probe that failed on every address was still a probe. Recording it as
+// untested makes it indistinguishable from a protocol that was never attempted,
+// and hides it from every query that filters on Tested.
+func TestSetIPResultMarksFailedProbesAsTested(t *testing.T) {
+	pr := &ProtocolTestResult{}
+	pr.SetIPv6Result(false, 0, "2001:db8::1", "connection refused")
+	if !pr.Tested {
+		t.Error("Tested = false after a failed IPv6 probe")
+	}
+	if pr.Success {
+		t.Error("Success = true after a failed probe")
+	}
+	if pr.Error != "connection refused" {
+		t.Errorf("Error = %q, want the failure reason", pr.Error)
+	}
+
+	// A later address that works wins: success clears the error.
+	pr.SetIPv4Result(true, 42, "192.0.2.1", "")
+	if !pr.Success || pr.Error != "" {
+		t.Errorf("Success=%v Error=%q, want a clean success", pr.Success, pr.Error)
+	}
+	if pr.ResponseMs != 42 {
+		t.Errorf("ResponseMs = %d, want the successful probe's time", pr.ResponseMs)
+	}
+
+	// And a failure after a success must not overwrite it.
+	pr.SetIPv6Result(false, 0, "2001:db8::2", "timeout")
+	if !pr.Success || pr.Error != "" {
+		t.Errorf("Success=%v Error=%q, a later failure must not mask the success", pr.Success, pr.Error)
+	}
+}
