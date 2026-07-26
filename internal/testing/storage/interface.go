@@ -3,7 +3,8 @@ package storage
 import (
 	"context"
 	"time"
-	
+
+	"github.com/nodelistdb/internal/emailflags"
 	"github.com/nodelistdb/internal/testing/models"
 )
 
@@ -29,6 +30,11 @@ type Storage interface {
 	// WHOIS operations
 	StoreWhoisResult(ctx context.Context, result *models.WhoisResult) error
 	GetRecentWhoisResult(ctx context.Context, domain string, maxAge time.Duration) (*models.WhoisResult, error)
+
+	// Email domain verification (backs the /analytics/email report)
+	GetEmailDomainsToCheck(ctx context.Context, staleAfter time.Duration) ([]string, error)
+	GetEmailDomainCheck(ctx context.Context, domain string) (*StoredEmailDomainCheck, error)
+	StoreEmailDomainCheck(ctx context.Context, result emailflags.DomainResult, previous *StoredEmailDomainCheck) error
 
 	// Lifecycle
 	Close() error

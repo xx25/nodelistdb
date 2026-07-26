@@ -123,6 +123,32 @@ type VMPDataChannelConfig struct {
 type ServicesConfig struct {
 	Geolocation GeolocationConfig `yaml:"geolocation"`
 	DNS         DNSConfig         `yaml:"dns"`
+	EmailVerify EmailVerifyConfig `yaml:"email_verify"`
+}
+
+// EmailVerifyConfig controls DNS verification of the mail domains published in
+// nodelist email flags (IEM, IMI, ITX, ISE, IUC, and the non-standard
+// EMA/EVY), which backs the /analytics/email report.
+//
+// The check is plain DNS: MX lookup, null-MX and implicit-MX handling, and
+// resolution of each MX target. No SMTP connection is made -- outbound port 25
+// is blocked on the production host, and RCPT-TO probing is unreliable and
+// reputationally risky besides.
+type EmailVerifyConfig struct {
+	// Enabled turns the periodic sweep on. Default false.
+	Enabled bool `yaml:"enabled"`
+	// Interval is how often the sweep runs. Default 24h; the published
+	// domain set changes at most once a day, with a new nodelist.
+	Interval time.Duration `yaml:"interval"`
+	// StaleAfter is how old a stored verdict must be before the domain is
+	// re-checked. Default 7 days; mail domains change rarely.
+	StaleAfter time.Duration `yaml:"stale_after"`
+	// Timeout bounds a single DNS lookup. Default 5s.
+	Timeout time.Duration `yaml:"timeout"`
+	// Concurrency bounds simultaneous domain checks. Default 4. The
+	// population is a few dozen domains, so this is politeness towards the
+	// local resolver rather than throughput.
+	Concurrency int `yaml:"concurrency"`
 }
 
 // GeolocationConfig for IP geolocation service

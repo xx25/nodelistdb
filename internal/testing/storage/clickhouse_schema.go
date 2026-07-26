@@ -121,6 +121,26 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 	ORDER BY domain
 	TTL check_time + INTERVAL 90 DAY`)
 
+	// Add email_domain_checks table for verifying the mail domains published
+	// in nodelist email flags. Keyed by domain: under DNS-only checking every
+	// stored fact is domain-scoped. Versioned by last_attempt_time so a
+	// transient failure can carry the previous verdict forward and still
+	// record that the newest attempt failed.
+	schemas = append(schemas, `CREATE TABLE IF NOT EXISTS email_domain_checks (
+		domain String,
+		status LowCardinality(String),
+		detail String DEFAULT '',
+		ascii_domain String DEFAULT '',
+		mx_preferences Array(UInt16) DEFAULT [],
+		mx_hosts Array(String) DEFAULT [],
+		mx_resolved Array(UInt8) DEFAULT [],
+		check_time DateTime DEFAULT now(),
+		last_attempt_time DateTime DEFAULT now(),
+		check_error String DEFAULT ''
+	) ENGINE = ReplacingMergeTree(last_attempt_time)
+	ORDER BY domain
+	TTL last_attempt_time + INTERVAL 180 DAY`)
+
 	for _, schema := range schemas {
 		if err := s.conn.Exec(ctx, schema); err != nil {
 			// Ignore "already exists" errors for views

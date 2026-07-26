@@ -408,6 +408,8 @@ type Operations interface {
 	UnmarkPSTNDead(zone, net, node int, markedBy string) error
 	GetPSTNDeadNodes() ([]PSTNDeadNode, error)
 	GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error)
+	GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error)
+	GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error)
 	GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error)
 	GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error)
 	GetRecentModemSuccessPhones(days int) ([]string, error)

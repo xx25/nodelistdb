@@ -122,6 +122,10 @@ func main() {
 	check("GetPSTNCMNodes", err)
 	_, err = s.GetFileRequestNodes(5, "")
 	check("GetFileRequestNodes", err)
+	_, err = s.GetEmailCapableNodes(5, false, "")
+	check("GetEmailCapableNodes", err)
+	_, err = s.GetEmailFlagTrend("")
+	check("GetEmailFlagTrend", err)
 	_, err = s.GetOnThisDayNodes(7, 17, 5, false, "")
 	check("GetOnThisDayNodes", err)
 

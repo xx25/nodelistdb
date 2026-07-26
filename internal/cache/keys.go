@@ -218,6 +218,14 @@ func (kg *KeyGenerator) FileRequestNodesKey(limit int, domain string) string {
 	return fmt.Sprintf("%s:analytics:filerequest:%d:%s", kg.Prefix, limit, domain)
 }
 
+func (kg *KeyGenerator) EmailCapableNodesKey(limit int, useFieldFallback bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:email:nodes:%d:%t:%s", kg.Prefix, limit, useFieldFallback, domain)
+}
+
+func (kg *KeyGenerator) EmailFlagTrendKey(domain string) string {
+	return fmt.Sprintf("%s:analytics:email:trend:%s", kg.Prefix, domain)
+}
+
 func (kg *KeyGenerator) AKAMismatchNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
 	return fmt.Sprintf("%s:analytics:aka:mismatch:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }

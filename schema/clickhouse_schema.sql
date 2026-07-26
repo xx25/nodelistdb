@@ -401,3 +401,29 @@ ENGINE = ReplacingMergeTree(check_time)
 ORDER BY domain
 TTL check_time + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
+
+-- Email domain verification cache
+-- One row per mail domain published in a nodelist email flag (IEM, IMI, ITX,
+-- ISE, IUC, and the non-standard EMA/EVY). Written by testdaemon, read by the
+-- /analytics/email page. Keyed by domain because every fact here is
+-- domain-scoped under DNS-only checking.
+-- Versioned by last_attempt_time so a transient DNS failure can carry the
+-- previous verdict forward while still recording that the latest attempt
+-- failed (non-empty check_error means the displayed verdict is stale).
+CREATE TABLE IF NOT EXISTS nodelistdb.email_domain_checks
+(
+    `domain` String,                            -- Mail domain, lower-cased
+    `status` LowCardinality(String),            -- ok | implicit_mx | degraded | no_domain | null_mx | no_mx | mx_unresolvable | invalid | error
+    `detail` String DEFAULT '',                 -- Short human-readable explanation
+    `ascii_domain` String DEFAULT '',           -- Punycode form actually queried, when it differs
+    `mx_preferences` Array(UInt16) DEFAULT [],  -- Parallel arrays, ordered by preference
+    `mx_hosts` Array(String) DEFAULT [],
+    `mx_resolved` Array(UInt8) DEFAULT [],      -- 1 when that MX host has an A/AAAA record
+    `check_time` DateTime DEFAULT now(),        -- When the current verdict was established
+    `last_attempt_time` DateTime DEFAULT now(), -- When the domain was last re-tested
+    `check_error` String DEFAULT ''             -- Non-empty when the latest attempt failed transiently
+)
+ENGINE = ReplacingMergeTree(last_attempt_time)
+ORDER BY domain
+TTL last_attempt_time + INTERVAL 180 DAY
+SETTINGS index_granularity = 8192;

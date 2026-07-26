@@ -1041,6 +1041,71 @@ func (cs *CachedStorage) GetFileRequestNodes(limit int, domain string) ([]FileRe
 	return results, nil
 }
 
+// GetEmailCapableNodes returns nodes advertising email transport (cached)
+func (cs *CachedStorage) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetEmailCapableNodes(limit, useFieldFallback, domain)
+	}
+
+	key := cs.keyGen.EmailCapableNodesKey(limit, useFieldFallback, domain)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []EmailCapableNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetEmailCapableNodes(limit, useFieldFallback, domain)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
+// GetEmailFlagTrend returns per-year email flag counts (cached).
+// The trend only changes when a new nodelist lands, so it is held longer.
+func (cs *CachedStorage) GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetEmailFlagTrend(domain)
+	}
+
+	key := cs.keyGen.EmailFlagTrendKey(domain)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []EmailFlagTrendPoint
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetEmailFlagTrend(domain)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 24*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
 // GetAKAMismatchNodes returns AKA mismatch nodes (cached)
 func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {

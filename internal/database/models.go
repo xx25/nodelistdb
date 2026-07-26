@@ -117,12 +117,75 @@ func (d *DefaultAddresses) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ProtocolMap maps a connection-protocol flag (IBN, IFC, ...) to every
+// occurrence of that flag on the nodelist line.
+//
+// Rows written before these became lists stored a bare object, so
+// unmarshalling accepts both shapes; marshalling always emits a list. Without
+// this, a single legacy row fails the whole InternetConfiguration unmarshal
+// and silently loses the email data too.
+type ProtocolMap map[string][]InternetProtocolDetail
+
+// UnmarshalJSON accepts both the legacy object form ({"IBN": {...}}) and the
+// current list form ({"IBN": [{...}]}).
+func (p *ProtocolMap) UnmarshalJSON(data []byte) error {
+	result, err := unmarshalDetailMap[InternetProtocolDetail](data, "protocols")
+	if err != nil {
+		return err
+	}
+	*p = result
+	return nil
+}
+
+// EmailProtocolMap maps an email capability flag (IEM, IMI, ITX, ISE, IUC,
+// and the non-standard EMA/EVY) to every occurrence of that flag on the
+// nodelist line. A flag may legitimately repeat with different addresses for
+// multihomed systems (FTS-5001 rev 4), so all occurrences are kept.
+type EmailProtocolMap map[string][]EmailProtocolDetail
+
+// UnmarshalJSON accepts both the legacy object form ({"IMI": {...}}) and the
+// current list form ({"IMI": [{...}]}).
+func (e *EmailProtocolMap) UnmarshalJSON(data []byte) error {
+	result, err := unmarshalDetailMap[EmailProtocolDetail](data, "email_protocols")
+	if err != nil {
+		return err
+	}
+	*e = result
+	return nil
+}
+
+// unmarshalDetailMap decodes a flag->details map that may store each value
+// either as a list (current) or as a single bare object (legacy).
+func unmarshalDetailMap[T any](data []byte, field string) (map[string][]T, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	result := make(map[string][]T, len(raw))
+	for key, value := range raw {
+		var list []T
+		if err := json.Unmarshal(value, &list); err == nil {
+			result[key] = list
+			continue
+		}
+
+		var single T
+		if err := json.Unmarshal(value, &single); err != nil {
+			return nil, fmt.Errorf("%s[%q]: expected object or array of objects", field, key)
+		}
+		result[key] = []T{single}
+	}
+
+	return result, nil
+}
+
 // InternetConfiguration represents the structured internet config
 type InternetConfiguration struct {
-	Protocols      map[string][]InternetProtocolDetail `json:"protocols,omitempty"`
-	Defaults       DefaultAddresses                    `json:"defaults,omitempty"`
-	EmailProtocols map[string][]EmailProtocolDetail    `json:"email_protocols,omitempty"`
-	InfoFlags      []string                            `json:"info_flags,omitempty"`
+	Protocols      ProtocolMap      `json:"protocols,omitempty"`
+	Defaults       DefaultAddresses `json:"defaults,omitempty"`
+	EmailProtocols EmailProtocolMap `json:"email_protocols,omitempty"`
+	InfoFlags      []string         `json:"info_flags,omitempty"`
 }
 
 // NodeFilter represents search criteria for nodes

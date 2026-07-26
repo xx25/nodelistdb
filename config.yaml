@@ -239,6 +239,25 @@ services:
     cache_ttl: 168h            # Cache duration (7 days)
     rate_limit: 150            # Requests per minute
 
+  # Email endpoint verification (backs the /analytics/email report)
+  #
+  # Checks whether the mail domains published in nodelist email flags
+  # (IEM, IMI, ITX, ISE, IUC, and the non-standard EMA/EVY) can still
+  # receive mail. Plain DNS only: MX lookup, RFC 7505 null MX, RFC 5321
+  # implicit MX, and resolution of every MX target.
+  #
+  # No SMTP connection is ever made. Outbound port 25 is blocked on the
+  # production host, and RCPT-TO callback verification is unreliable
+  # (catch-all domains, greylisting) as well as reputationally risky.
+  #
+  # Requires schema/migrations/014_email_domain_checks.sql.
+  email_verify:
+    enabled: false             # Off by default; this is a reporting aid
+    interval: 24h              # How often to sweep (the domain set changes daily at most)
+    stale_after: 168h          # Re-check a domain after 7 days
+    timeout: 5s                # Per-lookup DNS timeout
+    concurrency: 4             # Simultaneous domain checks
+
 # Testdaemon Cache (Persistent cache for testdaemon)
 # ------------------
 testdaemon_cache:

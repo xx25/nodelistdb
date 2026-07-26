@@ -412,6 +412,14 @@ func (s *Storage) GetFileRequestNodes(limit int, domain string) ([]FileRequestNo
 	return s.analyticsOperations.GetFileRequestNodes(limit, domain)
 }
 
+func (s *Storage) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
+	return s.analyticsOperations.GetEmailCapableNodes(limit, useFieldFallback, domain)
+}
+
+func (s *Storage) GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error) {
+	return s.analyticsOperations.GetEmailFlagTrend(domain)
+}
+
 func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
 	return s.testOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
 }

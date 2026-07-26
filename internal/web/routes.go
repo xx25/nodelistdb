@@ -56,6 +56,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/pstn-accessible", varyByCookie(s.ModemAccessibleAnalyticsHandler))
 	mux.HandleFunc("/analytics/pstn-no-answer", varyByCookie(s.ModemNoAnswerAnalyticsHandler))
 	mux.HandleFunc("/analytics/file-request", varyByCookie(s.FileRequestAnalyticsHandler))
+	mux.HandleFunc("/analytics/email", varyByCookie(s.EmailAnalyticsHandler))
 	mux.HandleFunc("/analytics/software/binkp", varyByCookie(s.BinkPSoftwareHandler))
 	mux.HandleFunc("/analytics/software/ifcico", varyByCookie(s.IfcicoSoftwareHandler))
 	mux.HandleFunc("/analytics/geo-hosting", varyByCookie(s.GeoHostingAnalyticsHandler))

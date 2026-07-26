@@ -26,6 +26,7 @@ type Daemon struct {
 	whoisResolver *services.WhoisResolver
 	rdapResolver  *services.RDAPResolver
 	whoisWorker   *WhoisWorker
+	emailSweeper  *EmailDomainSweeper
 
 	// Persistent cache (optional) - now uses unified cache interface
 	persistentCache cache.Cache
@@ -200,6 +201,13 @@ func New(cfg *Config) (*Daemon, error) {
 	// Initialize WHOIS background worker
 	d.whoisWorker = NewWhoisWorker(d.whoisResolver, store, 1000)
 
+	// Periodic DNS verification of the mail domains published in nodelist
+	// email flags. Off unless configured: it is a reporting aid, not part of
+	// connectivity testing.
+	if cfg.Services.EmailVerify.Enabled {
+		d.emailSweeper = NewEmailDomainSweeper(cfg.Services.EmailVerify, store)
+	}
+
 	// Initialize EMSI configuration manager only if EMSI config is provided
 	// This preserves backward compatibility: when no testing.emsi section exists,
 	// the legacy protocols.ifcico.timeout continues to control handshake timing
@@ -330,6 +338,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// so worker pool stops first, preventing sends on closed queue)
 	d.whoisWorker.Start(ctx)
 	defer d.whoisWorker.Stop()
+
+	// Start the email domain sweep if it is configured
+	if d.emailSweeper != nil {
+		d.emailSweeper.Start(ctx)
+		defer d.emailSweeper.Stop()
+		logging.Info("Email domain verification enabled")
+	}
 
 	// Start worker pool (defers are LIFO, so this stops before whoisWorker)
 	d.workerPool.Start()

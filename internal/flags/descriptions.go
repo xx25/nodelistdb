@@ -77,15 +77,21 @@ func GetFlagDescriptions() map[string]FlagInfo {
 		"ITN": {Category: "internet", HasValue: true, Description: "Telnet protocol (default port 23)"},
 		"IVM": {Category: "internet", HasValue: true, Description: "VModem"},
 		"IFT": {Category: "internet", HasValue: true, Description: "FTP protocol (default port 21)"},
-		"INA": {Category: "internet", HasValue: true, Description: "Internet hostname/address (non-standard, use system name field)"},
+		"INA": {Category: "internet", HasValue: true, Description: "Default Internet address for non-email flags (FTS-5001)"},
 		"IP":  {Category: "internet", HasValue: true, Description: "TCP/IP capable (for protocols not covered by other flags)"},
 
-		// Email protocols
-		"IEM": {Category: "internet", HasValue: true, Description: "Internet email address (deprecated, use INA)"},
-		"IMI": {Category: "internet", HasValue: true, Description: "MIME-encoded email tunneling"},
-		"ITX": {Category: "internet", HasValue: true, Description: "TransX email encoding"},
-		"IUC": {Category: "internet", HasValue: true, Description: "UUencoded email tunneling"},
-		"ISE": {Category: "internet", HasValue: true, Description: "SEAT protocol for anonymous mail receipts"},
+		// Email protocols (FTS-5001 rev 4 section "Email Flags").
+		// The email flags never carry a port number, and INA does not supply a
+		// default address for them -- IEM does.
+		"IEM": {Category: "internet", HasValue: true, Description: "Unspecified mail tunneling method, or the default email address for the other email flags"},
+		"IMI": {Category: "internet", HasValue: true, Description: "MIME encoding of mail bundles"},
+		"ITX": {Category: "internet", HasValue: true, Description: "TransX email tunneling, return receipts required within 24h"},
+		"IUC": {Category: "internet", HasValue: true, Description: "UUencoding of mail bundles"},
+		"ISE": {Category: "internet", HasValue: true, Description: "SEAT protocol (FTS-1025), return receipts required within 24h; should accompany IUC and/or IMI"},
+
+		// Observed in real nodelists but defined by no FTSC document.
+		"EMA": {Category: "internet", HasValue: true, Description: "Email transport, method unspecified (non-standard, not defined by FTSC)"},
+		"EVY": {Category: "internet", HasValue: true, Description: "Voyager-compatible email transport (non-standard, not defined by FTSC)"},
 
 		// Internet information flags
 		"ICM":  {Category: "internet", HasValue: false, Description: "Internet Continuous Mail - accepts IP connections 24 hours"},

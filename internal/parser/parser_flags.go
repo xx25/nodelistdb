@@ -75,11 +75,28 @@ func (p *Parser) parseFlagWithValue(
 	case "INA":
 		addDefault(defaults, "INA", flagValue)
 
-	// Email protocols
+	// Email protocols.
+	//
+	// IEM carries the node's default email address (FTS-5001 rev 4: "sets the
+	// default email address for other flags (similar to INA)"), so an addressed
+	// IEM belongs in defaults where the resolver looks for it. A valueless
+	// "IEM:" still advertises the capability, so it is kept as a bare entry
+	// rather than dropped by addDefault.
 	case "IEM":
-		addDefault(defaults, "IEM", flagValue) // Default email
+		if flagValue == "" {
+			p.addEmailProtocol(flagName, "", emailProtocols)
+			return
+		}
+		addDefault(defaults, "IEM", flagValue)
 
-	case "IMI", "ITX", "ISE":
+	// IUC/EMA/EVY are listed here alongside the FTS-5001 flags because
+	// parseFlagWithoutValue already routes their bare forms into
+	// emailProtocols. Without them the addressed forms fell through to
+	// default: and were stored verbatim in flags[] ("EMA:user@host"), which
+	// hid them from every internet_config reader. EMA and EVY are not FTSC
+	// flags -- they appear nowhere in the FTSC archive -- but they occur in
+	// real nodelists and are recorded as observed conventions.
+	case "IMI", "ITX", "ISE", "IUC", "EMA", "EVY":
 		p.addEmailProtocol(flagName, flagValue, emailProtocols)
 
 	// General IP flag
@@ -116,8 +133,13 @@ func (p *Parser) parseFlagWithoutValue(
 		}
 		protocols[part] = append(protocols[part], detail)
 
-	// Email protocol flags without values
-	case "IMI", "ITX", "ISE", "IUC", "EMA", "EVY":
+	// Email protocol flags without values.
+	//
+	// A bare IEM advertises "an unspecified mail tunnelling method" with no
+	// address (FTS-5001 rev 4). It has no value to put in defaults, so it is
+	// recorded as a capability here; previously it fell through to default:
+	// and landed in flags[], invisible to internet_config readers.
+	case "IEM", "IMI", "ITX", "ISE", "IUC", "EMA", "EVY":
 		if emailProtocols[part] == nil {
 			emailProtocols[part] = []database.EmailProtocolDetail{}
 		}
@@ -341,4 +363,3 @@ func (p *Parser) hasFlag(flags []string, flag string) bool {
 	}
 	return false
 }
-

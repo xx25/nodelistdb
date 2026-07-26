@@ -1,0 +1,319 @@
+{{template "base" .}}
+
+{{define "title"}}FidoNet over Email{{end}}
+
+{{define "page_title"}}FidoNet over Email{{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">Nodes advertising mail transport over Internet email (FTS-5001 &ldquo;Email Flags&rdquo;)</p>{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/vendor/chart.min.js"></script>
+<script src="/static/sortable-table.js"></script>
+{{end}}
+
+{{define "extra_css"}}
+<style>
+    .email-chart-container { position: relative; height: 420px; margin-top: 1rem; }
+    .flag-swatch {
+        display: inline-block; width: 10px; height: 10px;
+        border-radius: 2px; margin-right: 6px; vertical-align: middle;
+    }
+    .addr-list { font-family: monospace; font-size: 0.9em; word-break: break-all; }
+    .addr-list div + div { margin-top: 2px; }
+    .provenance { color: #666; font-size: 0.85em; font-style: italic; }
+    .trend-table { font-size: 0.85em; }
+    .trend-table td, .trend-table th { padding: 3px 8px; text-align: right; }
+    .trend-table td:first-child, .trend-table th:first-child { text-align: left; }
+</style>
+{{end}}
+
+{{define "content"}}
+{{template "error_display" .}}
+
+{{if .Nodes}}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-box">
+        <h3>{{.Stats.TotalNodes}}</h3>
+        <p>Nodes with email flags</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.TotalAddresses}}</h3>
+        <p>Distinct addresses</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.DistinctDomains}}</h3>
+        <p>Mail domains</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.ReceiptCapable}}</h3>
+        <p>Receipt-capable (ITX/ISE)</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.WireProtocolSpecified}}</h3>
+        <p>Fully specified wire format (ISE)</p>
+    </div>
+    <div class="stats-box">
+        <h3>{{.Stats.Unresolved}}</h3>
+        <p>No address resolvable</p>
+    </div>
+</div>
+
+<!-- Historical trend -->
+{{if .Trend}}
+<div class="stats-box" style="margin-bottom: 2rem;">
+    <h4>Email transport flags over time</h4>
+    <p class="text-muted" style="margin-top: 0;">
+        One nodelist sampled per year. A node may advertise several flags, so the
+        series overlap and are not additive.
+    </p>
+    <div class="email-chart-container">
+        <canvas id="emailTrendChart"></canvas>
+    </div>
+
+    <details style="margin-top: 1rem;">
+        <summary>Show the same data as a table</summary>
+        <div class="table-responsive" style="margin-top: 0.5rem;">
+            <table class="data-table trend-table">
+                <thead>
+                    <tr>
+                        <th>Year</th>
+                        {{range .Stats.FlagReferences}}<th>{{.Flag}}</th>{{end}}
+                        <th>Any email</th>
+                        <th>Nodelist size</th>
+                        <th>Share</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $t := .Trend}}
+                    <tr>
+                        <td>{{$t.Year}}</td>
+                        {{range $.Stats.FlagReferences}}<td>{{index $t.Flags .Flag}}</td>{{end}}
+                        <td><strong>{{$t.AnyEmail}}</strong></td>
+                        <td>{{$t.TotalNodes}}</td>
+                        <td>{{printf "%.2f%%" $t.Percent}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </details>
+</div>
+
+<script>
+(function () {
+    const canvas = document.getElementById('emailTrendChart');
+    if (!canvas || typeof Chart === 'undefined') { return; }
+
+    new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: [{{range $i, $t := .Trend}}{{if $i}},{{end}}'{{$t.Year}}'{{end}}],
+            datasets: [
+                {{range $fi, $ref := .Stats.FlagReferences}}{{if $fi}},{{end}}{
+                    label: '{{$ref.Flag}}',
+                    data: [{{range $i, $t := $.Trend}}{{if $i}},{{end}}{{index $t.Flags $ref.Flag}}{{end}}],
+                    borderColor: '{{$ref.Color}}',
+                    backgroundColor: '{{$ref.Color}}',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    pointHitRadius: 12,
+                    tension: 0.15,
+                    fill: false
+                }{{end}}
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: true, position: 'top' },
+                tooltip: { mode: 'index', intersect: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Nodes advertising the flag' },
+                    grid: { color: 'rgba(0,0,0,0.06)' }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+})();
+</script>
+{{end}}
+
+<!-- Flag reference, coloured to match the chart -->
+<div class="stats-box" style="margin-bottom: 2rem;">
+    <h4>The flags</h4>
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Flag</th>
+                    <th>Nodes</th>
+                    <th>Standard</th>
+                    <th>Receipts</th>
+                    <th>Complete wire spec</th>
+                    <th>Meaning</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Stats.FlagReferences}}
+                <tr>
+                    <td style="white-space: nowrap;">
+                        <span class="flag-swatch" style="background: {{.Color}};"></span>
+                        <span class="badge badge-info">{{.Flag}}</span>
+                    </td>
+                    <td>{{.Count}}</td>
+                    <td>
+                        {{if .Standard}}<span title="Defined by FTS-5001">FTS-5001</span>
+                        {{else}}<span class="text-muted" title="Occurs in real nodelists but is defined by no FTSC document">non-standard</span>{{end}}
+                    </td>
+                    <td>{{if .ReceiptRequired}}<span style="color: #008300;">required</span>{{else}}<span class="text-muted">&ndash;</span>{{end}}</td>
+                    <td>{{if .WireProtocolSpecified}}<span style="color: #008300;">FTS-1025</span>{{else}}<span class="text-muted">&ndash;</span>{{end}}</td>
+                    <td style="font-size: 0.9em;">{{.Description}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Mail domains -->
+{{if .Stats.DomainCounts}}
+<div class="stats-box" style="margin-bottom: 2rem;">
+    <h4>Mail domains {{if gt .Stats.DistinctDomains 20}}(top 20 of {{.Stats.DistinctDomains}}){{end}}</h4>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        {{range .Stats.DomainCounts}}
+        <div style="background: #f0f0f0; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.9em;">
+            <span class="addr-list">{{.Domain}}</span> <strong>{{.Count}}</strong>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+<!-- Node table -->
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node</th>
+                <th data-sortable data-type="string">System Name</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="string">Sysop</th>
+                <th>Flags</th>
+                <th>Email address</th>
+                <th>Endpoint</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Nodes}}
+            <tr>
+                <td data-value="{{.Zone}}:{{.Net}}/{{.Node}}">
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="node-link">{{.Zone}}:{{.Net}}/{{.Node}}</a>
+                </td>
+                <td>{{replaceUnderscores .SystemName}}</td>
+                <td>{{replaceUnderscores .Location}}</td>
+                <td>{{replaceUnderscores .SysopName}}</td>
+                <td style="white-space: nowrap;">
+                    {{range .Capabilities}}
+                    <span class="badge {{if .Standard}}badge-info{{else}}badge-warning{{end}}"
+                          title="{{if .Standard}}FTS-5001{{else}}non-standard, defined by no FTSC document{{end}}{{if .ReceiptRequired}}; receipts required within 24h{{end}}{{if gt .Occurrences 1}}; listed {{.Occurrences}} times{{end}}; address {{if .Resolved}}from {{.Source.String}}{{else}}unresolved{{end}}">{{.Flag}}</span>
+                    {{end}}
+                </td>
+                <td>
+                    {{if .Addresses}}
+                    <div class="addr-list">
+                        {{range .Addresses}}<div>{{.}}</div>{{end}}
+                    </div>
+                    {{/* Flag the row only when no email flag carried an address
+                         itself, i.e. every address here was inherited or guessed.
+                         Per-flag provenance is on each flag badge's tooltip. */}}
+                    {{$explicit := false}}{{$prov := ""}}
+                    {{range .Capabilities}}{{if .Resolved}}
+                        {{if eq .Source.String "explicit"}}{{$explicit = true}}
+                        {{else if eq $prov ""}}{{$prov = .Source.String}}{{end}}
+                    {{end}}{{end}}
+                    {{if and (not $explicit) (ne $prov "")}}<div class="provenance">via {{$prov}}</div>{{end}}
+                    {{else}}
+                    <span class="text-muted">unresolved</span>
+                    {{end}}
+                    {{range .Capabilities}}{{range .Malformed}}
+                    <div class="provenance" style="color: #b8860b;" title="Published value that is not a usable email address">malformed: {{.}}</div>
+                    {{end}}{{end}}
+                </td>
+                <td>
+                    {{if .Endpoint}}
+                        {{range .Endpoint}}
+                        <div title="{{.Detail}}{{if .Stale}} (last check attempt failed; this verdict is older than it looks){{end}}">
+                            {{if eq .Status "ok"}}<span style="color: #008300;">&#10003; routable</span>
+                            {{else if eq .Status "implicit_mx"}}<span style="color: #008300;">&#10003; implicit MX</span>
+                            {{else if eq .Status "degraded"}}<span style="color: #b8860b;">&#9888; partial</span>
+                            {{else if eq .Status "no_domain"}}<span style="color: #c00;">&#10007; no such domain</span>
+                            {{else if eq .Status "null_mx"}}<span style="color: #c00;">&#10007; accepts no mail</span>
+                            {{else if eq .Status "no_mx"}}<span style="color: #c00;">&#10007; no mail route</span>
+                            {{else if eq .Status "mx_unresolvable"}}<span style="color: #c00;">&#10007; MX does not resolve</span>
+                            {{else if eq .Status "invalid"}}<span style="color: #c00;">&#10007; malformed</span>
+                            {{else}}<span class="text-muted">{{.Status}}</span>{{end}}
+                            {{if .Stale}}<span class="text-muted" title="Verdict is stale">*</span>{{end}}
+                        </div>
+                        {{end}}
+                    {{else}}
+                        <span class="text-muted">&ndash;</span>
+                    {{end}}
+                </td>
+                <td><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a></td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="info-box" style="margin-top: 2rem;">
+    <p><strong>What these flags mean.</strong> FTS-5001 defines five flags for carrying FidoNet mail
+    over Internet email: IEM, ITX, IUC, IMI and ISE. They are capability advertisements, not a single
+    protocol &mdash; a flag may name an encoding without defining a complete message format.
+    EMA and EVY appear in real nodelists but in no FTSC document, and are shown here as non-standard.</p>
+
+    <p><strong>Receipts.</strong> Only ITX and ISE promise proof of delivery; FTS-5001 requires a node
+    advertising either to send receipts within 24 hours. The other flags carry no acknowledgement, so
+    SMTP acceptance says nothing about whether the FidoNet bundle was ever imported.</p>
+
+    <p><strong>Only ISE is fully specified.</strong> SEAT (FTS-1025) is the one method in this group
+    with a complete FTSC wire specification. IMI and IUC name an encoding &mdash; MIME, UUencode &mdash;
+    but leave subject format, part ordering, filenames and duplicate detection undefined, so two
+    implementations need a prior agreement to interoperate.</p>
+
+    <p><strong>How the address is found.</strong> An address attached to the flag is used first;
+    otherwise IEM supplies the default, per FTS-5001 (&ldquo;sets the default email address for other
+    flags&rdquo;); otherwise an address published on another email flag is used, since the standard
+    says to &ldquo;look for addresses under any flag of the same type&rdquo;. INA is never used
+    &mdash; it is defined as the default for <em>non-email</em> flags only. Where the address came
+    from something other than the flag itself, the row says so.</p>
+
+    {{if .UseFieldFallback}}
+    <p><strong>Field fallback is on.</strong> Addresses are also being recovered from the Location and
+    System Name fields (FSP-1012 &sect;2.3.4). FTS-5001 warns these fields are easily mistaken for
+    Internet data, so treat those rows as guesses.
+    <a href="?">Turn it off</a>.</p>
+    {{else}}
+    <p>Some nodes publish the address in the Location or System Name field instead, where the flag
+    list would be too long (FSP-1012 &sect;2.3.4). That recovery is a heuristic and is off by default.
+    <a href="?fields=1">Try it</a>.</p>
+    {{end}}
+</div>
+
+{{else}}
+<div class="alert alert-warning">
+    <strong>No nodes advertising email transport were found.</strong><br>
+    No node in the latest nodelist for this network carries IEM, IMI, ITX, ISE, IUC, EMA or EVY.
+</div>
+{{end}}
+{{end}}
