@@ -49,7 +49,7 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 				modem_remote_location, modem_remote_sysop,
 				modem_tx_speed, modem_rx_speed, modem_modulation, test_source,
 				row_number() OVER (
-					PARTITION BY zone, net, node
+					PARTITION BY domain, zone, net, node
 					ORDER BY test_time DESC, modem_tx_speed DESC, modem_connect_speed DESC, modem_response_ms ASC
 				) as rn
 			FROM node_test_results
@@ -131,15 +131,15 @@ func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, inclu
 				modem_phone_dialed, modem_operator_name, test_source,
 				modem_ast_disposition, modem_ast_hangup_cause,
 				row_number() OVER (
-					PARTITION BY zone, net, node
+					PARTITION BY domain, zone, net, node
 					ORDER BY test_time DESC
 				) as rn,
-				count() OVER (PARTITION BY zone, net, node) as attempt_count
+				count() OVER (PARTITION BY domain, zone, net, node) as attempt_count
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND modem_tested = true
-				AND (zone, net, node) NOT IN (
-					SELECT zone, net, node FROM node_test_results
+				AND (domain, zone, net, node) NOT IN (
+					SELECT domain, zone, net, node FROM node_test_results
 					WHERE test_time >= now() - INTERVAL ? DAY
 						AND modem_tested = true AND modem_success = true
 						%s

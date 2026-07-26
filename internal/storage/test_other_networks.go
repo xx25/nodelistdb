@@ -80,7 +80,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain stri
 					if(r.ifcico_success, r.ifcico_addresses, [])
 				) as all_addresses
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND {{CYCLE_LT}}
 			WHERE r.is_aggregated = false
 				AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
 				{DOMAIN_FILTER_R}
@@ -104,6 +104,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain stri
 		ORDER BY node_count DESC, network_name ASC
 	`
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER_R}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days)
@@ -168,7 +169,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 					ORDER BY r.hostname_index ASC
 				) as rn
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND {{CYCLE_LT}}
 			WHERE r.is_aggregated = false
 				AND (
 					arrayExists(addr -> lower(addr) LIKE '%@' || lower(?) || '%', r.binkp_addresses)
@@ -212,6 +213,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 		LIMIT ?
 	`
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER_R}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, escapedName, escapedName, escapedName, limit)

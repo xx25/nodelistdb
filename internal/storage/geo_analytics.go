@@ -52,14 +52,14 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 			COUNT(*) as count
 		FROM (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(country, test_time) as country,
 				argMax(country_code, test_time) as country_code
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 			HAVING country <> ''
 		) AS latest_operational_nodes
 		GROUP BY country, country_code
@@ -101,7 +101,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 			COUNT(*) as count
 		FROM (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(isp, test_time) as isp,
 				argMax(org, test_time) as org,
 				argMax(asn, test_time) as asn,
@@ -110,7 +110,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 			WHERE is_operational = true
 				AND test_date >= today() - ?
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 			HAVING isp <> ''
 		) AS latest_operational_nodes
 		GROUP BY isp, org, asn
@@ -205,13 +205,13 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 	query := fmt.Sprintf(`
 		WITH latest_nodes AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(system_name, nodelist_date) as system_name,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
 			WHERE 1 = 1
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		)
 		SELECT
 			r.zone, r.net, r.node,
@@ -225,7 +225,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 			r.telnet_success, r.telnet_ipv6_success
 		FROM (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(binkp_system_name, test_time) as binkp_system_name,
 				argMax(ifcico_system_name, test_time) as ifcico_system_name,
 				argMax(binkp_sysop, test_time) as binkp_sysop,
@@ -248,9 +248,9 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 			WHERE is_operational = true
 				AND test_date >= today() - ?
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		) AS r
-		LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+		LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 		WHERE r.country_code = ?
 		ORDER BY r.zone, r.net, r.node
 	`, domainFilter, domainFilter)
@@ -306,13 +306,13 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 	query := fmt.Sprintf(`
 		WITH latest_nodes AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(system_name, nodelist_date) as system_name,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
 			WHERE 1 = 1
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		)
 		SELECT
 			r.zone, r.net, r.node,
@@ -326,7 +326,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 			r.telnet_success, r.telnet_ipv6_success
 		FROM (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(binkp_system_name, test_time) as binkp_system_name,
 				argMax(ifcico_system_name, test_time) as ifcico_system_name,
 				argMax(binkp_sysop, test_time) as binkp_sysop,
@@ -349,9 +349,9 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 			WHERE is_operational = true
 				AND test_date >= today() - ?
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		) AS r
-		LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+		LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 		WHERE r.isp = ?
 		ORDER BY r.zone, r.net, r.node
 	`, domainFilter, domainFilter)

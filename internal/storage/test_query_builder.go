@@ -301,7 +301,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 	rowPredicate := fmt.Sprintf(predicate, "")    // FROM node_test_results, unaliased
 	joinPredicate := fmt.Sprintf(predicate, "r.") // FROM node_test_results r JOIN ...
 
-	return fmt.Sprintf(`
+	return applyCycleWindows(fmt.Sprintf(`
 		WITH latest_tests AS (
 			SELECT
 				domain, zone, net, node,
@@ -325,7 +325,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 				r.domain, r.zone, r.net, r.node, r.test_time, r.hostname_index, r.is_aggregated,
 				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND {{CYCLE_LT}}
 			WHERE %s
 		),
 		latest_nodes AS (
@@ -368,7 +368,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
 		LEFT JOIN latest_nodes ln ON r.domain = ln.domain AND r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
 		ORDER BY r.test_time DESC
-		LIMIT ?`, rowPredicate, nodeFilter, domainFilter, joinPredicate)
+		LIMIT ?`, rowPredicate, nodeFilter, domainFilter, joinPredicate))
 }
 
 // BuildSearchByReachabilityQuery builds a query to search nodes by reachability status (ClickHouse)

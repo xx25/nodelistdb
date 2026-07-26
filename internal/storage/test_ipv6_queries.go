@@ -47,16 +47,7 @@ func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, day
 				AND length(resolved_ipv6) > 0
 			ORDER BY hostname_index`
 	} else {
-		query = `
-			SELECT DISTINCT tested_hostname
-			FROM node_test_results
-			WHERE zone = ? AND net = ? AND node = ?
-				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-				AND (? = '' OR domain = ?)
-				AND length(tested_hostname) > 0
-				AND hostname_index >= 0
-				AND array_length(resolved_ipv6) > 0
-			ORDER BY hostname_index`
+		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
 	rows, err := conn.Query(query, zone, net, node, days, domain, domain)
@@ -147,7 +138,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND r.test_time = lt.latest_test_time
+					AND {{CYCLE_LT}}
+				-- Re-apply the report's criteria to the candidate rows. The window
+				-- above admits the whole test cycle, including hostnames that carry
+				-- no working IPv6, and the ordering below would happily pick one of
+				-- those to represent the node.
+				WHERE length(r.resolved_ipv6) > 0
+					AND r.is_operational = true
+					AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
@@ -185,59 +183,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
 	} else {
-		query = fmt.Sprintf(`
-			WITH latest_tests AS (
-				SELECT
-					domain, zone, net, node,
-					max(test_time) as latest_test_time
-				FROM node_test_results
-				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-					AND array_length(resolved_ipv6) > 0
-					AND is_operational = true
-					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
-					%s
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
-				FROM nodes
-				GROUP BY domain, zone, net, node
-			)
-			SELECT DISTINCT ON (r.zone, r.net, r.node)
-				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
-				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
-				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
-				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
-				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
-				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
-				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated,
-				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success, r.domain, r.derived_from_address
-			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-				AND r.test_time = lt.latest_test_time
-			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			ORDER BY r.zone, r.net, r.node, r.test_time DESC
-			LIMIT ?`, nodeFilter)
+		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -295,7 +245,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 			WITH
 			-- Find nodes that have IPv6 addresses and were tested
 			nodes_with_ipv6 AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND length(resolved_ipv6) > 0
@@ -310,7 +260,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
-					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM nodes_with_ipv6)
 					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
@@ -320,8 +270,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
-				WHERE (zone, net, node) IN (
-					SELECT zone, net, node
+				WHERE (domain, zone, net, node) IN (
+					SELECT domain, zone, net, node
 					FROM ipv6_success_counts
 					WHERE success_count = 0
 				)
@@ -368,7 +318,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_failed_tests lft ON r.domain = lft.domain AND r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
-					AND r.test_time = lft.latest_test_time
+					AND {{CYCLE_LFT}}
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
@@ -406,83 +356,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
 	} else {
-		query = fmt.Sprintf(`
-			WITH
-			-- Find nodes that have IPv6 addresses and were tested
-			nodes_with_ipv6 AS (
-				SELECT DISTINCT zone, net, node
-				FROM node_test_results
-				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-					AND array_length(resolved_ipv6) > 0
-					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
-					%s
-					{{DOMAIN_FILTER}}
-			),
-			-- Count successful IPv6 tests per node in the period
-			ipv6_success_counts AS (
-				SELECT
-					domain, zone, net, node,
-					SUM(CASE WHEN (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) THEN 1 ELSE 0 END) as success_count
-				FROM node_test_results
-				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			-- Get latest test for nodes with zero successful IPv6 tests
-			latest_failed_tests AS (
-				SELECT
-					domain, zone, net, node,
-					max(test_time) as latest_test_time
-				FROM node_test_results
-				WHERE (zone, net, node) IN (
-					SELECT zone, net, node
-					FROM ipv6_success_counts
-					WHERE success_count = 0
-				)
-				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-				{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
-				FROM nodes
-				GROUP BY domain, zone, net, node
-			)
-			SELECT DISTINCT ON (r.zone, r.net, r.node)
-				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
-				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
-				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
-				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
-				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
-				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
-				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated,
-				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success, r.domain, r.derived_from_address
-			FROM node_test_results r
-			INNER JOIN latest_failed_tests lft ON r.domain = lft.domain AND r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
-				AND r.test_time = lft.latest_test_time
-			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			ORDER BY r.zone, r.net, r.node, r.test_time DESC
-			LIMIT ?`, nodeFilter)
+		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 
 	rows, err := conn.Query(query, days, days, days, limit)
 	if err != nil {
@@ -541,7 +419,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 			WITH
 			-- Find nodes that have IPv6 addresses and working IPv4 services
 			nodes_with_working_ipv4 AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
 					AND length(resolved_ipv6) > 0
@@ -557,7 +435,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
-					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_working_ipv4)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM nodes_with_working_ipv4)
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
 					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
@@ -568,8 +446,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
-				WHERE (zone, net, node) IN (
-					SELECT zone, net, node
+				WHERE (domain, zone, net, node) IN (
+					SELECT domain, zone, net, node
 					FROM ipv6_success_counts
 					WHERE success_count = 0
 				)
@@ -615,8 +493,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					r.ftp_anon_success, r.domain, r.derived_from_address,
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
-				INNER JOIN latest_ipv4_only_tests lit ON r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
-					AND r.test_time = lit.latest_test_time
+				INNER JOIN latest_ipv4_only_tests lit ON r.domain = lit.domain AND r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
+					AND {{CYCLE_LIT}}
 				WHERE 1 = 1 {{DOMAIN_FILTER_R}}
 			)
 			SELECT
@@ -655,86 +533,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
 	} else {
-		query = fmt.Sprintf(`
-			WITH
-			-- Find nodes that have IPv6 addresses and working IPv4 services
-			nodes_with_working_ipv4 AS (
-				SELECT DISTINCT zone, net, node
-				FROM node_test_results
-				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-					AND array_length(resolved_ipv6) > 0
-					AND is_operational = true
-					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
-					%s
-					{{DOMAIN_FILTER}}
-			),
-			-- Count successful IPv6 tests per node in the period
-			ipv6_success_counts AS (
-				SELECT
-					domain, zone, net, node,
-					SUM(CASE WHEN (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) THEN 1 ELSE 0 END) as success_count
-				FROM node_test_results
-				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_working_ipv4)
-					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			-- Get latest test for nodes with zero successful IPv6 tests but working IPv4
-			latest_ipv4_only_tests AS (
-				SELECT
-					domain, zone, net, node,
-					max(test_time) as latest_test_time
-				FROM node_test_results
-				WHERE (zone, net, node) IN (
-					SELECT zone, net, node
-					FROM ipv6_success_counts
-					WHERE success_count = 0
-				)
-				AND test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-				{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
-				FROM nodes
-				GROUP BY domain, zone, net, node
-			)
-			SELECT DISTINCT ON (r.zone, r.net, r.node)
-				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
-				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
-				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
-				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
-				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
-				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
-				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated,
-				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success, r.domain, r.derived_from_address
-			FROM node_test_results r
-			INNER JOIN latest_ipv4_only_tests lit ON r.zone = lit.zone AND r.net = lit.net AND r.node = lit.node
-				AND r.test_time = lit.latest_test_time
-			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			WHERE 1 = 1 {{DOMAIN_FILTER_R}}
-			ORDER BY r.zone, r.net, r.node, r.test_time DESC
-			LIMIT ?`, nodeFilter)
+		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, days, days, limit)
@@ -844,7 +647,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND r.test_time = lt.latest_test_time
+					AND {{CYCLE_LT}}
 				-- Re-apply the report's own criteria to the candidate rows. The
 				-- aggregated row ORs protocol successes across hostnames, so a node
 				-- that qualified through one IPv6-only hostname would otherwise be
@@ -891,59 +694,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
 	} else {
-		query = fmt.Sprintf(`
-			WITH latest_tests AS (
-				SELECT
-					domain, zone, net, node,
-					max(test_time) as latest_test_time
-				FROM node_test_results
-				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-					AND array_length(resolved_ipv6) > 0
-					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
-					AND NOT (binkp_ipv4_success = true OR ifcico_ipv4_success = true OR telnet_ipv4_success = true)
-					%s
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
-				FROM nodes
-				GROUP BY domain, zone, net, node
-			)
-			SELECT DISTINCT ON (r.zone, r.net, r.node)
-				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
-				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
-				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
-				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
-				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
-				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
-				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated,
-				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success, r.domain, r.derived_from_address
-			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-				AND r.test_time = lt.latest_test_time
-			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			ORDER BY r.zone, r.net, r.node, r.test_time DESC
-			LIMIT ?`, nodeFilter)
+		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -1051,7 +806,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND r.test_time = lt.latest_test_time
+					AND {{CYCLE_LT}}
 				-- Re-apply the report's own criteria: the aggregated row UNIONs
 				-- resolved addresses across hostnames, so it can carry IPv4 addresses
 				-- that the qualifying IPv6-only hostname does not have. See the same
@@ -1096,59 +851,11 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 			ORDER BY rr.test_time DESC
 			LIMIT ?`, nodeFilter)
 	} else {
-		query = fmt.Sprintf(`
-			WITH latest_tests AS (
-				SELECT
-					domain, zone, net, node,
-					max(test_time) as latest_test_time
-				FROM node_test_results
-				WHERE test_time >= CURRENT_TIMESTAMP - INTERVAL ? DAY
-					AND array_length(resolved_ipv6) > 0
-					AND array_length(resolved_ipv4) = 0
-					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
-					%s
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					FIRST(system_name ORDER BY nodelist_date DESC) as system_name
-				FROM nodes
-				GROUP BY domain, zone, net, node
-			)
-			SELECT DISTINCT ON (r.zone, r.net, r.node)
-				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-				r.binkp_tested, r.binkp_success, r.binkp_response_ms,
-				COALESCE(n.system_name, r.binkp_system_name) as binkp_system_name,
-				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
-				COALESCE(n.system_name, r.ifcico_system_name) as ifcico_system_name,
-				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_error,
-				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_error,
-				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_error,
-				r.is_operational, r.has_connectivity_issues, r.address_validated,
-				r.tested_hostname, r.hostname_index, r.is_aggregated,
-				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-				r.ftp_anon_success, r.domain, r.derived_from_address
-			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-				AND r.test_time = lt.latest_test_time
-			LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
-			ORDER BY r.zone, r.net, r.node, r.test_time DESC
-			LIMIT ?`, nodeFilter)
+		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -1205,7 +912,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 
 	query := fmt.Sprintf(`
 		WITH latest_tests AS (
-			SELECT zone, net, node, max(test_time) as latest_test_time
+			SELECT domain, zone, net, node, max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND is_aggregated = false
@@ -1216,14 +923,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 			GROUP BY domain, zone, net, node
 		),
 		latest_nodes AS (
-			SELECT zone, net, node,
+			SELECT domain, zone, net, node,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
 			WHERE 1 = 1 {{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
 		),
 		stability AS (
-			SELECT zone, net, node,
+			SELECT domain, zone, net, node,
 				uniqExact(test_time) as ipv6_failure_count
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL 30 DAY
@@ -1238,14 +945,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 			GROUP BY domain, zone, net, node
 		),
 		best_results AS (
-			SELECT r.test_time, r.zone, r.net, r.node,
+			SELECT r.domain, r.test_time, r.zone, r.net, r.node,
 				r.resolved_ipv6, r.isp, r.org,
 				r.binkp_ipv4_success, r.ifcico_ipv4_success, r.telnet_ipv4_success,
 				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node
 					ORDER BY r.hostname_index ASC) as rn
 			FROM node_test_results r
-			INNER JOIN latest_tests lt ON r.zone = lt.zone AND r.net = lt.net
-				AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net
+				AND r.node = lt.node AND {{CYCLE_LT}}
 			WHERE r.is_aggregated = false
 				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true)
 				AND r.address_validated = true
@@ -1257,13 +964,14 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 			br.binkp_ipv4_success, br.ifcico_ipv4_success, br.telnet_ipv4_success,
 			COALESCE(s.ipv6_failure_count, 0) as ipv6_failure_count
 		FROM best_results br
-		LEFT JOIN latest_nodes n ON br.zone = n.zone AND br.net = n.net AND br.node = n.node
-		LEFT JOIN stability s ON br.zone = s.zone AND br.net = s.net AND br.node = s.node
+		LEFT JOIN latest_nodes n ON br.domain = n.domain AND br.zone = n.zone AND br.net = n.net AND br.node = n.node
+		LEFT JOIN stability s ON br.domain = s.domain AND br.zone = s.zone AND br.net = s.net AND br.node = s.node
 		WHERE br.rn = 1
 		ORDER BY br.zone, br.net, br.node
 		LIMIT ?`, nodeFilter, nodeFilter)
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, limit)

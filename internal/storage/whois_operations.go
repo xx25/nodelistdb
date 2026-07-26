@@ -127,12 +127,15 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 	}
 
 	// Step 2: Filter for target domain, collect unique (zone, net, node) tuples
-	type nodeKey struct{ zone, net, node int }
+	type nodeKey struct {
+		ftnDomain       string
+		zone, net, node int
+	}
 	matchedNodes := make(map[nodeKey]string) // nodeKey → first matching hostname
 	for _, hn := range hostnameNodes {
 		d := domain.ExtractRegistrableDomain(hn.hostname)
 		if d == targetDomain {
-			nk := nodeKey{}
+			nk := nodeKey{ftnDomain: hn.ftnDomain}
 			_, _ = fmt.Sscanf(hn.nodeKey, "%d:%d/%d", &nk.zone, &nk.net, &nk.node)
 			if _, exists := matchedNodes[nk]; !exists {
 				matchedNodes[nk] = hn.hostname
@@ -145,19 +148,28 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 	}
 
 	// Step 3: Build IN-clause tuples for ClickHouse query
+	// The network name comes from the database, but it is inlined rather than
+	// bound, so it goes through the same validation as every other inlined
+	// domain literal (see domainFilterSQL).
 	var tuples []string
 	for nk := range matchedNodes {
-		tuples = append(tuples, fmt.Sprintf("(%d, %d, %d)", nk.zone, nk.net, nk.node))
+		if !domainSQLRe.MatchString(nk.ftnDomain) {
+			continue
+		}
+		tuples = append(tuples, fmt.Sprintf("('%s', %d, %d, %d)", nk.ftnDomain, nk.zone, nk.net, nk.node))
+	}
+	if len(tuples) == 0 {
+		return []NodeTestResult{}, nil
 	}
 
 	query := fmt.Sprintf(`
 		WITH latest_nodes AS (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(system_name, nodelist_date) as system_name,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 		)
 		SELECT
 			r.zone, r.net, r.node,
@@ -174,7 +186,7 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 			r.vmodem_success, r.vmodem_ipv6_success
 		FROM (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(binkp_system_name, test_time) as binkp_system_name,
 				argMax(ifcico_system_name, test_time) as ifcico_system_name,
 				argMax(binkp_sysop, test_time) as binkp_sysop,
@@ -201,10 +213,10 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 			FROM node_test_results
 			WHERE is_aggregated = false
 				AND test_date >= today() - %d
-				AND (zone, net, node) IN (%s)
-			GROUP BY zone, net, node
+				AND (domain, zone, net, node) IN (%s)
+			GROUP BY domain, zone, net, node
 		) AS r
-		LEFT JOIN latest_nodes n ON r.zone = n.zone AND r.net = n.net AND r.node = n.node
+		LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 		ORDER BY r.zone, r.net, r.node
 	`, days, strings.Join(tuples, ", "))
 
@@ -291,15 +303,16 @@ func (w *WhoisOperations) getWhoisEntries(ctx context.Context) ([]DomainWhoisRes
 }
 
 type hostnameNode struct {
-	hostname string
-	nodeKey  string // "zone:net/node" for dedup
+	hostname  string
+	ftnDomain string // FTN network the address belongs to
+	nodeKey   string // "zone:net/node" for dedup
 }
 
 // getHostnameNodeMappings fetches distinct (hostname, zone, net, node) tuples
 // from recent test results. ftnDomain scopes the results to one FTN network
 // ("" = all networks).
 func (w *WhoisOperations) getHostnameNodeMappings(ctx context.Context, days int, ftnDomain string) ([]hostnameNode, error) {
-	query := fmt.Sprintf(`SELECT DISTINCT hostname, zone, net, node
+	query := fmt.Sprintf(`SELECT DISTINCT hostname, domain, zone, net, node
 		FROM node_test_results
 		WHERE hostname != ''
 		  AND is_aggregated = false
@@ -316,15 +329,17 @@ func (w *WhoisOperations) getHostnameNodeMappings(ctx context.Context, days int,
 	var results []hostnameNode
 	for rows.Next() {
 		var (
-			h                string
-			zone, net, node  int
+			h               string
+			ftnDomain       string
+			zone, net, node int
 		)
-		if err := rows.Scan(&h, &zone, &net, &node); err != nil {
+		if err := rows.Scan(&h, &ftnDomain, &zone, &net, &node); err != nil {
 			return nil, err
 		}
 		results = append(results, hostnameNode{
-			hostname: h,
-			nodeKey:  fmt.Sprintf("%d:%d/%d", zone, net, node),
+			hostname:  h,
+			ftnDomain: ftnDomain,
+			nodeKey:   fmt.Sprintf("%d:%d/%d", zone, net, node),
 		})
 	}
 

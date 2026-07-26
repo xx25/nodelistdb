@@ -72,7 +72,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 			WITH
 			-- Nodes that were NOT in nodelist 7-14 days ago
 			old_period_nodes AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM nodes
 				WHERE nodelist_date >= now() - INTERVAL 14 DAY
 					AND nodelist_date < now() - INTERVAL 7 DAY
@@ -80,10 +80,10 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 			),
 			-- Nodes that ARE in nodelist in last 7 days (new arrivals)
 			recent_nodes AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM nodes
 				WHERE nodelist_date >= now() - INTERVAL 7 DAY
-					AND (zone, net, node) NOT IN (SELECT zone, net, node FROM old_period_nodes)
+					AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM old_period_nodes)
 					%s
 					{{DOMAIN_FILTER}}
 			),
@@ -97,7 +97,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 					AND length(resolved_ipv6) > 0
 					AND is_operational = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true OR ftp_success = true)
-					AND (zone, net, node) IN (SELECT zone, net, node FROM recent_nodes)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM recent_nodes)
 					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
@@ -140,7 +140,13 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND r.test_time = lt.latest_test_time
+					AND {{CYCLE_LT}}
+				-- Re-apply the report's criteria; see GetIPv6EnabledNodes. The
+				-- window admits every hostname of the cycle, including ones with no
+				-- working IPv6.
+				WHERE length(r.resolved_ipv6) > 0
+					AND r.is_operational = true
+					AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true OR r.ftp_success = true)
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
@@ -182,6 +188,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {
@@ -209,7 +216,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 			WITH
 			-- Nodes that were NOT in nodelist 7-14 days ago
 			old_period_nodes AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM nodes
 				WHERE nodelist_date >= now() - INTERVAL 14 DAY
 					AND nodelist_date < now() - INTERVAL 7 DAY
@@ -217,21 +224,21 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 			),
 			-- Nodes that ARE in nodelist in last 7 days (new arrivals)
 			recent_nodes AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM nodes
 				WHERE nodelist_date >= now() - INTERVAL 7 DAY
-					AND (zone, net, node) NOT IN (SELECT zone, net, node FROM old_period_nodes)
+					AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM old_period_nodes)
 					%s
 					{{DOMAIN_FILTER}}
 			),
 			-- Nodes with IPv6 but no working services
 			nodes_with_ipv6 AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
-					AND (zone, net, node) IN (SELECT zone, net, node FROM recent_nodes)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM recent_nodes)
 					{{DOMAIN_FILTER}}
 			),
 			-- Count successful IPv6 tests
@@ -241,7 +248,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 					countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND (zone, net, node) IN (SELECT zone, net, node FROM nodes_with_ipv6)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM nodes_with_ipv6)
 					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
@@ -251,8 +258,8 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 					domain, zone, net, node,
 					max(test_time) as latest_test_time
 				FROM node_test_results
-				WHERE (zone, net, node) IN (
-					SELECT zone, net, node
+				WHERE (domain, zone, net, node) IN (
+					SELECT domain, zone, net, node
 					FROM ipv6_success_counts
 					WHERE success_count = 0
 				)
@@ -299,7 +306,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_failed_tests lft ON r.domain = lft.domain AND r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
-					AND r.test_time = lft.latest_test_time
+					AND {{CYCLE_LFT}}
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
@@ -341,6 +348,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {
@@ -368,7 +376,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 			WITH
 			-- Nodes that have been in nodelist for >14 days
 			old_nodes AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM nodes
 				WHERE nodelist_date < now() - INTERVAL 14 DAY
 					%s
@@ -376,25 +384,25 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 			),
 			-- Nodes with working IPv6 in 7-14 days ago period
 			had_ipv6_before AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 14 DAY
 					AND test_time < now() - INTERVAL 7 DAY
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
-					AND (zone, net, node) IN (SELECT zone, net, node FROM old_nodes)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM old_nodes)
 					{{DOMAIN_FILTER}}
 			),
 			-- Nodes without working IPv6 in last 7 days
 			no_ipv6_now AS (
-				SELECT zone, net, node
+				SELECT domain, zone, net, node
 				FROM (
 					SELECT
 						domain, zone, net, node,
 						countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
 					FROM node_test_results
 					WHERE test_time >= now() - INTERVAL 7 DAY
-						AND (zone, net, node) IN (SELECT zone, net, node FROM had_ipv6_before)
+						AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM had_ipv6_before)
 						{{DOMAIN_FILTER}}
 					GROUP BY domain, zone, net, node
 				)
@@ -407,7 +415,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND (zone, net, node) IN (SELECT zone, net, node FROM no_ipv6_now)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM no_ipv6_now)
 					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
@@ -450,7 +458,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND r.test_time = lt.latest_test_time
+					AND {{CYCLE_LT}}
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
@@ -492,6 +500,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {
@@ -519,7 +528,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 			WITH
 			-- Nodes that have been in nodelist for >14 days
 			old_nodes AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM nodes
 				WHERE nodelist_date < now() - INTERVAL 14 DAY
 					%s
@@ -527,16 +536,16 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 			),
 			-- Nodes tested 7-14 days ago (to check previous state)
 			tested_before AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 14 DAY
 					AND test_time < now() - INTERVAL 7 DAY
-					AND (zone, net, node) IN (SELECT zone, net, node FROM old_nodes)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM old_nodes)
 					{{DOMAIN_FILTER}}
 			),
 			-- Nodes without working IPv6 in 7-14 days ago period
 			no_ipv6_before AS (
-				SELECT zone, net, node
+				SELECT domain, zone, net, node
 				FROM (
 					SELECT
 						domain, zone, net, node,
@@ -544,7 +553,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 					FROM node_test_results
 					WHERE test_time >= now() - INTERVAL 14 DAY
 						AND test_time < now() - INTERVAL 7 DAY
-						AND (zone, net, node) IN (SELECT zone, net, node FROM tested_before)
+						AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM tested_before)
 						{{DOMAIN_FILTER}}
 					GROUP BY domain, zone, net, node
 				)
@@ -552,12 +561,12 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 			),
 			-- Nodes with working IPv6 in last 7 days
 			has_ipv6_now AS (
-				SELECT DISTINCT zone, net, node
+				SELECT DISTINCT domain, zone, net, node
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
-					AND (zone, net, node) IN (SELECT zone, net, node FROM no_ipv6_before)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM no_ipv6_before)
 					{{DOMAIN_FILTER}}
 			),
 			-- Get latest test results
@@ -567,7 +576,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND (zone, net, node) IN (SELECT zone, net, node FROM has_ipv6_now)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM has_ipv6_now)
 					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
@@ -610,7 +619,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND r.test_time = lt.latest_test_time
+					AND {{CYCLE_LT}}
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
@@ -652,6 +661,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
+	query = applyCycleWindows(query)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {

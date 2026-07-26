@@ -121,19 +121,19 @@ func (qb *QueryBuilder) OptimizedLargestRegionsSQL() string {
 func (qb *QueryBuilder) LargestNetsSQL() string {
 	return `
 	WITH NetCounts AS (
-		SELECT zone, net, COUNT(*) as count
+		SELECT domain, zone, net, COUNT(*) as count
 		FROM nodes
 		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
-		GROUP BY zone, net
+		GROUP BY domain, zone, net
 	),
 	HostNames AS (
-		SELECT zone, net, system_name as host_name
+		SELECT domain, zone, net, system_name as host_name
 		FROM nodes
 		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND node_type = 'Host'
 	)
 	SELECT nc.zone, nc.net, nc.count, hn.host_name
 	FROM NetCounts nc
-	LEFT JOIN HostNames hn ON nc.zone = hn.zone AND nc.net = hn.net
+	LEFT JOIN HostNames hn ON nc.domain = hn.domain AND nc.zone = hn.zone AND nc.net = hn.net
 	ORDER BY nc.count DESC
 	LIMIT 10`
 }
@@ -143,18 +143,18 @@ func (qb *QueryBuilder) OptimizedLargestNetsSQL() string {
 	return `
 	SELECT nc.zone, nc.net, nc.count, hn.host_name
 	FROM (
-		SELECT zone, net, COUNT(*) as count
+		SELECT domain, zone, net, COUNT(*) as count
 		FROM nodes
 		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND node_type IN ('Node', 'Hub', 'Pvt', 'Hold', 'Down')
-		GROUP BY zone, net
+		GROUP BY domain, zone, net
 		ORDER BY count DESC
 		LIMIT 10
 	) nc
 	LEFT JOIN (
-		SELECT zone, net, system_name as host_name
+		SELECT domain, zone, net, system_name as host_name
 		FROM nodes
 		WHERE nodelist_date = ? AND (? = '' OR domain = ?) AND node_type = 'Host'
-	) hn ON nc.zone = hn.zone AND nc.net = hn.net
+	) hn ON nc.domain = hn.domain AND nc.zone = hn.zone AND nc.net = hn.net
 	ORDER BY nc.count DESC`
 }
 

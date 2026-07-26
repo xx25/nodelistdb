@@ -61,14 +61,14 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int, d
 			COUNT(*) as count
 		FROM (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(binkp_version, test_time) as binkp_version
 			FROM node_test_results
 			WHERE binkp_tested = true
 				AND binkp_success = true
 				AND test_date >= today() - ?
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 			HAVING binkp_version <> ''
 		) AS latest_tests
 		GROUP BY binkp_version
@@ -162,14 +162,14 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int, 
 			COUNT(*) as count
 		FROM (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(ifcico_mailer_info, test_time) as ifcico_mailer_info
 			FROM node_test_results
 			WHERE ifcico_tested = true
 				AND ifcico_success = true
 				AND test_date >= today() - ?
 				%s
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 			HAVING ifcico_mailer_info <> ''
 		) AS latest_tests
 		GROUP BY ifcico_mailer_info
@@ -259,14 +259,14 @@ func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int, domain s
 			COUNT(*) as count
 		FROM (
 			SELECT
-				zone, net, node,
+				domain, zone, net, node,
 				argMax(binkp_version, test_time) as binkp_version
 			FROM node_test_results
 			WHERE binkp_tested = true
 				AND binkp_success = true
 				AND test_date >= today() - ?
 				/*DOMAIN_FILTER*/
-			GROUP BY zone, net, node
+			GROUP BY domain, zone, net, node
 			HAVING binkp_version LIKE 'binkd/%'
 		) AS latest_tests
 		GROUP BY binkp_version
