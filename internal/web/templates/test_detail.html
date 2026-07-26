@@ -156,7 +156,7 @@
                 <h2>DNS Resolution</h2>
                 <div class="detail-grid">
                     <span class="detail-label">Hostname:</span>
-                    <span class="detail-value">{{if .TestResult.Hostname}}{{.TestResult.Hostname}}{{else}}-{{end}}</span>
+                    <span class="detail-value">{{if or .TestResult.Hostname .TestResult.TestedHostname .TestResult.ResolvedIPv4 .TestResult.ResolvedIPv6}}{{template "hostname_text" .TestResult}}{{else}}-{{end}}</span>
                     <span class="detail-label">IPv4 Addresses:</span>
                     <span class="detail-value">
                         {{if .TestResult.ResolvedIPv4}}

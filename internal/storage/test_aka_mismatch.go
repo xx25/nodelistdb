@@ -64,7 +64,12 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 
 // buildAKAMismatchQuery builds the query for nodes with AKA mismatches
 // Only shows nodes where the LATEST test has a mismatch (excludes historical mismatches that were fixed)
-// Excludes aggregated results since they don't track address_validated
+// Every stage - including the final SELECT - is restricted to non-aggregated
+// rows, and the final join pins hostname_index. An aggregated row shares its
+// node's test_time and carries no hostname, so without those two conditions a
+// multi-hostname node's aggregate is reported instead of the hostname that
+// actually mismatched (blank hostname column), and two mismatching hostnames
+// of the same node produce duplicate rows.
 // An empty domain means all FTN networks (no filtering).
 func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain string) string {
 	domainFilter := domainFilterSQL(domain, "")
@@ -91,7 +96,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 		-- Only consider operational rows with successful BinkP or IFCICO handshake
 		best_results AS (
 			SELECT
-				r.domain, r.zone, r.net, r.node, r.test_time,
+				r.domain, r.zone, r.net, r.node, r.test_time, r.hostname_index,
 				row_number() OVER (
 					PARTITION BY r.domain, r.zone, r.net, r.node
 					ORDER BY r.address_validated ASC, r.hostname_index ASC
@@ -132,8 +137,9 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
 			r.ftp_anon_success, r.domain, r.derived_from_address
 		FROM node_test_results r
-		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
-		WHERE r.address_validated = false
+		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
+		WHERE r.is_aggregated = false
+			AND r.address_validated = false
 			AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
 			%s
 		ORDER BY r.test_time DESC
@@ -238,6 +244,9 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 }
 
 // buildIPVersionMismatchQuery builds the query for nodes with IPv4/IPv6 AKA discrepancies
+// The final SELECT re-applies is_aggregated = false: an aggregated row uses
+// hostname_index 0 like the primary hostname's row and shares its test_time, so
+// the join alone would let it through (it carries no hostname of its own).
 // An empty domain means all FTN networks (no filtering).
 func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, validationFilter string, protocolFilter string, domain string) string {
 	domainFilter := domainFilterSQL(domain, "")
@@ -303,6 +312,7 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 			r.address_validated_ipv4, r.address_validated_ipv6
 		FROM node_test_results r
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
+		WHERE r.is_aggregated = false
 		ORDER BY r.test_time DESC
 		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, validationFilter, protocolFilter)
 }

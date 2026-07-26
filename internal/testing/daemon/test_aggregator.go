@@ -272,6 +272,15 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 			}
 		}
 
+		// AKA validation follows the same "any hostname counts" rule as the
+		// protocol results above: the node announced its own address if any
+		// hostname's handshake did. Without this the aggregated row is stored
+		// with address_validated = false even when every hostname validated,
+		// which reads as a permanent AKA mismatch to analytics.
+		aggregated.AddressValidated = aggregated.AddressValidated || result.AddressValidated
+		aggregated.AddressValidatedIPv4 = aggregated.AddressValidatedIPv4 || result.AddressValidatedIPv4
+		aggregated.AddressValidatedIPv6 = aggregated.AddressValidatedIPv6 || result.AddressValidatedIPv6
+
 		// Any success means the node is reachable
 		if result.IsOperational {
 			hasAnyProtocolSuccess = true

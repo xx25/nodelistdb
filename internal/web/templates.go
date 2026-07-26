@@ -513,6 +513,7 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 		"node_address_cell.html",
 		"hostname_cell.html",
 		"hostname_cell_simple.html",
+		"hostname_text.html",
 		"location_cell.html",
 		"timestamp_cell.html",
 		"action_buttons_cell.html",

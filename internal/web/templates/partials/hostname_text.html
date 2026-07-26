@@ -1,0 +1,6 @@
+{{/* Emits the best available name for the host that was tested, with no
+     markup, for places that render a bare hostname rather than a table cell.
+     Aggregated multi-hostname rows leave `hostname` empty and keep only
+     `tested_hostname`; a row with neither still has the resolved address it
+     connected to. Guard the caller's markup with `hostname_present`. */}}
+{{define "hostname_text"}}{{if .Hostname}}{{.Hostname}}{{else if .TestedHostname}}{{.TestedHostname}}{{else if .ResolvedIPv4}}{{index .ResolvedIPv4 0}}{{else if .ResolvedIPv6}}{{index .ResolvedIPv6 0}}{{end}}{{end}}

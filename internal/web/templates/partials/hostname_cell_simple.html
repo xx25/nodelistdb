@@ -1,6 +1,18 @@
 {{define "hostname_cell_simple"}}
 <td>
-    {{if .Hostname}}
+    {{/* Some rows carry no hostname of their own: aggregated multi-hostname
+         results keep only the hostname that was tested, and a node listed with
+         a bare IP has nothing else to show. Fall back to the tested hostname,
+         then to a resolved address, so the cell still names the host that
+         answered instead of a blank N/A. */}}
+    {{$label := .Hostname}}
+    {{if not $label}}{{$label = .TestedHostname}}{{end}}
+    {{$labelIsIP := false}}
+    {{if not $label}}
+        {{if .ResolvedIPv4}}{{$label = index .ResolvedIPv4 0}}{{$labelIsIP = true}}
+        {{else if .ResolvedIPv6}}{{$label = index .ResolvedIPv6 0}}{{$labelIsIP = true}}{{end}}
+    {{end}}
+    {{if $label}}
         {{$allIPs := ""}}
         {{if .ResolvedIPv4}}
             {{range $idx, $ip := .ResolvedIPv4}}{{if $idx}}{{$allIPs = printf "%s\n%s" $allIPs $ip}}{{else}}{{$allIPs = printf "IPv4:\n%s" $ip}}{{end}}{{end}}
@@ -9,10 +21,12 @@
             {{if $allIPs}}{{$allIPs = printf "%s\n\nIPv6:" $allIPs}}{{else}}{{$allIPs = "IPv6:"}}{{end}}
             {{range $idx, $ip := .ResolvedIPv6}}{{$allIPs = printf "%s\n%s" $allIPs $ip}}{{end}}
         {{end}}
-        {{if $allIPs}}
-            <span class="badge badge-info ip-tooltip" data-ips="{{$allIPs}}">{{.Hostname}}</span>
+        {{if and $allIPs (not $labelIsIP)}}
+            <span class="badge badge-info ip-tooltip" data-ips="{{$allIPs}}">{{$label}}</span>
+        {{else if $labelIsIP}}
+            <span class="badge badge-info" title="No hostname recorded - tested by IP address">{{$label}}</span>
         {{else}}
-            <span class="badge badge-info">{{.Hostname}}</span>
+            <span class="badge badge-info">{{$label}}</span>
         {{end}}
     {{else}}
         <span class="text-muted">N/A</span>

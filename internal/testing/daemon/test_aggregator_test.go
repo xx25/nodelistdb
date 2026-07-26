@@ -830,3 +830,87 @@ func TestCreateAggregatedResult_VModemSuccessOutranksFailure(t *testing.T) {
 		t.Errorf("Expected the successful hostname's details to win, got %q", d.Detail)
 	}
 }
+
+// TestCreateAggregatedResult_AddressValidation checks that AKA validation is
+// folded across hostnames like every other protocol outcome. The aggregated row
+// used to be written with address_validated = false unconditionally, which made
+// every multi-hostname node look like a permanent AKA mismatch to analytics.
+func TestCreateAggregatedResult_AddressValidation(t *testing.T) {
+	node := &models.Node{
+		Zone:              2,
+		Net:               455,
+		Node:              19,
+		InternetHostnames: []string{"host1.example.com", "host2.example.com"},
+		InternetProtocols: []string{"IBN"},
+	}
+
+	binkpOK := func() *models.ProtocolTestResult {
+		return &models.ProtocolTestResult{
+			Tested: true, Success: true,
+			IPv4Tested: true, IPv4Success: true, IPv4Address: "192.168.1.1",
+		}
+	}
+
+	tests := []struct {
+		name            string
+		results         []*models.TestResult
+		wantValidated   bool
+		wantValidatedV4 bool
+		wantValidatedV6 bool
+	}{
+		{
+			name: "one hostname validates, the other doesn't",
+			results: []*models.TestResult{
+				{TestedHostname: "host1.example.com", HostnameIndex: 0, ResolvedIPv4: []string{"192.168.1.1"},
+					IsOperational: true, BinkPResult: binkpOK(),
+					AddressValidated: false, AddressValidatedIPv4: false},
+				{TestedHostname: "host2.example.com", HostnameIndex: 1, ResolvedIPv4: []string{"192.168.1.2"},
+					IsOperational: true, BinkPResult: binkpOK(),
+					AddressValidated: true, AddressValidatedIPv4: true},
+			},
+			wantValidated:   true,
+			wantValidatedV4: true,
+		},
+		{
+			name: "IPv4 validates on one hostname, IPv6 on another",
+			results: []*models.TestResult{
+				{TestedHostname: "host1.example.com", HostnameIndex: 0, ResolvedIPv4: []string{"192.168.1.1"},
+					IsOperational: true, BinkPResult: binkpOK(),
+					AddressValidated: true, AddressValidatedIPv4: true},
+				{TestedHostname: "host2.example.com", HostnameIndex: 1, ResolvedIPv6: []string{"2001:db8::1"},
+					IsOperational: true, BinkPResult: binkpOK(),
+					AddressValidated: true, AddressValidatedIPv6: true},
+			},
+			wantValidated:   true,
+			wantValidatedV4: true,
+			wantValidatedV6: true,
+		},
+		{
+			name: "no hostname validates",
+			results: []*models.TestResult{
+				{TestedHostname: "host1.example.com", HostnameIndex: 0, ResolvedIPv4: []string{"192.168.1.1"},
+					IsOperational: true, BinkPResult: binkpOK()},
+				{TestedHostname: "host2.example.com", HostnameIndex: 1, ResolvedIPv4: []string{"192.168.1.2"},
+					IsOperational: true, BinkPResult: binkpOK()},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NewTestAggregator().CreateAggregatedResult(node, tt.results)
+			if result == nil {
+				t.Fatal("Expected non-nil aggregated result")
+			}
+			if result.AddressValidated != tt.wantValidated {
+				t.Errorf("AddressValidated = %v, want %v", result.AddressValidated, tt.wantValidated)
+			}
+			if result.AddressValidatedIPv4 != tt.wantValidatedV4 {
+				t.Errorf("AddressValidatedIPv4 = %v, want %v", result.AddressValidatedIPv4, tt.wantValidatedV4)
+			}
+			if result.AddressValidatedIPv6 != tt.wantValidatedV6 {
+				t.Errorf("AddressValidatedIPv6 = %v, want %v", result.AddressValidatedIPv6, tt.wantValidatedV6)
+			}
+		})
+	}
+}

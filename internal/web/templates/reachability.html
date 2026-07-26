@@ -403,8 +403,8 @@
                             <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="node-address">
                                 {{.Zone}}:{{.Net}}/{{.Node}}
                             </a>
-                            {{if .Hostname}}
-                            <span style="margin-left: 10px; color: #666;">{{.Hostname}}</span>
+                            {{if or .Hostname .TestedHostname .ResolvedIPv4 .ResolvedIPv6}}
+                            <span style="margin-left: 10px; color: #666;">{{template "hostname_text" .}}</span>
                             {{end}}
                             {{if .Country}}
                             <span style="margin-left: 10px; color: #888; font-size: 12px;">{{.Country}}</span>
@@ -451,8 +451,8 @@
                             <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="node-address">
                                 {{.Zone}}:{{.Net}}/{{.Node}}
                             </a>
-                            {{if .Hostname}}
-                            <span style="margin-left: 10px; color: #666;">{{.Hostname}}</span>
+                            {{if or .Hostname .TestedHostname .ResolvedIPv4 .ResolvedIPv6}}
+                            <span style="margin-left: 10px; color: #666;">{{template "hostname_text" .}}</span>
                             {{end}}
                         </div>
                         <div>
@@ -485,8 +485,8 @@
                             <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="node-address">
                                 {{.Zone}}:{{.Net}}/{{.Node}}
                             </a>
-                            {{if .Hostname}}
-                            <span style="margin-left: 10px; color: #666;">{{.Hostname}}</span>
+                            {{if or .Hostname .TestedHostname .ResolvedIPv4 .ResolvedIPv6}}
+                            <span style="margin-left: 10px; color: #666;">{{template "hostname_text" .}}</span>
                             {{end}}
                         </div>
                         <div>
