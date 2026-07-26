@@ -386,6 +386,43 @@ func (s *Scheduler) GetNodesForTesting(ctx context.Context, maxNodes int) []*mod
 	return result
 }
 
+// GetAllScheduledNodes returns every node the scheduler knows about, ignoring
+// when each is next due. It backs an explicit test limit: naming a set of nodes
+// by hand means testing that set now, not testing whichever of them the regular
+// interval had already come round to.
+//
+// A node outside its own call window is still skipped. That is the one
+// "do not disturb" the nodelist actually carries, and it is not hypothetical
+// here — a VMP call rings a sysop's mailer for real. The count is logged so a
+// sweep that comes back short says why.
+func (s *Scheduler) GetAllScheduledNodes() []*models.Node {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := s.timeNow()
+	result := make([]*models.Node, 0, len(s.schedules))
+	skippedForTimeWindow := 0
+
+	for _, schedule := range s.schedules {
+		if schedule.Node.Availability != nil && !schedule.Node.Availability.IsCallableNow(now) {
+			schedule.TestReason = "outside_call_window"
+			skippedForTimeWindow++
+			continue
+		}
+		node := schedule.Node
+		node.TestReason = "forced"
+		result = append(result, node)
+	}
+
+	if skippedForTimeWindow > 0 {
+		logging.Infof("Forced selection: skipped %d node(s) outside their call windows", skippedForTimeWindow)
+	}
+	logging.Debugf("GetAllScheduledNodes: selected=%d, skipped_for_call_window=%d, total_scheduled=%d",
+		len(result), skippedForTimeWindow, len(s.schedules))
+
+	return result
+}
+
 func (s *Scheduler) UpdateTestResult(ctx context.Context, node *models.Node, result *models.TestResult) {
 	if result == nil {
 		return

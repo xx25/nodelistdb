@@ -28,8 +28,21 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 
 	logging.Info("Starting test cycle")
 
-	// Use scheduler to get nodes that need testing
-	nodes := d.scheduler.GetNodesForTesting(ctx, d.config.Daemon.BatchSize*d.config.Daemon.Workers)
+	// Use scheduler to get nodes that need testing.
+	//
+	// A test limit names the nodes to test, so it selects from everything the
+	// scheduler knows rather than from whatever happened to be due. Filtering
+	// the due set instead made the flag mean "those of these nodes the regular
+	// schedule had already picked" — so a sweep of a small population like the
+	// IVM nodes usually matched nothing, and even naming one address did
+	// nothing whenever that node was inside its test interval.
+	var nodes []*models.Node
+	forced := d.config.Daemon.TestLimit != ""
+	if forced {
+		nodes = d.scheduler.GetAllScheduledNodes()
+	} else {
+		nodes = d.scheduler.GetNodesForTesting(ctx, d.config.Daemon.BatchSize*d.config.Daemon.Workers)
+	}
 	if len(nodes) == 0 {
 		// Log scheduler status for debugging
 		schedStatus := d.scheduler.GetScheduleStatus()
@@ -42,13 +55,13 @@ func (d *Daemon) runTestCycle(ctx context.Context) error {
 	}
 
 	// Apply test limit filter if specified
-	if d.config.Daemon.TestLimit != "" {
+	if forced {
 		nodes = d.nodeFilter.FilterByTestLimit(nodes, d.config.Daemon.TestLimit)
 		if len(nodes) == 0 {
 			logging.Warnf("No nodes match test limit filter: %s", d.config.Daemon.TestLimit)
 			return nil
 		}
-		logging.Infof("Applied test limit filter '%s', testing %d node(s)", d.config.Daemon.TestLimit, len(nodes))
+		logging.Infof("Applied test limit filter '%s', testing %d node(s) regardless of when each was last tested", d.config.Daemon.TestLimit, len(nodes))
 	} else {
 		logging.Infof("Scheduler selected %d nodes for testing", len(nodes))
 	}

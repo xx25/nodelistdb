@@ -208,6 +208,38 @@ func TestFilterByTestLimit_Telnet(t *testing.T) {
 	}
 }
 
+// TestFilterByTestLimit_VModem covers the filter that backs a sweep of the IVM
+// nodes. It uses its own node set rather than the shared fixture, which has no
+// IVM node and whose counts the other protocol tests assert exactly.
+func TestFilterByTestLimit_VModem(t *testing.T) {
+	filter := NewNodeFilter()
+	nodes := []*models.Node{
+		{Zone: 2, Net: 5001, Node: 100, InternetProtocols: []string{"IBN"}},
+		{Zone: 2, Net: 5025, Node: 2, InternetProtocols: []string{"IVM"}},
+		{Zone: 2, Net: 371, Node: 52, InternetProtocols: []string{"IBN", "IFC", "IVM"}},
+		{Zone: 1, Net: 100, Node: 1, InternetProtocols: []string{"ITN"}},
+	}
+
+	// "vmodem" and the nodelist's own name for the flag select the same nodes.
+	for _, limit := range []string{"vmodem", "ivm", "IVM"} {
+		result := filter.FilterByTestLimit(nodes, limit)
+		if len(result) != 2 {
+			t.Errorf("limit %q: expected 2 nodes with IVM, got %d", limit, len(result))
+		}
+		for _, node := range result {
+			if !node.HasProtocol("IVM") {
+				t.Errorf("limit %q: node %d:%d/%d should have IVM", limit, node.Zone, node.Net, node.Node)
+			}
+		}
+	}
+
+	// An unknown filter falls through to "everything"; IVM must not, or a
+	// sweep would quietly test the whole nodelist.
+	if got := len(filter.FilterByTestLimit(nodes, "vmodem")); got == len(nodes) {
+		t.Error("IVM filter returned every node, so it is not filtering at all")
+	}
+}
+
 func TestFilterByTestLimit_MultiHostname(t *testing.T) {
 	filter := NewNodeFilter()
 	nodes := createTestNodes()

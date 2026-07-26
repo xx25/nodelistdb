@@ -90,13 +90,18 @@ func (nf *NodeFilter) FilterByTestLimit(nodes []*models.Node, testLimit string) 
 		}
 	}
 
-	// Handle protocol-specific limits
+	// Handle protocol-specific limits. The vmodem predicate is the same IVM
+	// check the executor uses to decide whether to run the VModem tester at
+	// all, so "-test-limit vmodem" selects exactly the nodes that would
+	// produce a VModem result. "ivm" is accepted as the nodelist's own name
+	// for it.
 	protocolFilters := map[string]func(*models.Node) bool{
 		"binkp":  func(n *models.Node) bool { return n.HasBinkP() },
 		"emsi":   func(n *models.Node) bool { return n.HasIFCICO() },
 		"telnet": func(n *models.Node) bool { return n.HasTEL() },
 		"ftp":    func(n *models.Node) bool { return n.FTPAddress() != "" },
-		"vmodem": func(n *models.Node) bool { return false }, // Not implemented
+		"vmodem": func(n *models.Node) bool { return n.HasProtocol("IVM") },
+		"ivm":    func(n *models.Node) bool { return n.HasProtocol("IVM") },
 	}
 
 	if filterFunc, ok := protocolFilters[strings.ToLower(testLimit)]; ok {
