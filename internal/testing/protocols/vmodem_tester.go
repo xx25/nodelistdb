@@ -11,6 +11,7 @@ import (
 
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/xx25/fidomail/pkg/emsi"
+	"github.com/xx25/fidomail/pkg/vmp"
 )
 
 // VModemTester probes a node's announced IVM ("Internet VMODEM") port and
@@ -24,6 +25,10 @@ import (
 // EMSI handshake over the resulting data channel to read back the remote's
 // address, system name and sysop — the same identity the other protocol testers
 // collect. Everything else on an IVM port is classified without placing a call.
+//
+// The protocol itself lives in fidomail/pkg/vmp, shared with the mailer that
+// speaks it in both directions; what stays here is the classification — what
+// is actually running on a port the nodelist flagged IVM.
 type VModemTester struct {
 	timeout    time.Duration
 	ourAddress string
@@ -32,7 +37,7 @@ type VModemTester struct {
 	location   string
 	debug      bool
 	configMgr  *emsi.ConfigManager
-	vmp        vmpDialConfig
+	vmp        vmp.DialConfig
 	vmpEnabled bool
 	vmpSlot    chan struct{} // non-nil when calls must be serialized on one port
 }
@@ -72,19 +77,19 @@ func (t *VModemTester) SetEMSIConfigManager(mgr *emsi.ConfigManager) { t.configM
 // range given (leave the range at 0/0 to use an ephemeral port).
 func (t *VModemTester) EnableVMPCalls(listenHost string, preferredPort, portMin, portMax int, ringTimeout time.Duration) {
 	t.vmpEnabled = true
-	t.vmp = vmpDialConfig{
+	t.vmp = vmp.DialConfig{
 		ConnectTimeout: t.timeout,
 		RingTimeout:    ringTimeout,
 		ListenHost:     listenHost,
 		PreferredPort:  preferredPort,
 		PortMin:        portMin,
 		PortMax:        portMax,
-		Debug:          t.debug,
+		Logger:         vmpDebugLogger(t.debug),
 	}
 	// One port means one call at a time. Serialize rather than let concurrent
 	// workers race for the bind, since the loser cannot fall back to another
 	// port without asking a node to call back somewhere unreachable.
-	if t.vmp.singlePort() {
+	if t.vmp.SinglePort() {
 		t.vmpSlot = make(chan struct{}, 1)
 	} else {
 		t.vmpSlot = nil
@@ -117,7 +122,7 @@ func (t *VModemTester) TestWithoutCalling(ctx context.Context, host string, port
 func (t *VModemTester) test(ctx context.Context, host string, port int, expectedAddress string, mayCall bool) TestResult {
 	start := time.Now()
 	if port == 0 {
-		port = 3141
+		port = vmp.DefaultPort
 	}
 	res := &VModemTestResult{
 		BaseTestResult: BaseTestResult{TestTime: start},
@@ -225,10 +230,10 @@ var emsiINQNudge = []byte(emsi.EMSI_INQ + "\r")
 // left untouched and conn has been closed, so the caller must reconnect to
 // classify. The second return says the peer answered our frames with complete
 // silence, which the caller uses to describe a peer nothing else identifies
-// either — see vmpCall.SilentPeer.
+// either — see vmp.Call.SilentPeer.
 func (t *VModemTester) placeVMPCall(ctx context.Context, conn net.Conn, expectedAddress string, res *VModemTestResult) (isVMODEM, silent bool) {
 	cfg := t.vmp
-	cfg.Debug = t.debug
+	cfg.Logger = vmpDebugLogger(t.debug)
 	if cfg.ConnectTimeout == 0 {
 		cfg.ConnectTimeout = t.timeout
 	}
@@ -245,12 +250,12 @@ func (t *VModemTester) placeVMPCall(ctx context.Context, conn net.Conn, expected
 		}
 	}
 
-	call, err := vmpDialOn(ctx, conn, cfg)
+	call, err := vmp.DialOn(ctx, conn, cfg)
 	if err != nil {
 		if t.debug {
 			logging.Debugf("VModem %s VMP call failed: %v", peer, err)
 		}
-		if errors.Is(err, errVMPNoLocalPort) {
+		if errors.Is(err, vmp.ErrNoLocalPort) {
 			// Our own listener, not the node: say so instead of letting a
 			// healthy VMODEM be reported as an unrecognized peer.
 			res.Success = false
@@ -274,7 +279,7 @@ func (t *VModemTester) placeVMPCall(ctx context.Context, conn net.Conn, expected
 	res.Detail = call.Describe()
 	res.CallOutcome = call.OutcomeToken()
 
-	if call.Outcome != vmpOutcomeConnected {
+	if call.Outcome != vmp.OutcomeConnected {
 		// The responder is genuine even when no mailer picked up, so the node
 		// is reachable and correctly flagged; there is just no identity to read.
 		res.Success = true
@@ -336,7 +341,7 @@ func (t *VModemTester) classify(ctx context.Context, host string, port int, expe
 	text := string(app)
 
 	// 1. Genuine VMODEM (VMP) — the conformant case.
-	if ok, cmd := looksLikeVMP(app); ok {
+	if ok, cmd := vmp.LooksLike(app); ok {
 		res.Success = true
 		res.Variant = "vmp"
 		res.Conformant = true
