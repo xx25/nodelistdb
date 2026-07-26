@@ -56,7 +56,7 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 		nodeFilter = "AND node != 0"
 	}
 
-	query := am.buildAKAMismatchQuery(nodeFilter, domain)
+	query := am.buildAKAMismatchQuery(nodeFilter, domain, days)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -92,10 +92,10 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 // The latest test is matched as a session window rather than one exact
 // timestamp; see testSessionWindowSeconds.
 // An empty domain means all FTN networks (no filtering).
-func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain string) string {
+func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain string, days int) string {
 	domainFilter := domainFilterSQL(domain, "")
 	domainFilterR := domainFilterSQL(domain, "r.")
-	return fmt.Sprintf(`
+	return applyCycleWindows(fmt.Sprintf(`
 		WITH
 		-- First, find the latest test time for each node (regardless of mismatch status)
 		-- Only consider non-aggregated results since aggregated rows don't set address_validated
@@ -124,8 +124,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 				) as rn
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-			WHERE r.test_time <= lt.latest_test_time
-				AND r.test_time >= lt.latest_test_time - INTERVAL %d SECOND
+			WHERE {{CYCLE_LT}}
 				AND r.is_aggregated = false
 				AND r.is_operational = true
 				AND (r.binkp_success = true OR r.ifcico_success = true)
@@ -166,7 +165,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 			AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
 			%s
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter, domainFilter, testSessionWindowSeconds, domainFilterR, domainFilterR)
+		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, domainFilterR), days)
 }
 
 // AKAIPVersionMismatchNode holds a node where IPv4 and IPv6 AKA validation results differ
@@ -212,7 +211,7 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 		nodeFilter = "AND node != 0"
 	}
 
-	query := am.buildIPVersionMismatchQuery(nodeFilter, validationFilter, protocolFilter, domain)
+	query := am.buildIPVersionMismatchQuery(nodeFilter, validationFilter, protocolFilter, domain, days)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -272,10 +271,10 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 // the join alone would let it through (it carries no hostname of its own).
 // The latest test is matched as a session window; see testSessionWindowSeconds.
 // An empty domain means all FTN networks (no filtering).
-func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, validationFilter string, protocolFilter string, domain string) string {
+func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, validationFilter string, protocolFilter string, domain string, days int) string {
 	domainFilter := domainFilterSQL(domain, "")
 	domainFilterR := domainFilterSQL(domain, "r.")
-	return fmt.Sprintf(`
+	return applyCycleWindows(fmt.Sprintf(`
 		WITH
 		latest_tests AS (
 			SELECT
@@ -299,8 +298,7 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 				) as rn
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-			WHERE r.test_time <= lt.latest_test_time
-				AND r.test_time >= lt.latest_test_time - INTERVAL %d SECOND
+			WHERE {{CYCLE_LT}}
 				AND r.is_aggregated = false
 				AND r.is_operational = true
 				AND (r.binkp_success = true OR r.ifcico_success = true)
@@ -340,5 +338,5 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
 		WHERE r.is_aggregated = false
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter, domainFilter, testSessionWindowSeconds, domainFilterR, validationFilter, protocolFilter)
+		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, validationFilter, protocolFilter), days)
 }

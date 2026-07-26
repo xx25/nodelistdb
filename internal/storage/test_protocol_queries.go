@@ -40,7 +40,7 @@ func (pq *ProtocolQueryOperations) GetProtocolEnabledNodes(protocol string, limi
 		nodeFilter = "AND node != 0"
 	}
 
-	query := pq.queryBuilder.BuildProtocolEnabledQuery(protocol, nodeFilter, domainFilterSQL(domain, ""))
+	query := pq.queryBuilder.BuildProtocolEnabledQuery(protocol, nodeFilter, domainFilterSQL(domain, ""), days)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {

@@ -49,7 +49,7 @@ func TestTestResultQueryColumnCounts(t *testing.T) {
 	queries := []string{
 		qb.BuildTestHistoryQuery(),
 		qb.BuildDetailedTestResultQuery(),
-		qb.BuildProtocolEnabledQuery("binkp", "", ""),
+		qb.BuildProtocolEnabledQuery("binkp", "", "", 30),
 		qb.BuildSearchByReachabilityQuery(),
 	}
 

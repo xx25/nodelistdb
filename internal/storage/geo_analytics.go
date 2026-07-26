@@ -214,7 +214,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 			GROUP BY domain, zone, net, node
 		)
 		SELECT
-			r.zone, r.net, r.node,
+			r.domain, r.zone, r.net, r.node,
 			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
 			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
 			r.binkp_location,
@@ -267,6 +267,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 		var resolvedIPv4, resolvedIPv6 []string
 
 		err := rows.Scan(
+			&result.Domain,
 			&result.Zone, &result.Net, &result.Node,
 			&result.BinkPSystemName, &result.BinkPSysop, &result.BinkPLocation,
 			&result.Country, &result.CountryCode, &result.City,
@@ -315,7 +316,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 			GROUP BY domain, zone, net, node
 		)
 		SELECT
-			r.zone, r.net, r.node,
+			r.domain, r.zone, r.net, r.node,
 			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
 			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
 			r.binkp_location,
@@ -368,6 +369,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 		var resolvedIPv4, resolvedIPv6 []string
 
 		err := rows.Scan(
+			&result.Domain,
 			&result.Zone, &result.Net, &result.Node,
 			&result.BinkPSystemName, &result.BinkPSysop, &result.BinkPLocation,
 			&result.Country, &result.CountryCode, &result.City,

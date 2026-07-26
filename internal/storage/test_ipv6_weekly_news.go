@@ -188,7 +188,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {
@@ -348,7 +348,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {
@@ -500,7 +500,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {
@@ -661,7 +661,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
 	rows, err := conn.Query(query, limit)
 	if err != nil {

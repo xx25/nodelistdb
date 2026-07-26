@@ -51,14 +51,28 @@ func TestReachabilityStatsQueryCountsCycles(t *testing.T) {
 	// The cycle grouping itself: rows are clustered by the measured session
 	// window and the aggregated row represents its cycle.
 	for _, want := range []string{
-		fmt.Sprintf("> %d, 1, 0) as new_cycle", testSessionWindowSeconds),
+		fmt.Sprintf("> %d", testSessionWindowSeconds),
+		") as new_cycle",
 		"sum(new_cycle) OVER (",
-		"ORDER BY is_aggregated DESC, hostname_index ASC",
+		"ORDER BY is_aggregated DESC, is_operational DESC, hostname_index ASC, test_time ASC",
 	} {
 		if !strings.Contains(query, want) {
 			t.Errorf("cycle grouping incomplete: missing %q", want)
 		}
 	}
+
+	// A cycle writes each (hostname_index, is_aggregated) pair at most once, so a
+	// repeat inside the window is a separate test and must start a new cycle -
+	// otherwise two real tests moments apart are counted as one.
+	if !strings.Contains(query, "hostname_index = lagInFrame(hostname_index") ||
+		!strings.Contains(query, "is_aggregated = lagInFrame(is_aggregated") {
+		t.Error("a repeated (hostname_index, is_aggregated) must start a new cycle; two distinct tests inside the window would otherwise merge")
+	}
+
+	// The exact ORDER BY asserted above already pins the precedence that matters:
+	// is_operational outranks hostname_index, so a cycle whose aggregate was
+	// never written is not reported as failed on the strength of one broken
+	// primary hostname, and test_time last keeps the pick deterministic.
 
 	// The per-protocol rates stay per hostname instance on purpose - they answer
 	// "how often does an attempt against this node succeed". If they are ever

@@ -187,7 +187,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, days)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -360,7 +360,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, days)
 
 	rows, err := conn.Query(query, days, days, days, limit)
 	if err != nil {
@@ -537,7 +537,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, days)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, days, days, limit)
@@ -698,7 +698,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, days)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -855,7 +855,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 	}
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, days)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -971,7 +971,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 		LIMIT ?`, nodeFilter, nodeFilter)
 
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, days)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, limit)

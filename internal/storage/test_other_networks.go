@@ -104,7 +104,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain stri
 		ORDER BY node_count DESC, network_name ASC
 	`
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, days)
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER_R}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days)
@@ -213,7 +213,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 		LIMIT ?
 	`
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER}", domainFilterSQL(domain, ""))
-	query = applyCycleWindows(query)
+	query = applyCycleWindows(query, days)
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER_R}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, escapedName, escapedName, escapedName, limit)

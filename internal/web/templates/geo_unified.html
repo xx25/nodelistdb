@@ -64,7 +64,7 @@
             {{range .GeoNodes}}
             <tr>
                 <td style="white-space: nowrap;">
-                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}">
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if .Domain}}?domain={{.Domain}}{{end}}">
                         <strong>{{.Zone}}:{{.Net}}/{{.Node}}</strong>
                     </a>
                 </td>

@@ -22,7 +22,7 @@ type DomainWhoisResult struct {
 	CheckTime      time.Time  `json:"check_time"`
 	CheckError     string     `json:"check_error"`
 	NodeCount      int        `json:"node_count"`
-	NodeKeys       []string   `json:"node_keys,omitempty"` // "zone:net/node" keys behind NodeCount, for cross-domain dedup
+	NodeKeys       []string   `json:"node_keys,omitempty"` // opaque "network|zone:net/node" keys behind NodeCount, for cross-domain dedup
 }
 
 // WhoisOperations handles WHOIS cache database operations (server-side reads)
@@ -70,8 +70,11 @@ func (w *WhoisOperations) GetAllWhoisResults(ftnDomain string) ([]DomainWhoisRes
 		return nil, err
 	}
 
-	// Step 3: Count unique nodes per domain in Go
-	domainNodes := make(map[string]map[string]struct{}) // domain → set of "zone:net/node"
+	// Step 3: Count unique nodes per domain in Go. The key carries the FTN
+	// network: the same zone:net/node names different nodes in different
+	// networks, so keying on the address alone undercounts a registrar whenever
+	// two networks' nodes share a triple.
+	domainNodes := make(map[string]map[string]struct{}) // domain → set of "network|zone:net/node"
 	for _, hn := range hostnameNodes {
 		d := domain.ExtractRegistrableDomain(hn.hostname)
 		if d == "" {
@@ -80,7 +83,7 @@ func (w *WhoisOperations) GetAllWhoisResults(ftnDomain string) ([]DomainWhoisRes
 		if domainNodes[d] == nil {
 			domainNodes[d] = make(map[string]struct{})
 		}
-		domainNodes[d][hn.nodeKey] = struct{}{}
+		domainNodes[d][hn.ftnDomain+"|"+hn.nodeKey] = struct{}{}
 	}
 
 	// Step 4: Merge node counts into WHOIS results
@@ -172,7 +175,7 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 			GROUP BY domain, zone, net, node
 		)
 		SELECT
-			r.zone, r.net, r.node,
+			r.domain, r.zone, r.net, r.node,
 			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
 			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
 			r.binkp_location,
@@ -233,6 +236,7 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 		var resolvedIPv4, resolvedIPv6 []string
 
 		err := rows.Scan(
+			&result.Domain,
 			&result.Zone, &result.Net, &result.Node,
 			&result.BinkPSystemName, &result.BinkPSysop, &result.BinkPLocation,
 			&result.Hostname,

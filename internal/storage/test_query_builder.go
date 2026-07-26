@@ -112,26 +112,45 @@ func (tqb *TestQueryBuilder) BuildDetailedTestResultQuery() string {
 func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 	return fmt.Sprintf(`
 		WITH
-		-- Number each row's test cycle: a gap larger than the session window
-		-- starts a new one.
+		-- Number each row's test cycle. A gap larger than the session window
+		-- starts a new one - but so does a repeat of (hostname_index,
+		-- is_aggregated), because one cycle writes each of those combinations at
+		-- most once. Without that second rule two genuinely separate tests
+		-- landing inside the window are merged and counted as one: 2:467/70 was
+		-- probed twice 73s apart (once against a nodelist flag misparsed as a
+		-- hostname, which fails DNS, then against its real host), and 1:342/806
+		-- was re-tested by hand 60s after an automatic run.
 		cycle_marked AS (
 			SELECT *,
 				if(toInt64(toUnixTimestamp(test_time)) - toInt64(toUnixTimestamp(
-						lagInFrame(test_time, 1, toDateTime(0)) OVER (
+							lagInFrame(test_time, 1, toDateTime(0)) OVER (
+								PARTITION BY domain, zone, net, node ORDER BY test_time)
+						)) > %d
+					OR (
+						hostname_index = lagInFrame(hostname_index, 1, CAST(-999 AS Int32)) OVER (
 							PARTITION BY domain, zone, net, node ORDER BY test_time)
-					)) > %d, 1, 0) as new_cycle
+						AND is_aggregated = lagInFrame(is_aggregated, 1, false) OVER (
+							PARTITION BY domain, zone, net, node ORDER BY test_time)
+					), 1, 0) as new_cycle
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ?
 			AND test_time >= now() - INTERVAL ? DAY
 			AND (? = '' OR domain = ?)
 		),
-		-- rn = 1 marks the row that represents its cycle: the aggregated
-		-- summary when the cycle has one, else the node's only row.
+		-- rn = 1 marks the row that represents its cycle: the aggregated summary
+		-- when the cycle has one, else the node's only row.
+		--
+		-- is_operational DESC covers the cycle whose aggregate never got written
+		-- (an interrupted run): the aggregate's own rule is "operational if any
+		-- hostname answered", so falling back to the lowest hostname_index would
+		-- let one broken primary report the whole cycle as a failure. test_time
+		-- last keeps the pick deterministic when a cycle holds two rows with the
+		-- same hostname_index, which real data does contain.
 		ranked AS (
 			SELECT *,
 				row_number() OVER (
 					PARTITION BY domain, zone, net, node, cycle_id
-					ORDER BY is_aggregated DESC, hostname_index ASC
+					ORDER BY is_aggregated DESC, is_operational DESC, hostname_index ASC, test_time ASC
 				) as rn
 			FROM (
 				SELECT *,
@@ -293,7 +312,7 @@ var protocolSuccessPredicates = map[string]string{
 // BuildProtocolEnabledQuery builds a query for nodes with a specific protocol enabled (ClickHouse)
 // protocol should be one of: "binkp", "ifcico", "telnet", "ftp", "vmodem"
 // domainFilter is a ready-made SQL clause (see domainFilterSQL); "" means all FTN networks.
-func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, domainFilter string) string {
+func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, domainFilter string, days int) string {
 	predicate, ok := protocolSuccessPredicates[protocol]
 	if !ok {
 		predicate = protocolSuccessPredicates["binkp"] // fallback
@@ -368,7 +387,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
 		LEFT JOIN latest_nodes ln ON r.domain = ln.domain AND r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
 		ORDER BY r.test_time DESC
-		LIMIT ?`, rowPredicate, nodeFilter, domainFilter, joinPredicate))
+		LIMIT ?`, rowPredicate, nodeFilter, domainFilter, joinPredicate), days)
 }
 
 // BuildSearchByReachabilityQuery builds a query to search nodes by reachability status (ClickHouse)

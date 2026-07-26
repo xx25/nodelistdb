@@ -51,6 +51,13 @@ func TestAnalyticsQueriesScopeIdentityCorrectly(t *testing.T) {
 			pattern: regexp.MustCompile(`(?:JOIN [^\n]*?)?\bON \w+\.zone = `),
 			why:     "join on domain first, so a triple present in two networks does not fan out",
 		},
+		{
+			// This commit series fixed three of these in test_modem_queries.go;
+			// the guard missed them because it only looked at GROUP BY.
+			name:    "domain-blind window partition",
+			pattern: regexp.MustCompile(`PARTITION BY (?:r\.)?zone, `),
+			why:     "partition by domain first, or two networks' nodes share one dedup/numbering group",
+		},
 	}
 
 	for _, src := range sources {
@@ -75,7 +82,7 @@ func TestAnalyticsQueriesScopeIdentityCorrectly(t *testing.T) {
 // build time.
 func TestApplyCycleWindowsExpandsEveryMarker(t *testing.T) {
 	for marker, alias := range cycleWindowMarkers {
-		got := applyCycleWindows("SELECT 1 WHERE " + marker)
+		got := applyCycleWindows("SELECT 1 WHERE "+marker, 30)
 		if strings.Contains(got, "{{") {
 			t.Errorf("%s was not expanded: %s", marker, got)
 		}
@@ -88,7 +95,9 @@ func TestApplyCycleWindowsExpandsEveryMarker(t *testing.T) {
 	}
 
 	// Every marker used in the package's queries must be one applyCycleWindows
-	// knows about, or it would survive into the SQL.
+	// knows about, and every file that uses one must actually call it - a
+	// forgotten call leaves a literal marker in the SQL, which fails only when
+	// the query runs.
 	sources, _ := filepath.Glob("*.go")
 	used := regexp.MustCompile(`\{\{CYCLE_\w+\}\}`)
 	for _, src := range sources {
@@ -99,10 +108,16 @@ func TestApplyCycleWindowsExpandsEveryMarker(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, marker := range used.FindAllString(string(body), -1) {
+		text := string(body)
+		markers := used.FindAllString(text, -1)
+		for _, marker := range markers {
 			if _, ok := cycleWindowMarkers[marker]; !ok {
 				t.Errorf("%s uses unknown marker %s - add it to cycleWindowMarkers", src, marker)
 			}
+		}
+		if len(markers) > 0 && !strings.Contains(text, "applyCycleWindows(") {
+			t.Errorf("%s contains %d cycle marker(s) but never calls applyCycleWindows - the marker would reach ClickHouse verbatim",
+				src, len(markers))
 		}
 	}
 }

@@ -22,13 +22,13 @@ func TestAKAMismatchQueryScoping(t *testing.T) {
 	am := &AKAMismatchOperations{}
 
 	queries := map[string]string{
-		"aka_mismatch": am.buildAKAMismatchQuery("AND node != 0", "fidonet"),
+		"aka_mismatch": am.buildAKAMismatchQuery("AND node != 0", "fidonet", 30),
 		"ipv6_incorrect_ipv4_correct": am.buildIPVersionMismatchQuery("AND node != 0",
 			"r.address_validated_ipv4 = true AND r.address_validated_ipv6 = false",
-			"(r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true)", "fidonet"),
+			"(r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true)", "fidonet", 30),
 	}
 
-	window := fmt.Sprintf("r.test_time >= lt.latest_test_time - INTERVAL %d SECOND", testSessionWindowSeconds)
+	window := fmt.Sprintf("r.test_time >= greatest(lt.latest_test_time - INTERVAL %d SECOND", testSessionWindowSeconds)
 
 	for name, query := range queries {
 		t.Run(name, func(t *testing.T) {
