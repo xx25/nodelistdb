@@ -194,9 +194,6 @@ func TestEmailAnalyticsStats(t *testing.T) {
 	if stats.ReceiptCapable != 1 {
 		t.Errorf("ReceiptCapable = %d, want 1 (only the ISE node)", stats.ReceiptCapable)
 	}
-	if stats.WireProtocolSpecified != 1 {
-		t.Errorf("WireProtocolSpecified = %d, want 1 (only ISE has a complete FTSC wire spec)", stats.WireProtocolSpecified)
-	}
 	if stats.NonStandardOnly != 1 {
 		t.Errorf("NonStandardOnly = %d, want 1 (the EMA-only node)", stats.NonStandardOnly)
 	}
@@ -329,5 +326,31 @@ func TestEmailAnalyticsFlagsTable(t *testing.T) {
 	}
 	if got := strings.Count(html, ">receipts</span>"); got != 2 {
 		t.Errorf("receipts marked on %d flags, want 2 (ITX and ISE only)", got)
+	}
+}
+
+// TestEmailAnalyticsTableWidths pins the column sizing: the three token columns
+// shrink to their content so Meaning, the only one holding prose, gets the rest.
+func TestEmailAnalyticsTableWidths(t *testing.T) {
+	html := renderEmailAnalytics(t, samplePage())
+
+	for _, want := range []string{
+		`<col class="col-flag">`,
+		`<col class="col-nodes">`,
+		`<col class="col-notes">`,
+		`<col class="col-meaning">`,
+		".flags-table .col-meaning { width: 97%; }",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("column sizing is missing %q", want)
+		}
+	}
+
+	// The ISE stat tile is gone; the flag row still carries the fact.
+	if strings.Contains(html, "Fully specified wire format") {
+		t.Error("the ISE wire-format stat tile should be removed")
+	}
+	if !strings.Contains(html, "FTS-1025") {
+		t.Error("ISE's description must still name FTS-1025")
 	}
 }

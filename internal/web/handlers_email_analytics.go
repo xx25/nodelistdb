@@ -88,8 +88,6 @@ type EmailSummaryStats struct {
 	Unresolved int
 	// ReceiptCapable counts nodes advertising ITX or ISE.
 	ReceiptCapable int
-	// WireProtocolSpecified counts nodes advertising ISE.
-	WireProtocolSpecified int
 	// NonStandardOnly counts nodes whose only email flags are EMA/EVY.
 	NonStandardOnly int
 	Malformed       int
@@ -121,9 +119,6 @@ func computeEmailStats(nodes []storage.EmailCapableNode) EmailSummaryStats {
 		}
 		if n.ReceiptCapable {
 			stats.ReceiptCapable++
-		}
-		if n.WireProtocolSpecified {
-			stats.WireProtocolSpecified++
 		}
 		if n.HasNonStandardFlag && !n.HasStandardMethod {
 			stats.NonStandardOnly++

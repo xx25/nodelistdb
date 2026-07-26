@@ -21,6 +21,18 @@
     .addr-list { font-family: monospace; font-size: 0.9em; word-break: break-all; }
     .addr-list div + div { margin-top: 2px; }
     .provenance { color: #666; font-size: 0.85em; font-style: italic; }
+    /* Flag, Nodes and Notes hold a token each, so they shrink to their content
+       and Meaning -- the only column with real prose -- takes everything left.
+       width:1% on a nowrap cell is the shrink-to-fit idiom; the 97% on the last
+       column makes the browser hand it the remainder. */
+    .flags-table .col-flag,
+    .flags-table .col-nodes,
+    .flags-table .col-notes { width: 1%; }
+    .flags-table .col-meaning { width: 97%; }
+    .flags-table td, .flags-table th { vertical-align: top; }
+    .flags-table .cell-flag, .flags-table .cell-nodes { white-space: nowrap; }
+    .flags-table .cell-nodes { text-align: right; }
+    .flags-table .cell-meaning { font-size: 0.9em; }
     .flag-notes { white-space: nowrap; font-size: 0.9em; }
     .note-sep { color: #999; margin: 0 0.35em; }
     .trend-table { font-size: 0.85em; }
@@ -49,10 +61,6 @@
     <div class="stats-box">
         <h3>{{.Stats.ReceiptCapable}}</h3>
         <p>Receipt-capable (ITX/ISE)</p>
-    </div>
-    <div class="stats-box">
-        <h3>{{.Stats.WireProtocolSpecified}}</h3>
-        <p>Fully specified wire format (ISE)</p>
     </div>
     <div class="stats-box">
         <h3>{{.Stats.Unresolved}}</h3>
@@ -153,7 +161,13 @@
 <div class="stats-box" style="margin-bottom: 2rem;">
     <h4>The flags</h4>
     <div class="table-responsive">
-        <table class="data-table">
+        <table class="data-table flags-table">
+            <colgroup>
+                <col class="col-flag">
+                <col class="col-nodes">
+                <col class="col-notes">
+                <col class="col-meaning">
+            </colgroup>
             <thead>
                 <tr>
                     <th>Flag</th>
@@ -165,11 +179,11 @@
             <tbody>
                 {{range .Stats.FlagReferences}}
                 <tr>
-                    <td style="white-space: nowrap;">
+                    <td class="cell-flag">
                         <span class="flag-swatch" style="background: {{.Color}};"></span>
                         <span class="badge badge-info">{{.Flag}}</span>
                     </td>
-                    <td>{{.Count}}</td>
+                    <td class="cell-nodes">{{.Count}}</td>
                     {{/* Which document defines the flag, and whether it owes a
                          receipt, are the only two properties worth a column of
                          their own -- and each is true of so few flags that
@@ -181,7 +195,7 @@
                         {{else}}<span class="text-muted" title="Occurs in real nodelists but is defined by no FTSC document">non-standard</span>{{end}}
                         {{if .ReceiptRequired}}<span class="note-sep">&middot;</span><span style="color: #008300;" title="FTS-5001 requires a node advertising this flag to send receipts within 24 hours">receipts</span>{{end}}
                     </td>
-                    <td style="font-size: 0.9em;">{{.Description}}</td>
+                    <td class="cell-meaning">{{.Description}}</td>
                 </tr>
                 {{end}}
             </tbody>
