@@ -699,21 +699,7 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		// recorded for failed probes too, so prefer the family that actually
 		// worked and only then fall back to whichever family has a diagnosis —
 		// otherwise a failed IPv6 probe would mask a successful IPv4 one.
-		var d *models.VModemTestDetails
-		if r.VModemResult.IPv6Success {
-			d, _ = r.VModemResult.Details["ipv6"].(*models.VModemTestDetails)
-		}
-		if d == nil && r.VModemResult.IPv4Success {
-			d, _ = r.VModemResult.Details["ipv4"].(*models.VModemTestDetails)
-		}
-		if d == nil {
-			if v, ok := r.VModemResult.Details["ipv6"].(*models.VModemTestDetails); ok {
-				d = v
-			} else if v, ok := r.VModemResult.Details["ipv4"].(*models.VModemTestDetails); ok {
-				d = v
-			}
-		}
-		if d != nil {
+		if d := r.VModemResult.VModemDetails(); d != nil {
 			vmodemVariant, vmodemConformant, vmodemSoftware, vmodemSystemName, vmodemAddresses =
 				d.Variant, d.Conformant, d.Software, d.SystemName, d.Addresses
 			vmodemSysop, vmodemLocation = d.Sysop, d.Location

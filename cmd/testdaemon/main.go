@@ -82,8 +82,15 @@ func main() {
 	// If test-node is specified, run single test and exit
 	if *testNode != "" {
 		ctx := context.Background()
-		if err := d.TestSingleNode(ctx, *testNode, *testProto); err != nil {
-			log.Fatalf("Test failed: %v", err)
+		testErr := d.TestSingleNode(ctx, *testNode, *testProto)
+		// Storage batches inserts and flushes on a size or time trigger, so a
+		// single test's result only reaches ClickHouse if the daemon is closed
+		// properly. Exiting straight from here discarded it silently.
+		if err := d.Close(); err != nil {
+			log.Printf("Warning: shutdown failed, the result may not have been stored: %v", err)
+		}
+		if testErr != nil {
+			log.Fatalf("Test failed: %v", testErr)
 		}
 		log.Println("Test completed")
 		os.Exit(0)

@@ -411,10 +411,7 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	}
 
 	if protocol == "vmodem" && result.VModemResult != nil {
-		det, _ := result.VModemResult.Details["ipv6"].(*models.VModemTestDetails)
-		if det == nil {
-			det, _ = result.VModemResult.Details["ipv4"].(*models.VModemTestDetails)
-		}
+		det := result.VModemResult.VModemDetails()
 		if result.VModemResult.Success {
 			logging.Infof("  VModem: Reachable")
 		} else {

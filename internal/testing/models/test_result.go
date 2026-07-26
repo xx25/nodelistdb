@@ -93,6 +93,33 @@ type ProtocolTestResult struct {
 	SoftwareSource string
 }
 
+// VModemDetails picks the IP family whose VModem diagnosis should represent
+// this result: the one that actually worked, IPv6 first as everywhere else,
+// falling back to whichever family has anything to say.
+//
+// The fallback exists because details are recorded for a failed probe too — a
+// variant, a VMP call outcome, a banner — and without the success preference a
+// failed IPv6 probe would mask a successful IPv4 identification. Every reader
+// of these details resolves it the same way, so the rule lives here rather than
+// in three copies.
+func (pr *ProtocolTestResult) VModemDetails() *VModemTestDetails {
+	if pr == nil {
+		return nil
+	}
+	ipv6, _ := pr.Details["ipv6"].(*VModemTestDetails)
+	ipv4, _ := pr.Details["ipv4"].(*VModemTestDetails)
+	switch {
+	case pr.IPv6Success && ipv6 != nil:
+		return ipv6
+	case pr.IPv4Success && ipv4 != nil:
+		return ipv4
+	case ipv6 != nil:
+		return ipv6
+	default:
+		return ipv4
+	}
+}
+
 // BinkPTestDetails contains BinkP-specific test details
 type BinkPTestDetails struct {
 	SystemName   string

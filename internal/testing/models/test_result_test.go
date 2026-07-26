@@ -172,12 +172,12 @@ func TestProtocolTestResultBothFail(t *testing.T) {
 
 func TestProtocolTestResultGetConnectivityType(t *testing.T) {
 	tests := []struct {
-		name         string
-		ipv4Success  bool
-		ipv4Tested   bool
-		ipv6Success  bool
-		ipv6Tested   bool
-		expected     string
+		name        string
+		ipv4Success bool
+		ipv4Tested  bool
+		ipv6Success bool
+		ipv6Tested  bool
+		expected    string
 	}{
 		{
 			name:        "dual-stack",
@@ -591,5 +591,44 @@ func TestAggregatedTestResultGetSuccessRateEmpty(t *testing.T) {
 	rate := atr.GetSuccessRate()
 	if rate != 0 {
 		t.Errorf("Expected success rate 0%% for empty results, got %.2f%%", rate)
+	}
+}
+
+// A failed probe on one address family must not mask a successful one on the
+// other: details are recorded for failures too, so the reader has to prefer
+// the family that actually worked.
+func TestVModemDetailsPrefersTheFamilyThatWorked(t *testing.T) {
+	failed := &VModemTestDetails{Variant: "down"}
+	worked := &VModemTestDetails{Variant: "vmp", Conformant: true}
+
+	pr := &ProtocolTestResult{
+		IPv4Success: true,
+		Details:     map[string]interface{}{"ipv6": failed, "ipv4": worked},
+	}
+	if got := pr.VModemDetails(); got != worked {
+		t.Errorf("picked %+v, want the successful IPv4 details", got)
+	}
+
+	pr = &ProtocolTestResult{
+		IPv6Success: true,
+		IPv4Success: true,
+		Details:     map[string]interface{}{"ipv6": worked, "ipv4": failed},
+	}
+	if got := pr.VModemDetails(); got != worked {
+		t.Errorf("picked %+v, want IPv6 when both worked", got)
+	}
+
+	// Nothing worked: still report whatever diagnosis exists.
+	pr = &ProtocolTestResult{Details: map[string]interface{}{"ipv4": failed}}
+	if got := pr.VModemDetails(); got != failed {
+		t.Errorf("picked %+v, want the failed probe's diagnosis", got)
+	}
+
+	if (&ProtocolTestResult{}).VModemDetails() != nil {
+		t.Error("expected nil when no details were recorded")
+	}
+	var nilResult *ProtocolTestResult
+	if nilResult.VModemDetails() != nil {
+		t.Error("expected nil for a nil result")
 	}
 }

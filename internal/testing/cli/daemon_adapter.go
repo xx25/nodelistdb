@@ -232,29 +232,12 @@ func (a *DaemonAdapter) convertTestResult(r *models.TestResult) *TestResult {
 		// worked (IPv6 first, as elsewhere) and only then fall back to whichever
 		// family has a diagnosis, so a failed IPv6 probe cannot mask a
 		// successful IPv4 identification.
-		if d := pickVModemDetails(r.VModemResult); d != nil {
+		if d := r.VModemResult.VModemDetails(); d != nil {
 			applyVModemDetails(result.VModemResult, d)
 		}
 	}
 
 	return result
-}
-
-// pickVModemDetails chooses which IP family's VModem diagnosis to report:
-// the one that succeeded, else whichever one has something to say.
-func pickVModemDetails(pr *models.ProtocolTestResult) *models.VModemTestDetails {
-	ipv6, _ := pr.Details["ipv6"].(*models.VModemTestDetails)
-	ipv4, _ := pr.Details["ipv4"].(*models.VModemTestDetails)
-	switch {
-	case pr.IPv6Success && ipv6 != nil:
-		return ipv6
-	case pr.IPv4Success && ipv4 != nil:
-		return ipv4
-	case ipv6 != nil:
-		return ipv6
-	default:
-		return ipv4
-	}
 }
 
 // applyVModemDetails copies identified protocol details into the CLI result.
