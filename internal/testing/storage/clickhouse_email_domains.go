@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nodelistdb/internal/emailflags"
@@ -140,6 +142,29 @@ func (s *ClickHouseStorage) GetEmailDomainCheck(ctx context.Context, domain stri
 	return &stored, rows.Err()
 }
 
+// emailProtocolAddressSQL builds the per-flag address extraction for
+// internet_config.email_protocols.
+//
+// Both stored shapes must be handled. The current shape is a list of detail
+// objects; rows written before it became a list stored a single bare object,
+// which JSONExtractArrayRaw returns nothing for. The Go reader
+// (database.EmailProtocolMap.UnmarshalJSON) accepts both, so the sweep has to
+// as well -- otherwise a domain visible on the report would never be checked,
+// with nothing logged to say so.
+func emailProtocolAddressSQL() string {
+	flags := []string{"IMI", "ITX", "ISE", "IUC", "EMA", "EVY"}
+	clauses := make([]string, 0, len(flags))
+	for _, flag := range flags {
+		clauses = append(clauses, fmt.Sprintf(
+			`if(JSONType(ic, 'email_protocols', '%[1]s') = 'Array',
+				arrayMap(x -> JSONExtractString(x, 'email'), JSONExtractArrayRaw(ic, 'email_protocols', '%[1]s')),
+				if(JSONType(ic, 'email_protocols', '%[1]s') = 'Object',
+				   [JSONExtractString(ic, 'email_protocols', '%[1]s', 'email')],
+				   []))`, flag))
+	}
+	return strings.Join(clauses, ",\n\t\t\t\t") + ","
+}
+
 // GetEmailDomainsToCheck returns the mail domains published in the latest
 // nodelist of every network, together with when each was last attempted.
 //
@@ -168,12 +193,7 @@ func (s *ClickHouseStorage) GetEmailDomainsToCheck(ctx context.Context, staleAft
 				   if(JSONType(ic, 'defaults', 'IEM') = 'String',
 				      [JSONExtractString(ic, 'defaults', 'IEM')],
 				      [])),
-				arrayMap(x -> JSONExtractString(x, 'email'), JSONExtractArrayRaw(ic, 'email_protocols', 'IMI')),
-				arrayMap(x -> JSONExtractString(x, 'email'), JSONExtractArrayRaw(ic, 'email_protocols', 'ITX')),
-				arrayMap(x -> JSONExtractString(x, 'email'), JSONExtractArrayRaw(ic, 'email_protocols', 'ISE')),
-				arrayMap(x -> JSONExtractString(x, 'email'), JSONExtractArrayRaw(ic, 'email_protocols', 'IUC')),
-				arrayMap(x -> JSONExtractString(x, 'email'), JSONExtractArrayRaw(ic, 'email_protocols', 'EMA')),
-				arrayMap(x -> JSONExtractString(x, 'email'), JSONExtractArrayRaw(ic, 'email_protocols', 'EVY')),
+				%s
 				-- Pre-fix rows keep the whole "FLAG:address" token in flags.
 				arrayMap(f -> substringUTF8(f, position(f, ':') + 1),
 					arrayFilter(f -> match(f, '^(IEM|IMI|ITX|ISE|IUC|EMA|EVY):'), flags))
@@ -185,12 +205,23 @@ func (s *ClickHouseStorage) GetEmailDomainsToCheck(ctx context.Context, staleAft
 		WHERE addr != ''
 		  AND position(addr, '@') > 1
 		  AND mail_domain != ''
-		  AND mail_domain LIKE '%.%'
+		  AND mail_domain LIKE '%%.%%'
 		  AND mail_domain NOT IN (
-			SELECT domain FROM email_domain_checks
-			WHERE last_attempt_time >= ?
+			-- Fresh verdicts are skipped, but a stored 'error' is not a
+			-- verdict -- it is a DNS hiccup. Excluding it here would freeze
+			-- one timeout on screen for the whole stale_after window, so
+			-- error rows are always retried on the next sweep.
+			SELECT domain FROM (
+				SELECT domain, status, last_attempt_time
+				FROM email_domain_checks
+				ORDER BY domain, last_attempt_time DESC
+				LIMIT 1 BY domain
+			)
+			WHERE last_attempt_time >= ? AND status != '%s'
 		  )
 		ORDER BY mail_domain`
+
+	query = fmt.Sprintf(query, emailProtocolAddressSQL(), emailflags.DomainStatusError)
 
 	cutoff := time.Now().Add(-staleAfter)
 	rows, err := s.conn.Query(ctx, query, cutoff)

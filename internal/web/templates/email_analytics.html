@@ -251,9 +251,15 @@
                 </td>
                 <td>
                     {{if .Endpoint}}
+                        {{/* Name the domain whenever a node publishes more than
+                             one, so a verdict is never ambiguous about which
+                             address it refers to. */}}
+                        {{$multi := gt (len .Endpoint) 1}}
                         {{range .Endpoint}}
-                        <div title="{{.Detail}}{{if .Stale}} (last check attempt failed; this verdict is older than it looks){{end}}">
-                            {{if eq .Status "ok"}}<span style="color: #008300;">&#10003; routable</span>
+                        <div title="{{.MailDomain}}{{if .Detail}} &mdash; {{.Detail}}{{end}}{{if .Stale}} (last check attempt failed; this verdict is older than it looks){{end}}">
+                            {{if $multi}}<span class="addr-list text-muted">{{.MailDomain}}</span> {{end}}
+                            {{if eq .Status ""}}<span class="text-muted">not checked</span>
+                            {{else if eq .Status "ok"}}<span style="color: #008300;">&#10003; routable</span>
                             {{else if eq .Status "implicit_mx"}}<span style="color: #008300;">&#10003; implicit MX</span>
                             {{else if eq .Status "degraded"}}<span style="color: #b8860b;">&#9888; partial</span>
                             {{else if eq .Status "no_domain"}}<span style="color: #c00;">&#10007; no such domain</span>

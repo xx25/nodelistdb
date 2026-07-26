@@ -154,13 +154,26 @@ func (s *EmailDomainSweeper) Sweep(ctx context.Context) error {
 
 			// The previous row is needed so a transient failure can carry the
 			// last established verdict forward instead of erasing it.
-			previous, err := s.store.GetEmailDomainCheck(ctx, domain)
-			if err != nil {
-				logging.Debugf("Email domain sweep: could not read previous verdict for %s: %v", domain, err)
+			previous, readErr := s.store.GetEmailDomainCheck(ctx, domain)
+			if readErr != nil {
+				logging.Debugf("Email domain sweep: could not read previous verdict for %s: %v", domain, readErr)
 				previous = nil
 			}
 
 			result := s.resolver.CheckDomain(ctx, domain)
+
+			if !result.Stable() && readErr != nil {
+				// Both the lookup and the read of what was there before
+				// failed. Writing now would replace a possibly-good stored
+				// verdict with this hiccup, and nothing here knows what that
+				// verdict was. Leave the row alone and retry next sweep.
+				logging.Debugf("Email domain sweep: skipping write for %s, both the lookup and the previous-verdict read failed", domain)
+				s.resolver.InvalidateCache(domain)
+				mu.Lock()
+				transient++
+				mu.Unlock()
+				return
+			}
 
 			if err := s.store.StoreEmailDomainCheck(ctx, result, previous); err != nil {
 				logging.Errorf("Email domain sweep: failed to store verdict for %s: %v", domain, err)

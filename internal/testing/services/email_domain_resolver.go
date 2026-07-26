@@ -137,8 +137,9 @@ func (r *EmailDomainResolver) check(ctx context.Context, domain string) EmailDom
 	ascii, err := idna.Lookup.ToASCII(domain)
 	if err != nil {
 		result.Status = emailflags.DomainStatusInvalid
-		result.Detail = "not a valid domain name"
-		result.Error = err.Error()
+		// The reason goes in Detail, not Error: this is a settled verdict, and
+		// a non-empty Error is what marks a stored verdict as stale.
+		result.Detail = "not a valid domain name: " + err.Error()
 		return result
 	}
 	if ascii != domain {
@@ -148,7 +149,7 @@ func (r *EmailDomainResolver) check(ctx context.Context, domain string) EmailDom
 	lookupCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	records, err := r.resolver.LookupMX(lookupCtx, ascii)
+	records, err := r.resolver.LookupMX(lookupCtx, fqdn(ascii))
 	if err != nil {
 		var dnsErr *net.DNSError
 		if errors.As(err, &dnsErr) && !dnsErr.IsNotFound {
@@ -270,11 +271,24 @@ func (r *EmailDomainResolver) resolveHost(ctx context.Context, host string) (int
 	lookupCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	addrs, err := r.resolver.LookupIPAddr(lookupCtx, host)
+	addrs, err := r.resolver.LookupIPAddr(lookupCtx, fqdn(host))
 	if err != nil {
 		return 0, err
 	}
 	return len(addrs), nil
+}
+
+// fqdn roots a name so the resolver treats it as absolute.
+//
+// Without the trailing dot the stdlib applies the search suffixes from
+// /etc/resolv.conf, so on a host with a "search" directive a genuinely dead
+// public domain can resolve as "dead.example.<suffix>" and be reported
+// routable. Every published mail domain is by definition absolute.
+func fqdn(name string) string {
+	if name == "" || strings.HasSuffix(name, ".") {
+		return name
+	}
+	return name + "."
 }
 
 // isNullMX reports the RFC 7505 null MX pattern.

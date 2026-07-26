@@ -235,6 +235,55 @@ func TestEmailAnalyticsStats(t *testing.T) {
 	}
 }
 
+// TestEmailAnalyticsEndpointColumn covers a node publishing two mail domains
+// where only one has been swept. The unchecked one must be visible and both
+// must be labelled, so a partly-verified node cannot read as fully verified.
+func TestEmailAnalyticsEndpointColumn(t *testing.T) {
+	date := time.Date(2026, 7, 26, 0, 0, 0, 0, time.UTC)
+
+	node := storage.EmailCapableNode{
+		Domain: "fidonet", Zone: 2, Net: 5001, Node: 100,
+		SystemName: "Two_Domains", Location: "Moscow", SysopName: "A_Sysop",
+		NodelistDate: date, NodeType: "Node",
+		Addresses: []string{"a@checked.example", "b@unswept.example"},
+		Resolved:  true,
+		FlagNames: []string{"IEM"},
+		Capabilities: []emailflags.Capability{
+			{Flag: "IEM", Standard: true, Occurrences: 1,
+				Addresses: []string{"a@checked.example", "b@unswept.example"},
+				Source:    emailflags.SourceExplicit},
+		},
+		HasStandardMethod: true,
+		Endpoint: []storage.EmailEndpointStatus{
+			{Address: "a@checked.example", MailDomain: "checked.example",
+				Status: storage.EmailDomainStatusOK, Detail: "1 MX host", CheckTime: date},
+			// Never swept: no status at all.
+			{Address: "b@unswept.example", MailDomain: "unswept.example"},
+		},
+	}
+
+	nodes := []storage.EmailCapableNode{node}
+	html := renderEmailAnalytics(t, emailAnalyticsPage{
+		Title:      "FidoNet over Email",
+		ActivePage: "analytics",
+		Nodes:      nodes,
+		Stats:      computeEmailStats(nodes),
+		FlagOrder:  storage.EmailFlagOrder(),
+	})
+
+	for _, want := range []string{
+		"routable",
+		"not checked",
+		// Both domains are named, because the node has more than one.
+		"checked.example",
+		"unswept.example",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("endpoint column is missing %q", want)
+		}
+	}
+}
+
 func TestEmailAnalyticsEmptyState(t *testing.T) {
 	html := renderEmailAnalytics(t, emailAnalyticsPage{
 		Title:      "FidoNet over Email",

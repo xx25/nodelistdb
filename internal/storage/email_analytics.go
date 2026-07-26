@@ -238,11 +238,18 @@ func (ao *AnalyticsOperations) attachEndpointStatus(nodes []EmailCapableNode) {
 		seen := make(map[string]bool, len(n.Addresses))
 		for _, addr := range n.Addresses {
 			domain := emailflags.MailDomain(addr)
-			verdict, ok := verdicts[domain]
-			if !ok || seen[domain] {
+			if domain == "" || seen[domain] {
 				continue
 			}
 			seen[domain] = true
+
+			// Every domain gets a row, checked or not. Omitting the unchecked
+			// ones would make a node with one verified and one never-swept
+			// domain look fully verified.
+			verdict, ok := verdicts[domain]
+			if !ok {
+				verdict = EmailEndpointStatus{MailDomain: domain}
+			}
 			verdict.Address = addr
 			n.Endpoint = append(n.Endpoint, verdict)
 		}
