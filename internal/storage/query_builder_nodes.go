@@ -536,6 +536,10 @@ func (qb *QueryBuilder) buildFilterConditions(filter database.NodeFilter) (ident
 		attrs = append(attrs, "is_cm = ?")
 		attrArgs = append(attrArgs, *filter.IsCM)
 	}
+	if filter.IsMO != nil {
+		attrs = append(attrs, "is_mo = ?")
+		attrArgs = append(attrArgs, *filter.IsMO)
+	}
 	if filter.HasInet != nil {
 		attrs = append(attrs, "has_inet = ?")
 		attrArgs = append(attrArgs, *filter.HasInet)

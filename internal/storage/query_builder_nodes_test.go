@@ -23,7 +23,7 @@ var nodeFilterShapes = map[string]database.NodeFilter{
 	"attribute only":         {Location: strp2("moscow"), Limit: 100},
 	"mixed":                  {Zone: intp(2), Location: strp2("moscow"), SysopName: strp2("doe"), Limit: 100, Offset: 20},
 	"dates":                  {DateFrom: timep(time.Now().Add(-24 * time.Hour)), DateTo: timep(time.Now())},
-	"flags":                  {IsCM: boolp(true), HasInet: boolp(true), HasBinkp: boolp(false)},
+	"flags":                  {IsCM: boolp(true), IsMO: boolp(true), HasInet: boolp(true), HasBinkp: boolp(false)},
 	"latest only":            {LatestOnly: boolp(true), Limit: 100},
 	"latest only + identity": {LatestOnly: boolp(true), Zone: intp(2), Limit: 5},
 	"latest only + mixed":    {LatestOnly: boolp(true), Zone: intp(2), NodeType: strp2("Node"), Limit: 5, Offset: 3},
@@ -152,12 +152,9 @@ func TestNodeFilterFieldsAreClassified(t *testing.T) {
 		"DateFrom": "attribute", "DateTo": "attribute", "SystemName": "attribute",
 		"Location": "attribute", "SysopName": "attribute", "NodeType": "attribute",
 		"IsCM": "attribute", "HasInet": "attribute", "HasBinkp": "attribute",
+		"IsMO": "attribute",
 		// Not predicates.
 		"LatestOnly": "option", "Limit": "option", "Offset": "option",
-		// Accepted by the API but never translated into SQL, here and before
-		// the identity/attribute split. Listed so it stays a known gap rather
-		// than being mistaken for an oversight in the classification.
-		"IsMO": "unimplemented",
 	}
 
 	ft := reflect.TypeOf(database.NodeFilter{})
