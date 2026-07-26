@@ -1,8 +1,20 @@
+{{/*
+    Row actions for an analytics table whose rows are test results.
+
+    "Test" opens the very test the row reports — the one whose timestamp the
+    Last Tested column shows — so the reader can see what was actually found
+    rather than only that something was. It deliberately does not link to the
+    node page: the address cell in the same row already goes there.
+
+    Every template using this partial also uses timestamp_cell, so .TestTime is
+    always present. Domain is carried through both links; without it a node
+    that exists in several FTN networks resolves to the wrong one.
+*/}}
 {{define "action_buttons_cell"}}
 <td>
     <div class="compact-actions">
-        <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-sm btn-info">View</a>
-        <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>
+        <a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05Z07:00"}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="btn btn-sm btn-info">Test</a>
+        <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="btn btn-sm btn-secondary">History</a>
     </div>
 </td>
 {{end}}
