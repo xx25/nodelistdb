@@ -180,6 +180,11 @@
             background: #6c757d;
             color: white;
         }
+        /* Reachable, but running something other than the protocol announced. */
+        .protocol-status.other {
+            background: #d39e00;
+            color: #212529;
+        }
         .error-message {
             background: #f8d7da;
             color: #721c24;
@@ -375,7 +380,7 @@
                             <option value="ifcico" {{if eq .ProtocolFilter "ifcico"}}selected{{end}}>IFCICO Only</option>
                             <option value="telnet" {{if eq .ProtocolFilter "telnet"}}selected{{end}}>Telnet Only</option>
                             <option value="ftp" {{if eq .ProtocolFilter "ftp"}}selected{{end}}>FTP Only</option>
-                            <option value="vmodem" {{if eq .ProtocolFilter "vmodem"}}selected{{end}}>VModem (IVM) Only</option>
+                            <option value="vmodem" {{if eq .ProtocolFilter "vmodem"}}selected{{end}}>Confirmed VMODEM Only</option>
                         </select>
 
                         <label style="font-weight: bold;">Limit:</label>
@@ -423,9 +428,7 @@
                             {{if .FTPSuccess}}
                             <span class="protocol-status success">FTP</span>
                             {{end}}
-                            {{if .VModemSuccess}}
-                            <span class="protocol-status success">VModem</span>
-                            {{end}}
+                            {{template "vmodem_badge" .}}
                             <span class="response-time">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                         </div>
                     </div>
@@ -465,9 +468,7 @@
                             {{if .FTPSuccess}}
                             <span class="protocol-status success">FTP</span>
                             {{end}}
-                            {{if .VModemSuccess}}
-                            <span class="protocol-status success">VModem</span>
-                            {{end}}
+                            {{template "vmodem_badge" .}}
                             <span class="response-time">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                         </div>
                     </div>

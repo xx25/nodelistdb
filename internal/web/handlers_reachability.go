@@ -166,7 +166,11 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 				filteredNodes = append(filteredNodes, node)
 			}
 		case "vmodem":
-			if node.VModemSuccess {
+			// VModemSuccess only says something answered on the announced IVM
+			// port — usually an EMSI mailer or a telnet login, not VMODEM. The
+			// filter asks for VMODEM, so it takes confirmed VMP responders only,
+			// same as the /analytics/vmodem page.
+			if node.IsConfirmedVMODEM() {
 				filteredNodes = append(filteredNodes, node)
 			}
 		default: // "any" or empty

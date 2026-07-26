@@ -561,18 +561,21 @@ func (s *Server) TelnetAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	s.renderProtocolAnalytics(w, r, config, s.storage.GetTelnetEnabledNodes)
 }
 
-// VModemAnalyticsHandler shows VModem enabled nodes analytics
+// VModemAnalyticsHandler shows nodes confirmed to run a genuine VMODEM (VMP)
+// responder on their announced IVM port.
 func (s *Server) VModemAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{
-		PageTitle:    "VModem Enabled Nodes",
-		PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with VModem protocol</p>`),
-		StatsHeading: "VModem Enabled",
+		PageTitle:    "VMODEM (IVM) Nodes",
+		PageSubtitle: template.HTML(`<p class="subtitle">Nodes confirmed to run a genuine VMODEM responder on their announced IVM port</p>`),
+		StatsHeading: "Confirmed VMODEM",
 		ShowVersion:  false,
 		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that have been successfully tested with VModem protocol over the last %d days. VModem provides virtual modem emulation for legacy BBS software.`,
+			`<strong>Note:</strong> This report shows nodes whose announced IVM port was confirmed over the last %d days to run Ray Gwinn's Virtual Modem Protocol (VMP) — the protocol the IVM flag actually stands for. VMODEM provides virtual modem emulation so legacy mailer software can place FidoNet calls over TCP/IP.`,
+			`<strong>Why the list is short:</strong> most IVM-flagged ports do not run VMODEM. Probing them commonly finds an EMSI mailer over telnet or raw TCP, binkd, or a plain telnet login prompt instead. Those ports are reachable, but they are not VMODEM, so they are excluded here — see each node's test history for what was actually found.`,
+			`<strong>Confirmed is not the same as called:</strong> a node qualifies once it answers as a VMODEM. Placing a real VMP call rings the remote sysop's mailer and needs a reverse data channel back to us, so it is not done on every cycle. A node's test history shows whether a call was ever put through.`,
 		},
-		EmptyStateTitle: "No VModem enabled nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that either no nodes with VModem support were tested during this period, or none of them responded successfully to protocol tests.",
+		EmptyStateTitle: "No confirmed VMODEM nodes found for the selected period.",
+		EmptyStateDesc:  "This means no node's announced IVM port was confirmed to run VMODEM (VMP) during this period. Ports that answered with something else — an EMSI mailer, binkd, a telnet login — are deliberately not counted here.",
 	}
 	s.renderProtocolAnalytics(w, r, config, s.storage.GetVModemEnabledNodes)
 }

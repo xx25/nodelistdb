@@ -244,6 +244,19 @@ type NodeTestResult struct {
 	AllHostnames         []string `json:"all_hostnames"`         // All hostnames for this node (for display)
 }
 
+// IsConfirmedVMODEM reports whether the announced IVM port was confirmed to run
+// a genuine VMODEM (Gwinn VMP) responder.
+//
+// This is deliberately narrower than VModemSuccess, which is true for anything
+// recognizable on the port — an EMSI mailer over telnet or raw TCP, binkd, even
+// a bare telnet login prompt. Reaching one of those proves the port is alive but
+// says nothing about VMODEM, so anywhere a surface claims to be about VMODEM it
+// should ask this instead. It is also false for rows written before the tester
+// classified variants, whose bare success carries no evidence at all.
+func (r *NodeTestResult) IsConfirmedVMODEM() bool {
+	return r != nil && r.VModemConformant && r.VModemVariant == "vmp"
+}
+
 // NodeReachabilityStats represents aggregated reachability statistics for a node
 type NodeReachabilityStats struct {
 	Zone                  int       `json:"zone"`

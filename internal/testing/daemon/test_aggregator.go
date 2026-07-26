@@ -89,6 +89,30 @@ func keepFailureDetails(dst, src *models.ProtocolTestResult, sawSuccess *bool) {
 	}
 }
 
+// preferConfirmedVMODEM lets a hostname that answered as a genuine VMODEM claim
+// the aggregated row's VModem details, even when an earlier hostname already
+// filled them in.
+//
+// mergeProtocolResult takes details from the first hostname that succeeded, but
+// a VModem probe succeeds against anything recognizable on the IVM port. On a
+// multi-hostname node whose first hostname answers with, say, an EMSI mailer
+// over telnet, that ordering would report the node as running a mailer while a
+// later hostname is the real VMODEM — and analytics read the aggregated row.
+// Confirmation is the strongest thing a VModem probe can establish, so it wins
+// regardless of hostname order; ties go to the first one found.
+func preferConfirmedVMODEM(dst, src *models.ProtocolTestResult, foundVMP *bool) {
+	if dst == nil || src == nil || *foundVMP {
+		return
+	}
+	d := src.VModemDetails()
+	if d == nil || !d.Conformant {
+		return
+	}
+	dst.Details = src.Details
+	dst.SoftwareSource = src.SoftwareSource
+	*foundVMP = true
+}
+
 // finalizeProtocolResult derives the overall Tested/Success/ResponseMs/Error
 // fields from the merged per-IP-family results, so a node that succeeded via
 // IPv6 on one hostname and failed IPv4 on another reports success overall,
@@ -152,6 +176,8 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 	// Tracks whether the VModem details on the aggregated row came from a
 	// hostname that succeeded; see keepFailureDetails.
 	vmodemDetailsFromSuccess := false
+	// Tracks whether they came from a confirmed VMODEM; see preferConfirmedVMODEM.
+	vmodemVMPFound := false
 
 	// Aggregate DNS results
 	var allIPv4s []string
@@ -240,6 +266,7 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 			}
 			mergeProtocolResult(aggregated.VModemResult, result.VModemResult)
 			keepFailureDetails(aggregated.VModemResult, result.VModemResult, &vmodemDetailsFromSuccess)
+			preferConfirmedVMODEM(aggregated.VModemResult, result.VModemResult, &vmodemVMPFound)
 			if result.VModemResult.Success {
 				hasAnyProtocolSuccess = true
 			}

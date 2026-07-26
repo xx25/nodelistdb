@@ -113,7 +113,10 @@
                     {{if or .FTPSuccess .FTPIPv6Success}}
                         <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">F</span>
                     {{end}}
-                    {{if or .VModemSuccess .VModemIPv6Success}}
+                    {{/* Confirmed VMODEM only: a VModem probe also "succeeds" against
+                         an EMSI mailer or telnet login sitting on the announced IVM port,
+                         which a V badge would misreport as working VMODEM. */}}
+                    {{if .IsConfirmedVMODEM}}
                         <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">V</span>
                     {{end}}
                     {{if or .BinkPIPv6Success .IfcicoIPv6Success .TelnetIPv6Success .FTPIPv6Success .VModemIPv6Success}}
@@ -137,7 +140,7 @@
         <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">I</span> IFCICO,
         <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">T</span> Telnet,
         <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">F</span> FTP,
-        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">V</span> VModem,
+        <span class="badge badge-info" style="font-size: 0.8em; padding: 2px 4px;">V</span> VMODEM (confirmed),
         <span class="badge badge-success" style="font-size: 0.8em; padding: 2px 4px;">6</span> IPv6 Working,
         <span class="badge badge-warning" style="font-size: 0.8em; padding: 2px 4px;">6?</span> IPv6 DNS Only
     </p>

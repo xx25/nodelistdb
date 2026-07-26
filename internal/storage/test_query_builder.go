@@ -220,22 +220,37 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsFromDailyStatsQuery() string
 		ORDER BY date ASC`
 }
 
+// protocolSuccessPredicates maps a protocol to the SQL condition that decides
+// whether a test row counts as a working instance of it. `%[1]s` is the table
+// alias prefix, so the same condition can be applied both where rows are
+// selected and where one row per node is picked.
+//
+// Every protocol but VModem is a plain success flag. A VModem probe reports
+// success for whatever answers on the announced IVM port — an EMSI mailer over
+// telnet, binkd, even a bare telnet login prompt — because reaching any of
+// those still proves the port is alive. Listing them as "VModem enabled" is
+// wrong, so this page asks for the thing the flag actually promises: a
+// confirmed genuine VMODEM (Gwinn VMP) responder. That also excludes rows
+// written before the tester classified variants, whose bare vmodem_success
+// carries no evidence at all (vmodem_variant defaults to the empty string).
+var protocolSuccessPredicates = map[string]string{
+	"binkp":  "%[1]sbinkp_success = true",
+	"ifcico": "%[1]sifcico_success = true",
+	"telnet": "%[1]stelnet_success = true",
+	"ftp":    "%[1]sftp_success = true",
+	"vmodem": "%[1]svmodem_variant = 'vmp' AND %[1]svmodem_conformant = true",
+}
+
 // BuildProtocolEnabledQuery builds a query for nodes with a specific protocol enabled (ClickHouse)
 // protocol should be one of: "binkp", "ifcico", "telnet", "ftp", "vmodem"
 // domainFilter is a ready-made SQL clause (see domainFilterSQL); "" means all FTN networks.
 func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, domainFilter string) string {
-	protocolMap := map[string]string{
-		"binkp":  "binkp_success",
-		"ifcico": "ifcico_success",
-		"telnet": "telnet_success",
-		"ftp":    "ftp_success",
-		"vmodem": "vmodem_success",
-	}
-
-	protocolColumn, ok := protocolMap[protocol]
+	predicate, ok := protocolSuccessPredicates[protocol]
 	if !ok {
-		protocolColumn = "binkp_success" // fallback
+		predicate = protocolSuccessPredicates["binkp"] // fallback
 	}
+	rowPredicate := fmt.Sprintf(predicate, "")    // FROM node_test_results, unaliased
+	joinPredicate := fmt.Sprintf(predicate, "r.") // FROM node_test_results r JOIN ...
 
 	return fmt.Sprintf(`
 		WITH latest_tests AS (
@@ -244,19 +259,25 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
-				AND %s = true
+				AND %s
 				AND is_operational = true
 				%s
 				%s
 			GROUP BY domain, zone, net, node
 		),
-		-- Prefer aggregated results for multi-hostname nodes, otherwise take single result
+		-- Prefer aggregated results for multi-hostname nodes, otherwise take single result.
+		-- The predicate is reapplied here: latest_tests only fixes the timestamp, and a
+		-- node can have several rows at that timestamp (the aggregated summary plus one
+		-- per hostname). Without it the preferred row can be one that doesn't qualify —
+		-- e.g. a multi-hostname node whose aggregated row took its VModem diagnosis from
+		-- a hostname running an EMSI mailer while another hostname is the real VMODEM.
 		best_results AS (
 			SELECT
-				r.domain, r.zone, r.net, r.node, r.test_time,
+				r.domain, r.zone, r.net, r.node, r.test_time, r.hostname_index, r.is_aggregated,
 				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
+			WHERE %s
 		),
 		latest_nodes AS (
 			SELECT
@@ -294,10 +315,11 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
 			r.ftp_anon_success, r.domain, r.derived_from_address
 		FROM node_test_results r
-		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND br.rn = 1
+		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time
+			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
 		LEFT JOIN latest_nodes ln ON r.domain = ln.domain AND r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
 		ORDER BY r.test_time DESC
-		LIMIT ?`, protocolColumn, nodeFilter, domainFilter)
+		LIMIT ?`, rowPredicate, nodeFilter, domainFilter, joinPredicate)
 }
 
 // BuildSearchByReachabilityQuery builds a query to search nodes by reachability status (ClickHouse)

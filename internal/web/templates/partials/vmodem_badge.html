@@ -1,0 +1,16 @@
+{{/*
+    VModem protocol badge for a NodeTestResult.
+
+    A VModem probe reports success for whatever answers on the announced IVM
+    port, so a plain "VModem" badge on .VModemSuccess would claim VMODEM for
+    ports actually running an EMSI mailer, binkd or a telnet login. Only a
+    confirmed VMP responder gets the protocol badge; anything else says what
+    was really found, because the port being reachable is still worth showing.
+*/}}
+{{define "vmodem_badge"}}
+{{if .IsConfirmedVMODEM}}
+<span class="protocol-status success" title="Confirmed VMODEM (Gwinn VMP) responder">VMODEM</span>
+{{else if .VModemSuccess}}
+<span class="protocol-status other" title="IVM announced, but the port answers with {{if .VModemVariant}}{{.VModemVariant}}{{else}}an unclassified protocol{{end}} — not VMODEM">IVM: {{if .VModemVariant}}{{.VModemVariant}}{{else}}unclassified{{end}}</span>
+{{end}}
+{{end}}

@@ -519,6 +519,7 @@ func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*t
 		"ipv6_protocols_cell.html",
 		"ipv4_protocols_cell.html",
 		"ipv6_failed_protocols_cell.html",
+		"vmodem_badge.html",
 	}
 
 	for _, partialFile := range partialFiles {
