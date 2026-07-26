@@ -7,6 +7,25 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
+// testSessionWindowSeconds is how far back from a node's latest test the rows
+// of that same test cycle can reach.
+//
+// One cycle of a multi-hostname node writes one row per hostname, each stamped
+// with its own test_time as the tester works through the list, so the cycle
+// spans a range of timestamps rather than a single one. Matching only
+// max(test_time) exactly would keep the last hostname's row and silently drop
+// its siblings - a hostname that announced the wrong AKA would go unreported
+// whenever a later hostname of the same node validated.
+//
+// The bound is measured, not guessed: across the production history the gap
+// between adjacent hostname_index rows of one cycle peaks at 61s (p99 21s),
+// while the same hostname is retested no sooner than ~86 minutes later at the
+// 1st percentile. 120s therefore covers any real cycle with headroom and cannot
+// reach into the previous one. The rare exception is two runs deliberately
+// started seconds apart (a CLI re-test right after a cycle); those report the
+// same configuration, so folding them together is harmless.
+const testSessionWindowSeconds = 120
+
 // AKAMismatchOperations handles AKA address validation queries
 type AKAMismatchOperations struct {
 	db           database.DatabaseInterface
@@ -70,6 +89,8 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 // multi-hostname node's aggregate is reported instead of the hostname that
 // actually mismatched (blank hostname column), and two mismatching hostnames
 // of the same node produce duplicate rows.
+// The latest test is matched as a session window rather than one exact
+// timestamp; see testSessionWindowSeconds.
 // An empty domain means all FTN networks (no filtering).
 func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain string) string {
 	domainFilter := domainFilterSQL(domain, "")
@@ -91,7 +112,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 				%s
 			GROUP BY domain, zone, net, node
 		),
-		-- Get the best non-aggregated result at the latest test time
+		-- Get the best non-aggregated result of the latest test cycle
 		-- Prioritize rows with address_validated=false (mismatched) first, then by hostname_index
 		-- Only consider operational rows with successful BinkP or IFCICO handshake
 		best_results AS (
@@ -99,11 +120,13 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 				r.domain, r.zone, r.net, r.node, r.test_time, r.hostname_index,
 				row_number() OVER (
 					PARTITION BY r.domain, r.zone, r.net, r.node
-					ORDER BY r.address_validated ASC, r.hostname_index ASC
+					ORDER BY r.address_validated ASC, r.hostname_index ASC, r.test_time DESC
 				) as rn
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
-			WHERE r.is_aggregated = false
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+			WHERE r.test_time <= lt.latest_test_time
+				AND r.test_time >= lt.latest_test_time - INTERVAL %d SECOND
+				AND r.is_aggregated = false
 				AND r.is_operational = true
 				AND (r.binkp_success = true OR r.ifcico_success = true)
 				%s
@@ -143,7 +166,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 			AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
 			%s
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, domainFilterR)
+		LIMIT ?`, nodeFilter, domainFilter, testSessionWindowSeconds, domainFilterR, domainFilterR)
 }
 
 // AKAIPVersionMismatchNode holds a node where IPv4 and IPv6 AKA validation results differ
@@ -247,6 +270,7 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 // The final SELECT re-applies is_aggregated = false: an aggregated row uses
 // hostname_index 0 like the primary hostname's row and shares its test_time, so
 // the join alone would let it through (it carries no hostname of its own).
+// The latest test is matched as a session window; see testSessionWindowSeconds.
 // An empty domain means all FTN networks (no filtering).
 func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, validationFilter string, protocolFilter string, domain string) string {
 	domainFilter := domainFilterSQL(domain, "")
@@ -271,11 +295,13 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 				r.domain, r.zone, r.net, r.node, r.test_time, r.hostname_index,
 				row_number() OVER (
 					PARTITION BY r.domain, r.zone, r.net, r.node
-					ORDER BY r.hostname_index ASC
+					ORDER BY r.hostname_index ASC, r.test_time DESC
 				) as rn
 			FROM node_test_results r
-			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND r.test_time = lt.latest_test_time
-			WHERE r.is_aggregated = false
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+			WHERE r.test_time <= lt.latest_test_time
+				AND r.test_time >= lt.latest_test_time - INTERVAL %d SECOND
+				AND r.is_aggregated = false
 				AND r.is_operational = true
 				AND (r.binkp_success = true OR r.ifcico_success = true)
 				%s
@@ -314,5 +340,5 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
 		WHERE r.is_aggregated = false
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, validationFilter, protocolFilter)
+		LIMIT ?`, nodeFilter, domainFilter, testSessionWindowSeconds, domainFilterR, validationFilter, protocolFilter)
 }
