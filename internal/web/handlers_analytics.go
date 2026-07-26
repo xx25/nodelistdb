@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1504,6 +1505,28 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// geoWindowDays are the only windows the geo pages offer. Both drill-downs take
+// a caller-supplied string in their cache key, so the window is snapped to this
+// set rather than accepted anywhere in 1..3650: every distinct (input, days)
+// pair is a separate cache entry and a separate query, and the pages are
+// crawlable. Anything else falls back to the default.
+var geoWindowDays = map[int]bool{30: true, 90: true, 365: true, 730: true}
+
+// geoCountryCodeRe bounds the country drill-down's key space to ISO 3166-1
+// alpha-2 shaped input.
+var geoCountryCodeRe = regexp.MustCompile(`^[A-Za-z]{2}$`)
+
+// maxGeoProviderLen caps the provider name. An ISP is free-form so it cannot be
+// validated by shape, but an unbounded string should not become a cache key.
+const maxGeoProviderLen = 128
+
+func geoDays(r *http.Request) int {
+	if d, err := strconv.Atoi(r.URL.Query().Get("days")); err == nil && geoWindowDays[d] {
+		return d
+	}
+	return 365
+}
+
 // GeoCountryNodesHandler shows nodes for a specific country
 func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) {
 	// Get country code from URL query
@@ -1512,13 +1535,12 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Country code is required", http.StatusBadRequest)
 		return
 	}
-
-	// Parse days parameter (default: 365)
-	daysStr := r.URL.Query().Get("days")
-	days := 365
-	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 && d <= 3650 {
-		days = d
+	if !geoCountryCodeRe.MatchString(countryCode) {
+		http.Error(w, "Invalid country code", http.StatusBadRequest)
+		return
 	}
+
+	days := geoDays(r)
 
 	// Get nodes for country
 	nodes, err := s.storage.GetNodesByCountry(countryCode, days, requestDomain(r))
@@ -1594,13 +1616,12 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Provider is required", http.StatusBadRequest)
 		return
 	}
-
-	// Parse days parameter (default: 365)
-	daysStr := r.URL.Query().Get("days")
-	days := 365
-	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 && d <= 3650 {
-		days = d
+	if len(provider) > maxGeoProviderLen {
+		http.Error(w, "Invalid provider", http.StatusBadRequest)
+		return
 	}
+
+	days := geoDays(r)
 
 	// Get nodes for provider
 	nodes, err := s.storage.GetNodesByProvider(provider, days, requestDomain(r))

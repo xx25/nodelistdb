@@ -20,10 +20,7 @@ type EmailFlagReference struct {
 	// ReceiptRequired marks the flags FTS-5001 requires to answer with a
 	// receipt within 24 hours.
 	ReceiptRequired bool
-	// WireProtocolSpecified is true only where a complete FTSC wire
-	// specification exists, which is ISE (SEAT, FTS-1025) alone.
-	WireProtocolSpecified bool
-	Description           string
+	Description     string
 	// Count is how many nodes on the current nodelist advertise it.
 	Count int
 	// Color is the chart series colour, so the reference table and the chart
@@ -51,11 +48,10 @@ var emailFlagReferences = []EmailFlagReference{
 		Description:     "TransX email tunnelling with receipts enabled. No complete FTSC wire specification exists for TransX.",
 	},
 	{
-		Flag:                  "ISE",
-		Standard:              true,
-		ReceiptRequired:       true,
-		WireProtocolSpecified: true,
-		Description:           "SEAT (FTS-1025), the only method here with a complete FTSC wire specification. Should accompany IUC and/or IMI.",
+		Flag:            "ISE",
+		Standard:        true,
+		ReceiptRequired: true,
+		Description:     "SEAT (FTS-1025), the only method here with a complete FTSC wire specification. Should accompany IUC and/or IMI.",
 	},
 	{
 		Flag:        "IUC",

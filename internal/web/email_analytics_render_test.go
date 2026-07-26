@@ -221,9 +221,6 @@ func TestEmailAnalyticsStats(t *testing.T) {
 	if got := byFlag["ISE"].Count; got != 1 {
 		t.Errorf("ISE count = %d, want 1", got)
 	}
-	if !byFlag["ISE"].WireProtocolSpecified {
-		t.Error("ISE should be marked as having a complete wire specification")
-	}
 	if byFlag["EMA"].Standard || byFlag["EVY"].Standard {
 		t.Error("EMA and EVY must not be marked as FTSC standard flags")
 	}
@@ -299,5 +296,38 @@ func TestEmailAnalyticsEmptyState(t *testing.T) {
 
 	if !strings.Contains(html, "No nodes advertising email transport were found") {
 		t.Error("empty state message missing")
+	}
+}
+
+// TestEmailAnalyticsFlagsTable pins the reference table's shape: four columns,
+// with the two per-flag properties folded into one Notes cell.
+func TestEmailAnalyticsFlagsTable(t *testing.T) {
+	html := renderEmailAnalytics(t, samplePage())
+
+	if strings.Contains(html, "Complete wire spec") {
+		t.Error("the wire-spec column should be gone; the fact belongs in the Meaning text")
+	}
+	if !strings.Contains(html, "<th>Notes</th>") {
+		t.Error("the merged Notes column header is missing")
+	}
+	// The wire-spec fact still has to reach the reader, via ISE's description.
+	if !strings.Contains(html, "FTS-1025") {
+		t.Error("ISE's description should still name FTS-1025")
+	}
+
+	// Every flag keeps a row, including those with no nodes on this nodelist:
+	// ISE reading zero is itself the report's headline finding.
+	for _, flag := range storage.EmailFlagOrder() {
+		if !strings.Contains(html, ">"+flag+"</span>") {
+			t.Errorf("flag %s has no row in the reference table", flag)
+		}
+	}
+
+	// Notes carries the defining document, and receipts only where owed.
+	if !strings.Contains(html, "FTS-5001") || !strings.Contains(html, "non-standard") {
+		t.Error("Notes should distinguish FTS-5001 flags from non-standard ones")
+	}
+	if got := strings.Count(html, ">receipts</span>"); got != 2 {
+		t.Errorf("receipts marked on %d flags, want 2 (ITX and ISE only)", got)
 	}
 }

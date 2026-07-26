@@ -21,6 +21,8 @@
     .addr-list { font-family: monospace; font-size: 0.9em; word-break: break-all; }
     .addr-list div + div { margin-top: 2px; }
     .provenance { color: #666; font-size: 0.85em; font-style: italic; }
+    .flag-notes { white-space: nowrap; font-size: 0.9em; }
+    .note-sep { color: #999; margin: 0 0.35em; }
     .trend-table { font-size: 0.85em; }
     .trend-table td, .trend-table th { padding: 3px 8px; text-align: right; }
     .trend-table td:first-child, .trend-table th:first-child { text-align: left; }
@@ -156,9 +158,7 @@
                 <tr>
                     <th>Flag</th>
                     <th>Nodes</th>
-                    <th>Standard</th>
-                    <th>Receipts</th>
-                    <th>Complete wire spec</th>
+                    <th>Notes</th>
                     <th>Meaning</th>
                 </tr>
             </thead>
@@ -170,12 +170,17 @@
                         <span class="badge badge-info">{{.Flag}}</span>
                     </td>
                     <td>{{.Count}}</td>
-                    <td>
+                    {{/* Which document defines the flag, and whether it owes a
+                         receipt, are the only two properties worth a column of
+                         their own -- and each is true of so few flags that
+                         separate columns were mostly dashes. Whether a complete
+                         wire specification exists is left to the Meaning text,
+                         which is where it needs explaining anyway. */}}
+                    <td class="flag-notes">
                         {{if .Standard}}<span title="Defined by FTS-5001">FTS-5001</span>
                         {{else}}<span class="text-muted" title="Occurs in real nodelists but is defined by no FTSC document">non-standard</span>{{end}}
+                        {{if .ReceiptRequired}}<span class="note-sep">&middot;</span><span style="color: #008300;" title="FTS-5001 requires a node advertising this flag to send receipts within 24 hours">receipts</span>{{end}}
                     </td>
-                    <td>{{if .ReceiptRequired}}<span style="color: #008300;">required</span>{{else}}<span class="text-muted">&ndash;</span>{{end}}</td>
-                    <td>{{if .WireProtocolSpecified}}<span style="color: #008300;">FTS-1025</span>{{else}}<span class="text-muted">&ndash;</span>{{end}}</td>
                     <td style="font-size: 0.9em;">{{.Description}}</td>
                 </tr>
                 {{end}}
