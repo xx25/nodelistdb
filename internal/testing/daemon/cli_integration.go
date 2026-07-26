@@ -6,12 +6,24 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/testing/cli"
+	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
 )
 
 // StartCLIServer starts the telnet CLI server if enabled in config
 func (d *Daemon) StartCLIServer(ctx context.Context) error {
 	if !d.config.CLI.Enabled {
+		return nil
+	}
+
+	// A run-once cycle exits as soon as the cycle ends, so nobody could reach
+	// the CLI in the meantime. Binding the port anyway is worse than useless on
+	// the one host where such a run is most useful: the installed service
+	// already holds it, so the hand-run dies on "address already in use"
+	// before testing anything. -cli-only is the opposite case and keeps the
+	// server, since there the CLI is the only way in.
+	if d.config.Daemon.RunOnce && !d.config.Daemon.CLIOnly {
+		logging.Debugf("Run-once mode: not starting the CLI server on %s:%d", d.config.CLI.Host, d.config.CLI.Port)
 		return nil
 	}
 	
