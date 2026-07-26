@@ -273,76 +273,86 @@ func (qb *QueryBuilder) BuildBatchInsertSQL(batchSize int) string {
 		DO NOTHING`, strings.Join(values, ","))
 }
 
-// BuildNodesQuery builds the main nodes query with filters
-func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []interface{}) {
-	var baseSQL string
-	var args []interface{}
-
-	if filter.LatestOnly != nil && *filter.LatestOnly {
-		// ClickHouse-compatible latest only query.
-		// "Latest" is per (domain, zone, net, node): the same 3D address may exist
-		// in several networks with different nodelist cadences.
-		baseSQL = `
-		SELECT zone, net, node, nodelist_date, day_number,
-			   system_name, location, sysop_name, phone, node_type, region, max_speed,
-			   is_cm, is_mo,
-			   flags, modem_flags,
-			   conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL + `, fts_id, raw_line, domain
-		FROM nodes
-		WHERE (domain, zone, net, node, nodelist_date) IN (
-			SELECT domain, zone, net, node, MAX(nodelist_date) as max_date
-			FROM nodes
-			GROUP BY domain, zone, net, node
-		)`
-
-		conditions, conditionArgs := qb.buildWhereConditions(filter)
-		if len(conditions) > 0 {
-			baseSQL += " AND " + strings.Join(conditions, " AND ")
-			args = append(args, conditionArgs...)
-		}
-	} else {
-		// Historical search - ClickHouse optimized version without JOINs
-		conditions, conditionArgs := qb.buildWhereConditions(filter)
-		args = append(args, conditionArgs...)
-
-		var whereClause string
-		if len(conditions) > 0 {
-			whereClause = " WHERE " + strings.Join(conditions, " AND ")
-		}
-
-		// For historical search: get latest entry for each node that matches criteria
-		// Use window function approach - more reliable in ClickHouse
-		baseSQL = `
-		SELECT
-			zone, net, node, nodelist_date, day_number,
+// nodeColumnsSQL is the select list shared by both BuildNodesQuery shapes.
+const nodeColumnsSQL = `zone, net, node, nodelist_date, day_number,
 			system_name, location, sysop_name, phone, node_type, region, max_speed,
 			is_cm, is_mo,
 			flags, modem_flags,
-			conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL + `, fts_id, raw_line, domain
-		FROM (
-			SELECT *,
-				   row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
-			FROM nodes
-			WHERE (domain, zone, net, node) IN (
-				SELECT DISTINCT domain, zone, net, node
-				FROM nodes` + whereClause + `
-			)
-		) ranked
-		WHERE rn = 1`
-	}
+			conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL + `, fts_id, raw_line, domain`
 
-	// Add ORDER BY
-	baseSQL += " ORDER BY zone, net, node, nodelist_date DESC"
+// BuildNodesQuery builds the main nodes query with filters.
+//
+// Both shapes return each matching node's latest row, but they differ in what
+// "matching" means, so they cannot share one query:
+//
+//   - LatestOnly: take every node's latest row, THEN filter. A node whose
+//     latest row falls outside the filter drops out. Because the row set is
+//     "all rows at the node's max date", this keeps every conflict_sequence
+//     row of a duplicated nodelist entry — collapsing them with LIMIT 1 BY
+//     would silently drop real records (measured: 52499 rows instead of 52503
+//     for zone=2).
+//   - Default: find nodes matching on ANY historical row, then return each
+//     one's single latest row — so a search for a location a node has since
+//     left still finds it, and reports where it is now.
+func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []interface{}) {
+	identity, identityArgs, attrs, attrArgs := qb.buildFilterConditions(filter)
+	var args []interface{}
 
-	// Add LIMIT and OFFSET
-	if filter.Limit > 0 {
-		baseSQL += fmt.Sprintf(" LIMIT %d", filter.Limit)
-		if filter.Offset > 0 {
-			baseSQL += fmt.Sprintf(" OFFSET %d", filter.Offset)
+	if filter.LatestOnly != nil && *filter.LatestOnly {
+		// "Latest" is per (domain, zone, net, node): the same 3D address may exist
+		// in several networks with different nodelist cadences.
+		//
+		// Identity predicates are pushed into the MAX subquery as well as kept on
+		// the outer query: they are invariant per node, so restricting which nodes
+		// get a max computed cannot change any surviving row, and it keeps the
+		// subquery from aggregating the entire table. Attribute predicates must
+		// NOT be pushed - they would move the max to the newest row satisfying
+		// them rather than the node's true latest row.
+		sub := "SELECT domain, zone, net, node, MAX(nodelist_date) as max_date\n\t\t\tFROM nodes"
+		if len(identity) > 0 {
+			sub += "\n\t\t\tWHERE " + strings.Join(identity, " AND ")
+			args = append(args, identityArgs...)
 		}
+		sub += "\n\t\t\tGROUP BY domain, zone, net, node"
+
+		sql := "\n\t\tSELECT " + nodeColumnsSQL + `
+		FROM nodes
+		WHERE (domain, zone, net, node, nodelist_date) IN (
+			` + sub + `
+		)`
+		if all := append(append([]string{}, identity...), attrs...); len(all) > 0 {
+			sql += " AND " + strings.Join(all, " AND ")
+			args = append(args, identityArgs...)
+			args = append(args, attrArgs...)
+		}
+		sql += " ORDER BY zone, net, node, nodelist_date DESC, domain, conflict_sequence"
+		return sql + paginationSQL(filter), args
 	}
 
-	return baseSQL, args
+	// Default shape. ORDER BY / LIMIT 1 BY / LIMIT share one SELECT so ClickHouse
+	// can stop reading once it has enough distinct keys; see paginationSQL.
+	where := append([]string{}, identity...)
+	args = append(args, identityArgs...)
+
+	if len(attrs) > 0 {
+		// Attributes vary over a node's history, so they select node keys through
+		// a subquery over all of it. Identity predicates are repeated inside to
+		// prune that scan; they are already on the outer query, where they also
+		// give the primary-key lookup that makes the early stop cheap.
+		inner := append(append([]string{}, identity...), attrs...)
+		where = append(where, "(domain, zone, net, node) IN (\n\t\t\tSELECT DISTINCT domain, zone, net, node\n\t\t\tFROM nodes WHERE "+
+			strings.Join(inner, " AND ")+"\n\t\t)")
+		args = append(args, identityArgs...)
+		args = append(args, attrArgs...)
+	}
+
+	sql := "\n\t\tSELECT " + nodeColumnsSQL + "\n\t\tFROM nodes"
+	if len(where) > 0 {
+		sql += "\n\t\tWHERE " + strings.Join(where, " AND ")
+	}
+	sql += "\n\t\tORDER BY zone, net, node, nodelist_date DESC, conflict_sequence ASC, domain" +
+		"\n\t\tLIMIT 1 BY domain, zone, net, node"
+	return sql + paginationSQL(filter), args
 }
 
 // BuildFTSQuery builds a ClickHouse-compatible FTS query
@@ -460,69 +470,104 @@ func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []int
 	return query, args, usedFTS
 }
 
-// buildWhereConditions creates WHERE clause conditions compatible with ClickHouse
-func (qb *QueryBuilder) buildWhereConditions(filter database.NodeFilter) ([]string, []interface{}) {
-	var conditions []string
-	var args []interface{}
-
+// buildFilterConditions splits a NodeFilter into identity and attribute
+// predicates, mirroring BuildPointFilterConditions.
+//
+// The split is what lets BuildNodesQuery pick a query shape, so it is returned
+// by the condition builder itself rather than kept as a parallel list of "key
+// fields" that could drift out of sync with the conditions below.
+//
+// Identity predicates constrain (domain, zone, net, node) — the columns that
+// ARE the node's identity and so are invariant across its whole history. A
+// predicate over only those columns is either true for every row of a node or
+// false for all of them, which is why it can be applied directly to a row
+// instead of through a "did any historical row match" subquery.
+//
+// Everything else is an attribute: it describes one point in a node's history.
+// nodelist_date belongs here, not with identity — restricting the ranking pool
+// to a date window would return the newest row *inside* the window rather than
+// the node's true latest row.
+func (qb *QueryBuilder) buildFilterConditions(filter database.NodeFilter) (identity []string, identityArgs []interface{}, attrs []string, attrArgs []interface{}) {
 	if filter.Domain != nil && *filter.Domain != "" {
-		conditions = append(conditions, "domain = ?")
-		args = append(args, *filter.Domain)
+		identity = append(identity, "domain = ?")
+		identityArgs = append(identityArgs, *filter.Domain)
 	}
 	if filter.Zone != nil {
-		conditions = append(conditions, "zone = ?")
-		args = append(args, *filter.Zone)
+		identity = append(identity, "zone = ?")
+		identityArgs = append(identityArgs, *filter.Zone)
 	}
 	if filter.Net != nil {
-		conditions = append(conditions, "net = ?")
-		args = append(args, *filter.Net)
+		identity = append(identity, "net = ?")
+		identityArgs = append(identityArgs, *filter.Net)
 	}
 	if filter.Node != nil {
-		conditions = append(conditions, "node = ?")
-		args = append(args, *filter.Node)
+		identity = append(identity, "node = ?")
+		identityArgs = append(identityArgs, *filter.Node)
 	}
+
 	if filter.DateFrom != nil {
-		conditions = append(conditions, "nodelist_date >= ?")
-		args = append(args, *filter.DateFrom)
+		attrs = append(attrs, "nodelist_date >= ?")
+		attrArgs = append(attrArgs, *filter.DateFrom)
 	}
 	if filter.DateTo != nil {
-		conditions = append(conditions, "nodelist_date <= ?")
-		args = append(args, *filter.DateTo)
+		attrs = append(attrs, "nodelist_date <= ?")
+		attrArgs = append(attrArgs, *filter.DateTo)
 	}
 	if filter.SystemName != nil {
 		// Use ILIKE for case-insensitive matching - performs as well as materialized columns
-		conditions = append(conditions, "system_name ILIKE ?")
-		args = append(args, "%"+*filter.SystemName+"%")
+		attrs = append(attrs, "system_name ILIKE ?")
+		attrArgs = append(attrArgs, "%"+*filter.SystemName+"%")
 	}
 	if filter.Location != nil {
 		// Use ILIKE for case-insensitive matching - performs as well as materialized columns
-		conditions = append(conditions, "location ILIKE ?")
-		args = append(args, "%"+*filter.Location+"%")
+		attrs = append(attrs, "location ILIKE ?")
+		attrArgs = append(attrArgs, "%"+*filter.Location+"%")
 	}
 	if filter.SysopName != nil {
 		// Use ILIKE for case-insensitive matching - performs as well as materialized columns
-		conditions = append(conditions, "sysop_name ILIKE ?")
-		args = append(args, "%"+*filter.SysopName+"%")
+		attrs = append(attrs, "sysop_name ILIKE ?")
+		attrArgs = append(attrArgs, "%"+*filter.SysopName+"%")
 	}
 	if filter.NodeType != nil {
-		conditions = append(conditions, "node_type = ?")
-		args = append(args, *filter.NodeType)
+		attrs = append(attrs, "node_type = ?")
+		attrArgs = append(attrArgs, *filter.NodeType)
 	}
 	if filter.IsCM != nil {
-		conditions = append(conditions, "is_cm = ?")
-		args = append(args, *filter.IsCM)
+		attrs = append(attrs, "is_cm = ?")
+		attrArgs = append(attrArgs, *filter.IsCM)
 	}
 	if filter.HasInet != nil {
-		conditions = append(conditions, "has_inet = ?")
-		args = append(args, *filter.HasInet)
+		attrs = append(attrs, "has_inet = ?")
+		attrArgs = append(attrArgs, *filter.HasInet)
 	}
 	if filter.HasBinkp != nil {
 		// HasBinkp is now determined from JSON: check for IBN or BND protocols
-		conditions = append(conditions, "(JSON_EXISTS(toString(internet_config), '$.protocols.IBN') OR JSON_EXISTS(toString(internet_config), '$.protocols.BND')) = ?")
-		args = append(args, *filter.HasBinkp)
+		attrs = append(attrs, "(JSON_EXISTS(toString(internet_config), '$.protocols.IBN') OR JSON_EXISTS(toString(internet_config), '$.protocols.BND')) = ?")
+		attrArgs = append(attrArgs, *filter.HasBinkp)
 	}
 
-	return conditions, args
+	return identity, identityArgs, attrs, attrArgs
+}
+
+// paginationSQL renders the trailing LIMIT/OFFSET.
+//
+// Each branch of BuildNodesQuery appends its own complete trailing clause. A
+// shared "append ORDER BY + LIMIT to whatever came before" footer used to do
+// this, but it cannot express the shape the fast path needs: ClickHouse only
+// pushes the outer limit into the read - stopping once it has enough distinct
+// keys - when ORDER BY, LIMIT n BY and LIMIT all sit in the SAME SELECT. A
+// generic footer can only append a second ORDER BY (a syntax error) or wrap the
+// query in a derived table, and the wrapper silently forfeits the optimisation:
+// measured on prod, zone=2 limit=5 costs 16.6s / 20.5M rows wrapped versus
+// 0.33s / 122k rows combined.
+func paginationSQL(filter database.NodeFilter) string {
+	if filter.Limit <= 0 {
+		return ""
+	}
+	if filter.Offset > 0 {
+		return fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Limit, filter.Offset)
+	}
+	return fmt.Sprintf(" LIMIT %d", filter.Limit)
 }
 
 // NodeHistorySQL returns SQL for retrieving node history.

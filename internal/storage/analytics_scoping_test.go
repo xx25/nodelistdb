@@ -169,12 +169,13 @@ func TestLatestNodesCTEsAreBounded(t *testing.T) {
 // TestJoinedNodeColumnsUseNullif guards the fallbacks on joined `nodes` columns.
 //
 // Prod runs with join_use_nulls = false and nodes.system_name/sysop_name are
-// plain String, so an unmatched LEFT JOIN row yields '' rather than NULL.
-// COALESCE returns its first non-NULL argument, so `COALESCE(n.system_name,
-// r.binkp_system_name)` returns the empty string on a miss and never reaches the
-// mailer-reported fallback. NULLIF(n.col, '') restores the intent. This is
-// invisible while the join always matches, and the date window above is exactly
-// what starts making it miss.
+// plain String, so an unmatched LEFT JOIN row yields the empty string rather
+// than NULL. COALESCE returns its first non-NULL argument, so a bare
+// COALESCE(n.system_name, r.binkp_system_name) keeps that empty string and
+// never reaches the mailer-reported fallback; wrapping the first argument in
+// NULLIF against the empty string restores the intent. This is invisible while
+// the join always matches, and the date window above is exactly what starts
+// making it miss.
 func TestJoinedNodeColumnsUseNullif(t *testing.T) {
 	sources, err := filepath.Glob("*.go")
 	if err != nil {
