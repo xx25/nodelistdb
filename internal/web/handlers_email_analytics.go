@@ -150,15 +150,16 @@ func computeEmailStats(nodes []storage.EmailCapableNode) EmailSummaryStats {
 	for domain, count := range domainCounts {
 		stats.DomainCounts = append(stats.DomainCounts, EmailDomainCount{Domain: domain, Count: count})
 	}
+	// Every domain is listed, not a top-N slice. The list is bounded by the
+	// number of distinct published addresses -- a few dozen in practice -- and
+	// a truncated list is worse than none here: the whole point of the section
+	// is to show where FidoNet's email traffic would actually land.
 	sort.Slice(stats.DomainCounts, func(i, j int) bool {
 		if stats.DomainCounts[i].Count != stats.DomainCounts[j].Count {
 			return stats.DomainCounts[i].Count > stats.DomainCounts[j].Count
 		}
 		return stats.DomainCounts[i].Domain < stats.DomainCounts[j].Domain
 	})
-	if len(stats.DomainCounts) > 20 {
-		stats.DomainCounts = stats.DomainCounts[:20]
-	}
 
 	return stats
 }

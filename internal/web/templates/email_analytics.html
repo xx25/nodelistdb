@@ -206,7 +206,11 @@
 <!-- Mail domains -->
 {{if .Stats.DomainCounts}}
 <div class="stats-box" style="margin-bottom: 2rem;">
-    <h4>Mail domains {{if gt .Stats.DistinctDomains 20}}(top 20 of {{.Stats.DistinctDomains}}){{end}}</h4>
+    <h4>Mail domains ({{.Stats.DistinctDomains}})</h4>
+    <p class="text-muted" style="margin-top: 0;">
+        Where the published addresses would deliver. The number after each domain
+        is how many of them use it.
+    </p>
     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
         {{range .Stats.DomainCounts}}
         <div style="background: #f0f0f0; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.9em;">

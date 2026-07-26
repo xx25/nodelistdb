@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"strings"
 	"testing"
@@ -352,5 +353,54 @@ func TestEmailAnalyticsTableWidths(t *testing.T) {
 	}
 	if !strings.Contains(html, "FTS-1025") {
 		t.Error("ISE's description must still name FTS-1025")
+	}
+}
+
+// TestEmailAnalyticsListsEveryMailDomain pins that the domain list is complete
+// rather than a top-N slice, and that it holds bare domains, never addresses.
+func TestEmailAnalyticsListsEveryMailDomain(t *testing.T) {
+	date := time.Date(2026, 7, 26, 0, 0, 0, 0, time.UTC)
+
+	// More domains than the old 20-item cap allowed.
+	var nodes []storage.EmailCapableNode
+	for i := 0; i < 25; i++ {
+		addr := fmt.Sprintf("sysop@domain%02d.example", i)
+		nodes = append(nodes, storage.EmailCapableNode{
+			Domain: "fidonet", Zone: 2, Net: 5001, Node: 100 + i,
+			SystemName: "S", Location: "L", SysopName: "P",
+			NodelistDate: date, NodeType: "Node",
+			Addresses: []string{addr}, Resolved: true, FlagNames: []string{"IEM"},
+			HasStandardMethod: true,
+			Capabilities: []emailflags.Capability{
+				{Flag: "IEM", Standard: true, Occurrences: 1,
+					Addresses: []string{addr}, Source: emailflags.SourceExplicit},
+			},
+		})
+	}
+
+	stats := computeEmailStats(nodes)
+	if stats.DistinctDomains != 25 {
+		t.Fatalf("DistinctDomains = %d, want 25", stats.DistinctDomains)
+	}
+	if len(stats.DomainCounts) != 25 {
+		t.Errorf("DomainCounts holds %d entries, want all 25 (no top-N truncation)", len(stats.DomainCounts))
+	}
+	for _, dc := range stats.DomainCounts {
+		if strings.Contains(dc.Domain, "@") {
+			t.Errorf("domain list entry %q is an email address, not a domain", dc.Domain)
+		}
+	}
+
+	html := renderEmailAnalytics(t, emailAnalyticsPage{
+		Title: "FidoNet over Email", ActivePage: "analytics",
+		Nodes: nodes, Stats: stats, FlagOrder: storage.EmailFlagOrder(),
+	})
+	if strings.Contains(html, "top 20") {
+		t.Error("the heading should no longer advertise a truncated list")
+	}
+	for i := 0; i < 25; i++ {
+		if want := fmt.Sprintf("domain%02d.example", i); !strings.Contains(html, want) {
+			t.Errorf("domain %s is missing from the rendered list", want)
+		}
 	}
 }
