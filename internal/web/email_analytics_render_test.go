@@ -75,7 +75,7 @@ func samplePage() emailAnalyticsPage {
 			// Nothing on this node's flags carried an address; it came from
 			// the Location field, so the row must say so.
 			Domain: "fidonet", Zone: 2, Net: 460, Node: 58,
-			SystemName: "Guessed_Node", Location: "Odesa_guess@example.ua", SysopName: "E_Sysop",
+			SystemName: "Guessed_Node", Location: "Odesa", SysopName: "E_Sysop",
 			NodelistDate: date, NodeType: "Node",
 			Capabilities: []emailflags.Capability{
 				{Flag: "IUC", Standard: true, Addresses: []string{"guess@example.ua"},
@@ -107,6 +107,11 @@ func samplePage() emailAnalyticsPage {
 			}
 		}
 		n.Resolved = len(n.Addresses) > 0
+		for _, a := range n.Addresses {
+			if d := emailflags.MailDomain(a); d != "" {
+				n.MailDomains = appendIfMissing(n.MailDomains, d)
+			}
+		}
 	}
 
 	// Give the first node a DNS verdict, and the SEAT node a dead one.
@@ -146,14 +151,15 @@ func TestEmailAnalyticsRenders(t *testing.T) {
 	mustContain := []string{
 		"FidoNet over Email",
 		"2:5001/100",
-		"sysop@example.net",
-		"seat@example.org",
+		// Domains, not mailboxes: the page must not publish addresses.
+		"example.net",
+		"example.org",
 		// Provenance is shown when the address was not on the flag itself.
 		"via location field",
 		// Unresolved capability is labelled, not hidden.
 		"unresolved",
-		// Malformed values stay visible.
-		"broken@@thing",
+		// Malformed values stay visible, with the mailbox redacted.
+		"…@thing",
 		// Endpoint verdicts.
 		"routable",
 		"no such domain",
@@ -240,9 +246,10 @@ func TestEmailAnalyticsEndpointColumn(t *testing.T) {
 		Domain: "fidonet", Zone: 2, Net: 5001, Node: 100,
 		SystemName: "Two_Domains", Location: "Moscow", SysopName: "A_Sysop",
 		NodelistDate: date, NodeType: "Node",
-		Addresses: []string{"a@checked.example", "b@unswept.example"},
-		Resolved:  true,
-		FlagNames: []string{"IEM"},
+		Addresses:   []string{"a@checked.example", "b@unswept.example"},
+		MailDomains: []string{"checked.example", "unswept.example"},
+		Resolved:    true,
+		FlagNames:   []string{"IEM"},
 		Capabilities: []emailflags.Capability{
 			{Flag: "IEM", Standard: true, Occurrences: 1,
 				Addresses: []string{"a@checked.example", "b@unswept.example"},
@@ -369,7 +376,8 @@ func TestEmailAnalyticsListsEveryMailDomain(t *testing.T) {
 			Domain: "fidonet", Zone: 2, Net: 5001, Node: 100 + i,
 			SystemName: "S", Location: "L", SysopName: "P",
 			NodelistDate: date, NodeType: "Node",
-			Addresses: []string{addr}, Resolved: true, FlagNames: []string{"IEM"},
+			Addresses: []string{addr}, MailDomains: []string{emailflags.MailDomain(addr)},
+			Resolved: true, FlagNames: []string{"IEM"},
 			HasStandardMethod: true,
 			Capabilities: []emailflags.Capability{
 				{Flag: "IEM", Standard: true, Occurrences: 1,
@@ -401,6 +409,55 @@ func TestEmailAnalyticsListsEveryMailDomain(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		if want := fmt.Sprintf("domain%02d.example", i); !strings.Contains(html, want) {
 			t.Errorf("domain %s is missing from the rendered list", want)
+		}
+	}
+}
+
+// TestEmailAnalyticsPublishesNoMailboxes pins that the report shows mail
+// domains and never a full address. The nodelist publishes the address, but a
+// web page is far easier to harvest, and every question this page answers
+// turns on the domain alone.
+func TestEmailAnalyticsPublishesNoMailboxes(t *testing.T) {
+	html := renderEmailAnalytics(t, samplePage())
+
+	if !strings.Contains(html, "<th>Mail domain</th>") {
+		t.Error("the column should be headed Mail domain, not Email address")
+	}
+
+	// Every mailbox in the fixtures must be absent, while its domain is shown.
+	for _, addr := range []string{
+		"sysop@example.net", "seat@example.org",
+		"other@example.com", "guess@example.ua",
+	} {
+		if strings.Contains(html, addr) {
+			t.Errorf("the page published the full address %q", addr)
+		}
+		if d := emailflags.MailDomain(addr); !strings.Contains(html, d) {
+			t.Errorf("domain %q of %q is missing", d, addr)
+		}
+	}
+
+	// A malformed value still has to be diagnosable, but with the mailbox hidden.
+	if strings.Contains(html, "broken@@thing") {
+		t.Error("a malformed value was published with its mailbox intact")
+	}
+	if !strings.Contains(html, "…@thing") {
+		t.Error("the malformed value should appear with its local part redacted")
+	}
+}
+
+func TestRedactLocalPart(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"user@example.net:extra", "…@example.net:extra"},
+		{"user@example.net", "…@example.net"},
+		{"weird@user@example.net", "…@example.net"},
+		{"no-at-sign", "no-at-sign"},
+		{"@leading", "@leading"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := emailflags.RedactLocalPart(tt.in); got != tt.want {
+			t.Errorf("RedactLocalPart(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

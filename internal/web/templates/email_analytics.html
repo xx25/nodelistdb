@@ -231,7 +231,7 @@
                 <th data-sortable data-type="string">Location</th>
                 <th data-sortable data-type="string">Sysop</th>
                 <th>Flags</th>
-                <th>Email address</th>
+                <th>Mail domain</th>
                 <th>Endpoint</th>
                 <th>Actions</th>
             </tr>
@@ -252,9 +252,13 @@
                     {{end}}
                 </td>
                 <td>
-                    {{if .Addresses}}
+                    {{/* Domains, never the addresses themselves. The nodelist
+                         publishes the full address, but a web page is far easier
+                         to harvest than a nodelist file, and every question this
+                         report answers turns on the domain. */}}
+                    {{if .MailDomains}}
                     <div class="addr-list">
-                        {{range .Addresses}}<div>{{.}}</div>{{end}}
+                        {{range .MailDomains}}<div>{{.}}</div>{{end}}
                     </div>
                     {{/* Flag the row only when no email flag carried an address
                          itself, i.e. every address here was inherited or guessed.
@@ -269,7 +273,7 @@
                     <span class="text-muted">unresolved</span>
                     {{end}}
                     {{range .Capabilities}}{{range .Malformed}}
-                    <div class="provenance" style="color: #b8860b;" title="Published value that is not a usable email address">malformed: {{.}}</div>
+                    <div class="provenance" style="color: #b8860b;" title="Published value that is not a usable email address">malformed: {{redactEmail .}}</div>
                     {{end}}{{end}}
                 </td>
                 <td>

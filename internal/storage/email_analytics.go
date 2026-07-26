@@ -373,6 +373,20 @@ func (n *EmailCapableNode) summarize() {
 	}
 	sort.Strings(n.Addresses)
 	n.Resolved = len(n.Addresses) > 0
+
+	// The report renders domains rather than addresses. The nodelist publishes
+	// the full address, but a web page is orders of magnitude easier to harvest
+	// than a nodelist file, and the domain is what every question this page
+	// answers actually turns on.
+	seenDomain := make(map[string]bool, len(n.Addresses))
+	for _, addr := range n.Addresses {
+		domain := emailflags.MailDomain(addr)
+		if domain == "" || seenDomain[domain] {
+			continue
+		}
+		seenDomain[domain] = true
+		n.MailDomains = append(n.MailDomains, domain)
+	}
 }
 
 // EmailCapableNode is a node advertising mail transport over Internet email.
@@ -393,7 +407,13 @@ type EmailCapableNode struct {
 
 	// The remaining fields are derived from Capabilities for display.
 	FlagNames []string `json:"flag_names"`
+	// Addresses holds the full published addresses. They drive domain
+	// resolution and endpoint verification but are not rendered; the report
+	// shows MailDomains instead.
 	Addresses []string `json:"addresses"`
+	// MailDomains is the deduplicated domain of each address, in the same
+	// order, and is what the page displays.
+	MailDomains []string `json:"mail_domains"`
 	// Resolved is true when at least one usable address was found.
 	Resolved bool `json:"resolved"`
 	// ReceiptCapable is true when ITX or ISE is advertised, the only flags

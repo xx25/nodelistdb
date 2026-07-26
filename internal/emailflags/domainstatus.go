@@ -104,3 +104,17 @@ func MailDomain(address string) string {
 	}
 	return strings.ToLower(strings.TrimSpace(address[at+1:]))
 }
+
+// RedactLocalPart replaces everything before the last "@" with an ellipsis,
+// so a value can be shown for diagnosis without publishing a mailbox.
+//
+// It exists for values the report shows verbatim because they are malformed:
+// "user@example.net:extra" is not a usable address, but it still contains one,
+// and the report deliberately does not put mailboxes on a web page.
+func RedactLocalPart(value string) string {
+	at := strings.LastIndex(value, "@")
+	if at <= 0 {
+		return value
+	}
+	return "…" + value[at:]
+}

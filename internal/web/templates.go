@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/emailflags"
 	"github.com/nodelistdb/internal/flags"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/testing/timeavail"
@@ -305,6 +306,10 @@ func (s *Server) loadTemplates() {
 			}
 			return addresses
 		},
+		// redactEmail hides the mailbox in a value that has to be displayed
+		// verbatim, so a malformed nodelist entry can be diagnosed without the
+		// page publishing an address.
+		"redactEmail": emailflags.RedactLocalPart,
 		"getEmails": func(config json.RawMessage) []string {
 			if len(config) == 0 {
 				return nil
