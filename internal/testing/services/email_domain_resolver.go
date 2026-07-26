@@ -195,16 +195,22 @@ func (r *EmailDomainResolver) check(ctx context.Context, domain string) EmailDom
 	// working domain dead.
 	resolved := 0
 	var placeholder []string
+	// unknown holds hosts whose lookup failed transiently. Such a host is not
+	// evidence of anything, but it is also not a reason to abandon the whole
+	// domain: a dead backup MX is common (owlserver.de publishes two on
+	// dynamic-DNS providers that no longer exist), and giving up at the first
+	// one would discard a primary that already resolved and report a perfectly
+	// deliverable domain as unchecked.
+	var unknown []string
 	for i := range hosts {
 		count, err := r.resolveHost(ctx, hosts[i].Host)
 		if err != nil {
 			var dnsErr *net.DNSError
 			if errors.As(err, &dnsErr) && !dnsErr.IsNotFound {
-				result.MXHosts = hosts
-				result.Status = emailflags.DomainStatusError
-				result.Detail = fmt.Sprintf("could not resolve MX host %s", hosts[i].Host)
-				result.Error = err.Error()
-				return result
+				unknown = append(unknown, hosts[i].Host)
+				if result.Error == "" {
+					result.Error = err.Error()
+				}
 			}
 		}
 		hosts[i].Addresses = count
@@ -218,16 +224,31 @@ func (r *EmailDomainResolver) check(ctx context.Context, domain string) EmailDom
 	}
 	result.MXHosts = hosts
 
+	// One working exchanger is enough to deliver, so the verdict follows what
+	// resolved. Only when nothing resolved does an unknown host matter: then
+	// the lookups genuinely failed to establish anything and the domain must
+	// stay retryable rather than be recorded as dead.
 	switch {
-	case resolved == 0:
+	case resolved > 0:
+		if resolved == len(hosts) {
+			result.Status = emailflags.DomainStatusOK
+			result.Detail = fmt.Sprintf("%d MX host(s), all resolving", len(hosts))
+		} else {
+			result.Status = emailflags.DomainStatusDegraded
+			result.Detail = fmt.Sprintf("%d of %d MX host(s) resolve", resolved, len(hosts))
+			if len(unknown) > 0 {
+				result.Detail += fmt.Sprintf("; %s did not answer", strings.Join(unknown, ", "))
+			}
+		}
+		// The domain is deliverable, so a failed backup lookup is detail, not
+		// a reason to mark the stored verdict stale.
+		result.Error = ""
+	case len(unknown) > 0:
+		result.Status = emailflags.DomainStatusError
+		result.Detail = fmt.Sprintf("no MX host resolved and %d of %d did not answer", len(unknown), len(hosts))
+	default:
 		result.Status = emailflags.DomainStatusMXUnresolvable
 		result.Detail = fmt.Sprintf("all %d MX host(s) fail to resolve", len(hosts))
-	case resolved < len(hosts):
-		result.Status = emailflags.DomainStatusDegraded
-		result.Detail = fmt.Sprintf("%d of %d MX host(s) resolve", resolved, len(hosts))
-	default:
-		result.Status = emailflags.DomainStatusOK
-		result.Detail = fmt.Sprintf("%d MX host(s), all resolving", len(hosts))
 	}
 
 	// A .invalid target is the placeholder some hosted-mail providers leave

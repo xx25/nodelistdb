@@ -227,3 +227,37 @@ func TestCheckDomainPunycodes(t *testing.T) {
 		t.Errorf("ASCIIDomain = %q, want the punycode form xn--e1afmkfd.xn--p1ai", got.ASCIIDomain)
 	}
 }
+
+// TestDegradedDomainSurvivesADeadBackupMX pins the owlserver.de case: a domain
+// whose primary MX resolves but whose backups sit on defunct dynamic-DNS
+// providers is deliverable, and must be reported degraded rather than
+// abandoned as unchecked at the first SERVFAIL.
+func TestDegradedDomainSurvivesADeadBackupMX(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live DNS test in short mode")
+	}
+
+	r := NewEmailDomainResolver(EmailDomainResolverConfig{Timeout: 8 * time.Second})
+	got := r.CheckDomain(context.Background(), "owlserver.de")
+
+	if !emailflags.DomainStatusRoutable(got.Status) {
+		t.Fatalf("owlserver.de reported unroutable (%s: %s); its preference-10 MX resolves",
+			got.Status, got.Detail)
+	}
+	if got.Status != emailflags.DomainStatusDegraded {
+		t.Errorf("status = %s, want %s (%s)", got.Status, emailflags.DomainStatusDegraded, got.Detail)
+	}
+	if got.Error != "" {
+		t.Errorf("a deliverable domain must not carry an error that marks it stale: %q", got.Error)
+	}
+
+	var resolved int
+	for _, h := range got.MXHosts {
+		if h.Resolved {
+			resolved++
+		}
+	}
+	if resolved == 0 || resolved == len(got.MXHosts) {
+		t.Errorf("expected some but not all MX hosts to resolve, got %d of %d", resolved, len(got.MXHosts))
+	}
+}
