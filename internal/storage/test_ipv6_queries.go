@@ -104,6 +104,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -152,10 +155,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -186,6 +189,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 
@@ -284,6 +288,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -325,10 +332,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -359,6 +366,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 
@@ -460,6 +468,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -502,10 +513,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -536,6 +547,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
@@ -613,6 +625,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -663,10 +678,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -697,6 +712,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 
@@ -772,6 +788,9 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -820,10 +839,10 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -854,6 +873,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 		return nil, fmt.Errorf("IPv6 analytics require ClickHouse")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 
@@ -926,7 +946,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 			SELECT domain, zone, net, node,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
-			WHERE 1 = 1 {{DOMAIN_FILTER}}
+			WHERE 1 = 1 {{NODE_WINDOW}} {{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
 		),
 		stability AS (
@@ -970,6 +990,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 		ORDER BY br.zone, br.net, br.node
 		LIMIT ?`, nodeFilter, nodeFilter)
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))

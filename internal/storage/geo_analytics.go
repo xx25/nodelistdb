@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -210,13 +211,14 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
 			WHERE 1 = 1
+				{{NODE_WINDOW}}
 				%s
 			GROUP BY domain, zone, net, node
 		)
 		SELECT
 			r.domain, r.zone, r.net, r.node,
-			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
-			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
+			COALESCE(NULLIF(n.system_name, ''), r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
+			COALESCE(NULLIF(n.sysop_name, ''), r.binkp_sysop) as binkp_sysop,
 			r.binkp_location,
 			r.country, r.country_code, r.city, r.isp, r.org, r.asn,
 			r.resolved_ipv4, r.resolved_ipv6,
@@ -254,6 +256,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 		WHERE r.country_code = ?
 		ORDER BY r.zone, r.net, r.node
 	`, domainFilter, domainFilter)
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 
 	rows, err := conn.Query(query, days, countryCode)
 	if err != nil {
@@ -286,6 +289,12 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 		results = append(results, result)
 	}
 
+	// A failure part-way through iteration would otherwise surface as a short
+	// (often empty) result with a nil error, which the caller caches.
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed while reading nodes: %w", err)
+	}
+
 	return results, nil
 }
 
@@ -312,13 +321,14 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
 			WHERE 1 = 1
+				{{NODE_WINDOW}}
 				%s
 			GROUP BY domain, zone, net, node
 		)
 		SELECT
 			r.domain, r.zone, r.net, r.node,
-			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
-			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
+			COALESCE(NULLIF(n.system_name, ''), r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
+			COALESCE(NULLIF(n.sysop_name, ''), r.binkp_sysop) as binkp_sysop,
 			r.binkp_location,
 			r.country, r.country_code, r.city, r.isp, r.org, r.asn,
 			r.resolved_ipv4, r.resolved_ipv6,
@@ -356,6 +366,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 		WHERE r.isp = ?
 		ORDER BY r.zone, r.net, r.node
 	`, domainFilter, domainFilter)
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 
 	rows, err := conn.Query(query, days, isp)
 	if err != nil {
@@ -386,6 +397,12 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 		result.ResolvedIPv4 = resolvedIPv4
 		result.ResolvedIPv6 = resolvedIPv6
 		results = append(results, result)
+	}
+
+	// A failure part-way through iteration would otherwise surface as a short
+	// (often empty) result with a nil error, which the caller caches.
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed while reading nodes: %w", err)
 	}
 
 	return results, nil

@@ -387,13 +387,6 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 			FROM node_test_results r
 			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND {{CYCLE_LT}}
 			WHERE %s
-		),
-		latest_nodes AS (
-			SELECT
-				domain, zone, net, node,
-				argMax(system_name, nodelist_date) as system_name
-			FROM nodes
-			GROUP BY domain, zone, net, node
 		)
 		SELECT
 			r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
@@ -426,7 +419,6 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 		FROM node_test_results r
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time
 			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
-		LEFT JOIN latest_nodes ln ON r.domain = ln.domain AND r.zone = ln.zone AND r.net = ln.net AND r.node = ln.node
 		ORDER BY r.test_time DESC
 		LIMIT ?`, rowPredicate, nodeFilter, domainFilter, joinPredicate), days)
 }

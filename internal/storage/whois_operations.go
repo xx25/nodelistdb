@@ -165,6 +165,9 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 		return []NodeTestResult{}, nil
 	}
 
+	// latest_nodes carries no domain filter on purpose: this drill-down spans
+	// every FTN network (see step 1), and each tuple carries its own network.
+	// It is still bounded by the nodes-history window.
 	query := fmt.Sprintf(`
 		WITH latest_nodes AS (
 			SELECT
@@ -172,12 +175,14 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 				argMax(system_name, nodelist_date) as system_name,
 				argMax(sysop_name, nodelist_date) as sysop_name
 			FROM nodes
+			WHERE 1 = 1
+				{{NODE_WINDOW}}
 			GROUP BY domain, zone, net, node
 		)
 		SELECT
 			r.domain, r.zone, r.net, r.node,
-			COALESCE(n.system_name, r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
-			COALESCE(n.sysop_name, r.binkp_sysop) as binkp_sysop,
+			COALESCE(NULLIF(n.system_name, ''), r.binkp_system_name, r.ifcico_system_name) as binkp_system_name,
+			COALESCE(NULLIF(n.sysop_name, ''), r.binkp_sysop) as binkp_sysop,
 			r.binkp_location,
 			r.hostname,
 			r.country, r.country_code, r.city, r.isp, r.org, r.asn,
@@ -222,6 +227,7 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 		LEFT JOIN latest_nodes n ON r.domain = n.domain AND r.zone = n.zone AND r.net = n.net AND r.node = n.node
 		ORDER BY r.zone, r.net, r.node
 	`, days, strings.Join(tuples, ", "))
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 
 	conn := w.db.Conn()
 	rows, err := conn.QueryContext(ctx, query)

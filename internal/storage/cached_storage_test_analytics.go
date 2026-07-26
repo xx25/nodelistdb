@@ -597,14 +597,27 @@ func (cs *CachedStorage) GetNodesByCountry(countryCode string, days int, domain 
 		return nil, err
 	}
 
-	// Cache result with 30 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 30*time.Minute)
-		}
-	}
-
+	cs.cacheGeoDrilldown(key, results)
 	return results, nil
+}
+
+// cacheGeoDrilldown stores a geo drill-down result, including an empty one.
+//
+// The country and provider drill-downs are the only analytics entries whose
+// cache key contains a caller-supplied string, so they are the only ones where
+// a crawler can walk keys that resolve to nothing. Skipping the Set on an empty
+// result - what every other method here does - means those keys never cache and
+// re-run their query on every request. An empty result is cached for a shorter
+// time than a populated one: it is the case an attacker can manufacture, and a
+// short TTL bounds how long junk keys occupy the (unbounded, in-memory) map.
+func (cs *CachedStorage) cacheGeoDrilldown(key string, results []NodeTestResult) {
+	ttl := 30 * time.Minute
+	if len(results) == 0 {
+		ttl = 5 * time.Minute
+	}
+	if data, err := json.Marshal(results); err == nil {
+		_ = cs.cache.Set(context.Background(), key, data, ttl)
+	}
 }
 
 // GetNodesByProvider returns nodes for a specific provider (cached)
@@ -632,13 +645,7 @@ func (cs *CachedStorage) GetNodesByProvider(provider string, days int, domain st
 		return nil, err
 	}
 
-	// Cache result with 30 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 30*time.Minute)
-		}
-	}
-
+	cs.cacheGeoDrilldown(key, results)
 	return results, nil
 }
 

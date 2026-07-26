@@ -1452,12 +1452,10 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 
 // GeoHostingAnalyticsHandler shows geographic hosting distribution
 func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse days parameter (default: 365 for current year view)
-	daysStr := r.URL.Query().Get("days")
-	days := 365
-	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 && d <= 3650 {
-		days = d
-	}
+	// Snapped to the same set as the drill-downs: this page bakes its own days
+	// value into every "View" link, so accepting a value the drill-down would
+	// then silently change produced a page whose URL disagreed with its content.
+	days := geoDays(r)
 
 	// Get geo distribution
 	dist, err := s.storage.GetGeoHostingDistribution(days, requestDomain(r))
@@ -1561,7 +1559,7 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 	// Build page config
 	config := GeoPageConfig{
 		PageTitle:       fmt.Sprintf("Nodes in %s", countryName),
-		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes in %s (last %d days)</p>`, countryName, days)),
+		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes in %s (last %d days)</p>`, template.HTMLEscapeString(countryName), days)),
 		StatsHeading:    "Nodes",
 		ViewType:        "country",
 		CountryCode:     countryCode,
@@ -1636,7 +1634,7 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	// Build page config
 	config := GeoPageConfig{
 		PageTitle:       provider,
-		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes hosted by %s (last %d days)</p>`, provider, days)),
+		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes hosted by %s (last %d days)</p>`, template.HTMLEscapeString(provider), days)),
 		StatsHeading:    "Nodes",
 		ViewType:        "provider",
 		ProviderName:    provider,

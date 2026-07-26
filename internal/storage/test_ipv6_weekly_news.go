@@ -106,6 +106,9 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -153,10 +156,10 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -187,6 +190,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
@@ -272,6 +276,9 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -313,10 +320,10 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -347,6 +354,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
@@ -424,6 +432,9 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -465,10 +476,10 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -499,6 +510,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
@@ -585,6 +597,9 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 					domain, zone, net, node,
 					argMax(system_name, nodelist_date) as system_name
 				FROM nodes
+				WHERE 1 = 1
+					{{NODE_WINDOW}}
+					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
 			),
 			ranked_results AS (
@@ -626,10 +641,10 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
 				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
 				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(n.system_name, rr.binkp_system_name) as binkp_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
 				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
 				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(n.system_name, rr.ifcico_system_name) as ifcico_system_name,
+				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
 				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
 				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
 				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
@@ -660,6 +675,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
 	}
 
+	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
