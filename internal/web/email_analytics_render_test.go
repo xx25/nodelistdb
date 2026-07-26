@@ -259,6 +259,9 @@ func TestEmailAnalyticsEndpointColumn(t *testing.T) {
 				Status: storage.EmailDomainStatusOK, Detail: "1 MX host", CheckTime: date},
 			// Never swept: no status at all.
 			{Address: "b@unswept.example", MailDomain: "unswept.example"},
+			// A transient DNS failure: not a verdict about the domain.
+			{Address: "c@flaky.example", MailDomain: "flaky.example",
+				Status: storage.EmailDomainStatusError, Detail: "DNS lookup failed", Stale: true},
 		},
 	}
 
@@ -277,6 +280,8 @@ func TestEmailAnalyticsEndpointColumn(t *testing.T) {
 		// Both domains are named, because the node has more than one.
 		"checked.example",
 		"unswept.example",
+		// A transient failure must not render as a bare "error".
+		"check failed",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("endpoint column is missing %q", want)

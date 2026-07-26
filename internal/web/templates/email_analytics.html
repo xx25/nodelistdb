@@ -267,6 +267,9 @@
                             {{else if eq .Status "no_mx"}}<span style="color: #c00;">&#10007; no mail route</span>
                             {{else if eq .Status "mx_unresolvable"}}<span style="color: #c00;">&#10007; MX does not resolve</span>
                             {{else if eq .Status "invalid"}}<span style="color: #c00;">&#10007; malformed</span>
+                            {{/* A transient lookup failure says nothing about the
+                                 domain, so it must not read as a verdict on it. */}}
+                            {{else if eq .Status "error"}}<span class="text-muted">&#8213; check failed</span>
                             {{else}}<span class="text-muted">{{.Status}}</span>{{end}}
                             {{if .Stale}}<span class="text-muted" title="Verdict is stale">*</span>{{end}}
                         </div>
