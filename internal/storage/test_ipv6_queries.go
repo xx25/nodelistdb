@@ -845,6 +845,15 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 					AND r.test_time = lt.latest_test_time
+				-- Re-apply the report's own criteria to the candidate rows. The
+				-- aggregated row ORs protocol successes across hostnames, so a node
+				-- that qualified through one IPv6-only hostname would otherwise be
+				-- represented by an aggregate that shows IPv4 working - contradicting
+				-- the report. The anchor is the latest QUALIFYING test, so at least
+				-- one row always survives this and no node is dropped.
+				WHERE length(r.resolved_ipv6) > 0
+					AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
+					AND NOT (r.binkp_ipv4_success = true OR r.ifcico_ipv4_success = true OR r.telnet_ipv4_success = true)
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
@@ -1043,6 +1052,13 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 				FROM node_test_results r
 				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
 					AND r.test_time = lt.latest_test_time
+				-- Re-apply the report's own criteria: the aggregated row UNIONs
+				-- resolved addresses across hostnames, so it can carry IPv4 addresses
+				-- that the qualifying IPv6-only hostname does not have. See the same
+				-- guard in GetIPv6OnlyNodes.
+				WHERE length(r.resolved_ipv6) > 0
+					AND length(r.resolved_ipv4) = 0
+					AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
 			)
 			SELECT
 				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,

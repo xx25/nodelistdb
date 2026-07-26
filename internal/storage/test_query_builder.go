@@ -92,14 +92,63 @@ func (tqb *TestQueryBuilder) BuildDetailedTestResultQuery() string {
 }
 
 // BuildReachabilityStatsQuery builds a query for node reachability statistics (ClickHouse)
+//
+// The whole-node counters and success rate are computed per TEST CYCLE, not per
+// stored row. A cycle of a multi-hostname node writes one row per hostname plus
+// an aggregated summary, so counting rows made a node with one permanently
+// broken backup hostname look partly unreachable: 2:240/5833 reported 24 tests
+// at a 66.7% success rate when it had 8 cycles and answered in every one. Rows
+// are grouped into cycles with the same measured bound the AKA queries use (see
+// testSessionWindowSeconds) and each cycle contributes its aggregated row when
+// it has one, otherwise its single row - the daemon writes no aggregate for a
+// single-hostname node, and total_hostnames is 0 on every per-hostname row, so
+// the cycle is the only thing that can tell the two apart.
+//
+// The per-protocol rates below are deliberately left per HOSTNAME instance:
+// they answer "how often does a BinkP attempt against this node succeed",
+// which is the more diagnostic view for a node with a flaky backup host, and
+// folding them into cycles would silently change what they mean. That is why
+// their denominators can exceed total_tests.
 func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
-	return `
+	return fmt.Sprintf(`
+		WITH
+		-- Number each row's test cycle: a gap larger than the session window
+		-- starts a new one.
+		cycle_marked AS (
+			SELECT *,
+				if(toInt64(toUnixTimestamp(test_time)) - toInt64(toUnixTimestamp(
+						lagInFrame(test_time, 1, toDateTime(0)) OVER (
+							PARTITION BY domain, zone, net, node ORDER BY test_time)
+					)) > %d, 1, 0) as new_cycle
+			FROM node_test_results
+			WHERE zone = ? AND net = ? AND node = ?
+			AND test_time >= now() - INTERVAL ? DAY
+			AND (? = '' OR domain = ?)
+		),
+		-- rn = 1 marks the row that represents its cycle: the aggregated
+		-- summary when the cycle has one, else the node's only row.
+		ranked AS (
+			SELECT *,
+				row_number() OVER (
+					PARTITION BY domain, zone, net, node, cycle_id
+					ORDER BY is_aggregated DESC, hostname_index ASC
+				) as rn
+			FROM (
+				SELECT *,
+					sum(new_cycle) OVER (
+						PARTITION BY domain, zone, net, node ORDER BY test_time
+						ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+					) as cycle_id
+				FROM cycle_marked
+			)
+		)
 		SELECT
 			zone, net, node,
-			count(*) as total_tests,
+			countIf(rn = 1) as total_tests,
 
 			-- Fully successful tests: all tested protocols succeeded (IPv4 and IPv6 if available)
 			countIf(
+				rn = 1 AND
 				is_operational AND
 				(length(resolved_ipv6) = 0 OR (
 					(NOT binkp_tested OR binkp_ipv6_success OR length(resolved_ipv6) = 0) AND
@@ -110,6 +159,7 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 
 			-- Partially failed tests: operational but some IPv6 tests failed
 			countIf(
+				rn = 1 AND
 				is_operational AND
 				length(resolved_ipv6) > 0 AND (
 					(binkp_tested AND NOT binkp_ipv6_success) OR
@@ -119,23 +169,25 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 			) as partially_failed_tests,
 
 			-- Fully failed tests: not operational at all
-			countIf(NOT is_operational) as failed_tests,
+			countIf(rn = 1 AND NOT is_operational) as failed_tests,
 
 			-- For backward compatibility
-			countIf(is_operational) as successful_tests,
-			avg(is_operational) * 100 as success_rate,
+			countIf(rn = 1 AND is_operational) as successful_tests,
+			avgIf(is_operational, rn = 1) * 100 as success_rate,
 
 			avgIf(least(
 				if(binkp_response_ms > 0, binkp_response_ms, 999999),
 				if(ifcico_response_ms > 0, ifcico_response_ms, 999999),
 				if(telnet_response_ms > 0, telnet_response_ms, 999999)
-			), is_operational AND least(
+			), rn = 1 AND is_operational AND least(
 				if(binkp_response_ms > 0, binkp_response_ms, 999999),
 				if(ifcico_response_ms > 0, ifcico_response_ms, 999999),
 				if(telnet_response_ms > 0, telnet_response_ms, 999999)
 			) < 999999) as avg_response_ms,
 			max(test_time) as last_test_time,
-			argMax(is_operational, test_time) as last_status,
+			-- Current status is the latest CYCLE's verdict, not whichever row was
+			-- written last (that can be a failing backup hostname).
+			argMaxIf(is_operational, test_time, rn = 1) as last_status,
 
 			-- Combined success rates (IPv4 OR IPv6)
 			avgIf(binkp_success, binkp_tested) * 100 as binkp_success_rate,
@@ -151,11 +203,8 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 			avgIf(binkp_ipv6_success, binkp_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as binkp_ipv6_success_rate,
 			avgIf(ifcico_ipv6_success, ifcico_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as ifcico_ipv6_success_rate,
 			avgIf(telnet_ipv6_success, telnet_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as telnet_ipv6_success_rate
-		FROM node_test_results
-		WHERE zone = ? AND net = ? AND node = ?
-		AND test_time >= now() - INTERVAL ? DAY
-		AND (? = '' OR domain = ?)
-		GROUP BY domain, zone, net, node`
+		FROM ranked
+		GROUP BY domain, zone, net, node`, testSessionWindowSeconds)
 }
 
 // BuildReachabilityTrendsQuery builds a query for reachability trends over time (ClickHouse)
