@@ -125,9 +125,20 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 		--     back-to-back, where the transition is aggregate(index 0) to the
 		--     next cycle's primary(index 0) and neither the gap nor a repeated
 		--     (hostname_index, is_aggregated) pair would reveal it;
-		--   * a per-hostname row whose index does not advance, which covers both
-		--     a re-test of the same host and a cycle whose aggregate was never
-		--     written (index 1 followed by index 0).
+		--   * either side of an AKA-derived row. Such a row is not this node's
+		--     test at all: deriveAKAResults clones ANOTHER node's successful
+		--     result into this partition for a shared host, so letting it share
+		--     a cycle lets max(is_operational) report someone else's success and
+		--     erase this node's own failure;
+		--   * a per-hostname row whose index does not advance, or that carries
+		--     the -1 "no index" sentinel on either side of the step, since a real
+		--     cycle numbers its hostnames 0,1,2. This covers a re-test of the
+		--     same host, a cycle whose aggregate was never written (index 1
+		--     followed by index 0), and a legacy/CLI row abutting a modern one.
+		--     It is skipped when the timestamp has not advanced: test_time has
+		--     one-second resolution, so rows inside the same second cannot be
+		--     attributed to one cycle or the next, and splitting on index there
+		--     shreds a single cycle into one fragment per hostname.
 		-- 2:467/70 was probed twice 73s apart (once against a nodelist flag
 		-- misparsed as a hostname, which fails DNS, then against its real host),
 		-- and 1:342/806 was re-tested by hand 60s after an automatic run.
@@ -137,9 +148,16 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 							lagInFrame(test_time, 1, toDateTime(0)) OVER seq
 						)) > %d
 					OR lagInFrame(is_aggregated, 1, true) OVER seq
+					OR derived_from_address != ''
+					OR lagInFrame(derived_from_address, 1, '') OVER seq != ''
 					OR (
 						NOT is_aggregated
-						AND hostname_index <= lagInFrame(hostname_index, 1, CAST(2147483647 AS Int32)) OVER seq
+						AND test_time != lagInFrame(test_time, 1, toDateTime(0)) OVER seq
+						AND (
+							hostname_index <= lagInFrame(hostname_index, 1, CAST(2147483647 AS Int32)) OVER seq
+							OR hostname_index < 0
+							OR lagInFrame(hostname_index, 1, CAST(0 AS Int32)) OVER seq < 0
+						)
 					), 1, 0) as new_cycle
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ?

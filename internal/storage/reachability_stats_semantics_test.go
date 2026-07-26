@@ -126,6 +126,41 @@ func TestReachabilityStatsCycleSemantics(t *testing.T) {
 			want: statsTiles{total: 1, fully: 1, partial: 0, failed: 0, rate: 100},
 		},
 		{
+			name: "AKA-derived result must not absorb this node's failure",
+			why: "a derived row is another node's success cloned in for a shared " +
+				"host; merging it hid a real failure and read 1 test at 100%",
+			rows: []fixtureRow{
+				{ts: "10:00:00", idx: 0, operational: false},
+				{ts: "10:00:01", idx: 0, aggregated: true, operational: true, ipv6OK: true,
+					derivedFrom: "2:5001/100@fidonet"},
+			},
+			want: statsTiles{total: 2, fully: 1, partial: 0, failed: 1, rate: 50},
+		},
+		{
+			name: "two complete cycles inside one second",
+			why: "test_time has second resolution, so index cannot separate them; " +
+				"splitting on it shredded 2 cycles into 4",
+			rows: []fixtureRow{
+				{ts: "10:00:00", idx: 0, operational: true, ipv6OK: true},
+				{ts: "10:00:00", idx: 1, operational: true, ipv6OK: true},
+				{ts: "10:00:00", idx: 0, aggregated: true, operational: true, ipv6OK: true},
+				{ts: "10:00:00", idx: 0, operational: false},
+				{ts: "10:00:00", idx: 1, operational: false},
+				{ts: "10:00:00", idx: 0, aggregated: true, operational: false},
+			},
+			want: statsTiles{total: 2, fully: 1, partial: 0, failed: 1, rate: 50},
+		},
+		{
+			name: "legacy no-index row abutting a modern cycle",
+			why: "hostname_index -1 is a live sentinel on 3090 production rows; " +
+				"-1 then 0 ascends, so the does-not-advance rule alone misses it",
+			rows: []fixtureRow{
+				{ts: "10:00:00", idx: -1, operational: false},
+				{ts: "10:00:30", idx: 0, operational: true, ipv6OK: true},
+			},
+			want: statsTiles{total: 2, fully: 1, partial: 0, failed: 1, rate: 50},
+		},
+		{
 			name: "two interrupted cycles back to back",
 			why: "with no aggregate to end either cycle, the boundary is only " +
 				"visible as index 1 followed by index 0",
@@ -155,11 +190,12 @@ func TestReachabilityStatsCycleSemantics(t *testing.T) {
 // fixtureRow is one stored test result, described the way the daemon writes it.
 type fixtureRow struct {
 	ts          string // time of day on the fixed fixture date
-	idx         int    // hostname_index
+	idx         int    // hostname_index; -1 is the legacy/CLI "no index" sentinel
 	aggregated  bool
 	operational bool
-	ipv6OK      bool // the per-protocol IPv6 legs succeeded
-	noIPv6      bool // this hostname resolved no IPv6 at all
+	ipv6OK      bool   // the per-protocol IPv6 legs succeeded
+	noIPv6      bool   // this hostname resolved no IPv6 at all
+	derivedFrom string // non-empty: cloned from another node's test via a shared host
 }
 
 type statsTiles struct {
@@ -177,11 +213,11 @@ func (r fixtureRow) values() string {
 	}
 	// Protocol legs mirror the row's overall verdict; the IPv6 legs are what the
 	// fully/partially-failed tiers read.
-	return fmt.Sprintf("('fidonet',2,999,1,'%s%s',%d,%s,%s,['192.0.2.1'],%s,"+
+	return fmt.Sprintf("('fidonet',2,999,1,'%s%s',%d,%s,%s,'%s',['192.0.2.1'],%s,"+
 		"true,%s,true,%s,true,%s,10,"+
 		"true,%s,true,%s,true,%s,10,"+
 		"true,%s,true,%s,true,%s,10)",
-		fixtureDate, r.ts, r.idx, b(r.aggregated), b(r.operational), v6,
+		fixtureDate, r.ts, r.idx, b(r.aggregated), b(r.operational), r.derivedFrom, v6,
 		b(r.operational), b(r.operational), b(r.ipv6OK),
 		b(r.operational), b(r.operational), b(r.ipv6OK),
 		b(r.operational), b(r.operational), b(r.ipv6OK))
@@ -195,7 +231,7 @@ func runStatsQuery(t *testing.T, bin string, rows []fixtureRow) (statsTiles, err
 	const ddl = `CREATE TABLE node_test_results (
 	domain String, zone Int32, net Int32, node Int32,
 	test_time DateTime, hostname_index Int32,
-	is_aggregated Bool, is_operational Bool,
+	is_aggregated Bool, is_operational Bool, derived_from_address String,
 	resolved_ipv4 Array(String), resolved_ipv6 Array(String),
 	binkp_tested Bool, binkp_success Bool, binkp_ipv4_tested Bool, binkp_ipv4_success Bool,
 	binkp_ipv6_tested Bool, binkp_ipv6_success Bool, binkp_response_ms UInt32,
