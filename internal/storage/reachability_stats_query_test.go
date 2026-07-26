@@ -23,10 +23,10 @@ func TestReachabilityStatsQueryCountsCycles(t *testing.T) {
 		"countIf(rn = 1) as total_tests",
 		") as fully_successful_tests",
 		") as partially_failed_tests",
-		"countIf(rn = 1 AND NOT is_operational) as failed_tests",
-		"countIf(rn = 1 AND is_operational) as successful_tests",
-		"avgIf(is_operational, rn = 1) * 100 as success_rate",
-		"argMaxIf(is_operational, test_time, rn = 1) as last_status",
+		"countIf(rn = 1 AND NOT cyc_operational) as failed_tests",
+		"countIf(rn = 1 AND cyc_operational) as successful_tests",
+		"avgIf(cyc_operational, rn = 1) * 100 as success_rate",
+		"argMaxIf(cyc_operational, test_time, rn = 1) as last_status",
 	}
 	for _, want := range perCycle {
 		if !strings.Contains(query, want) {
@@ -61,12 +61,39 @@ func TestReachabilityStatsQueryCountsCycles(t *testing.T) {
 		}
 	}
 
-	// A cycle writes each (hostname_index, is_aggregated) pair at most once, so a
-	// repeat inside the window is a separate test and must start a new cycle -
-	// otherwise two real tests moments apart are counted as one.
-	if !strings.Contains(query, "hostname_index = lagInFrame(hostname_index") ||
-		!strings.Contains(query, "is_aggregated = lagInFrame(is_aggregated") {
-		t.Error("a repeated (hostname_index, is_aggregated) must start a new cycle; two distinct tests inside the window would otherwise merge")
+	// Two tests landing inside the window must still be two cycles. Comparing
+	// only against the immediately preceding row is not enough: for two complete
+	// multi-hostname cycles the transition is aggregate(index 0) -> next
+	// primary(index 0), which no single-pair comparison reveals. The boundary is
+	// therefore "the previous row was an aggregate" plus "a per-hostname index
+	// that does not advance".
+	if !strings.Contains(query, "lagInFrame(is_aggregated, 1, true) OVER seq") {
+		t.Error("an aggregate must end its cycle, or two back-to-back multi-hostname cycles merge into one")
+	}
+	if !strings.Contains(query, "hostname_index <= lagInFrame(hostname_index") {
+		t.Error("a per-hostname index that does not advance must start a new cycle (re-test, or a cycle whose aggregate was never written)")
+	}
+	// The ordering the boundary rules depend on: per-hostname rows ascending,
+	// then the aggregate, even when the whole cycle shares one test_time.
+	if !strings.Contains(query, "ORDER BY test_time, is_aggregated, hostname_index") {
+		t.Error("cycle detection needs a deterministic within-timestamp order or ties decide the boundaries")
+	}
+
+	// The tiers must be folded across the cycle, not read off whichever row
+	// represents it: an interrupted cycle's working hostname would otherwise
+	// report a node as fully successful while a different hostname is the one
+	// with broken IPv6.
+	for _, want := range []string{
+		"max(is_operational) OVER cyc as cyc_operational",
+		"max(length(resolved_ipv6) > 0) OVER cyc as cyc_has_ipv6",
+		"max(binkp_ipv6_success) OVER cyc as cyc_binkp_ipv6_success",
+	} {
+		if !strings.Contains(query, want) {
+			t.Errorf("cycle-level fold missing: %q", want)
+		}
+	}
+	if strings.Contains(query, "countIf(rn = 1 AND NOT is_operational)") {
+		t.Error("failed_tests still reads one row's is_operational instead of the cycle's")
 	}
 
 	// The exact ORDER BY asserted above already pins the precedence that matters:

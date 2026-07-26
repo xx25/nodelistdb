@@ -186,12 +186,16 @@ func (kg *KeyGenerator) GeoHostingDistributionKey(days int, domain string) strin
 }
 
 func (kg *KeyGenerator) NodesByCountryKey(countryCode string, days int, domain string) string {
-	return fmt.Sprintf("%s:analytics:geo:country:%s:%d:%s", kg.Prefix, countryCode, days, domain)
+	// v2: rows now carry the FTN network, so their node links resolve to the
+	// right one. Cached v1 entries have an empty Domain and would keep serving
+	// network-less links until they expired.
+	return fmt.Sprintf("%s:analytics:geo:country:v2:%s:%d:%s", kg.Prefix, countryCode, days, domain)
 }
 
 func (kg *KeyGenerator) NodesByProviderKey(provider string, days int, domain string) string {
+	// v2: see NodesByCountryKey.
 	hash := md5.Sum([]byte(provider))
-	return fmt.Sprintf("%s:analytics:geo:provider:%s:%d:%s", kg.Prefix, hex.EncodeToString(hash[:8]), days, domain)
+	return fmt.Sprintf("%s:analytics:geo:provider:v2:%s:%d:%s", kg.Prefix, hex.EncodeToString(hash[:8]), days, domain)
 }
 
 func (kg *KeyGenerator) OnThisDayNodesKey(month, day, limit int, activeOnly bool, domain string) string {
@@ -243,7 +247,10 @@ func (kg *KeyGenerator) NodeTestHistoryKey(zone, net, node, days int) string {
 }
 
 func (kg *KeyGenerator) NodeReachabilityStatsKey(zone, net, node, days int) string {
-	return fmt.Sprintf("%s:reachability:stats:%d:%d:%d:%d", kg.Prefix, zone, net, node, days)
+	// v2: the counters are per test cycle rather than per stored row. Cached v1
+	// entries hold the old inflated totals and would outlive the fix by their
+	// whole TTL, on the very page the change was made for.
+	return fmt.Sprintf("%s:reachability:stats:v2:%d:%d:%d:%d", kg.Prefix, zone, net, node, days)
 }
 
 func (kg *KeyGenerator) DetailedTestResultKey(zone, net, node int, testTime string) string {
@@ -251,6 +258,8 @@ func (kg *KeyGenerator) DetailedTestResultKey(zone, net, node int, testTime stri
 }
 
 func (kg *KeyGenerator) WhoisResultsKey(domain string) string {
+	// v4: node_keys are now keyed "network|zone:net/node" - a bare address
+	// undercounted a registrar whenever two networks shared a triple.
 	// v3: entries carry node_keys for registrar-level node dedup AND are now
 	// scoped to one FTN network ("" = all networks). The all-networks sentinel
 	// is "*", which is outside the valid network-name charset ([a-z0-9_-]), so
@@ -258,12 +267,13 @@ func (kg *KeyGenerator) WhoisResultsKey(domain string) string {
 	if domain == "" {
 		domain = "*"
 	}
-	return fmt.Sprintf("%s:analytics:whois:results:v3:%s", kg.Prefix, domain)
+	return fmt.Sprintf("%s:analytics:whois:results:v4:%s", kg.Prefix, domain)
 }
 
 func (kg *KeyGenerator) NodesByDomainKey(domain string, days int) string {
+	// v2: rows carry the FTN network; see NodesByCountryKey.
 	hash := md5.Sum([]byte(domain))
-	return fmt.Sprintf("%s:analytics:whois:domain:%s:%d", kg.Prefix, hex.EncodeToString(hash[:8]), days)
+	return fmt.Sprintf("%s:analytics:whois:domain:v2:%s:%d", kg.Prefix, hex.EncodeToString(hash[:8]), days)
 }
 
 func (kg *KeyGenerator) AnalyticsPattern() string {

@@ -112,42 +112,63 @@ func (tqb *TestQueryBuilder) BuildDetailedTestResultQuery() string {
 func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 	return fmt.Sprintf(`
 		WITH
-		-- Number each row's test cycle. A gap larger than the session window
-		-- starts a new one - but so does a repeat of (hostname_index,
-		-- is_aggregated), because one cycle writes each of those combinations at
-		-- most once. Without that second rule two genuinely separate tests
-		-- landing inside the window are merged and counted as one: 2:467/70 was
-		-- probed twice 73s apart (once against a nodelist flag misparsed as a
-		-- hostname, which fails DNS, then against its real host), and 1:342/806
-		-- was re-tested by hand 60s after an automatic run.
+		-- Number each row's test cycle. Rows are ordered so that one cycle reads
+		-- as its per-hostname rows in ascending hostname_index followed by its
+		-- aggregated summary - which is also the order the daemon writes them,
+		-- and pins the order when several rows share a test_time (common: a whole
+		-- cycle often lands inside one second).
+		--
+		-- A boundary is any of:
+		--   * a gap wider than the session window;
+		--   * the previous row being an aggregate, since that ends its cycle -
+		--     this is what catches two complete multi-hostname cycles run
+		--     back-to-back, where the transition is aggregate(index 0) to the
+		--     next cycle's primary(index 0) and neither the gap nor a repeated
+		--     (hostname_index, is_aggregated) pair would reveal it;
+		--   * a per-hostname row whose index does not advance, which covers both
+		--     a re-test of the same host and a cycle whose aggregate was never
+		--     written (index 1 followed by index 0).
+		-- 2:467/70 was probed twice 73s apart (once against a nodelist flag
+		-- misparsed as a hostname, which fails DNS, then against its real host),
+		-- and 1:342/806 was re-tested by hand 60s after an automatic run.
 		cycle_marked AS (
 			SELECT *,
 				if(toInt64(toUnixTimestamp(test_time)) - toInt64(toUnixTimestamp(
-							lagInFrame(test_time, 1, toDateTime(0)) OVER (
-								PARTITION BY domain, zone, net, node ORDER BY test_time)
+							lagInFrame(test_time, 1, toDateTime(0)) OVER seq
 						)) > %d
+					OR lagInFrame(is_aggregated, 1, true) OVER seq
 					OR (
-						hostname_index = lagInFrame(hostname_index, 1, CAST(-999 AS Int32)) OVER (
-							PARTITION BY domain, zone, net, node ORDER BY test_time)
-						AND is_aggregated = lagInFrame(is_aggregated, 1, false) OVER (
-							PARTITION BY domain, zone, net, node ORDER BY test_time)
+						NOT is_aggregated
+						AND hostname_index <= lagInFrame(hostname_index, 1, CAST(2147483647 AS Int32)) OVER seq
 					), 1, 0) as new_cycle
 			FROM node_test_results
 			WHERE zone = ? AND net = ? AND node = ?
 			AND test_time >= now() - INTERVAL ? DAY
 			AND (? = '' OR domain = ?)
+			WINDOW seq AS (PARTITION BY domain, zone, net, node ORDER BY test_time, is_aggregated, hostname_index)
 		),
-		-- rn = 1 marks the row that represents its cycle: the aggregated summary
-		-- when the cycle has one, else the node's only row.
+		-- Fold each cycle the way the daemon's own aggregation does - a protocol
+		-- counts as reached if any hostname reached it - so the tiers below do
+		-- not depend on which single row represents the cycle. That matters for
+		-- a cycle whose aggregate was never written: reading IPv6 flags off one
+		-- hostname's row would report a node as fully successful when a
+		-- different hostname is the one with broken IPv6. Where the aggregate
+		-- does exist its values are already these ORs, so folding is idempotent.
 		--
-		-- is_operational DESC covers the cycle whose aggregate never got written
-		-- (an interrupted run): the aggregate's own rule is "operational if any
-		-- hostname answered", so falling back to the lowest hostname_index would
-		-- let one broken primary report the whole cycle as a failure. test_time
-		-- last keeps the pick deterministic when a cycle holds two rows with the
-		-- same hostname_index, which real data does contain.
+		-- rn = 1 still marks a representative row, now only for the response
+		-- time and the timestamp; is_operational DESC keeps an interrupted
+		-- cycle's working hostname in front of a broken one, and test_time last
+		-- makes the pick deterministic.
 		ranked AS (
 			SELECT *,
+				max(is_operational) OVER cyc as cyc_operational,
+				max(length(resolved_ipv6) > 0) OVER cyc as cyc_has_ipv6,
+				max(binkp_tested) OVER cyc as cyc_binkp_tested,
+				max(binkp_ipv6_success) OVER cyc as cyc_binkp_ipv6_success,
+				max(ifcico_tested) OVER cyc as cyc_ifcico_tested,
+				max(ifcico_ipv6_success) OVER cyc as cyc_ifcico_ipv6_success,
+				max(telnet_tested) OVER cyc as cyc_telnet_tested,
+				max(telnet_ipv6_success) OVER cyc as cyc_telnet_ipv6_success,
 				row_number() OVER (
 					PARTITION BY domain, zone, net, node, cycle_id
 					ORDER BY is_aggregated DESC, is_operational DESC, hostname_index ASC, test_time ASC
@@ -155,11 +176,13 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 			FROM (
 				SELECT *,
 					sum(new_cycle) OVER (
-						PARTITION BY domain, zone, net, node ORDER BY test_time
+						PARTITION BY domain, zone, net, node
+						ORDER BY test_time, is_aggregated, hostname_index
 						ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
 					) as cycle_id
 				FROM cycle_marked
 			)
+			WINDOW cyc AS (PARTITION BY domain, zone, net, node, cycle_id)
 		)
 		SELECT
 			zone, net, node,
@@ -168,31 +191,31 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 			-- Fully successful tests: all tested protocols succeeded (IPv4 and IPv6 if available)
 			countIf(
 				rn = 1 AND
-				is_operational AND
-				(length(resolved_ipv6) = 0 OR (
-					(NOT binkp_tested OR binkp_ipv6_success OR length(resolved_ipv6) = 0) AND
-					(NOT ifcico_tested OR ifcico_ipv6_success OR length(resolved_ipv6) = 0) AND
-					(NOT telnet_tested OR telnet_ipv6_success OR length(resolved_ipv6) = 0)
+				cyc_operational AND
+				(NOT cyc_has_ipv6 OR (
+					(NOT cyc_binkp_tested OR cyc_binkp_ipv6_success) AND
+					(NOT cyc_ifcico_tested OR cyc_ifcico_ipv6_success) AND
+					(NOT cyc_telnet_tested OR cyc_telnet_ipv6_success)
 				))
 			) as fully_successful_tests,
 
 			-- Partially failed tests: operational but some IPv6 tests failed
 			countIf(
 				rn = 1 AND
-				is_operational AND
-				length(resolved_ipv6) > 0 AND (
-					(binkp_tested AND NOT binkp_ipv6_success) OR
-					(ifcico_tested AND NOT ifcico_ipv6_success) OR
-					(telnet_tested AND NOT telnet_ipv6_success)
+				cyc_operational AND
+				cyc_has_ipv6 AND (
+					(cyc_binkp_tested AND NOT cyc_binkp_ipv6_success) OR
+					(cyc_ifcico_tested AND NOT cyc_ifcico_ipv6_success) OR
+					(cyc_telnet_tested AND NOT cyc_telnet_ipv6_success)
 				)
 			) as partially_failed_tests,
 
 			-- Fully failed tests: not operational at all
-			countIf(rn = 1 AND NOT is_operational) as failed_tests,
+			countIf(rn = 1 AND NOT cyc_operational) as failed_tests,
 
 			-- For backward compatibility
-			countIf(rn = 1 AND is_operational) as successful_tests,
-			avgIf(is_operational, rn = 1) * 100 as success_rate,
+			countIf(rn = 1 AND cyc_operational) as successful_tests,
+			avgIf(cyc_operational, rn = 1) * 100 as success_rate,
 
 			avgIf(least(
 				if(binkp_response_ms > 0, binkp_response_ms, 999999),
@@ -206,7 +229,7 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 			max(test_time) as last_test_time,
 			-- Current status is the latest CYCLE's verdict, not whichever row was
 			-- written last (that can be a failing backup hostname).
-			argMaxIf(is_operational, test_time, rn = 1) as last_status,
+			argMaxIf(cyc_operational, test_time, rn = 1) as last_status,
 
 			-- Combined success rates (IPv4 OR IPv6)
 			avgIf(binkp_success, binkp_tested) * 100 as binkp_success_rate,

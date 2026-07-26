@@ -55,7 +55,7 @@ func TestAnalyticsQueriesScopeIdentityCorrectly(t *testing.T) {
 			// This commit series fixed three of these in test_modem_queries.go;
 			// the guard missed them because it only looked at GROUP BY.
 			name:    "domain-blind window partition",
-			pattern: regexp.MustCompile(`PARTITION BY (?:r\.)?zone, `),
+			pattern: regexp.MustCompile(`PARTITION BY (?:\w+\.)?zone, `),
 			why:     "partition by domain first, or two networks' nodes share one dedup/numbering group",
 		},
 	}
