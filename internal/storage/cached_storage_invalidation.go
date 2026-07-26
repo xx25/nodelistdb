@@ -9,15 +9,16 @@ import (
 )
 
 // Cache invalidation operations
-
-// InvalidateNode clears cache for a specific node
-func (cs *CachedStorage) InvalidateNode(zone, net, node int) error {
-	if !cs.config.Enabled {
-		return nil
-	}
-	pattern := cs.keyGen.NodePattern(zone, net, node)
-	return cs.cache.DeleteByPattern(context.Background(), pattern)
-}
+//
+// There is deliberately no per-node invalidator. Entries for one node live in
+// seven key families spread across three namespaces (node/history/changes here,
+// analytics:modem:detail, and three reachability families), so no single prefix
+// reaches them all, and the ones under reachability are written by testdaemon
+// through internal/testing/storage - which bypasses CachedStorage entirely and
+// so has no invalidation hook to call. A per-node invalidator would therefore
+// have to enumerate all seven families and would still have no caller; the
+// earlier one silently matched nothing for its whole life. Anything needing it
+// should invalidate at the write boundary that actually owns the data.
 
 // InvalidateAll clears entire cache (used after nodelist import)
 func (cs *CachedStorage) InvalidateAll() error {
@@ -25,7 +26,7 @@ func (cs *CachedStorage) InvalidateAll() error {
 		return nil
 	}
 	logging.Info("Invalidating entire cache")
-	return cs.cache.DeleteByPattern(context.Background(), cs.keyGen.AllPattern())
+	return cs.cache.DeleteByPrefix(context.Background(), cs.keyGen.AllPrefix())
 }
 
 // InvalidateStats clears all statistics cache entries
@@ -34,7 +35,7 @@ func (cs *CachedStorage) InvalidateStats() error {
 		return nil
 	}
 	logging.Info("Invalidating statistics cache")
-	return cs.cache.DeleteByPattern(context.Background(), cs.keyGen.StatsPattern())
+	return cs.cache.DeleteByPrefix(context.Background(), cs.keyGen.StatsPrefix())
 }
 
 // InvalidateSearches clears all search result cache entries
@@ -43,7 +44,7 @@ func (cs *CachedStorage) InvalidateSearches() error {
 		return nil
 	}
 	logging.Info("Invalidating search cache")
-	return cs.cache.DeleteByPattern(context.Background(), cs.keyGen.SearchPattern())
+	return cs.cache.DeleteByPrefix(context.Background(), cs.keyGen.SearchPrefix())
 }
 
 // InvalidateDates clears all date-related cache entries
@@ -52,7 +53,7 @@ func (cs *CachedStorage) InvalidateDates() error {
 		return nil
 	}
 	logging.Info("Invalidating dates cache")
-	return cs.cache.DeleteByPattern(context.Background(), cs.keyGen.DatesPattern())
+	return cs.cache.DeleteByPrefix(context.Background(), cs.keyGen.DatesPrefix())
 }
 
 // InvalidateSysops clears all sysop-related cache entries
@@ -61,7 +62,7 @@ func (cs *CachedStorage) InvalidateSysops() error {
 		return nil
 	}
 	logging.Info("Invalidating sysops cache")
-	return cs.cache.DeleteByPattern(context.Background(), cs.keyGen.SysopsPattern())
+	return cs.cache.DeleteByPrefix(context.Background(), cs.keyGen.SysopsPrefix())
 }
 
 // InvalidateAnalytics clears all analytics-related cache entries
@@ -70,7 +71,7 @@ func (cs *CachedStorage) InvalidateAnalytics() error {
 		return nil
 	}
 	logging.Info("Invalidating analytics cache")
-	return cs.cache.DeleteByPattern(context.Background(), cs.keyGen.AnalyticsPattern())
+	return cs.cache.DeleteByPrefix(context.Background(), cs.keyGen.AnalyticsPrefix())
 }
 
 // InvalidateAfterImport performs smart cache invalidation after nodelist import

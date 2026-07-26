@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -150,8 +151,10 @@ func (mc *MemoryCache) DeleteMulti(_ context.Context, keys []string) error {
 	return nil
 }
 
-func (mc *MemoryCache) DeleteByPattern(_ context.Context, pattern string) error {
-	prefix := strings.TrimSuffix(pattern, "*")
+func (mc *MemoryCache) DeleteByPrefix(_ context.Context, prefix string) error {
+	if strings.Contains(prefix, "*") {
+		return fmt.Errorf("%w: %q", ErrWildcardPrefix, prefix)
+	}
 
 	mc.mu.Lock()
 	var count uint64

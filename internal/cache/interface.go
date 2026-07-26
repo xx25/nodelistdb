@@ -2,8 +2,14 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrWildcardPrefix is returned by DeleteByPrefix when handed a glob pattern
+// instead of a literal key prefix. Both backends match a literal prefix only,
+// so a "*" anywhere in the argument used to match nothing and report success.
+var ErrWildcardPrefix = errors.New("cache: DeleteByPrefix takes a literal key prefix, not a glob pattern")
 
 // Cache defines the cache operations interface
 type Cache interface {
@@ -17,8 +23,14 @@ type Cache interface {
 	SetMulti(ctx context.Context, items map[string]CacheItem) error
 	DeleteMulti(ctx context.Context, keys []string) error
 	
-	// Pattern operations
-	DeleteByPattern(ctx context.Context, pattern string) error
+	// Prefix operations
+	//
+	// DeleteByPrefix removes every key starting with prefix. Matching is on a
+	// literal prefix, not a glob: the prefix must end on a key delimiter to
+	// avoid catching deeper siblings, since "ndb:node:2:5001:100" is also a
+	// prefix of "ndb:node:2:5001:1000". Supplying a "*" returns
+	// ErrWildcardPrefix rather than silently deleting nothing.
+	DeleteByPrefix(ctx context.Context, prefix string) error
 	
 	// Metrics
 	GetMetrics() *Metrics

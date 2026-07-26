@@ -246,11 +246,13 @@ func (bc *BadgerCache) DeleteMulti(ctx context.Context, keys []string) error {
 	return err
 }
 
-func (bc *BadgerCache) DeleteByPattern(ctx context.Context, pattern string) error {
-	// Convert pattern to prefix (simple implementation)
-	// Supports patterns like "prefix:*"
-	prefix := strings.TrimSuffix(pattern, "*")
-	
+func (bc *BadgerCache) DeleteByPrefix(ctx context.Context, prefix string) error {
+	// Literal prefix only: the scan below is an ordered Seek over the keyspace,
+	// which a leading or embedded wildcard could not use.
+	if strings.Contains(prefix, "*") {
+		return fmt.Errorf("%w: %q", ErrWildcardPrefix, prefix)
+	}
+
 	var keysToDelete [][]byte
 	
 	err := bc.db.View(func(txn *badger.Txn) error {

@@ -82,29 +82,33 @@ func (kg *KeyGenerator) NearestDateKey(date time.Time) string {
 	return fmt.Sprintf("%s:dates:nearest:%s", kg.Prefix, date.Format("2006-01-02"))
 }
 
-// Pattern generation for bulk invalidation
-func (kg *KeyGenerator) NodePattern(zone, net, node int) string {
-	return fmt.Sprintf("%s:*:%d:%d:%d*", kg.Prefix, zone, net, node)
+// Prefix generation for bulk invalidation. Each one is a literal key prefix
+// for DeleteByPrefix, terminated on the ":" delimiter so it cannot reach into
+// a neighbouring namespace.
+//
+// There is deliberately no per-node prefix. Node-scoped entries are spread
+// across three namespaces that do not share one ("node:"/"history:"/"changes:"
+// here, plus "analytics:modem:detail:" and several "reachability:" families),
+// so no single prefix covers a node. See the note on InvalidateAll in
+// internal/storage/cached_storage_invalidation.go.
+func (kg *KeyGenerator) AllPrefix() string {
+	return fmt.Sprintf("%s:", kg.Prefix)
 }
 
-func (kg *KeyGenerator) AllPattern() string {
-	return fmt.Sprintf("%s:*", kg.Prefix)
+func (kg *KeyGenerator) StatsPrefix() string {
+	return fmt.Sprintf("%s:stats:", kg.Prefix)
 }
 
-func (kg *KeyGenerator) StatsPattern() string {
-	return fmt.Sprintf("%s:stats:*", kg.Prefix)
+func (kg *KeyGenerator) SearchPrefix() string {
+	return fmt.Sprintf("%s:search:", kg.Prefix)
 }
 
-func (kg *KeyGenerator) SearchPattern() string {
-	return fmt.Sprintf("%s:search:*", kg.Prefix)
+func (kg *KeyGenerator) SysopsPrefix() string {
+	return fmt.Sprintf("%s:sysops:", kg.Prefix)
 }
 
-func (kg *KeyGenerator) SysopsPattern() string {
-	return fmt.Sprintf("%s:sysops:*", kg.Prefix)
-}
-
-func (kg *KeyGenerator) DatesPattern() string {
-	return fmt.Sprintf("%s:dates:*", kg.Prefix)
+func (kg *KeyGenerator) DatesPrefix() string {
+	return fmt.Sprintf("%s:dates:", kg.Prefix)
 }
 
 // Analytics keys
@@ -284,8 +288,8 @@ func (kg *KeyGenerator) NodesByDomainKey(domain string, days int) string {
 	return fmt.Sprintf("%s:analytics:whois:domain:v2:%s:%d", kg.Prefix, hex.EncodeToString(hash[:8]), days)
 }
 
-func (kg *KeyGenerator) AnalyticsPattern() string {
-	return fmt.Sprintf("%s:analytics:*", kg.Prefix)
+func (kg *KeyGenerator) AnalyticsPrefix() string {
+	return fmt.Sprintf("%s:analytics:", kg.Prefix)
 }
 
 // Helper function to create a filter hash
