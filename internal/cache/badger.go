@@ -55,6 +55,22 @@ func NewBadgerCache(config *BadgerConfig) (*BadgerCache, error) {
 		opts = opts.WithMemTableSize(memTableSize)
 		opts = opts.WithNumMemtables(numMemtables)
 
+		// Badger derives its transaction batch limit from the memtable size
+		// (maxBatchSize = 15% of it) and refuses to open when ValueThreshold
+		// exceeds that limit. Shrinking the memtable without shrinking the
+		// threshold made every budget below 27MB fail at Open with an error
+		// pointing at BaseTableSize, an option that does not even feed the
+		// limit. Keep the threshold at half the batch size so the largest
+		// value still stored inline cannot by itself exceed the limit: a value
+		// at or above the threshold goes to the value log and costs ~14 bytes
+		// against the batch, but one just below it is charged in full.
+		const badgerMaxValueThreshold = 1 << 20 // badger's own ceiling
+		valueThreshold := memTableSize * 15 / 100 / 2
+		if valueThreshold > badgerMaxValueThreshold {
+			valueThreshold = badgerMaxValueThreshold
+		}
+		opts = opts.WithValueThreshold(valueThreshold)
+
 		// Limit block cache and index cache to fit within budget
 		blockCacheSize := int64(config.MaxMemoryMB) << 20 / 4
 		indexCacheSize := int64(config.MaxMemoryMB) << 20 / 8

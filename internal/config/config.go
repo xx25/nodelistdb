@@ -264,6 +264,32 @@ func (c *Config) validate() error {
 	if c.Cache.GCDiscardRatio == 0 {
 		c.Cache.GCDiscardRatio = 0.5
 	}
+	// LoadConfig unmarshals onto a zero-value Config, so a cache section that
+	// omits a TTL leaves it at 0 - and 0 means "never expires" in both backends
+	// (memory.go, badger.go both gate expiry on ttl > 0), not "expires now".
+	// Resolve each one: explicit value, then default_ttl, then its own default.
+	// Per field, so a single default_ttl cannot flatten the four distinct ones.
+	cacheDefaults := DefaultCacheConfig()
+	for _, ttl := range []struct {
+		field *time.Duration
+		def   time.Duration
+	}{
+		{&c.Cache.NodeTTL, cacheDefaults.NodeTTL},
+		{&c.Cache.StatsTTL, cacheDefaults.StatsTTL},
+		{&c.Cache.SearchTTL, cacheDefaults.SearchTTL},
+	} {
+		if *ttl.field != 0 {
+			continue
+		}
+		if c.Cache.DefaultTTL > 0 {
+			*ttl.field = c.Cache.DefaultTTL
+			continue
+		}
+		*ttl.field = ttl.def
+	}
+	if c.Cache.DefaultTTL == 0 {
+		c.Cache.DefaultTTL = cacheDefaults.DefaultTTL
+	}
 
 	// Validate FTP configuration
 	if c.FTP.Port == 0 {

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Validator interface for config validation
@@ -126,6 +127,23 @@ func (c *CacheConfig) Validate() error {
 
 	if c.GCDiscardRatio < 0 || c.GCDiscardRatio > 1 {
 		errs.Add(fmt.Errorf("cache.gc_discard_ratio must be between 0 and 1, got %.2f", c.GCDiscardRatio))
+	}
+
+	// A negative TTL survives the zero-check that backfills omitted ones, and
+	// both backends only apply expiry when ttl > 0 - so it would silently cache
+	// forever. Reject rather than coerce: it can only be a typo.
+	for _, ttl := range []struct {
+		name  string
+		value time.Duration
+	}{
+		{"default_ttl", c.DefaultTTL},
+		{"node_ttl", c.NodeTTL},
+		{"stats_ttl", c.StatsTTL},
+		{"search_ttl", c.SearchTTL},
+	} {
+		if ttl.value < 0 {
+			errs.Add(fmt.Errorf("cache.%s must not be negative, got %s", ttl.name, ttl.value))
+		}
 	}
 
 	if errs.HasErrors() {

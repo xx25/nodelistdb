@@ -206,7 +206,6 @@ func main() {
 		// Wrap storage with cache
 		cacheStorageConfig := &storage.CacheStorageConfig{
 			Enabled:          true,
-			DefaultTTL:       cfg.Cache.DefaultTTL,
 			NodeTTL:          cfg.Cache.NodeTTL,
 			StatsTTL:         cfg.Cache.StatsTTL,
 			SearchTTL:        cfg.Cache.SearchTTL,

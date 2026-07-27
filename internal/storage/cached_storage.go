@@ -16,10 +16,14 @@ type CachedStorage struct {
 	config *CacheStorageConfig
 }
 
-// CacheStorageConfig configures the caching behavior
+// CacheStorageConfig configures the caching behavior.
+//
+// There is no DefaultTTL here on purpose. config.Cache.DefaultTTL is the
+// fallback for an omitted node/stats/search TTL and is resolved during config
+// validation, so by the time a config reaches this layer every TTL is already
+// specific. Carrying it further would just be a second field nobody reads.
 type CacheStorageConfig struct {
 	Enabled           bool
-	DefaultTTL        time.Duration
 	NodeTTL           time.Duration
 	StatsTTL          time.Duration
 	SearchTTL         time.Duration
@@ -32,7 +36,6 @@ func NewCachedStorage(storage *Storage, cacheImpl cache.Cache, config *CacheStor
 	if config == nil {
 		config = &CacheStorageConfig{
 			Enabled:          true,
-			DefaultTTL:       5 * time.Minute,
 			NodeTTL:          15 * time.Minute,
 			StatsTTL:         1 * time.Hour,
 			SearchTTL:        5 * time.Minute,
