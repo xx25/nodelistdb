@@ -140,6 +140,43 @@ func TestBuildNodesQueryPicksTheRightShape(t *testing.T) {
 	})
 }
 
+// TestBuildFTSQueryDelegates keeps text searches on one definition of
+// latest_only. BuildFTSQuery used to answer "who is listed right now" while
+// BuildNodesQuery answered "one row per node", and callers got whichever one
+// their query's shape happened to select.
+func TestBuildFTSQueryDelegates(t *testing.T) {
+	qb := NewQueryBuilder()
+
+	for _, latestOnly := range []*bool{nil, boolp(false), boolp(true)} {
+		filter := database.NodeFilter{SysopName: strp2("Ivanov"), LatestOnly: latestOnly, Limit: 100}
+
+		got, gotArgs, usedFTS := qb.BuildFTSQuery(filter)
+		if !usedFTS {
+			t.Fatalf("text filter must produce a usable query (latestOnly=%v)", latestOnly)
+		}
+		want, wantArgs := qb.BuildNodesQuery(filter)
+		if got != want {
+			t.Errorf("text search diverges from BuildNodesQuery (latestOnly=%v)\ngot:  %s\nwant: %s", latestOnly, got, want)
+		}
+		if len(gotArgs) != len(wantArgs) {
+			t.Errorf("arg count %d != %d (latestOnly=%v)", len(gotArgs), len(wantArgs), latestOnly)
+		}
+		// The retired shape restricted to each domain's newest nodelist.
+		if strings.Contains(got, "GROUP BY domain)") {
+			t.Errorf("domain-only max is the retired active_only meaning, not latest_only\n%s", got)
+		}
+	}
+
+	// No text term: the caller falls through to BuildNodesQuery itself.
+	if _, _, usedFTS := qb.BuildFTSQuery(database.NodeFilter{Zone: intp(2)}); usedFTS {
+		t.Error("a filter with no text term must not claim a usable FTS query")
+	}
+	// An empty text term is not a text search.
+	if _, _, usedFTS := qb.BuildFTSQuery(database.NodeFilter{SysopName: strp2("")}); usedFTS {
+		t.Error("empty text term must not count as a text search")
+	}
+}
+
 // TestNodeFilterFieldsAreClassified fails when a field is added to NodeFilter
 // without deciding whether it identifies a node or describes one moment of its
 // history. Getting that wrong picks the wrong query shape and silently changes

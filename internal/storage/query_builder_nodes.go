@@ -355,119 +355,36 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 	return sql + paginationSQL(filter), args
 }
 
-// BuildFTSQuery builds a ClickHouse-compatible FTS query
+// BuildFTSQuery routes text searches to BuildNodesQuery.
+//
+// It used to carry a second, parallel implementation for the case "text filter
+// AND latest_only=true", and the two disagreed about what latest_only means:
+// that one restricted results to each domain's newest nodelist ("who is listed
+// right now"), while BuildNodesQuery returns each node's own most recent row
+// ("one row per node"), which is what openapi.yaml documents. Which definition
+// a caller got depended on whether their query happened to contain a text term:
+// sysop_name=Ivanov&latest_only=true returned 3 rows, the same search without
+// latest_only returned 128.
+//
+// The parallel path also silently dropped has_inet, and ordered without the
+// domain tie-breaker, so a 3-D address present in two networks sorted
+// arbitrarily. Deleting it rather than repairing it in place is what stops the
+// two from drifting apart a third time - is_mo had already diverged the other
+// way, implemented here and missing from the main path.
+//
+// The name is historical: ClickHouse has no FTS index here and text matching is
+// ILIKE on both paths. The bool reports whether the returned query is usable,
+// so a filter with no text term falls through to BuildNodesQuery in the caller.
 func (qb *QueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []interface{}, bool) {
-	// ClickHouse doesn't have FTS indexes like DuckDB, so we use LIKE with bloom filters
-	var conditions []string
-	var args []interface{}
-	usedFTS := false
-
-	// When doing text searches with LatestOnly=false, use the proper grouping query
-	if (filter.Location != nil || filter.SystemName != nil || filter.SysopName != nil) &&
-		(filter.LatestOnly == nil || !*filter.LatestOnly) {
-		// Use the main BuildNodesQuery which has proper grouping logic
-		query, queryArgs := qb.BuildNodesQuery(filter)
-		return query, queryArgs, true
+	hasText := (filter.SystemName != nil && *filter.SystemName != "") ||
+		(filter.Location != nil && *filter.Location != "") ||
+		(filter.SysopName != nil && *filter.SysopName != "")
+	if !hasText {
+		return "", nil, false
 	}
 
-	baseQuery := qb.NodeSelectSQL()
-
-	// Text search using ILIKE for optimal performance
-	if filter.SystemName != nil && *filter.SystemName != "" {
-		conditions = append(conditions, "system_name ILIKE ?")
-		args = append(args, "%"+*filter.SystemName+"%")
-		usedFTS = true
-	}
-
-	if filter.Location != nil && *filter.Location != "" {
-		conditions = append(conditions, "location ILIKE ?")
-		args = append(args, "%"+*filter.Location+"%")
-		usedFTS = true
-	}
-
-	if filter.SysopName != nil && *filter.SysopName != "" {
-		conditions = append(conditions, "sysop_name ILIKE ?")
-		args = append(args, "%"+*filter.SysopName+"%")
-		usedFTS = true
-	}
-
-	// Add other non-text filters
-	if filter.Domain != nil && *filter.Domain != "" {
-		conditions = append(conditions, "domain = ?")
-		args = append(args, *filter.Domain)
-	}
-
-	if filter.Zone != nil {
-		conditions = append(conditions, "zone = ?")
-		args = append(args, *filter.Zone)
-	}
-
-	if filter.Net != nil {
-		conditions = append(conditions, "net = ?")
-		args = append(args, *filter.Net)
-	}
-
-	if filter.Node != nil {
-		conditions = append(conditions, "node = ?")
-		args = append(args, *filter.Node)
-	}
-
-	if filter.NodeType != nil {
-		conditions = append(conditions, "node_type = ?")
-		args = append(args, *filter.NodeType)
-	}
-
-	// Boolean filters
-	if filter.IsCM != nil {
-		conditions = append(conditions, "is_cm = ?")
-		args = append(args, *filter.IsCM)
-	}
-
-	if filter.IsMO != nil {
-		conditions = append(conditions, "is_mo = ?")
-		args = append(args, *filter.IsMO)
-	}
-
-	if filter.HasBinkp != nil {
-		// HasBinkp is now determined from JSON: check for IBN or BND protocols
-		conditions = append(conditions, "(JSON_EXISTS(toString(internet_config), '$.protocols.IBN') OR JSON_EXISTS(toString(internet_config), '$.protocols.BND')) = ?")
-		args = append(args, *filter.HasBinkp)
-	}
-
-	// Date filters
-	if filter.DateFrom != nil {
-		conditions = append(conditions, "nodelist_date >= ?")
-		args = append(args, *filter.DateFrom)
-	}
-
-	if filter.DateTo != nil {
-		conditions = append(conditions, "nodelist_date <= ?")
-		args = append(args, *filter.DateTo)
-	}
-
-	// Latest only - per-domain latest, since networks publish on different cadences
-	if filter.LatestOnly != nil && *filter.LatestOnly {
-		conditions = append(conditions, "(domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes GROUP BY domain)")
-	}
-
-	// Build final query
-	query := baseQuery
-	if len(conditions) > 0 {
-		query += " WHERE " + strings.Join(conditions, " AND ")
-	}
-
-	// Order by for consistent results
-	query += " ORDER BY zone, net, node, nodelist_date DESC, conflict_sequence"
-
-	// Limit and offset
-	if filter.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
-		if filter.Offset > 0 {
-			query += fmt.Sprintf(" OFFSET %d", filter.Offset)
-		}
-	}
-
-	return query, args, usedFTS
+	query, args := qb.BuildNodesQuery(filter)
+	return query, args, true
 }
 
 // buildFilterConditions splits a NodeFilter into identity and attribute

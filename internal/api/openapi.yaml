@@ -128,12 +128,11 @@ paths:
           schema:
             type: boolean
             example: true
-        - name: is_active
-          in: query
-          description: Filter by active status (true=in latest nodelist, false=historical only)
-          schema:
-            type: boolean
-            example: true
+        # is_active is intentionally absent: it was documented here but never
+        # implemented, so passing it silently returned unfiltered results. Use
+        # latest_only for "one entry per node". A real "still listed in the
+        # current nodelist" filter is tracked separately - true is expressible
+        # as a row predicate, false is not, so it needs its own query shape.
         - name: date_from
           in: query
           description: Start date for historical data (YYYY-MM-DD)

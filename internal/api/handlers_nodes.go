@@ -62,7 +62,7 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Search nodes
-	nodes, err := s.storage.NodeOps().GetNodes(filter)
+	nodes, err := s.storage.GetNodes(filter)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
 		return
@@ -132,7 +132,7 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 		Limit:  1, // Get only the most recent version
 	}
 
-	nodes, err := s.storage.NodeOps().GetNodes(filter)
+	nodes, err := s.storage.GetNodes(filter)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Node lookup failed: %v", err), http.StatusInternalServerError)
 		return
@@ -175,7 +175,7 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get node history within the resolved network
 	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
-	history, err := s.storage.NodeOps().GetNodeHistory(zone, net, node, domain)
+	history, err := s.storage.GetNodeHistory(zone, net, node, domain)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get node history: %v", err), http.StatusInternalServerError)
 		return
@@ -190,7 +190,7 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// Note: Errors from GetNodeDateRange are not critical - if it fails,
 	// firstDate and lastDate will be zero values which is acceptable.
 	// The history data itself is sufficient for the response.
-	firstDate, lastDate, _ := s.storage.NodeOps().GetNodeDateRange(zone, net, node, domain)
+	firstDate, lastDate, _ := s.storage.GetNodeDateRange(zone, net, node, domain)
 
 	response := map[string]interface{}{
 		"address":           fmt.Sprintf("%d:%d/%d", zone, net, node),
@@ -278,7 +278,7 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 
 	// Get node history within the resolved network
 	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
-	history, err := s.storage.NodeOps().GetNodeHistory(zone, net, node, domain)
+	history, err := s.storage.GetNodeHistory(zone, net, node, domain)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get node history: %v", err), http.StatusInternalServerError)
 		return
