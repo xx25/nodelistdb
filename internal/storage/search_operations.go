@@ -129,7 +129,7 @@ func (so *SearchOperations) SearchNodesWithLifetime(filter database.NodeFilter) 
 	conn := so.db.Conn()
 
 	// Build a modified query that returns summary information with lifetime data
-	query := so.queryBuilder.NodeSummarySearchSQL()
+	query := so.queryBuilder.NodeSummarySearchSQL(filter.ActiveOnly != nil && *filter.ActiveOnly)
 	args := so.buildNodeSummaryArgs(filter)
 
 	rows, err := conn.Query(query, args...)

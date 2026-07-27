@@ -460,7 +460,7 @@ type QueryBuilderInterface interface {
 	NodeHistorySQL() string
 	NodeDateRangeSQL() string
 	SysopSearchSQL() string
-	NodeSummarySearchSQL() string
+	NodeSummarySearchSQL(activeOnly bool) string
 
 	// Utility queries
 	ConflictCheckSQL() string

@@ -63,8 +63,8 @@ func (nqb *NodeQueryBuilder) SearchSysop() string {
 }
 
 // SearchNodeSummary returns SQL for searching nodes with lifetime information
-func (nqb *NodeQueryBuilder) SearchNodeSummary() string {
-	return nqb.base.NodeSummarySearchSQL()
+func (nqb *NodeQueryBuilder) SearchNodeSummary(activeOnly bool) string {
+	return nqb.base.NodeSummarySearchSQL(activeOnly)
 }
 
 // UniqueSysops returns SQL for getting unique sysops with statistics
@@ -572,8 +572,21 @@ func (qb *QueryBuilder) SysopSearchSQL() string {
 	LIMIT ?`
 }
 
-// NodeSummarySearchSQL returns SQL for searching nodes with lifetime information
-func (qb *QueryBuilder) NodeSummarySearchSQL() string {
+// NodeSummarySearchSQL returns the web search's per-node summary query.
+//
+// activeOnly drops nodes whose last appearance predates their network's newest
+// nodelist. The predicate reuses currently_active, the same comparison this
+// query already returns as a per-row badge, so the filter and the badge shown
+// next to each result cannot disagree.
+//
+// It is applied after latest_per_node has collapsed each node to one row: "is
+// this node still listed" is a property of a node's final row, so filtering
+// earlier would keep a departed node alive on the strength of an older row.
+func (qb *QueryBuilder) NodeSummarySearchSQL(activeOnly bool) string {
+	activeOnlyClause := ""
+	if activeOnly {
+		activeOnlyClause = "\n\tWHERE lpn.last_date = dm.max_date"
+	}
 	return `
 	WITH
 	domain_max AS (
@@ -608,7 +621,7 @@ func (qb *QueryBuilder) NodeSummarySearchSQL() string {
 		CASE WHEN lpn.last_date = dm.max_date THEN true ELSE false END as currently_active,
 		lpn.domain
 	FROM latest_per_node lpn
-	JOIN domain_max dm ON lpn.domain = dm.domain
+	JOIN domain_max dm ON lpn.domain = dm.domain` + activeOnlyClause + `
 	ORDER BY lpn.last_date DESC, lpn.zone, lpn.net, lpn.node
 	LIMIT ?`
 }

@@ -128,12 +128,13 @@ func buildNodeFilterFromAddress(address string) (database.NodeFilter, error) {
 		return database.NodeFilter{}, err
 	}
 
-	latestOnly := true
+	// No LatestOnly here: an address lookup goes to the summary search, which
+	// already returns one row per node, and a node should be findable by its
+	// address whether or not it is still listed.
 	return database.NodeFilter{
-		Zone:       &zone,
-		Net:        &net,
-		Node:       &node,
-		LatestOnly: &latestOnly,
+		Zone: &zone,
+		Net:  &net,
+		Node: &node,
 	}, nil
 }
 
@@ -261,11 +262,15 @@ func buildPointFilterFromForm(r *http.Request) (database.PointFilter, bool) {
 func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 	// Check if historical search is requested
 	// Checkbox sends "1" when checked, empty string when unchecked
+	// Unchecking "Include historical data" asks for nodes still in the current
+	// nodelist. That is ActiveOnly, not LatestOnly: this search already returns
+	// one row per node, so LatestOnly has nothing to collapse here and setting
+	// it did nothing at all - the checkbox was inert.
 	includeHistorical := r.FormValue("include_historical") == "1"
-	latestOnly := !includeHistorical
+	activeOnly := !includeHistorical
 
 	filter := database.NodeFilter{
-		LatestOnly: &latestOnly,
+		ActiveOnly: &activeOnly,
 		Limit:      100, // Default limit
 	}
 
@@ -319,7 +324,7 @@ func buildNodeFilterFromForm(r *http.Request) database.NodeFilter {
 
 	// Return empty filter for resource-intensive searches to prevent OOM
 	if !hasSpecificConstraint {
-		return database.NodeFilter{LatestOnly: &latestOnly, Limit: 0} // Limit 0 = no results
+		return database.NodeFilter{ActiveOnly: &activeOnly, Limit: 0} // Limit 0 = no results
 	}
 
 	return filter

@@ -177,6 +177,36 @@ func TestBuildFTSQueryDelegates(t *testing.T) {
 	}
 }
 
+// TestNodeSummarySearchActiveOnly guards the web search's "Include historical
+// data" checkbox. It was wired to LatestOnly, which this query never reads, so
+// unchecking it did nothing at all - a visible control with no effect.
+func TestNodeSummarySearchActiveOnly(t *testing.T) {
+	qb := NewQueryBuilder()
+
+	off := qb.NodeSummarySearchSQL(false)
+	on := qb.NodeSummarySearchSQL(true)
+
+	if strings.Contains(off, "lpn.last_date = dm.max_date\n") {
+		t.Errorf("unfiltered query must not restrict to currently-listed nodes\n%s", off)
+	}
+	if !strings.Contains(on, "WHERE lpn.last_date = dm.max_date") {
+		t.Errorf("activeOnly did not add the still-listed predicate\n%s", on)
+	}
+	// The predicate has to land after latest_per_node has collapsed each node
+	// to one row: applied earlier, an older row would keep a departed node in.
+	if strings.Index(on, "WHERE lpn.last_date") < strings.Index(on, "FROM latest_per_node") {
+		t.Errorf("predicate applied before per-node collapse\n%s", on)
+	}
+	// Same comparison as the badge each row carries, so they cannot disagree.
+	if !strings.Contains(on, "lpn.last_date = dm.max_date THEN true") {
+		t.Errorf("expected currently_active badge to use the same comparison\n%s", on)
+	}
+	if strings.Count(on, "?") != strings.Count(off, "?") {
+		t.Errorf("activeOnly must not change the bind count: %d vs %d",
+			strings.Count(on, "?"), strings.Count(off, "?"))
+	}
+}
+
 // TestNodeFilterFieldsAreClassified fails when a field is added to NodeFilter
 // without deciding whether it identifies a node or describes one moment of its
 // history. Getting that wrong picks the wrong query shape and silently changes
@@ -192,6 +222,9 @@ func TestNodeFilterFieldsAreClassified(t *testing.T) {
 		"IsMO": "attribute",
 		// Not predicates.
 		"LatestOnly": "option", "Limit": "option", "Offset": "option",
+		// Read only by the node-summary search, which resolves one row per
+		// node before filtering; BuildNodesQuery does not accept it.
+		"ActiveOnly": "summary-only",
 	}
 
 	ft := reflect.TypeOf(database.NodeFilter{})

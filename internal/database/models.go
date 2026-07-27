@@ -217,6 +217,17 @@ type NodeFilter struct {
 	// Result options
 	LatestOnly *bool `json:"latest_only,omitempty"`
 
+	// ActiveOnly restricts results to nodes still listed in the newest
+	// nodelist of their network. It is NOT LatestOnly: that one collapses a
+	// node's history to its most recent row and keeps long-departed nodes,
+	// this one drops them. The two were conflated once already, which is why
+	// they are separate fields rather than one flag carrying two meanings.
+	//
+	// Only the node-summary search (SearchNodesWithLifetime) reads it, because
+	// that query already resolves one row per node before filtering - the
+	// order the "still listed" test requires. GetNodes does not accept it.
+	ActiveOnly *bool `json:"active_only,omitempty"`
+
 	// Pagination
 	Limit  int `json:"limit,omitempty"`
 	Offset int `json:"offset,omitempty"`
