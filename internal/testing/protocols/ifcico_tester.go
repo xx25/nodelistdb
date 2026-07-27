@@ -28,13 +28,9 @@ type IfcicoTester struct {
 	configMgr    *emsi.ConfigManager // Per-node EMSI configuration manager
 }
 
-// NewIfcicoTester creates a new IFCICO tester
+// NewIfcicoTester creates a new IFCICO tester. ourAddress must come from
+// configuration: see the note on NewIfcicoTesterWithInfo.
 func NewIfcicoTester(timeout time.Duration, ourAddress string) *IfcicoTester {
-	// Use a default address if none provided
-	if ourAddress == "" {
-		ourAddress = "2:5001/5001"
-	}
-	
 	return &IfcicoTester{
 		timeout:     timeout,
 		ourAddress:  ourAddress,
@@ -46,13 +42,13 @@ func NewIfcicoTester(timeout time.Duration, ourAddress string) *IfcicoTester {
 	}
 }
 
-// NewIfcicoTesterWithInfo creates a new IFCICO tester with custom system info
+// NewIfcicoTesterWithInfo creates a new IFCICO tester with custom system info.
+//
+// There is deliberately no built-in default for ourAddress: an address baked
+// into the binary is somebody's real node, and every handshake we make would
+// claim to be them. Callers get it from configuration, which is validated
+// up front (daemon Config.Validate), so an empty value never reaches here.
 func NewIfcicoTesterWithInfo(timeout time.Duration, ourAddress, systemName, sysop, location string) *IfcicoTester {
-	// Use a default address if none provided
-	if ourAddress == "" {
-		ourAddress = "2:5001/5001"
-	}
-	
 	return &IfcicoTester{
 		timeout:     timeout,
 		ourAddress:  ourAddress,

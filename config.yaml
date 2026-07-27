@@ -154,8 +154,8 @@ protocols:
   binkp:
     enabled: true
     port: 24554                # Default BinkP port
-    timeout: 10s               # Connection timeout
-    our_address: "2:5001/5001" # Your FidoNet address for handshake
+    timeout: 30s               # Connection timeout (some binkd hosts stall >10s on first contact)
+    our_address: "2:5001/5001.5001" # Your FidoNet address for handshake (required)
     system_name: "NodelistDB Test Daemon"  # System name (SYS)
     sysop: "Test Operator"     # Sysop name (ZYZ)
     location: "Test Location"  # Location (LOC)
@@ -165,7 +165,7 @@ protocols:
     enabled: true
     port: 60179                # Default IFCICO port
     timeout: 30s               # Connection timeout (EMSI needs more time)
-    our_address: "2:5001/5001"
+    our_address: "2:5001/5001.5001"
     system_name: "NodelistDB Test Daemon"
     sysop: "Test Operator"
     location: "Test Location"

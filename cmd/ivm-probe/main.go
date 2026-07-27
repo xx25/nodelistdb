@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nodelistdb/internal/testing/protocols"
@@ -41,10 +42,17 @@ func main() {
 		portMax     = flag.Int("port-max", 0, "high bound of the VMP data-channel port range")
 		ringTimeout = flag.Duration("ring-timeout", 45*time.Second, "how long to let the remote ring its mailer")
 		timeout     = flag.Duration("timeout", 15*time.Second, "per-connection timeout")
-		ourAddress  = flag.String("our-address", "2:5001/5001", "FTN address to present in the EMSI handshake")
+		ourAddress  = flag.String("our-address", "", "FTN address to present in the EMSI handshake (required)")
 		debug       = flag.Bool("debug", os.Getenv("IVM_DEBUG") != "", "verbose protocol logging")
 	)
 	flag.Parse()
+
+	// No default: a probe handshake announces an FTN address to a stranger's
+	// mailer, and any address compiled in here is a real node somewhere.
+	if strings.TrimSpace(*ourAddress) == "" {
+		fmt.Fprintln(os.Stderr, "-our-address is required: the EMSI handshake announces it to the node under test")
+		os.Exit(2)
+	}
 
 	var targets []target
 	switch args := flag.Args(); {

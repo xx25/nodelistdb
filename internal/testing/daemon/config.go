@@ -455,5 +455,22 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("at least one protocol must be enabled")
 	}
 
+	// Handshaking protocols must be told who we are. There is no built-in
+	// default anywhere in the code: any address compiled into the binary is a
+	// real node somewhere, and we would be announcing ourselves as them to
+	// every host we test. Refusing to start is the only safe answer.
+	if c.Protocols.BinkP.Enabled && c.Protocols.BinkP.OurAddress == "" {
+		return fmt.Errorf("protocols.binkp.our_address is required when binkp is enabled")
+	}
+	if c.Protocols.Ifcico.Enabled && c.Protocols.Ifcico.OurAddress == "" {
+		return fmt.Errorf("protocols.ifcico.our_address is required when ifcico is enabled")
+	}
+	// VModem falls through to an EMSI handshake and reuses the IFCICO identity
+	// when it has none of its own, so either one satisfies it.
+	if c.Protocols.VModem.Enabled &&
+		firstNonEmpty(c.Protocols.VModem.OurAddress, c.Protocols.Ifcico.OurAddress) == "" {
+		return fmt.Errorf("protocols.vmodem.our_address is required when vmodem is enabled (or set protocols.ifcico.our_address, which vmodem falls back to)")
+	}
+
 	return nil
 }

@@ -436,6 +436,16 @@ func main() {
 		}
 	}
 
+	// Dialing means an EMSI handshake, which announces our FTN address to the
+	// answering mailer. There is deliberately no default (see
+	// EMSIConfig.OurAddress): a compiled-in address is a real node, and every
+	// call would introduce us as them. Interactive and info modes never
+	// handshake, so they still run without one.
+	if (*batch || len(phones) > 0) && strings.TrimSpace(cfg.EMSI.OurAddress) == "" {
+		fmt.Fprintf(log.GetOutput(), "ERROR: emsi.our_address is required for test runs; set it in the config file (%s)\n", configFile)
+		os.Exit(1)
+	}
+
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))

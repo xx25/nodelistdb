@@ -117,7 +117,7 @@ type PrefixOperatorConfig struct {
 
 // EMSIConfig contains EMSI handshake parameters
 type EMSIConfig struct {
-	OurAddress      string   `yaml:"our_address"`
+	OurAddress      string   `yaml:"our_address"` // required for any mode that dials
 	SystemName      string   `yaml:"system_name"`
 	Sysop           string   `yaml:"sysop"`
 	Location        string   `yaml:"location"`
@@ -213,7 +213,10 @@ func DefaultConfig() *Config {
 			},
 		},
 		EMSI: EMSIConfig{
-			OurAddress: "2:5001/5001",
+			// OurAddress has no default on purpose: any address compiled in
+			// here is a real node, and every call we place would announce us
+			// as them. It must come from the config file; test modes refuse
+			// to dial without it.
 			SystemName: "NodelistDB Tester",
 			Sysop:      "Test",
 			Location:   "Test",

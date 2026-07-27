@@ -23,9 +23,10 @@ func TestNodeResultAlignment(t *testing.T) {
 		},
 		Protocols: ProtocolsConfig{
 			BinkP: ProtocolConfig{
-				Enabled: true,
-				Port:    24554,
-				Timeout: 30 * time.Second,
+				Enabled:    true,
+				Port:       24554,
+				Timeout:    30 * time.Second,
+				OurAddress: "2:5001/100",
 			},
 		},
 		Services: ServicesConfig{

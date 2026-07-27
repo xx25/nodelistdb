@@ -83,7 +83,7 @@ test:
   # csv_file: "modem-test-results.csv"  # Optional: output results to CSV file
 
 emsi:
-  our_address: "2:5001/5001"
+  our_address: "2:5001/5001.5001"   # required: announced to every mailer we call
   system_name: "NodelistDB Tester"
   sysop: "Test"
   location: "Test"

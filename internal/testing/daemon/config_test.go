@@ -255,7 +255,8 @@ func TestConfigValidate(t *testing.T) {
 				},
 				Protocols: ProtocolsConfig{
 					BinkP: ProtocolConfig{
-						Enabled: true,
+						Enabled:    true,
+						OurAddress: "2:5001/100",
 					},
 				},
 			},
@@ -325,9 +326,81 @@ func TestConfigValidate(t *testing.T) {
 					Database: "testdb",
 				},
 				Protocols: ProtocolsConfig{
-					BinkP:  ProtocolConfig{Enabled: true},
-					Ifcico: ProtocolConfig{Enabled: true},
+					BinkP:  ProtocolConfig{Enabled: true, OurAddress: "2:5001/100"},
+					Ifcico: ProtocolConfig{Enabled: true, OurAddress: "2:5001/100"},
 					Telnet: ProtocolConfig{Enabled: false},
+				},
+			},
+			wantError: false,
+		},
+		{
+			// No address may be defaulted in code: an address compiled into the
+			// binary belongs to a real node, and we would handshake as them.
+			name: "binkp enabled without our_address",
+			config: &Config{
+				ClickHouse: &ClickHouseConfig{
+					Host:     "localhost",
+					Database: "testdb",
+				},
+				Protocols: ProtocolsConfig{
+					BinkP: ProtocolConfig{Enabled: true},
+				},
+			},
+			wantError: true,
+		},
+		{
+			name: "ifcico enabled without our_address",
+			config: &Config{
+				ClickHouse: &ClickHouseConfig{
+					Host:     "localhost",
+					Database: "testdb",
+				},
+				Protocols: ProtocolsConfig{
+					Ifcico: ProtocolConfig{Enabled: true},
+				},
+			},
+			wantError: true,
+		},
+		{
+			name: "vmodem enabled without any address",
+			config: &Config{
+				ClickHouse: &ClickHouseConfig{
+					Host:     "localhost",
+					Database: "testdb",
+				},
+				Protocols: ProtocolsConfig{
+					VModem: ProtocolConfig{Enabled: true},
+				},
+			},
+			wantError: true,
+		},
+		{
+			// VModem reuses the IFCICO identity when it has none of its own,
+			// which is how the shipped config is written.
+			name: "vmodem inherits ifcico our_address",
+			config: &Config{
+				ClickHouse: &ClickHouseConfig{
+					Host:     "localhost",
+					Database: "testdb",
+				},
+				Protocols: ProtocolsConfig{
+					Ifcico: ProtocolConfig{Enabled: true, OurAddress: "2:5001/100"},
+					VModem: ProtocolConfig{Enabled: true},
+				},
+			},
+			wantError: false,
+		},
+		{
+			// Neither protocol handshakes, so neither needs an identity.
+			name: "telnet and ftp need no address",
+			config: &Config{
+				ClickHouse: &ClickHouseConfig{
+					Host:     "localhost",
+					Database: "testdb",
+				},
+				Protocols: ProtocolsConfig{
+					Telnet: ProtocolConfig{Enabled: true},
+					FTP:    ProtocolConfig{Enabled: true},
 				},
 			},
 			wantError: false,

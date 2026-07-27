@@ -42,17 +42,12 @@ type VModemTester struct {
 	vmpSlot    chan struct{} // non-nil when calls must be serialized on one port
 }
 
-// NewVModemTester creates a VModem tester with neutral defaults.
-func NewVModemTester(timeout time.Duration) *VModemTester {
-	return NewVModemTesterWithInfo(timeout, "", "", "", "")
-}
-
 // NewVModemTesterWithInfo creates a VModem tester that advertises the given
 // identity when it falls through to an EMSI handshake.
+//
+// ourAddress has no built-in default on purpose — see NewIfcicoTesterWithInfo.
+// It comes from configuration, validated before any tester is built.
 func NewVModemTesterWithInfo(timeout time.Duration, ourAddress, systemName, sysop, location string) *VModemTester {
-	if ourAddress == "" {
-		ourAddress = "2:5001/5001"
-	}
 	return &VModemTester{
 		timeout:    timeout,
 		ourAddress: ourAddress,
