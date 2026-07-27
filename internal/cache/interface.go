@@ -17,12 +17,12 @@ type Cache interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
 	Delete(ctx context.Context, key string) error
-	
+
 	// Batch operations
 	GetMulti(ctx context.Context, keys []string) (map[string][]byte, error)
 	SetMulti(ctx context.Context, items map[string]CacheItem) error
 	DeleteMulti(ctx context.Context, keys []string) error
-	
+
 	// Prefix operations
 	//
 	// DeleteByPrefix removes every key starting with prefix. Matching is on a
@@ -31,10 +31,10 @@ type Cache interface {
 	// prefix of "ndb:node:2:5001:1000". Supplying a "*" returns
 	// ErrWildcardPrefix rather than silently deleting nothing.
 	DeleteByPrefix(ctx context.Context, prefix string) error
-	
+
 	// Metrics
 	GetMetrics() *Metrics
-	
+
 	// Lifecycle
 	Close() error
 }
@@ -47,13 +47,18 @@ type CacheItem struct {
 
 // Metrics tracks cache performance
 type Metrics struct {
-	Hits       uint64
-	Misses     uint64
-	Sets       uint64
-	Deletes    uint64
-	Evictions  uint64
-	Size       uint64
-	Keys       uint64
+	Hits      uint64
+	Misses    uint64
+	Sets      uint64
+	Deletes   uint64
+	Evictions uint64
+	// Rejected counts Set/SetMulti calls declined because the backend was over
+	// its disk budget. Those calls return nil - declining an entry is normal
+	// operation for a full cache, not a failure, and every call site discards
+	// the error anyway - so this counter is the only evidence they happened.
+	Rejected uint64
+	Size     uint64
+	Keys     uint64
 }
 
 // HitRate calculates the cache hit rate percentage

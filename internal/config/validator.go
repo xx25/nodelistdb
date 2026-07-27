@@ -129,6 +129,23 @@ func (c *CacheConfig) Validate() error {
 		errs.Add(fmt.Errorf("cache.gc_discard_ratio must be between 0 and 1, got %.2f", c.GCDiscardRatio))
 	}
 
+	// Same shape as the TTL check below - a negative survives the zero-check
+	// that backfills an omitted value - but this one is fatal rather than
+	// merely wrong. It reaches time.NewTicker on a goroutine with no recover(),
+	// and NewTicker panics on a non-positive interval, which takes the whole
+	// process down at startup. The backends coerce it defensively too; this is
+	// so an operator is told about the typo instead of silently getting 10m.
+	if c.GCInterval < 0 {
+		errs.Add(fmt.Errorf("cache.gc_interval must not be negative, got %s", c.GCInterval))
+	}
+
+	// 0 means "no disk cap", so a negative reads as one too rather than as a
+	// cap that is permanently exceeded. Reject it: nobody means "unlimited" by
+	// writing -512.
+	if c.MaxDiskMB < 0 {
+		errs.Add(fmt.Errorf("cache.max_disk_mb must not be negative, got %d (0 means no limit)", c.MaxDiskMB))
+	}
+
 	// A negative TTL survives the zero-check that backfills omitted ones, and
 	// both backends only apply expiry when ttl > 0 - so it would silently cache
 	// forever. Reject rather than coerce: it can only be a typo.

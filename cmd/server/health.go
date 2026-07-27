@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/nodelistdb/internal/api"
@@ -63,7 +64,7 @@ func (h *serverHealthChecker) CheckHealth() *api.HealthStatus {
 		metrics := h.cache.GetMetrics()
 		status.Cache = &api.CacheHealth{
 			Enabled: true,
-			Keys:    metrics.Keys,
+			Keys:    atomic.LoadUint64(&metrics.Keys),
 			HitRate: metrics.HitRate(),
 		}
 	}

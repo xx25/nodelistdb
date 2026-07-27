@@ -65,6 +65,15 @@ cache:
   gc_interval: 10m             # Garbage collection interval
   gc_discard_ratio: 0.5        # GC discard ratio
 
+  # Disk budget, checked once per gc_interval. 0 (the default) means no cap.
+  # Over budget, the cache stops accepting new entries and lets TTL expiry
+  # drain it; reads keep being served throughout. If it is still over budget
+  # three checks later - draining needs compaction, and compaction needs
+  # writes - the store is reset. Set this comfortably above the working set:
+  # badger reports the logical size of its files, and a fresh value log alone
+  # reports twice value_log_max_mb.
+  # max_disk_mb: 0
+
   # Cache TTL settings
   default_ttl: 5m              # Default cache TTL
   node_ttl: 15m                # Node data TTL

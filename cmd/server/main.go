@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -292,7 +293,7 @@ func main() {
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{"hits":%d,"misses":%d,"sets":%d,"deletes":%d,"size":%d,"keys":%d,"hit_rate":%.2f}`,
 				metrics.Hits, metrics.Misses, metrics.Sets, metrics.Deletes,
-				metrics.Size, metrics.Keys,
+				atomic.LoadUint64(&metrics.Size), atomic.LoadUint64(&metrics.Keys),
 				float64(metrics.Hits)/float64(metrics.Hits+metrics.Misses+1)*100)
 		})
 	}

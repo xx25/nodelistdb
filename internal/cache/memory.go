@@ -35,7 +35,10 @@ func NewMemoryCache(config *MemoryConfig) *MemoryCache {
 	if config == nil {
 		config = &MemoryConfig{}
 	}
-	if config.GCInterval == 0 {
+	// <=, not ==: a negative interval reaches time.NewTicker in runGC below, on
+	// a goroutine with no recover(), and NewTicker panics on a non-positive
+	// interval - killing the process. Same guard as NewBadgerCache.
+	if config.GCInterval <= 0 {
 		config.GCInterval = 5 * time.Minute
 	}
 
@@ -172,8 +175,13 @@ func (mc *MemoryCache) DeleteByPrefix(_ context.Context, prefix string) error {
 
 func (mc *MemoryCache) GetMetrics() *Metrics {
 	mc.mu.RLock()
-	mc.metrics.Keys = uint64(len(mc.entries))
+	keys := uint64(len(mc.entries))
 	mc.mu.RUnlock()
+
+	// Store rather than assign: mu is held for reading here, so two concurrent
+	// GetMetrics calls both hold RLock and race writing Keys. Same fix as
+	// BadgerCache.updateSizeMetrics.
+	atomic.StoreUint64(&mc.metrics.Keys, keys)
 	return mc.metrics
 }
 
