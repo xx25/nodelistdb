@@ -2,6 +2,7 @@ package storage
 
 import (
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +49,10 @@ func TestBuildNodesQueryBindCounts(t *testing.T) {
 	}
 }
 
+// windowSpec matches a window function's OVER(...) clause, whose own ORDER BY
+// is not a query-level one.
+var windowSpec = regexp.MustCompile(`OVER \([^)]*\)`)
+
 // TestBuildNodesQueryIsSyntacticallySane checks the structural properties that
 // a result-set diff cannot catch, because a query with either defect never runs.
 func TestBuildNodesQueryIsSyntacticallySane(t *testing.T) {
@@ -59,9 +64,11 @@ func TestBuildNodesQueryIsSyntacticallySane(t *testing.T) {
 
 			// A single SELECT cannot carry two ORDER BY clauses; appending a
 			// generic footer to a query that already ordered itself produced
-			// exactly this and failed with SYNTAX_ERROR at runtime.
-			if n := strings.Count(query, "ORDER BY"); n != 1 {
-				t.Errorf("expected exactly 1 ORDER BY, got %d\n%s", n, query)
+			// exactly this and failed with SYNTAX_ERROR at runtime. The
+			// ORDER BY inside a window's OVER(...) is part of the window spec,
+			// not a query-level clause, so it is stripped before counting.
+			if n := strings.Count(windowSpec.ReplaceAllString(query, "OVER ()"), "ORDER BY"); n != 1 {
+				t.Errorf("expected exactly 1 query-level ORDER BY, got %d\n%s", n, query)
 			}
 			if strings.Contains(query, "LIMIT 1 BY") {
 				// The limit must stay in the same SELECT as LIMIT 1 BY, after
@@ -106,6 +113,21 @@ func TestBuildNodesQueryPicksTheRightShape(t *testing.T) {
 		query, _ := qb.BuildNodesQuery(database.NodeFilter{Location: strp2("moscow"), Limit: 5})
 		if !strings.Contains(query, "SELECT DISTINCT") {
 			t.Errorf("attribute filter must match on any historical row\n%s", query)
+		}
+	})
+
+	t.Run("attribute filter ranks instead of LIMIT 1 BY", func(t *testing.T) {
+		// LIMIT 1 BY only pays off when the outer LIMIT can stop the read
+		// early, which an attribute predicate rules out - the matching keys
+		// are not known until the subquery has run. Without that payoff it
+		// just sorts the whole matching set: measured 6.86s against 1.34s for
+		// row_number() on 2:5020 with has_inet.
+		query, _ := qb.BuildNodesQuery(database.NodeFilter{Zone: intp(2), HasInet: boolp(true), Limit: 500})
+		if strings.Contains(query, "LIMIT 1 BY") {
+			t.Errorf("attribute filter must not use LIMIT 1 BY - it cannot stop early and sorts everything\n%s", query)
+		}
+		if !strings.Contains(query, "row_number() OVER") || !strings.Contains(query, "rn = 1") {
+			t.Errorf("expected the ranking shape for an attribute filter\n%s", query)
 		}
 	})
 

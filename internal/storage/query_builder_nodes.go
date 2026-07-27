@@ -329,29 +329,50 @@ func (qb *QueryBuilder) BuildNodesQuery(filter database.NodeFilter) (string, []i
 		return sql + paginationSQL(filter), args
 	}
 
-	// Default shape. ORDER BY / LIMIT 1 BY / LIMIT share one SELECT so ClickHouse
-	// can stop reading once it has enough distinct keys; see paginationSQL.
-	where := append([]string{}, identity...)
+	if len(attrs) == 0 {
+		// Identity-only. ORDER BY / LIMIT 1 BY / LIMIT share one SELECT so
+		// ClickHouse pushes the limit into the read and stops once it has
+		// enough distinct keys - the whole point of this shape. Measured:
+		// zone=2 limit=5 costs 0.33s here against 30.9s for the shape below.
+		sql := "\n\t\tSELECT " + nodeColumnsSQL + "\n\t\tFROM nodes"
+		if len(identity) > 0 {
+			sql += "\n\t\tWHERE " + strings.Join(identity, " AND ")
+			args = append(args, identityArgs...)
+		}
+		sql += "\n\t\tORDER BY zone, net, node, nodelist_date DESC, conflict_sequence ASC, domain" +
+			"\n\t\tLIMIT 1 BY domain, zone, net, node"
+		return sql + paginationSQL(filter), args
+	}
+
+	// An attribute predicate rules the early stop out: the matching keys are not
+	// known until the subquery has run, so no prefix of the table can satisfy
+	// the limit. Without that payoff LIMIT 1 BY is the wrong tool - it has to
+	// sort the whole matching set, wide columns and all, while row_number()
+	// partitions data the primary key already grouped and drops rn > 1 as it
+	// goes. Measured on 2:5020 with has_inet, limit 500: 1.34s here versus
+	// 6.86s for LIMIT 1 BY.
+	//
+	// Attributes vary over a node's history, so they select node keys through a
+	// subquery over all of it, and the node's own latest row is returned even
+	// when that row no longer matches. Identity predicates are repeated on the
+	// outer query for the primary-key lookup.
+	inner := append(append([]string{}, identity...), attrs...)
+	outer := append([]string{}, identity...)
 	args = append(args, identityArgs...)
+	outer = append(outer, "(domain, zone, net, node) IN (\n\t\t\t\tSELECT DISTINCT domain, zone, net, node\n\t\t\t\tFROM nodes WHERE "+
+		strings.Join(inner, " AND ")+"\n\t\t\t)")
+	args = append(args, identityArgs...)
+	args = append(args, attrArgs...)
 
-	if len(attrs) > 0 {
-		// Attributes vary over a node's history, so they select node keys through
-		// a subquery over all of it. Identity predicates are repeated inside to
-		// prune that scan; they are already on the outer query, where they also
-		// give the primary-key lookup that makes the early stop cheap.
-		inner := append(append([]string{}, identity...), attrs...)
-		where = append(where, "(domain, zone, net, node) IN (\n\t\t\tSELECT DISTINCT domain, zone, net, node\n\t\t\tFROM nodes WHERE "+
-			strings.Join(inner, " AND ")+"\n\t\t)")
-		args = append(args, identityArgs...)
-		args = append(args, attrArgs...)
-	}
-
-	sql := "\n\t\tSELECT " + nodeColumnsSQL + "\n\t\tFROM nodes"
-	if len(where) > 0 {
-		sql += "\n\t\tWHERE " + strings.Join(where, " AND ")
-	}
-	sql += "\n\t\tORDER BY zone, net, node, nodelist_date DESC, conflict_sequence ASC, domain" +
-		"\n\t\tLIMIT 1 BY domain, zone, net, node"
+	sql := "\n\t\tSELECT " + nodeColumnsSQL + `
+		FROM (
+			SELECT *,
+				row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY nodelist_date DESC, conflict_sequence ASC) as rn
+			FROM nodes
+			WHERE ` + strings.Join(outer, " AND ") + `
+		) ranked
+		WHERE rn = 1
+		ORDER BY zone, net, node, nodelist_date DESC, domain`
 	return sql + paginationSQL(filter), args
 }
 
