@@ -54,9 +54,6 @@ func TestVModemUnavailableRender(t *testing.T) {
 				VModemVariant: "vmp", VModemConformant: false, VModemCallOutcome: "no-local-port",
 			},
 		},
-		UntestedNodes: []storage.VModemUntestedNode{
-			{Zone: 21, Net: 1, Node: 100, SystemName: "The_File_Bank", SysopName: "John_Doe", Location: "Nowhere", NodeType: "Pvt", Domain: "fsxnet"},
-		},
 		Days:          30,
 		Limit:         1000,
 		Config:        config,
@@ -74,7 +71,6 @@ func TestVModemUnavailableRender(t *testing.T) {
 		"emsi-telnet", "Platinum Xpress/WINServer",
 		"Not classified",
 		"Call not attempted (local)",
-		"21:1/100", "The File Bank", "fsxnet",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
@@ -82,5 +78,14 @@ func TestVModemUnavailableRender(t *testing.T) {
 	}
 	if strings.Contains(out, "badge-warning\">vmp<") {
 		t.Errorf("no-local-port row must not render as a plain 'vmp' badge")
+	}
+	// The page answers one question — "announced IVM, answered as something
+	// else" — and a second table of nodes nobody probed made it read as "IVM
+	// nodes with a problem" when half of it was "IVM nodes we have not looked
+	// at". That is a coverage question, not a node question.
+	for _, gone := range []string{"Never Tested", "no VModem test recorded"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("page still renders the untested section (%q); it asks a different question", gone)
+		}
 	}
 }

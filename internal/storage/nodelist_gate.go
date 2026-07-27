@@ -56,6 +56,12 @@ var protocolAnnouncementFlags = map[string]string{
 // claim about the probe alone — so they get nodelistMembershipPredicateSQL and
 // not the flag test.
 //
+// Both VModem pages therefore resolve "announces IVM" through the same
+// predicate, which is what keeps /analytics/vmodem and
+// /analytics/vmodem-unavailable complementary: every gated node lands on
+// exactly one of them, and the pair cannot drift into double-counting or into
+// a gap where a node appears on neither.
+//
 // The distinction is not academic. Because one host answers for all of its
 // AKAs, a successful test in one network is derived onto the same host's
 // entries in the others (derived_from_address; see the testdaemon notes in

@@ -582,13 +582,12 @@ func (s *Server) VModemAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 // vmodemUnavailableAnalyticsData holds template data for the VModem
-// unavailable/untested analytics page.
+// unavailable analytics page.
 type vmodemUnavailableAnalyticsData struct {
 	Title            string
 	ActivePage       string
 	Version          string
 	UnconfirmedNodes []storage.NodeTestResult
-	UntestedNodes    []storage.VModemUntestedNode
 	Days             int
 	Limit            int
 	IncludeZeroNodes bool
@@ -597,20 +596,25 @@ type vmodemUnavailableAnalyticsData struct {
 	ProcessedInfo    []template.HTML
 }
 
-// VModemUnavailableAnalyticsHandler shows nodes NOT confirmed to run genuine
-// VMODEM: nodes probed but found to be down or running something else, plus
-// nodes that advertise IVM but were never probed in the report window.
-// Complements VModemAnalyticsHandler ("/analytics/vmodem").
+// VModemUnavailableAnalyticsHandler shows nodes that announce IVM but were not
+// confirmed to run genuine VMODEM: probed and found down, or running something
+// else entirely. Complements VModemAnalyticsHandler ("/analytics/vmodem").
+//
+// Deliberately scoped to nodes that answered something. An IVM-flagged node
+// with no probe in the window is a different question — one about test
+// coverage, not about the node — and pairing the two under one title invited
+// the page to be read as "IVM nodes with a problem" when half of it was "IVM
+// nodes we have not looked at".
 func (s *Server) VModemUnavailableAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := VModemUnavailablePageConfig{
 		PageTitle:    "VMODEM Unavailable",
 		PageSubtitle: template.HTML(`<p class="subtitle">Nodes whose announced IVM port was not confirmed to run genuine VMODEM, and why</p>`),
 		StatsHeading: "Not Confirmed VMODEM",
 		InfoText: []string{
-			`<strong>Note:</strong> This report complements <a href="/analytics/vmodem">Confirmed VMODEM</a>. It lists nodes whose IVM port was probed over the last %d days but did not answer as a genuine VMP responder — either down/unreachable, or running something else (an EMSI mailer, binkd, ssh, a telnet login prompt, ...) — plus nodes advertising the IVM flag that were never probed during this period.`,
+			`<strong>Note:</strong> This report complements <a href="/analytics/vmodem">Confirmed VMODEM</a>. It lists nodes whose announced IVM port was probed over the last %d days but did not answer as a genuine VMP responder — either down/unreachable, or running something else (an EMSI mailer, binkd, ssh, a telnet login prompt, ...).`,
 		},
 		EmptyStateTitle: "No unconfirmed VMODEM nodes found for the selected period.",
-		EmptyStateDesc:  "Every IVM-flagged node that was tested confirmed as VMODEM elsewhere, or none were tested during this period.",
+		EmptyStateDesc:  "Every IVM-flagged node probed during this period answered as a genuine VMODEM responder.",
 	}
 
 	params := parseAnalyticsParams(r)
@@ -625,21 +629,11 @@ func (s *Server) VModemUnavailableAnalyticsHandler(w http.ResponseWriter, r *htt
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
 
-	untested, err := s.storage.GetVModemUntestedNodes(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
-	if err != nil {
-		logging.Errorf("VModem Unavailable Analytics: Error fetching untested nodes: %v", err)
-		untested = []storage.VModemUntestedNode{}
-		if displayError == nil {
-			displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
-		}
-	}
-
 	data := vmodemUnavailableAnalyticsData{
 		Title:            config.PageTitle,
 		ActivePage:       "analytics",
 		Version:          version.GetVersionInfo(),
 		UnconfirmedNodes: unconfirmed,
-		UntestedNodes:    untested,
 		Days:             params.Days,
 		Limit:            params.Limit,
 		IncludeZeroNodes: params.IncludeZeroNodes,

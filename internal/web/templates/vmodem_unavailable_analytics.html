@@ -82,47 +82,6 @@
 </div>
 {{end}}
 
-<div class="stats-box" style="margin-top: 2rem;">
-    <h3>Flagged IVM, Never Tested {{if .UntestedNodes}}({{len .UntestedNodes}}){{end}}</h3>
-    <p class="text-muted">Nodes advertising the IVM flag in the latest nodelist with no VModem test recorded in the selected period.</p>
-</div>
-
-{{if .UntestedNodes}}
-<div class="table-responsive">
-    <table class="data-table sortable-table">
-        <thead>
-            <tr>
-                <th data-sortable data-type="address">Node Address</th>
-                <th data-sortable data-type="string">System Name</th>
-                <th data-sortable data-type="string">Sysop</th>
-                <th data-sortable data-type="string">Location</th>
-                <th data-sortable data-type="string">Node Type</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{range .UntestedNodes}}
-            <tr>
-                {{template "node_address_cell" .}}
-                <td>{{replaceUnderscores .SystemName}}</td>
-                <td>{{replaceUnderscores .SysopName}}</td>
-                <td>{{replaceUnderscores .Location}}</td>
-                <td><span class="badge badge-info">{{.NodeType}}</span></td>
-                <td>
-                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-sm btn-secondary">History</a>
-                </td>
-            </tr>
-            {{end}}
-        </tbody>
-    </table>
-</div>
-{{else}}
-<div class="alert alert-success">
-    <strong>No untested IVM nodes found for the selected period.</strong><br>
-    Every node advertising the IVM flag in the latest nodelist was VModem-tested during this period, or none advertise it.
-</div>
-{{end}}
-
 <div class="info-box" style="margin-top: 2rem;">
     {{range .ProcessedInfo}}
     <p>{{.}}</p>

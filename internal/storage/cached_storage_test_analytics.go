@@ -1083,43 +1083,6 @@ func (cs *CachedStorage) GetFileRequestNodes(limit int, domain string) ([]FileRe
 	return results, nil
 }
 
-// GetVModemUntestedNodes returns nodes flagged IVM in the latest nodelist
-// that have not been VModem-tested within the report window (cached). Unlike
-// GetFileRequestNodes this is gated by the days window against
-// node_test_results (which changes far more often than a nodelist snapshot),
-// so it uses the same 15-minute TTL as the other protocol-report methods
-// rather than GetFileRequestNodes' 1-hour TTL.
-func (cs *CachedStorage) GetVModemUntestedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]VModemUntestedNode, error) {
-	if !cs.config.Enabled {
-		return cs.Storage.GetVModemUntestedNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.VModemUntestedNodesKey(limit, days, includeZeroNodes, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []VModemUntestedNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetVModemUntestedNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
-}
-
 // GetEmailCapableNodes returns nodes advertising email transport (cached)
 func (cs *CachedStorage) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
 	if !cs.config.Enabled {

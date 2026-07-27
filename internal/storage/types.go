@@ -409,7 +409,6 @@ type Operations interface {
 	UnmarkPSTNDead(zone, net, node int, markedBy string) error
 	GetPSTNDeadNodes() ([]PSTNDeadNode, error)
 	GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error)
-	GetVModemUntestedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]VModemUntestedNode, error)
 	GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error)
 	GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error)
 	GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error)
@@ -621,21 +620,6 @@ type FileRequestNode struct {
 	NodelistDate    time.Time `json:"nodelist_date"`
 	NodeType        string    `json:"node_type"`
 	Flags           []string  `json:"flags"`
-}
-
-// VModemUntestedNode represents a node flagged IVM in the latest nodelist per
-// domain that has not been VModem-tested within the report window (no row
-// with vmodem_tested = true in node_test_results in the last N days).
-type VModemUntestedNode struct {
-	Zone         int       `json:"zone"`
-	Net          int       `json:"net"`
-	Node         int       `json:"node"`
-	SystemName   string    `json:"system_name"`
-	Location     string    `json:"location"`
-	SysopName    string    `json:"sysop_name"`
-	NodelistDate time.Time `json:"nodelist_date"`
-	NodeType     string    `json:"node_type"`
-	Domain       string    `json:"domain"`
 }
 
 // ModemAccessibleNode represents a node successfully reached via modem (PSTN) test

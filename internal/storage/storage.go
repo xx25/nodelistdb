@@ -416,10 +416,6 @@ func (s *Storage) GetFileRequestNodes(limit int, domain string) ([]FileRequestNo
 	return s.analyticsOperations.GetFileRequestNodes(limit, domain)
 }
 
-func (s *Storage) GetVModemUntestedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]VModemUntestedNode, error) {
-	return s.analyticsOperations.GetVModemUntestedNodes(limit, days, includeZeroNodes, domain)
-}
-
 func (s *Storage) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
 	return s.analyticsOperations.GetEmailCapableNodes(limit, useFieldFallback, domain)
 }
