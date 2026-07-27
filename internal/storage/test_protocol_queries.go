@@ -85,3 +85,43 @@ func (pq *ProtocolQueryOperations) GetVModemEnabledNodes(limit int, days int, in
 func (pq *ProtocolQueryOperations) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return pq.GetProtocolEnabledNodes("ftp", limit, days, includeZeroNodes, domain)
 }
+
+// GetVModemUnconfirmedNodes returns nodes whose IVM port was VModem-tested
+// within the report window but was NOT confirmed as a genuine VMP responder.
+// Unlike GetVModemEnabledNodes this deliberately does not filter on
+// is_operational: a node whose only tested protocol was VModem, and it came
+// back "down", has is_operational = false on that row and must still be
+// included — that row is exactly the evidence this report exists to show.
+// An empty domain means all FTN networks (no filtering).
+func (pq *ProtocolQueryOperations) GetVModemUnconfirmedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	pq.mu.RLock()
+	defer pq.mu.RUnlock()
+
+	conn := pq.db.Conn()
+
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	query := pq.queryBuilder.BuildVModemUnconfirmedQuery(nodeFilter, domainFilterSQL(domain, ""), days)
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unconfirmed vmodem nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []NodeTestResult
+	for rows.Next() {
+		var r NodeTestResult
+		if err := pq.resultParser.ParseTestResultRow(rows, &r); err != nil {
+			return nil, fmt.Errorf("failed to parse test result: %w", err)
+		}
+		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating unconfirmed vmodem rows: %w", err)
+	}
+	return results, nil
+}

@@ -827,6 +827,80 @@ func (ao *AnalyticsOperations) GetFileRequestNodes(limit int, domain string) ([]
 	return results, nil
 }
 
+// GetVModemUntestedNodes returns nodes flagged IVM in the latest nodelist per
+// domain that have NOT been VModem-tested within the report window. The IVM
+// flag (bare or valued) is always routed into internet_config.protocols.IVM,
+// never into the flags array (see internal/parser/parser_flags.go), so
+// detecting it requires JSON_EXISTS over internet_config rather than
+// hasAny(flags, ...). toString(internet_config) avoids the clickhouse-go
+// SharedVariant decode panic on raw internet_config reads (see
+// internetConfigSelectSQL in types.go); JSON_EXISTS never materializes the
+// value at all.
+// An empty domain searches all FTN networks.
+func (ao *AnalyticsOperations) GetVModemUntestedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]VModemUntestedNode, error) {
+	ao.mu.RLock()
+	defer ao.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	}
+	if limit > MaxPSTNSearchLimit {
+		limit = MaxPSTNSearchLimit
+	}
+
+	conn := ao.db.Conn()
+
+	nodeFilter := ""
+	if !includeZeroNodes {
+		nodeFilter = "AND node != 0"
+	}
+
+	domainFilter := domainFilterSQL(domain, "")
+
+	query := fmt.Sprintf(`
+		WITH tested_nodes AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM node_test_results
+			WHERE vmodem_tested = true
+				AND test_time >= now() - INTERVAL ? DAY
+		)
+		SELECT
+			zone, net, node, system_name, location, sysop_name,
+			nodelist_date, node_type, domain
+		FROM nodes
+		WHERE (domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes WHERE 1 = 1 %s GROUP BY domain)
+		  %s
+		  AND conflict_sequence = 0
+		  AND node_type NOT IN ('Down', 'Hold')
+		  %s
+		  AND JSON_EXISTS(toString(internet_config), '$.protocols.IVM')
+		  AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM tested_nodes)
+		ORDER BY zone, net, node
+		LIMIT ?`, domainFilter, domainFilter, nodeFilter)
+
+	rows, err := conn.Query(query, days, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query untested vmodem nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var results []VModemUntestedNode
+	for rows.Next() {
+		var n VModemUntestedNode
+		if err := rows.Scan(&n.Zone, &n.Net, &n.Node, &n.SystemName, &n.Location, &n.SysopName,
+			&n.NodelistDate, &n.NodeType, &n.Domain); err != nil {
+			return nil, fmt.Errorf("failed to scan untested vmodem node row: %w", err)
+		}
+		results = append(results, n)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating untested vmodem rows: %w", err)
+	}
+
+	return results, nil
+}
+
 // Close closes the analytics operations
 func (ao *AnalyticsOperations) Close() error {
 	ao.mu.Lock()

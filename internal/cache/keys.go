@@ -153,6 +153,14 @@ func (kg *KeyGenerator) VModemEnabledNodesKey(limit, days int, includeZeroNodes 
 	return fmt.Sprintf("%s:analytics:vmodem:enabled:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }
 
+func (kg *KeyGenerator) VModemUnconfirmedNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:vmodem:unconfirmed:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
+}
+
+func (kg *KeyGenerator) VModemUntestedNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
+	return fmt.Sprintf("%s:analytics:vmodem:untested:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
+}
+
 func (kg *KeyGenerator) FTPEnabledNodesKey(limit, days int, includeZeroNodes bool, domain string) string {
 	return fmt.Sprintf("%s:analytics:ftp:enabled:%d:%d:%t:%s", kg.Prefix, limit, days, includeZeroNodes, domain)
 }

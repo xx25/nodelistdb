@@ -98,6 +98,11 @@ func (to *TestOperationsRefactored) GetVModemEnabledNodes(limit int, days int, i
 	return to.protocolOps.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
+// GetVModemUnconfirmedNodes returns nodes whose VModem probe did not confirm a genuine VMP responder
+func (to *TestOperationsRefactored) GetVModemUnconfirmedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return to.protocolOps.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
+}
+
 // GetFTPEnabledNodes returns nodes that have been successfully tested with FTP
 func (to *TestOperationsRefactored) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return to.protocolOps.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)

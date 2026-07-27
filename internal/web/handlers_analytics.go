@@ -581,6 +581,85 @@ func (s *Server) VModemAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	s.renderProtocolAnalytics(w, r, config, s.storage.GetVModemEnabledNodes)
 }
 
+// vmodemUnavailableAnalyticsData holds template data for the VModem
+// unavailable/untested analytics page.
+type vmodemUnavailableAnalyticsData struct {
+	Title            string
+	ActivePage       string
+	Version          string
+	UnconfirmedNodes []storage.NodeTestResult
+	UntestedNodes    []storage.VModemUntestedNode
+	Days             int
+	Limit            int
+	IncludeZeroNodes bool
+	Error            error
+	Config           VModemUnavailablePageConfig
+	ProcessedInfo    []template.HTML
+}
+
+// VModemUnavailableAnalyticsHandler shows nodes NOT confirmed to run genuine
+// VMODEM: nodes probed but found to be down or running something else, plus
+// nodes that advertise IVM but were never probed in the report window.
+// Complements VModemAnalyticsHandler ("/analytics/vmodem").
+func (s *Server) VModemUnavailableAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
+	config := VModemUnavailablePageConfig{
+		PageTitle:    "VMODEM Unavailable",
+		PageSubtitle: template.HTML(`<p class="subtitle">Nodes whose announced IVM port was not confirmed to run genuine VMODEM, and why</p>`),
+		StatsHeading: "Not Confirmed VMODEM",
+		InfoText: []string{
+			`<strong>Note:</strong> This report complements <a href="/analytics/vmodem">Confirmed VMODEM</a>. It lists nodes whose IVM port was probed over the last %d days but did not answer as a genuine VMP responder — either down/unreachable, or running something else (an EMSI mailer, binkd, ssh, a telnet login prompt, ...) — plus nodes advertising the IVM flag that were never probed during this period.`,
+		},
+		EmptyStateTitle: "No unconfirmed VMODEM nodes found for the selected period.",
+		EmptyStateDesc:  "Every IVM-flagged node that was tested confirmed as VMODEM elsewhere, or none were tested during this period.",
+	}
+
+	params := parseAnalyticsParams(r)
+
+	unconfirmed, err := s.storage.GetVModemUnconfirmedNodes(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
+	var displayError error
+	if err != nil {
+		logging.Errorf("VModem Unavailable Analytics: Error fetching unconfirmed nodes: %v", err)
+		unconfirmed = []storage.NodeTestResult{}
+		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
+	} else if params.ValidationError != "" {
+		displayError = fmt.Errorf("%s", params.ValidationError)
+	}
+
+	untested, err := s.storage.GetVModemUntestedNodes(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
+	if err != nil {
+		logging.Errorf("VModem Unavailable Analytics: Error fetching untested nodes: %v", err)
+		untested = []storage.VModemUntestedNode{}
+		if displayError == nil {
+			displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
+		}
+	}
+
+	data := vmodemUnavailableAnalyticsData{
+		Title:            config.PageTitle,
+		ActivePage:       "analytics",
+		Version:          version.GetVersionInfo(),
+		UnconfirmedNodes: unconfirmed,
+		UntestedNodes:    untested,
+		Days:             params.Days,
+		Limit:            params.Limit,
+		IncludeZeroNodes: params.IncludeZeroNodes,
+		Error:            displayError,
+		Config:           config,
+		ProcessedInfo:    config.processInfoText(params.Days),
+	}
+
+	tmpl, exists := s.templates["vmodem_unavailable_analytics"]
+	if !exists {
+		logging.Errorf("VModem Unavailable Analytics: Template 'vmodem_unavailable_analytics' not found")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if err := tmpl.Execute(w, data); err != nil {
+		logging.Errorf("VModem Unavailable Analytics: Error executing template: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 // FTPAnalyticsHandler shows FTP enabled nodes analytics
 func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{

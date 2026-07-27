@@ -423,6 +423,86 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 		LIMIT ?`, rowPredicate, nodeFilter, domainFilter, joinPredicate), days)
 }
 
+// BuildVModemUnconfirmedQuery builds a query for nodes whose VModem probe in
+// the report window did not confirm a genuine VMP responder — either the IVM
+// port was down/unreachable, or it answered as something else entirely (an
+// EMSI mailer, binkd, ssh, a telnet login prompt, ...).
+//
+// Structurally identical to BuildProtocolEnabledQuery's three-CTE shape, but
+// anchored on "was probed" (vmodem_tested) rather than "is_operational AND
+// succeeded": a down/unreachable result is exactly the case this report
+// exists to surface, and such a row has is_operational = false (see
+// determineOperationalStatus in internal/testing/daemon/test_executor.go —
+// is_operational is true if ANY protocol succeeded on that row, not
+// specifically VModem, so filtering on it here would drop the "down" case).
+//
+// The final WHERE is the SQL form of NodeTestResult.IsConfirmedVMODEM(),
+// negated: a row is included unless it is a genuine, confirmed VMP responder.
+// domainFilter is a ready-made SQL clause (see domainFilterSQL); "" means all FTN networks.
+func (tqb *TestQueryBuilder) BuildVModemUnconfirmedQuery(nodeFilter, domainFilter string, days int) string {
+	return applyCycleWindows(fmt.Sprintf(`
+		WITH latest_tests AS (
+			SELECT
+				domain, zone, net, node,
+				max(test_time) as latest_test_time
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL ? DAY
+				AND vmodem_tested = true
+				%s
+				%s
+			GROUP BY domain, zone, net, node
+		),
+		-- Prefer the aggregated row, same ordering BuildProtocolEnabledQuery uses:
+		-- for a multi-hostname node, test_aggregator.go's preferConfirmedVMODEM
+		-- makes the aggregated row absorb confirmation from ANY hostname, so this
+		-- ordering alone gets a multi-hostname node right without extra logic.
+		-- The candidate predicate is reapplied here per session_window.go's rule:
+		-- widening the anchor to a session window admits rows the anchor CTE's own
+		-- predicate rejected.
+		best_results AS (
+			SELECT
+				r.domain, r.zone, r.net, r.node, r.test_time, r.hostname_index, r.is_aggregated,
+				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+			FROM node_test_results r
+			JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node AND {{CYCLE_LT}}
+			WHERE r.vmodem_tested = true
+		)
+		SELECT
+			r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+			r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+			r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+			r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+			r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+			r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
+			r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+			r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+			r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+			r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+			r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
+			r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
+			r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
+			r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
+			r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
+			r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
+			r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
+			r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
+			r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
+			r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
+			r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
+			r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
+			r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
+			r.is_operational, r.has_connectivity_issues, r.address_validated,
+			r.tested_hostname, r.hostname_index, r.is_aggregated,
+			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+			r.ftp_anon_success, r.domain, r.derived_from_address
+		FROM node_test_results r
+		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time
+			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
+		WHERE NOT (r.vmodem_variant = 'vmp' AND r.vmodem_conformant = true)
+		ORDER BY r.test_time DESC
+		LIMIT ?`, nodeFilter, domainFilter), days)
+}
+
 // BuildSearchByReachabilityQuery builds a query to search nodes by reachability status (ClickHouse)
 func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
 	return `

@@ -332,6 +332,10 @@ func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bo
 	return s.testOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
+func (s *Storage) GetVModemUnconfirmedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.testOperations.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
+}
+
 func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
 }
@@ -410,6 +414,10 @@ func (s *Storage) GetPSTNDeadNodes() ([]PSTNDeadNode, error) {
 
 func (s *Storage) GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error) {
 	return s.analyticsOperations.GetFileRequestNodes(limit, domain)
+}
+
+func (s *Storage) GetVModemUntestedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]VModemUntestedNode, error) {
+	return s.analyticsOperations.GetVModemUntestedNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {

@@ -255,6 +255,41 @@ func (cs *CachedStorage) GetVModemEnabledNodes(limit int, days int, includeZeroN
 	return results, nil
 }
 
+// GetVModemUnconfirmedNodes returns nodes whose VModem probe did not confirm a genuine VMP responder (cached)
+func (cs *CachedStorage) GetVModemUnconfirmedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
+	}
+
+	key := cs.keyGen.VModemUnconfirmedNodesKey(limit, days, includeZeroNodes, domain)
+
+	// Try cache
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []NodeTestResult
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	// Fall back to database
+	results, err := cs.Storage.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache result with 15 minute TTL
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
+		}
+	}
+
+	return results, nil
+}
+
 // GetFTPEnabledNodes returns nodes with working FTP protocol (cached)
 func (cs *CachedStorage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	if !cs.config.Enabled {
@@ -1042,6 +1077,43 @@ func (cs *CachedStorage) GetFileRequestNodes(limit int, domain string) ([]FileRe
 	if len(results) > 0 {
 		if data, err := json.Marshal(results); err == nil {
 			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
+		}
+	}
+
+	return results, nil
+}
+
+// GetVModemUntestedNodes returns nodes flagged IVM in the latest nodelist
+// that have not been VModem-tested within the report window (cached). Unlike
+// GetFileRequestNodes this is gated by the days window against
+// node_test_results (which changes far more often than a nodelist snapshot),
+// so it uses the same 15-minute TTL as the other protocol-report methods
+// rather than GetFileRequestNodes' 1-hour TTL.
+func (cs *CachedStorage) GetVModemUntestedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]VModemUntestedNode, error) {
+	if !cs.config.Enabled {
+		return cs.Storage.GetVModemUntestedNodes(limit, days, includeZeroNodes, domain)
+	}
+
+	key := cs.keyGen.VModemUntestedNodesKey(limit, days, includeZeroNodes, domain)
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []VModemUntestedNode
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := cs.Storage.GetVModemUntestedNodes(limit, days, includeZeroNodes, domain)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
 		}
 	}
 

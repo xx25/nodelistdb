@@ -48,6 +48,7 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/analytics/ifcico", varyByCookie(s.IfcicoAnalyticsHandler))
 	mux.HandleFunc("/analytics/telnet", varyByCookie(s.TelnetAnalyticsHandler))
 	mux.HandleFunc("/analytics/vmodem", varyByCookie(s.VModemAnalyticsHandler))
+	mux.HandleFunc("/analytics/vmodem-unavailable", varyByCookie(s.VModemUnavailableAnalyticsHandler))
 	mux.HandleFunc("/analytics/ftp", varyByCookie(s.FTPAnalyticsHandler))
 	mux.HandleFunc("/analytics/aka-mismatch", varyByCookie(s.AKAMismatchAnalyticsHandler))
 	mux.HandleFunc("/analytics/other-networks", varyByCookie(s.OtherNetworksAnalyticsHandler))

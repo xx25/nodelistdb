@@ -1,0 +1,131 @@
+{{template "base" .}}
+
+{{define "title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_title"}}{{.Config.PageTitle}}{{end}}
+
+{{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
+
+{{define "head_scripts"}}
+<script src="/static/sortable-table.js"></script>
+<script src="/static/tooltip.js"></script>
+{{end}}
+
+{{define "content"}}
+{{template "analytics_filters" .}}
+{{template "error_display" .}}
+
+<div class="stats-box">
+    <h3>Not Confirmed VMODEM {{if .UnconfirmedNodes}}({{len .UnconfirmedNodes}}){{end}}</h3>
+    <p class="text-muted">IVM ports probed in the selected period that did not answer as a genuine VMODEM (VMP) responder.</p>
+</div>
+
+{{if .UnconfirmedNodes}}
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">Hostname</th>
+                <th data-sortable data-type="string">What It Actually Is</th>
+                <th>Software</th>
+                <th>Detail</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="date">Last Tested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .UnconfirmedNodes}}
+            <tr>
+                {{template "node_address_cell" .}}
+                {{template "hostname_cell_simple" .}}
+
+                {{/* What it actually is */}}
+                <td data-value="{{.VModemVariant}}">
+                    {{if eq .VModemCallOutcome "no-local-port"}}
+                        <span class="badge badge-secondary" title="Our host had no VMP callback port available for this call - a local test-infra gap, not evidence about the remote">Call not attempted (local)</span>
+                    {{else if eq .VModemVariant "down"}}
+                        <span class="badge badge-danger">Down / unreachable</span>
+                    {{else if eq .VModemVariant ""}}
+                        <span class="badge badge-secondary" title="Tested before variant classification existed">Not classified</span>
+                    {{else if eq .VModemVariant "unknown"}}
+                        <span class="badge badge-secondary">Unrecognized response</span>
+                    {{else}}
+                        <span class="badge badge-warning">{{.VModemVariant}}</span>
+                    {{end}}
+                </td>
+
+                {{/* Software */}}
+                <td>{{if .VModemSoftware}}{{.VModemSoftware}}{{else}}<span class="text-muted">N/A</span>{{end}}</td>
+
+                {{/* Detail */}}
+                <td>
+                    {{if .VModemDetail}}{{.VModemDetail}}
+                    {{else if .VModemError}}{{.VModemError}}
+                    {{else if .VModemBanner}}<span title="Raw banner">{{.VModemBanner}}</span>
+                    {{else}}<span class="text-muted">No details recorded</span>{{end}}
+                </td>
+
+                {{template "location_cell" .}}
+                {{template "timestamp_cell" .}}
+                {{template "action_buttons_cell" .}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{else}}
+<div class="alert alert-success">
+    <strong>{{.Config.EmptyStateTitle}}</strong><br>
+    {{.Config.EmptyStateDesc}}
+</div>
+{{end}}
+
+<div class="stats-box" style="margin-top: 2rem;">
+    <h3>Flagged IVM, Never Tested {{if .UntestedNodes}}({{len .UntestedNodes}}){{end}}</h3>
+    <p class="text-muted">Nodes advertising the IVM flag in the latest nodelist with no VModem test recorded in the selected period.</p>
+</div>
+
+{{if .UntestedNodes}}
+<div class="table-responsive">
+    <table class="data-table sortable-table">
+        <thead>
+            <tr>
+                <th data-sortable data-type="address">Node Address</th>
+                <th data-sortable data-type="string">System Name</th>
+                <th data-sortable data-type="string">Sysop</th>
+                <th data-sortable data-type="string">Location</th>
+                <th data-sortable data-type="string">Node Type</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .UntestedNodes}}
+            <tr>
+                {{template "node_address_cell" .}}
+                <td>{{replaceUnderscores .SystemName}}</td>
+                <td>{{replaceUnderscores .SysopName}}</td>
+                <td>{{replaceUnderscores .Location}}</td>
+                <td><span class="badge badge-info">{{.NodeType}}</span></td>
+                <td>
+                    <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-sm btn-secondary">History</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{else}}
+<div class="alert alert-success">
+    <strong>No untested IVM nodes found for the selected period.</strong><br>
+    Every node advertising the IVM flag in the latest nodelist was VModem-tested during this period, or none advertise it.
+</div>
+{{end}}
+
+<div class="info-box" style="margin-top: 2rem;">
+    {{range .ProcessedInfo}}
+    <p>{{.}}</p>
+    {{end}}
+</div>
+{{end}}
