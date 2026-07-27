@@ -13,6 +13,40 @@ import (
 	"github.com/nodelistdb/internal/testing/models"
 )
 
+// protocolFlags maps a -test-proto value to the nodelist flag announcing it —
+// the same pairing test_executor.go gates the scheduled cycle on, and the same
+// one storage.protocolAnnouncementFlags gates the reports on.
+var protocolFlags = map[string]string{
+	"binkp":  "IBN",
+	"ifcico": "IFC",
+	"telnet": "ITN",
+	"ftp":    "IFT",
+	"vmodem": "IVM",
+}
+
+// protocolDefaultPorts is the fallback for a hand-run test: an ad-hoc host given
+// without a port, or a node announcing the protocol with no port of its own.
+// It is a fallback and not the first choice — the announced port wins, because
+// probing 3141 on a node whose nodelist entry says IBN:24554 measures nothing
+// about that node.
+var protocolDefaultPorts = map[string]int{
+	"binkp":  24554,
+	"ifcico": 60179,
+	"telnet": 23,
+	"ftp":    21,
+	"vmodem": 3141,
+}
+
+// Results for an ad-hoc `host:port` test belong to no node, so they are filed
+// under zone 0. Zone 0 is not a valid FTN zone, so the address cannot collide
+// with a real one, and node 0 keeps it out of every report that filters `node
+// != 0` even before the nodelist gate rejects it.
+const (
+	adHocZone = 0
+	adHocNet  = 0
+	adHocNode = 0
+)
+
 // runTestCycle runs a complete test cycle
 func (d *Daemon) runTestCycle(ctx context.Context) error {
 	// Check if paused
@@ -232,6 +266,23 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 		if hostname == "" {
 			return fmt.Errorf("node %s has no internet hostname or valid system name", nodeSpec)
 		}
+
+		// Honour what the node actually announces. Falling straight through to
+		// the protocol's default port probed 2:221/1 on 3141 when its nodelist
+		// entry offers only IBN:24554, and filed the refusal as this node's
+		// VModem result. The scheduled cycle never does this: it reads the
+		// announced port (daemon_protocols.go) and only tests a protocol the
+		// node claims (test_executor.go).
+		if flag, known := protocolFlags[protocol]; known {
+			if announced := targetNode.GetProtocolPort(flag); announced != 0 {
+				port = announced
+			}
+			if !targetNode.HasProtocol(flag) {
+				logging.Warnf("%s does not announce %s; probing the default port anyway. "+
+					"The result is stored, but /analytics/%s lists only nodes announcing %s, so it will not appear there.",
+					nodeSpec, flag, protocol, flag)
+			}
+		}
 	} else {
 		// Try to parse as host:port or just host (bracket-aware for IPv6)
 		if h, p, err := stdnet.SplitHostPort(nodeSpec); err == nil {
@@ -244,26 +295,28 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 			hostname = strings.Trim(nodeSpec, "[]")
 			port = 0
 		}
-		// We'll need to create a synthetic node for testing
-		zone, net, node = 2, 5001, 5001 // Default testing address
+		// An ad-hoc host is nobody's node, so it is filed under zone 0 — not a
+		// valid FTN zone, so it can never collide with a real address.
+		//
+		// This used to be 2:5001/5001, which is a live node: 6479 nodelist rows,
+		// present in today's issue, tested by the daemon every cycle. Every
+		// `-test-node somehost:24554` run wrote a stranger's handshake into that
+		// node's history, where nothing downstream could tell it apart from a
+		// real result — the row is well-formed and the address is real.
+		zone, net, node = adHocZone, adHocNet, adHocNode
+		nodeDomain = models.DefaultDomain
+		logging.Infof("%s is not an FTN address; filing results under the ad-hoc address %d:%d/%d, "+
+			"which is outside the nodelist and excluded from the analytics reports",
+			nodeSpec, adHocZone, adHocNet, adHocNode)
 	}
 
 	// Determine port based on protocol if not specified
 	if port == 0 {
-		switch protocol {
-		case "binkp":
-			port = 24554
-		case "ifcico":
-			port = 60179
-		case "telnet":
-			port = 23
-		case "ftp":
-			port = 21
-		case "vmodem":
-			port = 3141
-		default:
+		def, ok := protocolDefaultPorts[protocol]
+		if !ok {
 			return fmt.Errorf("unsupported protocol: %s", protocol)
 		}
+		port = def
 	}
 
 	// Build hostname with port only if hostname doesn't already include port
@@ -285,17 +338,8 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	}
 
 	// Set protocol flag based on requested protocol
-	switch protocol {
-	case "binkp":
-		testNode.InternetProtocols = []string{"IBN"}
-	case "ifcico":
-		testNode.InternetProtocols = []string{"IFC"}
-	case "telnet":
-		testNode.InternetProtocols = []string{"ITN"}
-	case "ftp":
-		testNode.InternetProtocols = []string{"IFT"}
-	case "vmodem":
-		testNode.InternetProtocols = []string{"IVM"}
+	if flag, ok := protocolFlags[protocol]; ok {
+		testNode.InternetProtocols = []string{flag}
 	}
 
 	// Run the test - but we need to handle the case where hostname is already an IP

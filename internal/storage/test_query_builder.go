@@ -353,6 +353,13 @@ var protocolSuccessPredicates = map[string]string{
 // BuildProtocolEnabledQuery builds a query for nodes with a specific protocol enabled (ClickHouse)
 // protocol should be one of: "binkp", "ifcico", "telnet", "ftp", "vmodem"
 // domainFilter is a ready-made SQL clause (see domainFilterSQL); "" means all FTN networks.
+//
+// Candidates are gated on announced_nodes, whose strength depends on what the
+// page claims: the VModem page says "...on their announced IVM port", so it
+// gets the flag test; the others say "successfully tested", so they get
+// nodelist membership only. See announcementGatedProtocols for why the
+// difference matters. Either way the gate drops nodes that left the nodelist or
+// went Down/Hold since their last successful test.
 func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, domainFilter string, days int) string {
 	predicate, ok := protocolSuccessPredicates[protocol]
 	if !ok {
@@ -361,8 +368,18 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 	rowPredicate := fmt.Sprintf(predicate, "")    // FROM node_test_results, unaliased
 	joinPredicate := fmt.Sprintf(predicate, "r.") // FROM node_test_results r JOIN ...
 
+	// An unknown protocol fell back to binkp's predicate above, and binkp is not
+	// announcement-gated, so it lands on membership only — the weaker gate, which
+	// is the safe direction for a protocol nobody has classified yet.
+	gate := currentNodesSQL(domainFilter, nodeFilter)
+	if announcementGatedProtocols[protocol] {
+		gate = announcedProtocolNodesSQL(protocolAnnouncementFlags[protocol], domainFilter, nodeFilter)
+	}
+
 	return applyCycleWindows(fmt.Sprintf(`
-		WITH latest_tests AS (
+		WITH announced_nodes AS (%s
+		),
+		latest_tests AS (
 			SELECT
 				domain, zone, net, node,
 				max(test_time) as latest_test_time
@@ -370,6 +387,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND %s
 				AND is_operational = true
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM announced_nodes)
 				%s
 				%s
 			GROUP BY domain, zone, net, node
@@ -420,7 +438,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time
 			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
 		ORDER BY r.test_time DESC
-		LIMIT ?`, rowPredicate, nodeFilter, domainFilter, joinPredicate), days)
+		LIMIT ?`, gate, rowPredicate, nodeFilter, domainFilter, joinPredicate), days)
 }
 
 // BuildVModemUnconfirmedQuery builds a query for nodes whose VModem probe in
@@ -438,16 +456,29 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 //
 // The final WHERE is the SQL form of NodeTestResult.IsConfirmedVMODEM(),
 // negated: a row is included unless it is a genuine, confirmed VMP responder.
+//
+// Candidates are gated on announced_nodes because "was probed" is not the same
+// population as "announces IVM" — see nodelist_gate.go for the ways a node with
+// no IVM flag acquires a vmodem_tested row. Unlike BuildProtocolEnabledQuery
+// this query has no success predicate to fall back on: its row predicate is
+// merely vmodem_tested, which a stray probe satisfies by definition, so the
+// gate is the only thing standing between the report and its claim. The gate
+// is a node-level predicate, so unlike the row-level ones it needs no
+// reapplication against the widened session window below: best_results reaches
+// rows only through latest_tests, which has already dropped the whole node.
 // domainFilter is a ready-made SQL clause (see domainFilterSQL); "" means all FTN networks.
 func (tqb *TestQueryBuilder) BuildVModemUnconfirmedQuery(nodeFilter, domainFilter string, days int) string {
 	return applyCycleWindows(fmt.Sprintf(`
-		WITH latest_tests AS (
+		WITH announced_nodes AS (%s
+		),
+		latest_tests AS (
 			SELECT
 				domain, zone, net, node,
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND vmodem_tested = true
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM announced_nodes)
 				%s
 				%s
 			GROUP BY domain, zone, net, node
@@ -500,7 +531,7 @@ func (tqb *TestQueryBuilder) BuildVModemUnconfirmedQuery(nodeFilter, domainFilte
 			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
 		WHERE NOT (r.vmodem_variant = 'vmp' AND r.vmodem_conformant = true)
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter, domainFilter), days)
+		LIMIT ?`, announcedProtocolNodesSQL("IVM", domainFilter, nodeFilter), nodeFilter, domainFilter), days)
 }
 
 // BuildSearchByReachabilityQuery builds a query to search nodes by reachability status (ClickHouse)

@@ -95,7 +95,7 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain string, days int) string {
 	domainFilter := domainFilterSQL(domain, "")
 	domainFilterR := domainFilterSQL(domain, "r.")
-	return applyCycleWindows(fmt.Sprintf(`
+	return applyNodelistGate(applyCycleWindows(fmt.Sprintf(`
 		WITH
 		-- First, find the latest test time for each node (regardless of mismatch status)
 		-- Only consider non-aggregated results since aggregated rows don't set address_validated
@@ -108,6 +108,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
+				{{NODELIST_GATE}}
 				%s
 				%s
 			GROUP BY domain, zone, net, node
@@ -165,7 +166,8 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 			AND (length(r.binkp_addresses) > 0 OR length(r.ifcico_addresses) > 0)
 			%s
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, domainFilterR), days)
+		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, domainFilterR), days),
+		"", domainFilter, nodeFilter)
 }
 
 // AKAIPVersionMismatchNode holds a node where IPv4 and IPv6 AKA validation results differ
@@ -274,7 +276,7 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, validationFilter string, protocolFilter string, domain string, days int) string {
 	domainFilter := domainFilterSQL(domain, "")
 	domainFilterR := domainFilterSQL(domain, "r.")
-	return applyCycleWindows(fmt.Sprintf(`
+	return applyNodelistGate(applyCycleWindows(fmt.Sprintf(`
 		WITH
 		latest_tests AS (
 			SELECT
@@ -285,6 +287,7 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
+				{{NODELIST_GATE}}
 				%s
 				%s
 			GROUP BY domain, zone, net, node
@@ -338,5 +341,6 @@ func (am *AKAMismatchOperations) buildIPVersionMismatchQuery(nodeFilter string, 
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
 		WHERE r.is_aggregated = false
 		ORDER BY r.test_time DESC
-		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, validationFilter, protocolFilter), days)
+		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, validationFilter, protocolFilter), days),
+		"", domainFilter, nodeFilter)
 }

@@ -59,6 +59,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
+				{{NODELIST_GATE}}
 				%s
 			GROUP BY domain, zone, net, node
 			HAVING country <> ''
@@ -66,6 +67,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 		GROUP BY country, country_code
 		ORDER BY count DESC
 	`, domainFilter)
+	countryQuery = applyNodelistGate(countryQuery, "", domainFilter, "")
 
 	rows, err := conn.Query(countryQuery, days)
 	if err != nil {
@@ -110,6 +112,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
+				{{NODELIST_GATE}}
 				%s
 			GROUP BY domain, zone, net, node
 			HAVING isp <> ''
@@ -117,6 +120,8 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 		GROUP BY isp, org, asn
 		ORDER BY count DESC
 	`, domainFilter)
+
+	providerQuery = applyNodelistGate(providerQuery, "", domainFilter, "")
 
 	rows2, err := conn.Query(providerQuery, days)
 	if err != nil {
@@ -249,6 +254,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
+				{{NODELIST_GATE}}
 				%s
 			GROUP BY domain, zone, net, node
 		) AS r
@@ -257,6 +263,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 		ORDER BY r.zone, r.net, r.node
 	`, domainFilter, domainFilter)
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
+	query = applyNodelistGate(query, "", domainFilter, "")
 
 	rows, err := conn.Query(query, days, countryCode)
 	if err != nil {
@@ -359,6 +366,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 			FROM node_test_results
 			WHERE is_operational = true
 				AND test_date >= today() - ?
+				{{NODELIST_GATE}}
 				%s
 			GROUP BY domain, zone, net, node
 		) AS r
@@ -367,6 +375,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 		ORDER BY r.zone, r.net, r.node
 	`, domainFilter, domainFilter)
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
+	query = applyNodelistGate(query, "", domainFilter, "")
 
 	rows, err := conn.Query(query, days, isp)
 	if err != nil {

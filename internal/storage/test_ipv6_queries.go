@@ -92,6 +92,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
+					{{NODELIST_GATE}}
 					AND length(resolved_ipv6) > 0
 					AND is_operational = true
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
@@ -192,6 +193,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
+	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -252,6 +254,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 				SELECT DISTINCT domain, zone, net, node
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
+					{{NODELIST_GATE}}
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
 					%s
@@ -369,6 +372,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
+	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 
 	rows, err := conn.Query(query, days, days, days, limit)
 	if err != nil {
@@ -430,6 +434,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 				SELECT DISTINCT domain, zone, net, node
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
+					{{NODELIST_GATE}}
 					AND length(resolved_ipv6) > 0
 					AND is_operational = true
 					AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
@@ -550,6 +555,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
+	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, days, days, limit)
@@ -613,6 +619,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
+					{{NODELIST_GATE}}
 					AND length(resolved_ipv6) > 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
 					AND NOT (binkp_ipv4_success = true OR ifcico_ipv4_success = true OR telnet_ipv4_success = true)
@@ -715,6 +722,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
+	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -776,6 +784,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 					max(test_time) as latest_test_time
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL ? DAY
+					{{NODELIST_GATE}}
 					AND length(resolved_ipv6) > 0
 					AND length(resolved_ipv4) = 0
 					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
@@ -876,6 +885,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
+	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {
@@ -935,6 +945,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 			SELECT domain, zone, net, node, max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
+				{{NODELIST_GATE}}
 				AND is_aggregated = false
 				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true)
 				AND address_validated = true
@@ -993,6 +1004,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
+	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, limit)

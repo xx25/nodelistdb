@@ -828,14 +828,10 @@ func (ao *AnalyticsOperations) GetFileRequestNodes(limit int, domain string) ([]
 }
 
 // GetVModemUntestedNodes returns nodes flagged IVM in the latest nodelist per
-// domain that have NOT been VModem-tested within the report window. The IVM
-// flag (bare or valued) is always routed into internet_config.protocols.IVM,
-// never into the flags array (see internal/parser/parser_flags.go), so
-// detecting it requires JSON_EXISTS over internet_config rather than
-// hasAny(flags, ...). toString(internet_config) avoids the clickhouse-go
-// SharedVariant decode panic on raw internet_config reads (see
-// internetConfigSelectSQL in types.go); JSON_EXISTS never materializes the
-// value at all.
+// domain that have NOT been VModem-tested within the report window.
+// "Flagged IVM" is announcedProtocolPredicateSQL, shared with the complementary
+// BuildVModemUnconfirmedQuery so the two halves of /analytics/vmodem-unavailable
+// split one population instead of two.
 // An empty domain searches all FTN networks.
 func (ao *AnalyticsOperations) GetVModemUntestedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]VModemUntestedNode, error) {
 	ao.mu.RLock()
@@ -868,15 +864,10 @@ func (ao *AnalyticsOperations) GetVModemUntestedNodes(limit int, days int, inclu
 			zone, net, node, system_name, location, sysop_name,
 			nodelist_date, node_type, domain
 		FROM nodes
-		WHERE (domain, nodelist_date) IN (SELECT domain, MAX(nodelist_date) FROM nodes WHERE 1 = 1 %s GROUP BY domain)
-		  %s
-		  AND conflict_sequence = 0
-		  AND node_type NOT IN ('Down', 'Hold')
-		  %s
-		  AND JSON_EXISTS(toString(internet_config), '$.protocols.IVM')
-		  AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM tested_nodes)
+		WHERE 1 = 1%s
+			AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM tested_nodes)
 		ORDER BY zone, net, node
-		LIMIT ?`, domainFilter, domainFilter, nodeFilter)
+		LIMIT ?`, announcedProtocolPredicateSQL("IVM", domainFilter, nodeFilter))
 
 	rows, err := conn.Query(query, days, limit)
 	if err != nil {

@@ -65,6 +65,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain stri
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
+				{{NODELIST_GATE}}
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
@@ -105,6 +106,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain stri
 	`
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
+	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), "")
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER_R}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days)
@@ -153,6 +155,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 				max(test_time) as latest_test_time
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
+				{{NODELIST_GATE}}
 				AND is_aggregated = false
 				AND is_operational = true
 				AND (binkp_success = true OR ifcico_success = true)
@@ -214,6 +217,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 	`
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
+	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), "")
 	query = strings.ReplaceAll(query, "{DOMAIN_FILTER_R}", domainFilterSQL(domain, "r."))
 
 	rows, err := conn.Query(query, days, escapedName, escapedName, escapedName, limit)
