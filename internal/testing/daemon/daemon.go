@@ -142,25 +142,40 @@ func New(cfg *Config) (*Daemon, error) {
 		akaEquiv: NewAkaEquivalence(),
 	}
 
-	// Initialize persistent cache using testdaemon_cache configuration
-	// Now uses unified BadgerCache interface
+	// Initialize the cache from testdaemon_cache.
+	//
+	// This used to call NewBadgerCache directly and never read the type field,
+	// so a config asking for "memory" ran badger regardless - which is how
+	// oracle-main came to be running a persistent cache while its config said
+	// otherwise. Route it through the factory so the field means what it says,
+	// and say plainly at startup which backend was picked: this cache holds DNS,
+	// geolocation and WHOIS results, and WHOIS lookups are rate limited, so
+	// choosing a backend that forgets them on restart is a decision worth
+	// seeing in the log rather than inferring from behaviour.
 	if cfg.TestdaemonCache.Enabled && cfg.TestdaemonCache.Path != "" {
-		pCache, err := cache.NewBadgerCache(&cache.BadgerConfig{
-			Path:             cfg.TestdaemonCache.Path,
-			MaxMemoryMB:      256, // Default for testing daemon
-			ValueLogMaxMB:    100,
-			CompactL0OnClose: true,
-			NumGoroutines:    4,
-			GCInterval:       10 * time.Minute,
-			GCDiscardRatio:   0.5,
-			MaxDiskMB:        512,
+		pCache, err := cache.New(&cache.Config{
+			Enabled:              true,
+			Type:                 cfg.TestdaemonCache.Type,
+			BadgerPath:           cfg.TestdaemonCache.Path,
+			BadgerMaxMemoryMB:    256, // Default for testing daemon
+			BadgerValueLogMaxMB:  100,
+			BadgerCompactL0:      true,
+			BadgerNumGoroutines:  4,
+			BadgerGCInterval:     10 * time.Minute,
+			BadgerGCDiscardRatio: 0.5,
+			BadgerMaxDiskMB:      cfg.TestdaemonCache.MaxDiskMB,
 		})
-		if err != nil {
-			logging.Warnf("Failed to initialize persistent cache: %v", err)
-			logging.Infof("Continuing with in-memory cache only")
-		} else {
+		switch {
+		case err != nil:
+			logging.Warnf("Failed to initialize testdaemon cache (type %q): %v", cfg.TestdaemonCache.Type, err)
+			logging.Infof("Continuing without it; the resolvers keep their own in-process caches")
+		case cfg.TestdaemonCache.Type == "memory":
 			d.persistentCache = pCache
-			logging.Infof("Persistent BadgerCache initialized at %s", cfg.TestdaemonCache.Path)
+			logging.Warnf("testdaemon_cache.type is \"memory\": DNS, geolocation and WHOIS results will NOT survive a restart. Set it to \"badger\" for a persistent cache.")
+		default:
+			d.persistentCache = pCache
+			logging.Infof("Persistent BadgerCache initialized at %s (max_disk_mb %d)",
+				cfg.TestdaemonCache.Path, cfg.TestdaemonCache.MaxDiskMB)
 		}
 	}
 

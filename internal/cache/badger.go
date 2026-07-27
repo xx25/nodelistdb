@@ -374,8 +374,21 @@ func (bc *BadgerCache) DeleteByPrefix(ctx context.Context, prefix string) error 
 	return err
 }
 
+// GetMetrics returns the live counter struct. It deliberately does NOT refresh
+// Size and Keys.
+//
+// Those two come from a full keyspace scan, and internal/storage reaches
+// GetMetrics from 110 places - once per cache hit and once per miss, as
+// atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1) - so refreshing them here
+// made every single cache operation O(keys) on this backend. A warm cache made
+// itself slower than the ClickHouse query it exists to avoid.
+//
+// Size and Keys are refreshed on the GC tick instead, so they lag by up to
+// gc_interval. That is not a real loss of precision: Size reads counters badger
+// itself only recomputes on a one-minute ticker, so it was never live. The
+// counters callers increment - Hits, Misses, Sets, Deletes, Rejected - stay
+// exact and immediate.
 func (bc *BadgerCache) GetMetrics() *Metrics {
-	bc.updateSizeMetrics()
 	return bc.metrics
 }
 
@@ -435,6 +448,10 @@ func (bc *BadgerCache) performGC() {
 	}
 
 	bc.enforceDiskBudget()
+
+	// The only place the keyspace scan runs after construction. GetMetrics used
+	// to do it on every read; see the comment there.
+	bc.updateSizeMetrics()
 }
 
 const (

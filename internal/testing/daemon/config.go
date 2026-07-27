@@ -169,8 +169,13 @@ type DNSConfig struct {
 // CacheConfig for local caching
 type CacheConfig struct {
 	Enabled bool   `yaml:"enabled"`
-	Type    string `yaml:"type"` // badger or bolt
-	Path    string `yaml:"path"`
+	Type    string `yaml:"type"` // badger (persistent) or memory (per-process)
+	Path    string `yaml:"path"` // badger only
+	// MaxDiskMB caps the badger store; 0 means no cap. Defaults to 512, the
+	// value this was hardcoded to before the field existed - a config that
+	// already sets max_disk_mb here was being silently dropped, since yaml
+	// ignores unknown keys.
+	MaxDiskMB int `yaml:"max_disk_mb"`
 }
 
 // LoggingConfig for logging settings
@@ -251,6 +256,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.TestdaemonCache.Path == "" {
 		cfg.TestdaemonCache.Path = "./cache/badger-testdaemon"
+	}
+	if cfg.TestdaemonCache.MaxDiskMB == 0 {
+		cfg.TestdaemonCache.MaxDiskMB = 512
 	}
 
 	if cfg.Logging.Level == "" {
