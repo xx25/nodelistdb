@@ -57,7 +57,18 @@ func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes
 // BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT for ClickHouse with proper array handling.
 // WARNING: this interpolates sysop-controlled strings through escapeSQL(),
 // whose escaping is incomplete. It is reached from every nodelist import.
-// Use NodeOperations.InsertNodes instead, which uses the native batch API (PrepareBatch/Append).
+//
+// The advice that used to sit here - "use NodeOperations.InsertNodes instead,
+// which uses the native batch API" - was circular and wrong on both halves.
+// InsertNodes calls InsertNodesInChunks, which calls this function; and the
+// only PrepareBatch in the repo is on the points path (point_operations.go).
+// There is no alternative to switch to today. Replacing this with PrepareBatch
+// on the nodes path is the actual fix, and it is still open.
+//
+// The concrete escaping gap is not in escapeSQL, which orders
+// backslash-then-quote correctly, but in formatArrayForDB
+// (clickhouse_result_parser.go), which escapes ' and never escapes \ - so
+// flags and modem_flags bypass escapeSQL entirely.
 func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
 	if len(nodes) == 0 {
 		return ""

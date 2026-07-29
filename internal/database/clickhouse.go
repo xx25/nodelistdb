@@ -53,6 +53,13 @@ func NewClickHouse(config *ClickHouseConfig) (*ClickHouseDB, error) {
 			Password: config.Password,
 		},
 		DialTimeout: config.DialTimeout,
+		// read_timeout is parsed, defaulted and validated by internal/config,
+		// but used to stop here: the option was never handed to the driver, so
+		// the setting had no effect at all. It went unnoticed because the
+		// driver's own fallback is 300s and the config default is 5m, so the
+		// observable behaviour matched by coincidence. Anyone tightening
+		// read_timeout to bound a runaway query would have changed nothing.
+		ReadTimeout: config.ReadTimeout,
 	}
 
 	if useHTTP {
