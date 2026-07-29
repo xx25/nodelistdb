@@ -6,39 +6,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/nodelistdb/internal/database"
 )
 
-// resolveNodeDomain picks the FTN network for a node endpoint. An explicit
-// ?domain= query parameter wins; otherwise, when the 3D address exists in
-// exactly one network that network is used, and when it exists in several the
-// default network (fidonet) is preferred so pre-multi-network URLs keep their
-// meaning. The full list of networks the address exists in is returned so
-// handlers can expose it as available_domains.
+// resolveNodeDomain picks the FTN network for a node endpoint, along with the
+// full list of networks the address exists in for available_domains.
 func (s *Server) resolveNodeDomain(r *http.Request, zone, net, node int) (string, []string) {
-	domains, err := s.storage.NodeOps().GetNodeDomains(zone, net, node)
+	domains, err := s.storage.GetNodeDomains(zone, net, node)
 	if err != nil {
 		domains = nil
 	}
-
-	if d := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))); d != "" {
-		return d, domains
-	}
-
-	switch len(domains) {
-	case 0:
-		return database.DefaultDomain, domains
-	case 1:
-		return domains[0], domains
-	default:
-		for _, d := range domains {
-			if d == database.DefaultDomain {
-				return d, domains
-			}
-		}
-		return domains[0], domains
-	}
+	return preferDomain(explicitDomain(r), domains), domains
 }
 
 // SearchNodesHandler handles node search requests.
@@ -90,22 +68,8 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodeHandler handles individual node lookups.
 // GET /api/nodes/{zone}/{net}/{node}
 func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse path parameters using Chi
-	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
-	if err != nil {
-		WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
-		return
-	}
-
-	net, err := strconv.Atoi(chi.URLParam(r, "net"))
-	if err != nil {
-		WriteJSONError(w, "Invalid net parameter", http.StatusBadRequest)
-		return
-	}
-
-	node, err := strconv.Atoi(chi.URLParam(r, "node"))
-	if err != nil {
-		WriteJSONError(w, "Invalid node parameter", http.StatusBadRequest)
+	zone, net, node, _, ok := parse4DPathParams(w, r, false)
+	if !ok {
 		return
 	}
 
@@ -142,22 +106,8 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodeHistoryHandler returns the complete history of a node.
 // GET /api/nodes/{zone}/{net}/{node}/history
 func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse path parameters using Chi
-	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
-	if err != nil {
-		WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
-		return
-	}
-
-	net, err := strconv.Atoi(chi.URLParam(r, "net"))
-	if err != nil {
-		WriteJSONError(w, "Invalid net parameter", http.StatusBadRequest)
-		return
-	}
-
-	node, err := strconv.Atoi(chi.URLParam(r, "node"))
-	if err != nil {
-		WriteJSONError(w, "Invalid node parameter", http.StatusBadRequest)
+	zone, net, node, _, ok := parse4DPathParams(w, r, false)
+	if !ok {
 		return
 	}
 
@@ -180,15 +130,11 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// The history data itself is sufficient for the response.
 	firstDate, lastDate, _ := s.storage.GetNodeDateRange(zone, net, node, domain)
 
-	response := map[string]interface{}{
-		"address":           fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"domain":            domain,
-		"available_domains": availableDomains,
-		"history":           history,
-		"count":             len(history),
-		"first_date":        firstDate,
-		"last_date":         lastDate,
-	}
+	response := addressEnvelope(zone, net, node, -1, domain, availableDomains)
+	response["history"] = history
+	response["count"] = len(history)
+	response["first_date"] = firstDate
+	response["last_date"] = lastDate
 
 	WriteJSONSuccess(w, response)
 }
@@ -196,22 +142,8 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodeChangesHandler returns detected changes for a node.
 // GET /api/nodes/{zone}/{net}/{node}/changes
 func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse path parameters using Chi
-	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
-	if err != nil {
-		WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
-		return
-	}
-
-	net, err := strconv.Atoi(chi.URLParam(r, "net"))
-	if err != nil {
-		WriteJSONError(w, "Invalid net parameter", http.StatusBadRequest)
-		return
-	}
-
-	node, err := strconv.Atoi(chi.URLParam(r, "node"))
-	if err != nil {
-		WriteJSONError(w, "Invalid node parameter", http.StatusBadRequest)
+	zone, net, node, _, ok := parse4DPathParams(w, r, false)
+	if !ok {
 		return
 	}
 
@@ -223,13 +155,9 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := map[string]interface{}{
-		"address":           fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"domain":            domain,
-		"available_domains": availableDomains,
-		"changes":           changes,
-		"count":             len(changes),
-	}
+	response := addressEnvelope(zone, net, node, -1, domain, availableDomains)
+	response["changes"] = changes
+	response["count"] = len(changes)
 
 	WriteJSONSuccess(w, response)
 }
@@ -237,22 +165,8 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodeTimelineHandler returns timeline data for visualization.
 // GET /api/nodes/{zone}/{net}/{node}/timeline
 func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse path parameters using Chi
-	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
-	if err != nil {
-		WriteJSONError(w, "Invalid zone parameter", http.StatusBadRequest)
-		return
-	}
-
-	net, err := strconv.Atoi(chi.URLParam(r, "net"))
-	if err != nil {
-		WriteJSONError(w, "Invalid net parameter", http.StatusBadRequest)
-		return
-	}
-
-	node, err := strconv.Atoi(chi.URLParam(r, "node"))
-	if err != nil {
-		WriteJSONError(w, "Invalid node parameter", http.StatusBadRequest)
+	zone, net, node, _, ok := parse4DPathParams(w, r, false)
+	if !ok {
 		return
 	}
 
@@ -297,13 +211,9 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 		timeline = append(timeline, event)
 	}
 
-	response := map[string]interface{}{
-		"address":           fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"domain":            domain,
-		"available_domains": availableDomains,
-		"timeline":          timeline,
-		"count":             len(timeline),
-	}
+	response := addressEnvelope(zone, net, node, -1, domain, availableDomains)
+	response["timeline"] = timeline
+	response["count"] = len(timeline)
 
 	WriteJSONSuccess(w, response)
 }
@@ -340,7 +250,7 @@ func (s *Server) GetPSTNNodesHandler(w http.ResponseWriter, r *http.Request) {
 
 	// queryDomain defaults to fidonet, preserving this endpoint's original
 	// fidonet-only behavior for the modem-test CLI
-	nodes, err := s.storage.GetPSTNNodes(limit, zone, queryDomain(r))
+	nodes, err := s.storage.GetPSTNNodes(limit, zone, domainOrDefault(r))
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to fetch PSTN nodes: %v", err), http.StatusInternalServerError)
 		return

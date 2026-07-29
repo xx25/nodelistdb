@@ -3,25 +3,13 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
-
-	"github.com/nodelistdb/internal/database"
 )
-
-// queryDomain returns the ?domain= query parameter, defaulting to fidonet so
-// pre-multi-network URLs keep returning FidoNet-only data.
-func queryDomain(r *http.Request) string {
-	if d := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))); d != "" {
-		return d
-	}
-	return database.DefaultDomain
-}
 
 // StatsHandler handles statistics requests.
 // GET /api/stats?date=2023-01-01&domain=fidonet
 func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
-	domain := queryDomain(r)
+	domain := domainOrDefault(r)
 
 	// Parse date parameter
 	dateStr := r.URL.Query().Get("date")
@@ -90,7 +78,7 @@ func (s *Server) NetworksHandler(w http.ResponseWriter, r *http.Request) {
 // GetAvailableDatesHandler returns all available dates for stats.
 // GET /api/stats/dates?domain=fidonet
 func (s *Server) GetAvailableDatesHandler(w http.ResponseWriter, r *http.Request) {
-	dates, err := s.storage.GetAvailableDates(queryDomain(r))
+	dates, err := s.storage.GetAvailableDates(domainOrDefault(r))
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get available dates: %v", err), http.StatusInternalServerError)
 		return

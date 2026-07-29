@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -19,6 +20,15 @@ func (cs *CachedStorage) GetNodes(filter database.NodeFilter) ([]database.Node, 
 func (cs *CachedStorage) GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error) {
 	return cachedFetch(cs, cs.keyGen.NodeHistoryKey(zone, net, node)+":"+domain, cs.config.NodeTTL, func() ([]database.Node, error) {
 		return cs.Storage.NodeOps().GetNodeHistory(zone, net, node, domain)
+	})
+}
+
+// GetNodeDomains with caching. The answer changes only when a nodelist import
+// adds the address to another network, so it rides the node TTL.
+func (cs *CachedStorage) GetNodeDomains(zone, net, node int) ([]string, error) {
+	key := fmt.Sprintf("%s:node:domains:%d:%d:%d", cs.keyGen.Prefix, zone, net, node)
+	return cachedFetch(cs, key, cs.config.NodeTTL, func() ([]string, error) {
+		return cs.Storage.NodeOps().GetNodeDomains(zone, net, node)
 	})
 }
 

@@ -11,34 +11,17 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// resolvePointDomain picks the FTN network for a point endpoint. It mirrors
-// resolveNodeDomain but consults the points table itself: resolving via the
-// boss node could 404 a point that exists only in a network the node-level
-// heuristic does not prefer. A nil point resolves at boss level.
+// resolvePointDomain picks the FTN network for a point endpoint. It consults
+// the points table itself rather than the boss node: resolving via the node
+// could 404 a point that exists only in a network the node-level heuristic
+// does not prefer. A nil point resolves at boss level.
 func (s *Server) resolvePointDomain(r *http.Request, zone, net, node int, point *int) (string, []string) {
 	domains, err := s.storage.GetPointDomains(zone, net, node, point)
 	if err != nil || domains == nil {
 		// Non-nil so JSON bodies carry "available_domains": [] rather than null
 		domains = []string{}
 	}
-
-	if d := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))); d != "" {
-		return d, domains
-	}
-
-	switch len(domains) {
-	case 0:
-		return database.DefaultDomain, domains
-	case 1:
-		return domains[0], domains
-	default:
-		for _, d := range domains {
-			if d == database.DefaultDomain {
-				return d, domains
-			}
-		}
-		return domains[0], domains
-	}
+	return preferDomain(explicitDomain(r), domains), domains
 }
 
 // parse4DPathParams extracts zone/net/node (and optionally point) from Chi
@@ -143,13 +126,9 @@ func (s *Server) GetNodePointsHandler(w http.ResponseWriter, r *http.Request) {
 		points = []database.Point{}
 	}
 
-	response := map[string]interface{}{
-		"address":           fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"domain":            domain,
-		"available_domains": availableDomains,
-		"points":            points,
-		"count":             len(points),
-	}
+	response := addressEnvelope(zone, net, node, -1, domain, availableDomains)
+	response["points"] = points
+	response["count"] = len(points)
 	if asOf != nil {
 		response["as_of"] = asOf.Format("2006-01-02")
 	}
@@ -216,13 +195,9 @@ func (s *Server) GetPointHistoryHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	response := map[string]interface{}{
-		"address":           fmt.Sprintf("%d:%d/%d.%d", zone, net, node, point),
-		"domain":            domain,
-		"available_domains": availableDomains,
-		"history":           history,
-		"count":             len(history),
-	}
+	response := addressEnvelope(zone, net, node, point, domain, availableDomains)
+	response["history"] = history
+	response["count"] = len(history)
 
 	WriteJSONSuccess(w, response)
 }
@@ -232,7 +207,7 @@ func (s *Server) GetPointHistoryHandler(w http.ResponseWriter, r *http.Request) 
 // GET /api/pointlists/dates?domain=fidonet&source=z2
 func (s *Server) PointlistDatesHandler(w http.ResponseWriter, r *http.Request) {
 	source := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source")))
-	files, err := s.storage.GetPointlistDates(queryDomain(r), source)
+	files, err := s.storage.GetPointlistDates(domainOrDefault(r), source)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get pointlist dates: %v", err), http.StatusInternalServerError)
 		return
@@ -249,7 +224,7 @@ func (s *Server) PointlistDatesHandler(w http.ResponseWriter, r *http.Request) {
 // PointlistSourcesHandler summarizes the imported pointlist series.
 // GET /api/pointlists/sources?domain=fidonet
 func (s *Server) PointlistSourcesHandler(w http.ResponseWriter, r *http.Request) {
-	sources, err := s.storage.GetPointlistSources(queryDomain(r))
+	sources, err := s.storage.GetPointlistSources(domainOrDefault(r))
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get pointlist sources: %v", err), http.StatusInternalServerError)
 		return

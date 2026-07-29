@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,15 +11,21 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// parseIntParam parses an integer parameter from query string.
-// Returns 0 and false if the parameter doesn't exist or is invalid.
-func parseIntParam(query url.Values, key string) (int, bool) {
-	if val := query.Get(key); val != "" {
-		if n, err := strconv.Atoi(val); err == nil {
-			return n, true
-		}
+// parseIntParam parses an integer parameter from a query string. It reports
+// present separately from ok: an absent parameter is not an error, but a
+// malformed one is. Both used to come back as (0, false), so ?zone=two was
+// silently dropped and the caller got an unfiltered search instead of a
+// complaint.
+func parseIntParam(query url.Values, key string) (value int, present bool, err error) {
+	raw := query.Get(key)
+	if raw == "" {
+		return 0, false, nil
 	}
-	return 0, false
+	n, cerr := strconv.Atoi(raw)
+	if cerr != nil {
+		return 0, true, &ParamError{Field: key, Value: raw, Message: key + " must be a whole number"}
+	}
+	return n, true, nil
 }
 
 // maxAnalyticsDays bounds the ?days= look-back window on the analytics
@@ -62,15 +69,20 @@ func parseBoolParam(query url.Values, key string) (bool, bool) {
 	return false, false
 }
 
-// parseDateParam parses a date parameter from query string in YYYY-MM-DD format.
-// Returns zero time and false if the parameter doesn't exist or is invalid.
-func parseDateParam(query url.Values, key string) (time.Time, bool) {
-	if val := query.Get(key); val != "" {
-		if t, err := time.Parse("2006-01-02", val); err == nil {
-			return t, true
-		}
+// parseDateParam parses a YYYY-MM-DD query parameter. Like parseIntParam, an
+// absent parameter is not an error and a malformed one is: ?date_from=last
+// used to be dropped, which quietly widened the search rather than rejecting
+// it.
+func parseDateParam(query url.Values, key string) (value time.Time, present bool, err error) {
+	raw := query.Get(key)
+	if raw == "" {
+		return time.Time{}, false, nil
 	}
-	return time.Time{}, false
+	t, perr := time.Parse("2006-01-02", raw)
+	if perr != nil {
+		return time.Time{}, true, &ParamError{Field: key, Value: raw, Message: key + " must be a date in YYYY-MM-DD form"}
+	}
+	return t, true, nil
 }
 
 // parseStringParam parses a string parameter from query string with minimum length validation.
@@ -123,17 +135,29 @@ func parseNodeFilter(r *http.Request) (database.NodeFilter, bool, error) {
 	}
 
 	// Zone, Net, Node
-	if zone, ok := parseIntParam(query, "zone"); ok {
+	zone, present, err := parseIntParam(query, "zone")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.Zone = &zone
 		hasConstraint = true
 	}
 
-	if net, ok := parseIntParam(query, "net"); ok {
+	net, present, err := parseIntParam(query, "net")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.Net = &net
 		hasConstraint = true
 	}
 
-	if node, ok := parseIntParam(query, "node"); ok {
+	node, present, err := parseIntParam(query, "node")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.Node = &node
 		hasConstraint = true
 	}
@@ -200,12 +224,20 @@ func parseNodeFilter(r *http.Request) (database.NodeFilter, bool, error) {
 	}
 
 	// Date range
-	if dateFrom, ok := parseDateParam(query, "date_from"); ok {
+	dateFrom, present, err := parseDateParam(query, "date_from")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.DateFrom = &dateFrom
 		hasConstraint = true
 	}
 
-	if dateTo, ok := parseDateParam(query, "date_to"); ok {
+	dateTo, present, err := parseDateParam(query, "date_to")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.DateTo = &dateTo
 		hasConstraint = true
 	}
@@ -235,22 +267,38 @@ func parsePointFilter(r *http.Request) (database.PointFilter, bool, error) {
 	}
 
 	// Zone, Net, Node, Point
-	if zone, ok := parseIntParam(query, "zone"); ok {
+	zone, present, err := parseIntParam(query, "zone")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.Zone = &zone
 		hasConstraint = true
 	}
 
-	if net, ok := parseIntParam(query, "net"); ok {
+	net, present, err := parseIntParam(query, "net")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.Net = &net
 		hasConstraint = true
 	}
 
-	if node, ok := parseIntParam(query, "node"); ok {
+	node, present, err := parseIntParam(query, "node")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.Node = &node
 		hasConstraint = true
 	}
 
-	if point, ok := parseIntParam(query, "point"); ok {
+	point, present, err := parseIntParam(query, "point")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.PointNum = &point
 		hasConstraint = true
 	}
@@ -284,12 +332,20 @@ func parsePointFilter(r *http.Request) (database.PointFilter, bool, error) {
 	}
 
 	// Date range
-	if dateFrom, ok := parseDateParam(query, "date_from"); ok {
+	dateFrom, present, err := parseDateParam(query, "date_from")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.DateFrom = &dateFrom
 		hasConstraint = true
 	}
 
-	if dateTo, ok := parseDateParam(query, "date_to"); ok {
+	dateTo, present, err := parseDateParam(query, "date_to")
+	if err != nil {
+		return filter, false, err
+	}
+	if present {
 		filter.DateTo = &dateTo
 		hasConstraint = true
 	}
@@ -314,4 +370,74 @@ type ParamError struct {
 
 func (e *ParamError) Error() string {
 	return e.Message
+}
+
+// addressEnvelope builds the {address, domain, available_domains} preamble the
+// node and point endpoints wrap their payloads in. Pass point < 0 for a 3-D
+// address; any other value renders the 4-D form.
+//
+// available_domains is always an array, never null: a client reading it as a
+// list should not have to special-case an address that exists in one network.
+func addressEnvelope(zone, net, node, point int, domain string, availableDomains []string) map[string]interface{} {
+	address := fmt.Sprintf("%d:%d/%d", zone, net, node)
+	if point >= 0 {
+		address = fmt.Sprintf("%d:%d/%d.%d", zone, net, node, point)
+	}
+	if availableDomains == nil {
+		availableDomains = []string{}
+	}
+	return map[string]interface{}{
+		"address":           address,
+		"domain":            domain,
+		"available_domains": availableDomains,
+	}
+}
+
+// explicitDomain returns the FTN network the request itself names via
+// ?domain=, normalized, or "" when it names none.
+func explicitDomain(r *http.Request) string {
+	return strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
+}
+
+// domainOrDefault is explicitDomain with fidonet as the fallback. Endpoints
+// that answer about one network use it, so a pre-multi-network URL keeps its
+// original meaning.
+func domainOrDefault(r *http.Request) string {
+	if d := explicitDomain(r); d != "" {
+		return d
+	}
+	return database.DefaultDomain
+}
+
+// domainOrAll is explicitDomain with "" - all networks - as the fallback.
+// The software and geo analytics endpoints use it: aggregating every network
+// is what they did before networks existed, and narrowing that silently would
+// change every existing caller's numbers.
+func domainOrAll(r *http.Request) string {
+	return explicitDomain(r)
+}
+
+// preferDomain resolves which of an address's networks an endpoint answers
+// about. An explicit request wins outright, even for a network the address is
+// not in - the caller asked a specific question and deserves its real answer,
+// which may be "not found". Otherwise: the only network it exists in, or
+// fidonet when it exists in several, so pre-multi-network URLs keep pointing
+// at the same node.
+func preferDomain(explicit string, available []string) string {
+	if explicit != "" {
+		return explicit
+	}
+	switch len(available) {
+	case 0:
+		return database.DefaultDomain
+	case 1:
+		return available[0]
+	default:
+		for _, d := range available {
+			if d == database.DefaultDomain {
+				return d
+			}
+		}
+		return available[0]
+	}
 }

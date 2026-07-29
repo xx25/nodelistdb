@@ -154,7 +154,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the network: explicit ?domain= wins, then the global switcher,
 	// then the network(s) the address actually exists in
-	availableDomains, _ := s.storage.NodeOps().GetNodeDomains(zone, net, node)
+	availableDomains, _ := s.storage.GetNodeDomains(zone, net, node)
 	domain := resolveEntityDomain(r, availableDomains)
 	history, err := s.storage.GetNodeHistory(zone, net, node, domain)
 	if err != nil {

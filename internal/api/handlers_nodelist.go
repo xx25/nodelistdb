@@ -15,7 +15,7 @@ import (
 //
 // GET /api/nodelist/latest?domain=fsxnet
 func (s *Server) LatestNodelistAPIHandler(w http.ResponseWriter, r *http.Request) {
-	network := queryDomain(r)
+	network := domainOrDefault(r)
 	if !nodelistfs.ValidNetworkName(network) {
 		WriteJSONError(w, "Invalid domain", http.StatusBadRequest)
 		return

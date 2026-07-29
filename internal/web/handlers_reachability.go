@@ -232,7 +232,7 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	// the global switcher when the address exists there, then wherever the
 	// address actually lives — so the page never silently merges test
 	// history from several networks sharing one zone:net/node.
-	availableDomains, _ := s.storage.NodeOps().GetNodeDomains(zone, net, node)
+	availableDomains, _ := s.storage.GetNodeDomains(zone, net, node)
 	domain := resolveEntityDomain(r, availableDomains)
 	history, err := s.storage.GetNodeTestHistory(zone, net, node, days, domain)
 	if err != nil {

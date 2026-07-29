@@ -331,6 +331,7 @@ type Operations interface {
 	GetNodes(filter database.NodeFilter) ([]database.Node, error)
 	GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error)
 	GetNodeDateRange(zone, net, node int, domain string) (firstDate, lastDate time.Time, err error)
+	GetNodeDomains(zone, net, node int) ([]string, error)
 	InsertNodes(nodes []database.Node) error
 
 	// Point operations (delegated to PointOps())

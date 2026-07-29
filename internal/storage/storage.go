@@ -165,6 +165,11 @@ func (s *Storage) GetPointCountsByNet(domain string, zone, net int, asOf *time.T
 	return s.pointOperations.GetPointCountsByNet(domain, zone, net, asOf)
 }
 
+// GetNodeDomains lists the FTN networks a 3D address exists in.
+func (s *Storage) GetNodeDomains(zone, net, node int) ([]string, error) {
+	return s.nodeOperations.GetNodeDomains(zone, net, node)
+}
+
 func (s *Storage) GetPointDomains(zone, net, node int, point *int) ([]string, error) {
 	return s.pointOperations.GetPointDomains(zone, net, node, point)
 }

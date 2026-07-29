@@ -1,26 +1,19 @@
 package api
 
 import (
-	"log"
 	"net/http"
-	"strings"
-)
 
-// softwareQueryDomain returns the optional ?domain= FTN network filter.
-// Unlike queryDomain it does NOT default to fidonet: the pre-multi-network
-// behavior of these endpoints was to aggregate every network.
-func softwareQueryDomain(r *http.Request) string {
-	return strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
-}
+	"github.com/nodelistdb/internal/logging"
+)
 
 // GetBinkPSoftwareStats returns BinkP software distribution statistics
 func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
 	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetBinkPSoftwareDistribution(days, softwareQueryDomain(r))
+	dist, err := s.storage.GetBinkPSoftwareDistribution(days, domainOrAll(r))
 	if err != nil {
-		log.Printf("ERROR: GetBinkPSoftwareDistribution failed: %v", err)
+		logging.Errorf("ERROR: GetBinkPSoftwareDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get BinkP software distribution", http.StatusInternalServerError)
 		return
 	}
@@ -33,9 +26,9 @@ func (s *Server) GetIFCICOSoftwareStats(w http.ResponseWriter, r *http.Request) 
 	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetIFCICOSoftwareDistribution(days, softwareQueryDomain(r))
+	dist, err := s.storage.GetIFCICOSoftwareDistribution(days, domainOrAll(r))
 	if err != nil {
-		log.Printf("ERROR: GetIFCICOSoftwareDistribution failed: %v", err)
+		logging.Errorf("ERROR: GetIFCICOSoftwareDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get IFCICO software distribution", http.StatusInternalServerError)
 		return
 	}
@@ -48,9 +41,9 @@ func (s *Server) GetBinkdDetailedStats(w http.ResponseWriter, r *http.Request) {
 	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetBinkdDetailedStats(days, softwareQueryDomain(r))
+	dist, err := s.storage.GetBinkdDetailedStats(days, domainOrAll(r))
 	if err != nil {
-		log.Printf("ERROR: GetBinkdDetailedStats failed: %v", err)
+		logging.Errorf("ERROR: GetBinkdDetailedStats failed: %v", err)
 		WriteJSONError(w, "Failed to get detailed binkd statistics", http.StatusInternalServerError)
 		return
 	}

@@ -198,6 +198,235 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/nodes/pstn:
+    get:
+      summary: Get PSTN Nodes
+      description: |
+        Every node in the latest nodelist with a usable phone number, for
+        modem testing. Nodes marked dead via /api/modem/pstn-dead are
+        excluded.
+      operationId: getPSTNNodes
+      tags:
+        - Nodes
+      parameters:
+        - name: domain
+          in: query
+          description: FTN network (defaults to fidonet)
+          schema:
+            type: string
+            default: fidonet
+        - name: zone
+          in: query
+          description: Restrict to one zone
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          description: Maximum nodes to return (default 5000, capped at 10000)
+          schema:
+            type: integer
+            default: 5000
+            maximum: 10000
+      responses:
+        '200':
+          description: PSTN-capable nodes
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/nodes/pstn/dead:
+    get:
+      summary: List Dead PSTN Nodes
+      description: Nodes marked as not answering by a modem test caller.
+      operationId: listPSTNDeadNodes
+      tags:
+        - Nodes
+      responses:
+        '200':
+          description: Nodes currently marked dead
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/nodes/pstn/recent-success:
+    get:
+      summary: Get Recently Reached Phone Numbers
+      description: |
+        Phone numbers a modem test reached successfully within the window, so
+        a caller can skip them.
+      operationId: getRecentModemSuccessPhones
+      tags:
+        - Nodes
+      parameters:
+        - name: days
+          in: query
+          description: Look-back window in days (1-90)
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+            maximum: 90
+      responses:
+        '200':
+          description: Phone numbers reached in the window
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/cache/stats:
+    get:
+      summary: Cache Statistics
+      description: |
+        Hit/miss counters and size for the server's response cache. Registered
+        only when caching is enabled in the server configuration.
+      operationId: getCacheStats
+      tags:
+        - Operations
+      responses:
+        '200':
+          description: Cache counters
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/ftp/stats:
+    get:
+      summary: FTP Server Statistics
+      description: |
+        Connection counters for the built-in FTP server. Registered only when
+        the FTP server is enabled in the server configuration.
+      operationId: getFTPStats
+      tags:
+        - Operations
+      responses:
+        '200':
+          description: FTP server counters
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/modem/results/direct:
+    post:
+      summary: Submit Modem Test Results
+      description: |
+        Submit results from a modem test run. Authenticated with an API key
+        (Authorization header); registered only when modem_api is enabled.
+      operationId: submitModemResultsDirect
+      tags:
+        - Modem Testing
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Results accepted
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid API key
+
+  /api/modem/pstn-dead:
+    post:
+      summary: Mark a PSTN Node Dead
+      description: |
+        Record that a node's phone number does not answer, so later callers
+        skip it. Authenticated; registered only when modem_api is enabled.
+      operationId: markPSTNDead
+      tags:
+        - Modem Testing
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zone, net, node]
+              properties:
+                zone:
+                  type: integer
+                net:
+                  type: integer
+                node:
+                  type: integer
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Node marked dead
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid API key
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Revive a PSTN Node
+      description: |
+        Clear a node's dead mark so it is dialled again. Authenticated;
+        registered only when modem_api is enabled.
+      operationId: unmarkPSTNDead
+      tags:
+        - Modem Testing
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zone, net, node]
+              properties:
+                zone:
+                  type: integer
+                net:
+                  type: integer
+                node:
+                  type: integer
+      responses:
+        '200':
+          description: Node revived
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid API key
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/nodes/{zone}/{net}/{node}:
     get:
       summary: Get Specific Node
@@ -1810,6 +2039,14 @@ components:
           type: object
           additionalProperties: true
           description: Additional error details
+
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: |
+        A caller-specific API key. The server stores its SHA-256 hash in
+        modem_api.callers; see the README for generating a pair.
 
   responses:
     BadRequest:
