@@ -47,11 +47,10 @@ func TestRouterSetup(t *testing.T) {
 	}
 }
 
-// newTestAPIServer creates a simple test server for routing tests
+// newTestAPIServer creates a server backed by a fake storage, for tests about
+// routing rather than about answers.
 func newTestAPIServer() (*Server, error) {
-	// Use the existing newMockServer if available
-	server, _ := newMockServer()
-	return server, nil
+	return New(&fakeOps{}), nil
 }
 
 // TestRouterMiddleware tests that middleware is properly applied

@@ -95,11 +95,11 @@ func (cs *CachedStorage) GetBinkdDetailedStats(days int, domain string) (*Softwa
 }
 
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes (cached)
-// This is accessed via TestOps().GetIPv6WeeklyNews(domain) in handlers,
+// This is accessed via GetIPv6WeeklyNews(domain) in handlers,
 // but we provide a direct cached wrapper for it
 func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
 	return cachedFetch(cs, cs.analyticsKey("ipv6:weeklynews", limit, includeZeroNodes, domain), cs.config.LongAnalyticsTTL, func() (*IPv6WeeklyNews, error) {
-		return cs.Storage.TestOps().GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
+		return cs.Storage.GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
 	})
 }
 

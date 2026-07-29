@@ -34,6 +34,29 @@ type fakeOps struct {
 	pointsErr    error
 	pointHistory []database.Point
 	pointDomains []string
+
+	sysops        []storage.SysopInfo
+	sysopsErr     error
+	sysopsFilters []sysopQuery
+	sysopNodes    []database.Node
+	sysopNodesErr error
+	sysopNodesFor string
+}
+
+// sysopQuery records how a sysop listing was asked for.
+type sysopQuery struct {
+	name          string
+	limit, offset int
+}
+
+func (f *fakeOps) GetUniqueSysops(nameFilter string, limit, offset int) ([]storage.SysopInfo, error) {
+	f.sysopsFilters = append(f.sysopsFilters, sysopQuery{nameFilter, limit, offset})
+	return f.sysops, f.sysopsErr
+}
+
+func (f *fakeOps) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
+	f.sysopNodesFor = sysopName
+	return f.sysopNodes, f.sysopNodesErr
 }
 
 func (f *fakeOps) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
@@ -334,5 +357,109 @@ func TestMalformedFilterParamsAre400(t *testing.T) {
 	rec, _ = call(t, ops, "GET", "/api/nodes?zone=2&is_cm=maybe")
 	if rec.Code != http.StatusOK {
 		t.Errorf("is_cm=maybe: status = %d, want 200 (booleans stay permissive)", rec.Code)
+	}
+}
+
+// TestSysopEndpoints covers what the deleted copied suite claimed to: the
+// listing, its name filter and pagination bounds, and the per-sysop node
+// lookup including how it decodes the name out of the path.
+func TestSysopEndpoints(t *testing.T) {
+	ops := &fakeOps{
+		sysops:     []storage.SysopInfo{{Name: "A_Sysop", NodeCount: 3}},
+		sysopNodes: []database.Node{sampleNode()},
+	}
+
+	rec, body := call(t, ops, "GET", "/api/sysops?name=Sysop&limit=5&offset=10")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if got := body["count"]; got != float64(1) {
+		t.Errorf("count = %v, want 1", got)
+	}
+	if len(ops.sysopsFilters) != 1 || ops.sysopsFilters[0] != (sysopQuery{"Sysop", 5, 10}) {
+		t.Errorf("storage saw %+v, want the name, limit and offset from the query", ops.sysopsFilters)
+	}
+
+	// The listing's limit is capped rather than rejected.
+	call(t, ops, "GET", "/api/sysops?limit=99999")
+	if last := ops.sysopsFilters[len(ops.sysopsFilters)-1]; last.limit != 200 {
+		t.Errorf("limit = %d, want it capped at 200", last.limit)
+	}
+
+	// A percent-encoded name reaches storage decoded.
+	rec, body = call(t, ops, "GET", "/api/sysops/John%20Smith/nodes")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sysop nodes: status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if ops.sysopNodesFor != "John Smith" {
+		t.Errorf("storage saw sysop %q, want %q", ops.sysopNodesFor, "John Smith")
+	}
+	if got := body["count"]; got != float64(1) {
+		t.Errorf("sysop nodes: count = %v, want 1", got)
+	}
+}
+
+// TestResponsesAreJSON pins the content type across a representative handler
+// from each family, plus the two error shapes.
+func TestResponsesAreJSON(t *testing.T) {
+	ops := &fakeOps{
+		nodes:       []database.Node{sampleNode()},
+		sysops:      []storage.SysopInfo{{Name: "A_Sysop"}},
+		nodeDomains: []string{"fidonet"},
+	}
+
+	for _, target := range []string{
+		"/api/health",
+		"/api/nodes?zone=2",
+		"/api/nodes/2/5001/100",
+		"/api/sysops",
+		"/api/nodes/x/5001/100", // 400
+		"/api/nodes/2/5001/999", // 200 with the same fake, but exercises the path
+	} {
+		rec, _ := call(t, ops, "GET", target)
+		if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("%s: Content-Type = %q, want application/json", target, ct)
+		}
+	}
+}
+
+// TestNonGetMethodsAre405 pins that chi answers 405 rather than 404 for a
+// wrong method on a real route. Twenty handlers used to carry their own
+// CheckMethod guard for this; the router already did it.
+func TestNonGetMethodsAre405(t *testing.T) {
+	ops := &fakeOps{}
+	for _, tc := range []struct{ method, target string }{
+		{"POST", "/api/nodes"},
+		{"POST", "/api/nodes/2/5001/100"},
+		{"DELETE", "/api/stats"},
+		{"PUT", "/api/sysops"},
+	} {
+		rec, _ := call(t, ops, tc.method, tc.target)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s %s: status = %d, want 405", tc.method, tc.target, rec.Code)
+		}
+	}
+}
+
+// TestLargeResultSetsSurviveEncoding covers what the old integration suite
+// checked with a copied handler: a full page of results encodes and comes back
+// counted.
+func TestLargeResultSetsSurviveEncoding(t *testing.T) {
+	nodes := make([]database.Node, 100)
+	for i := range nodes {
+		n := sampleNode()
+		n.Net = 5000 + i
+		nodes[i] = n
+	}
+
+	rec, body := call(t, &fakeOps{nodes: nodes}, "GET", "/api/nodes?zone=2")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := body["count"]; got != float64(100) {
+		t.Errorf("count = %v, want 100", got)
+	}
+	if got, _ := body["nodes"].([]interface{}); len(got) != 100 {
+		t.Errorf("nodes = %d entries, want 100", len(got))
 	}
 }

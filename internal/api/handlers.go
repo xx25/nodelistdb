@@ -4,13 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-
-	"github.com/nodelistdb/internal/storage"
 )
 
 // Server represents the API server
 type Server struct {
-	storage           storage.Operations
+	storage           Storage
 	modemHandler      *ModemHandler
 	healthChecker     HealthChecker
 	cacheStatsHandler http.HandlerFunc
@@ -38,7 +36,7 @@ func (s *Server) SetFTPStatsHandler(h http.HandlerFunc) {
 }
 
 // New creates a new API server
-func New(storage storage.Operations) *Server {
+func New(storage Storage) *Server {
 	return &Server{
 		storage: storage,
 	}

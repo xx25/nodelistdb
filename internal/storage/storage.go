@@ -8,21 +8,37 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// Storage provides thread-safe database operations using specialized components.
-// Instead of delegating all methods, Storage exposes sub-components directly via
-// accessor methods (NodeOps(), SearchOps(), etc.) to reduce boilerplate and improve maintainability.
+// Storage is the flat, thread-safe surface over the specialized operation
+// components. It delegates every method to whichever component owns it.
+//
+// The test-derived components used to sit behind one more facade,
+// TestOperationsRefactored, which added 231 lines of single-line delegation
+// and nothing else - and which the geo, software, modem and other-networks
+// components were routed through despite none of them being about test
+// history. They are named here for what they are.
 type Storage struct {
-	db                  database.DatabaseInterface
-	queryBuilder        QueryBuilderInterface
-	resultParser        ResultParserInterface
+	db           database.DatabaseInterface
+	queryBuilder QueryBuilderInterface
+	resultParser ResultParserInterface
+
 	nodeOperations      *NodeOperations
 	pointOperations     *PointOperations
 	searchOperations    *SearchOperations
 	statsOperations     *StatisticsOperations
 	analyticsOperations *AnalyticsOperations
-	testOperations      *TestOperationsRefactored
 	whoisOperations     *WhoisOperations
 	pstnDeadOperations  *PSTNDeadOperations
+
+	// Components over node_test_results, the daemon's log of what it probed.
+	testHistoryOperations   *TestHistoryOperations
+	reachabilityOperations  *ReachabilityOperations
+	protocolOperations      *ProtocolQueryOperations
+	ipv6Operations          *IPv6QueryOperations
+	akaMismatchOperations   *AKAMismatchOperations
+	modemOperations         *ModemQueryOperations
+	softwareOperations      *SoftwareAnalyticsOperations
+	geoOperations           *GeoAnalyticsOperations
+	otherNetworksOperations *OtherNetworksOperations
 
 	mu sync.RWMutex
 }
@@ -50,11 +66,6 @@ func (s *Storage) StatsOps() *StatisticsOperations {
 // AnalyticsOps returns the analytics operations component for historical analytics
 func (s *Storage) AnalyticsOps() *AnalyticsOperations {
 	return s.analyticsOperations
-}
-
-// TestOps returns the test operations component for node testing and reachability
-func (s *Storage) TestOps() *TestOperationsRefactored {
-	return s.testOperations
 }
 
 // WhoisOps returns the WHOIS operations component for domain expiration data
@@ -87,8 +98,18 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 	storage.statsOperations = NewStatisticsOperations(db, queryBuilder, resultParser)
 	storage.pstnDeadOperations = NewPSTNDeadOperations(db)
 	storage.analyticsOperations = NewAnalyticsOperations(db, queryBuilder, resultParser, storage.pstnDeadOperations)
-	storage.testOperations = NewTestOperationsRefactored(db, queryBuilder, resultParser)
 	storage.whoisOperations = NewWhoisOperations(db)
+
+	testQueryBuilder := NewTestQueryBuilder()
+	storage.testHistoryOperations = NewTestHistoryOperations(db, testQueryBuilder, resultParser)
+	storage.reachabilityOperations = NewReachabilityOperations(db, testQueryBuilder, resultParser)
+	storage.protocolOperations = NewProtocolQueryOperations(db, testQueryBuilder, resultParser)
+	storage.ipv6Operations = NewIPv6QueryOperations(db, testQueryBuilder, resultParser)
+	storage.akaMismatchOperations = NewAKAMismatchOperations(db, testQueryBuilder, resultParser)
+	storage.modemOperations = NewModemQueryOperations(db)
+	storage.softwareOperations = NewSoftwareAnalyticsOperations(db)
+	storage.geoOperations = NewGeoAnalyticsOperations(db)
+	storage.otherNetworksOperations = NewOtherNetworksOperations(db)
 
 	return storage, nil
 }
@@ -163,6 +184,11 @@ func (s *Storage) GetPointStats(domain string, asOf *time.Time) (*PointStats, er
 
 func (s *Storage) GetPointCountsByNet(domain string, zone, net int, asOf *time.Time) (map[int]uint64, error) {
 	return s.pointOperations.GetPointCountsByNet(domain, zone, net, asOf)
+}
+
+// CountNodes returns how many nodes one nodelist holds in one network.
+func (s *Storage) CountNodes(date time.Time, domain string) (int, error) {
+	return s.nodeOperations.CountNodes(date, domain)
 }
 
 // GetNodeDomains lists the FTN networks a 3D address exists in.
@@ -263,123 +289,123 @@ func (s *Storage) GetBrowseNodes(date time.Time, zone, net int, domain string) (
 
 // Test Operations delegated methods
 func (s *Storage) GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetNodeTestHistory(zone, net, node, days, domain)
+	return s.testHistoryOperations.GetNodeTestHistory(zone, net, node, days, domain)
 }
 
 func (s *Storage) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
-	return s.testOperations.GetDetailedTestResult(zone, net, node, testTime, domain)
+	return s.testHistoryOperations.GetDetailedTestResult(zone, net, node, testTime, domain)
 }
 
 func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
-	return s.testOperations.GetNodeReachabilityStats(zone, net, node, days, domain)
+	return s.reachabilityOperations.GetNodeReachabilityStats(zone, net, node, days, domain)
 }
 
 func (s *Storage) GetReachabilityTrendsAllTime(domain string) ([]ReachabilityTrend, error) {
-	return s.testOperations.GetReachabilityTrendsAllTime(domain)
+	return s.reachabilityOperations.GetReachabilityTrendsAllTime(domain)
 }
 
 func (s *Storage) GetReachabilityTrends(days int, domain string) ([]ReachabilityTrend, error) {
-	return s.testOperations.GetReachabilityTrends(days, domain)
+	return s.reachabilityOperations.GetReachabilityTrends(days, domain)
 }
 
 func (s *Storage) SearchNodesByReachability(operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.SearchNodesByReachability(operational, limit, days, domain)
+	return s.reachabilityOperations.SearchNodesByReachability(operational, limit, days, domain)
 }
 
 func (s *Storage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
+	return s.ipv6Operations.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
+	return s.ipv6Operations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
+	return s.ipv6Operations.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
+	return s.ipv6Operations.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
+	return s.ipv6Operations.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
-	return s.testOperations.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
+	return s.ipv6Operations.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
-	return s.testOperations.GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
+	return s.ipv6Operations.GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
+	return s.protocolOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
+	return s.protocolOperations.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
+	return s.protocolOperations.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
+	return s.protocolOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetVModemUnconfirmedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
+	return s.protocolOperations.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
+	return s.protocolOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
+	return s.akaMismatchOperations.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
-	return s.testOperations.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
+	return s.akaMismatchOperations.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
-	return s.testOperations.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
+	return s.akaMismatchOperations.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
-	return s.testOperations.GetOtherNetworksSummary(days, domain)
+	return s.otherNetworksOperations.GetOtherNetworksSummary(days, domain)
 }
 
 func (s *Storage) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
-	return s.testOperations.GetNodesInNetwork(networkName, limit, days, domain)
+	return s.otherNetworksOperations.GetNodesInNetwork(networkName, limit, days, domain)
 }
 
 func (s *Storage) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
-	return s.testOperations.GetBinkPSoftwareDistribution(days, domain)
+	return s.softwareOperations.GetBinkPSoftwareDistribution(days, domain)
 }
 
 func (s *Storage) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
-	return s.testOperations.GetIFCICOSoftwareDistribution(days, domain)
+	return s.softwareOperations.GetIFCICOSoftwareDistribution(days, domain)
 }
 
 func (s *Storage) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
-	return s.testOperations.GetBinkdDetailedStats(days, domain)
+	return s.softwareOperations.GetBinkdDetailedStats(days, domain)
 }
 
 func (s *Storage) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
-	return s.testOperations.GetGeoHostingDistribution(days, domain)
+	return s.geoOperations.GetGeoHostingDistribution(days, domain)
 }
 
 func (s *Storage) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetNodesByCountry(countryCode, days, domain)
+	return s.geoOperations.GetNodesByCountry(countryCode, days, domain)
 }
 
 func (s *Storage) GetNodesByProvider(provider string, days int, domain string) ([]NodeTestResult, error) {
-	return s.testOperations.GetNodesByProvider(provider, days, domain)
+	return s.geoOperations.GetNodesByProvider(provider, days, domain)
 }
 
 func (s *Storage) GetOnThisDayNodes(month, day, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
@@ -423,19 +449,19 @@ func (s *Storage) GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error
 }
 
 func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
-	return s.testOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
+	return s.modemOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
-	return s.testOperations.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
+	return s.modemOperations.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
 }
 
 func (s *Storage) GetRecentModemSuccessPhones(days int) ([]string, error) {
-	return s.testOperations.GetRecentModemSuccessPhones(days)
+	return s.modemOperations.GetRecentModemSuccessPhones(days)
 }
 
 func (s *Storage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
-	return s.testOperations.GetDetailedModemTestResult(zone, net, node, testTime)
+	return s.modemOperations.GetDetailedModemTestResult(zone, net, node, testTime)
 }
 
 // WHOIS Operations delegated methods

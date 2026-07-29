@@ -50,8 +50,8 @@ func (h *serverHealthChecker) CheckHealth() *api.HealthStatus {
 	}
 
 	// Node count from the default network's latest nodelist
-	if latestDate, err := h.storage.StatsOps().GetLatestStatsDate(database.DefaultDomain); err == nil {
-		if count, err := h.storage.NodeOps().CountNodes(latestDate, database.DefaultDomain); err == nil {
+	if latestDate, err := h.storage.GetLatestStatsDate(database.DefaultDomain); err == nil {
+		if count, err := h.storage.CountNodes(latestDate, database.DefaultDomain); err == nil {
 			status.Nodes = api.NodeCountInfo{
 				LatestDate: latestDate.Format("2006-01-02"),
 				Count:      count,

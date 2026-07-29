@@ -45,6 +45,14 @@ func (cs *CachedStorage) GetNodeCountHistory(domain string) ([]NodeCountByDate, 
 	})
 }
 
+// CountNodes with caching. It shares the stats TTL: it answers a question
+// about one nodelist date, which only an import can change.
+func (cs *CachedStorage) CountNodes(date time.Time, domain string) (int, error) {
+	return cachedFetch(cs, cs.keyGen.StatsKey(date)+":count:"+domain, cs.config.StatsTTL, func() (int, error) {
+		return cs.Storage.NodeOps().CountNodes(date, domain)
+	})
+}
+
 // Pass-through methods (not cached)
 
 // IsNodelistProcessed checks if a nodelist for a specific date has been processed
