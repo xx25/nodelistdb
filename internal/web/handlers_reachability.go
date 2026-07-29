@@ -36,8 +36,8 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Parse limit filter (default to 25 if not specified)
-	limitFilter := 25
+	// Parse limit filter (default to the 10 most recent tests)
+	limitFilter := 10
 	if l := query.Get("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 1000 {
 			limitFilter = parsed
@@ -75,44 +75,33 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		"LimitFilter":        limitFilter,
 	}
 
-	// Always show data by default - get recently tested nodes for the last day
-	// If filters are applied, get filtered results
-	if statusFilter != "" || protocolFilter != "" || query.Get("nodes_period") != "" || query.Get("limit") != "" {
-		filteredNodes, err := s.getFilteredReachabilityNodes(r.Context(), statusFilter, protocolFilter, nodesPeriodFilter, limitFilter, domain)
-		if err != nil {
-			if clientGone("Reachability: filtered nodes", err) {
-				return
-			}
-			logging.Errorf("Error getting filtered nodes: %v", err)
-			filteredNodes = []storage.NodeTestResult{}
+	// The list is always populated, filters or not: an unfiltered visit is just
+	// the defaults above - every status, every protocol, the last 24 hours, the
+	// 10 most recently tested nodes - so the page opens on data instead of on an
+	// empty "no nodes found" panel.
+	filteredNodes, err := s.getFilteredReachabilityNodes(r.Context(), statusFilter, protocolFilter, nodesPeriodFilter, limitFilter, domain)
+	if err != nil {
+		if clientGone("Reachability: filtered nodes", err) {
+			return
 		}
-		data["FilteredNodes"] = filteredNodes
-	} else {
-		// Default behavior - get recently tested nodes (both operational and failed) for the last day
-		operational, err := s.storage.SearchNodesByReachability(r.Context(), true, 10, nodesPeriodFilter, domain)
-		if err != nil {
-			if clientGone("Reachability: operational nodes", err) {
-				return
-			}
-			logging.Errorf("Error getting operational nodes: %v", err)
-			operational = []storage.NodeTestResult{}
-		}
-
-		failed, err := s.storage.SearchNodesByReachability(r.Context(), false, 10, nodesPeriodFilter, domain)
-		if err != nil {
-			if clientGone("Reachability: failed nodes", err) {
-				return
-			}
-			logging.Errorf("Error getting failed nodes: %v", err)
-			failed = []storage.NodeTestResult{}
-		}
-
-		data["OperationalNodes"] = operational
-		data["FailedNodes"] = failed
+		logging.Errorf("Error getting filtered nodes: %v", err)
+		filteredNodes = []storage.NodeTestResult{}
 	}
+	data["FilteredNodes"] = filteredNodes
 
 	s.render(w, "reachability", data)
 }
+
+// reachabilityFetchFloor is the smallest pre-filter pool the protocol filter is
+// given to work with, whatever the requested page size.
+//
+// The protocol filter runs in Go over rows the status query already returned, so
+// a pool the size of the page finds nothing for a protocol that is absent from
+// the newest tests but present a little further back - a rare protocol like FTP
+// can easily be missing from the 20 most recent results. The pool is a floor
+// rather than a multiple of the page size because the default page is only 10
+// rows.
+const reachabilityFetchFloor = 50
 
 // getFilteredReachabilityNodes retrieves nodes based on the applied filters
 func (s *Server) getFilteredReachabilityNodes(ctx context.Context, statusFilter, protocolFilter string, periodFilter, limitFilter int, domain string) ([]storage.NodeTestResult, error) {
@@ -121,15 +110,17 @@ func (s *Server) getFilteredReachabilityNodes(ctx context.Context, statusFilter,
 
 	var allNodes []storage.NodeTestResult
 
+	fetchLimit := max(limitFilter*2, reachabilityFetchFloor)
+
 	switch statusFilter {
 	case "operational":
-		nodes, err := s.storage.SearchNodesByReachability(ctx, true, limitFilter*2, periodFilter, domain) // Get more than needed for protocol filtering
+		nodes, err := s.storage.SearchNodesByReachability(ctx, true, fetchLimit, periodFilter, domain)
 		if err != nil {
 			return nil, err
 		}
 		allNodes = nodes
 	case "failed":
-		nodes, err := s.storage.SearchNodesByReachability(ctx, false, limitFilter*2, periodFilter, domain)
+		nodes, err := s.storage.SearchNodesByReachability(ctx, false, fetchLimit, periodFilter, domain)
 		if err != nil {
 			return nil, err
 		}
@@ -137,8 +128,6 @@ func (s *Server) getFilteredReachabilityNodes(ctx context.Context, statusFilter,
 	default: // "all" or empty
 		// Get both operational and failed nodes - fetch more to ensure we get both types
 		// When status=all, we want to show a mix of both operational and failed
-		// Fetch more than needed to account for protocol filtering
-		fetchLimit := limitFilter * 2
 		operational, err := s.storage.SearchNodesByReachability(ctx, true, fetchLimit, periodFilter, domain)
 		if err != nil {
 			return nil, err

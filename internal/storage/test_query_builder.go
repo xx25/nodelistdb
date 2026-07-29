@@ -406,12 +406,23 @@ func (tqb *TestQueryBuilder) BuildVModemUnconfirmedQuery(nodeFilter, domainFilte
 }
 
 // BuildSearchByReachabilityQuery builds a query to search nodes by reachability status (ClickHouse)
+//
+// test_time is second-resolution and a multi-hostname node's per-hostname rows
+// routinely share one second, so ORDER BY test_time alone leaves rn = 1
+// undefined among them - and the callers run this query twice, once per
+// is_operational value. Two executions free to break the tie differently put the
+// same node in both result sets whenever one of its hostnames failed and another
+// succeeded in the same second (real: 2:263/0, 2:240/5833), which is how one
+// node ends up listed twice with contradictory badges. The tie-break is the same
+// one BuildVMODEMNodesQuery uses: the aggregated row is the node's own verdict
+// over all its hostnames, so it wins when present, and hostname order decides
+// otherwise.
 func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
 	return applyTestResultColumns(`
 		SELECT
 			{{TEST_RESULT_COLUMNS}}
 		FROM (
-			SELECT *, row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY test_time DESC) as rn
+			SELECT *, row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY test_time DESC, is_aggregated DESC, hostname_index ASC) as rn
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 			AND (? = '' OR domain = ?)

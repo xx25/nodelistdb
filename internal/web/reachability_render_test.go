@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -80,9 +82,12 @@ func TestReachabilityTemplateRendersEveryPayload(t *testing.T) {
 		mustContain []string
 	}{
 		{
-			// ReachabilityHandler, no filters: trends chart plus the two
-			// default operational/failed lists.
-			name: "overview with default lists",
+			// ReachabilityHandler, no filters: trends chart plus the recently
+			// tested list built from the handler's own defaults. The node list
+			// is asserted through the sample's hostname rather than its address,
+			// because the address also appears in the lookup form's placeholder
+			// and so cannot tell a rendered list from an empty one.
+			name: "overview with default list",
 			data: map[string]interface{}{
 				"Title":              "Reachability History",
 				"Version":            "test",
@@ -92,15 +97,32 @@ func TestReachabilityTemplateRendersEveryPayload(t *testing.T) {
 				"TrendsPeriodFilter": 0,
 				"NodesPeriodFilter":  1,
 				"ProtocolFilter":     "",
-				"LimitFilter":        25,
-				"OperationalNodes":   nodes,
-				"FailedNodes":        []storage.NodeTestResult{},
+				"LimitFilter":        10,
+				"FilteredNodes":      nodes,
 			},
-			mustContain: []string{"2:5001/100", "2026-07-28"},
+			mustContain: []string{"2:5001/100", "bbs.example.org", "2026-07-28"},
 		},
 		{
-			// ReachabilityHandler with any filter applied: one combined list
-			// under FilteredNodes, and the two default lists absent entirely.
+			// The same payload with no tests inside the window: the list is
+			// empty rather than absent, so the no-results panel must show.
+			name: "overview with an empty default list",
+			data: map[string]interface{}{
+				"Title":              "Reachability History",
+				"Version":            "test",
+				"ActivePage":         "reachability",
+				"Trends":             sampleReachabilityTrends(),
+				"StatusFilter":       "",
+				"TrendsPeriodFilter": 0,
+				"NodesPeriodFilter":  1,
+				"ProtocolFilter":     "",
+				"LimitFilter":        10,
+				"FilteredNodes":      []storage.NodeTestResult{},
+			},
+			mustContain: []string{"No nodes found"},
+		},
+		{
+			// ReachabilityHandler with filters applied: same key, different
+			// filter values echoed back into the form's selects.
 			name: "overview with filters applied",
 			data: map[string]interface{}{
 				"Title":              "Reachability History",
@@ -114,7 +136,7 @@ func TestReachabilityTemplateRendersEveryPayload(t *testing.T) {
 				"LimitFilter":        50,
 				"FilteredNodes":      nodes,
 			},
-			mustContain: []string{"2:5001/100"},
+			mustContain: []string{"bbs.example.org"},
 		},
 		{
 			// ReachabilityNodeHandler with no address: the lookup form. This
@@ -184,6 +206,89 @@ func TestReachabilityTemplateRendersEveryPayload(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// reachabilityStub serves ReachabilityHandler's three storage calls and records
+// the arguments of each node search.
+type reachabilityStub struct {
+	Storage
+
+	trends    []storage.ReachabilityTrend
+	nodes     []storage.NodeTestResult
+	searchLog []reachabilitySearch
+}
+
+type reachabilitySearch struct {
+	operational bool
+	limit       int
+	days        int
+	domain      string
+}
+
+func (s *reachabilityStub) GetReachabilityTrends(ctx context.Context, days int, domain string) ([]storage.ReachabilityTrend, error) {
+	return s.trends, nil
+}
+
+func (s *reachabilityStub) GetReachabilityTrendsAllTime(ctx context.Context, domain string) ([]storage.ReachabilityTrend, error) {
+	return s.trends, nil
+}
+
+func (s *reachabilityStub) SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]storage.NodeTestResult, error) {
+	s.searchLog = append(s.searchLog, reachabilitySearch{operational: operational, limit: limit, days: days, domain: domain})
+	if !operational {
+		return nil, nil
+	}
+	return s.nodes, nil
+}
+
+// TestReachabilityHandlerOpensOnRecentNodes covers the whole handler for a bare
+// GET, which the render tests above cannot: they build the payload themselves,
+// so they pass whether or not the handler produces it.
+//
+// That is precisely how the page shipped broken - the handler filled
+// OperationalNodes/FailedNodes on the unfiltered path while the template read
+// only FilteredNodes, and nothing failed, because the payload is a
+// map[string]interface{} and the mismatch is invisible to the compiler and to
+// any test that supplies its own map. The assertion is therefore on the handler's
+// own output: a visitor who applies no filters sees nodes, not the empty panel.
+func TestReachabilityHandlerOpensOnRecentNodes(t *testing.T) {
+	ops := &reachabilityStub{
+		trends: sampleReachabilityTrends(),
+		nodes:  []storage.NodeTestResult{sampleReachabilityNode()},
+	}
+	s := newTestServer(t, ops)
+
+	rec := httptest.NewRecorder()
+	s.ReachabilityHandler(rec, httptest.NewRequest("GET", "/reachability", nil))
+
+	body := rec.Body.String()
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(body, "bbs.example.org") {
+		t.Error("a bare /reachability visit did not render the recently tested node")
+	}
+	if strings.Contains(body, "No nodes found") {
+		t.Error("a bare /reachability visit rendered the empty-results panel")
+	}
+
+	// Both statuses are searched, so the default list can mix them, and each
+	// search asks for more rows than the page shows - the protocol filter runs
+	// in Go over whatever came back.
+	if len(ops.searchLog) != 2 {
+		t.Fatalf("node searches = %d, want 2 (operational and failed)", len(ops.searchLog))
+	}
+	if ops.searchLog[0].operational == ops.searchLog[1].operational {
+		t.Error("both node searches asked for the same status")
+	}
+	for _, got := range ops.searchLog {
+		if got.limit < reachabilityFetchFloor {
+			t.Errorf("search(operational=%v) limit = %d, want at least the %d-row pre-filter floor", got.operational, got.limit, reachabilityFetchFloor)
+		}
+		if got.days != 1 {
+			t.Errorf("search(operational=%v) days = %d, want the 1-day default window", got.operational, got.days)
+		}
 	}
 }
 
