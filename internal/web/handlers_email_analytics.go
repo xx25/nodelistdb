@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -190,15 +189,20 @@ func (s *Server) EmailAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 
 	var displayError error
 
-	nodes, err := s.storage.GetEmailCapableNodes(limit, useFieldFallback, domain)
+	nodes, err := s.storage.GetEmailCapableNodes(r.Context(), limit, useFieldFallback, domain)
 	if err != nil {
-		logging.Errorf("Email Analytics: Error fetching nodes: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("Email Analytics", "Failed to fetch email analytics data. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.EmailCapableNode{}
-		displayError = fmt.Errorf("Failed to fetch email analytics data. Please try again later")
 	}
 
-	trend, err := s.storage.GetEmailFlagTrend(domain)
+	trend, err := s.storage.GetEmailFlagTrend(r.Context(), domain)
 	if err != nil {
+		if clientGone("Email Analytics: flag trend", err) {
+			return
+		}
 		// The trend is supporting context; losing it should not blank the page.
 		logging.Errorf("Email Analytics: Error fetching trend: %v", err)
 		trend = nil

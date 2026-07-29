@@ -7,9 +7,19 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// SetupRouter creates and configures a Chi router with all API routes
+// SetupRouter creates and configures a Chi router with all API routes.
+//
+// The query budgets are applied per route group rather than once at the top.
+// That is not a style choice: context.WithDeadline can only shorten a deadline
+// it inherits, so a single budget here would cap every group below it and make
+// the longer analytics budget unreachable. See internal/querybudget.
 func (s *Server) SetupRouter() http.Handler {
 	r := chi.NewRouter()
+
+	// read is the ordinary budget; heavy is the one the analytics reports get.
+	// Both are no-ops until query_budget.enabled is set, and on protocol: http
+	// they stay no-ops regardless.
+	read, heavy := s.budgets.Read.Wrap, s.budgets.Analytics.Wrap
 
 	// Built-in Chi middleware
 	r.Use(middleware.RequestID)
@@ -29,6 +39,7 @@ func (s *Server) SetupRouter() http.Handler {
 
 	// Node routes
 	r.Route("/api/nodes", func(r chi.Router) {
+		r.Use(read)
 		r.Get("/", s.SearchNodesHandler)
 		r.Get("/pstn", s.GetPSTNNodesHandler)
 		r.Get("/pstn/dead", s.ListPSTNDeadHandler)
@@ -42,6 +53,7 @@ func (s *Server) SetupRouter() http.Handler {
 
 	// Point (FTS-5002 pointlist) routes
 	r.Route("/api/points", func(r chi.Router) {
+		r.Use(read)
 		r.Get("/", s.SearchPointsHandler)
 		r.Get("/{zone}/{net}/{node}/{point}", s.GetPointHandler)
 		r.Get("/{zone}/{net}/{node}/{point}/history", s.GetPointHistoryHandler)
@@ -49,25 +61,28 @@ func (s *Server) SetupRouter() http.Handler {
 
 	// Pointlist metadata routes
 	r.Route("/api/pointlists", func(r chi.Router) {
+		r.Use(read)
 		r.Get("/dates", s.PointlistDatesHandler)
 		r.Get("/sources", s.PointlistSourcesHandler)
 	})
 
 	// Network (FTN domain) routes
-	r.Get("/api/networks", s.NetworksHandler)
+	r.With(read).Get("/api/networks", s.NetworksHandler)
 
 	// Statistics routes
-	r.Get("/api/stats", s.StatsHandler)
-	r.Get("/api/stats/dates", s.GetAvailableDatesHandler)
+	r.With(read).Get("/api/stats", s.StatsHandler)
+	r.With(read).Get("/api/stats/dates", s.GetAvailableDatesHandler)
 
 	// Sysop routes
 	r.Route("/api/sysops", func(r chi.Router) {
+		r.Use(read)
 		r.Get("/", s.SysopsHandler)
 		r.Get("/{name}/nodes", s.SysopNodesHandler)
 	})
 
 	// Software analytics routes
 	r.Route("/api/software", func(r chi.Router) {
+		r.Use(heavy)
 		r.Get("/binkp", s.GetBinkPSoftwareStats)
 		r.Get("/ifcico", s.GetIFCICOSoftwareStats)
 		r.Get("/binkd", s.GetBinkdDetailedStats)
@@ -75,6 +90,7 @@ func (s *Server) SetupRouter() http.Handler {
 
 	// Geographic analytics routes
 	r.Route("/api/analytics", func(r chi.Router) {
+		r.Use(heavy)
 		r.Get("/geo-hosting", s.GetGeoHostingStats)
 	})
 

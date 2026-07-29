@@ -126,19 +126,19 @@ func (s *Storage) Close() error {
 
 // --- Legacy Delegation Methods for Operations Interface Compatibility ---
 // These methods provide backward compatibility for code using the Operations interface.
-// New code should use the component accessors directly (e.g., storage.NodeOps().GetNodes()).
+// New code should use the component accessors directly (e.g., storage.NodeOps().GetNodes(ctx)).
 
 // Node Operations delegated methods
-func (s *Storage) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
-	return s.nodeOperations.GetNodes(filter)
+func (s *Storage) GetNodes(ctx context.Context, filter database.NodeFilter) ([]database.Node, error) {
+	return s.nodeOperations.GetNodes(ctx, filter)
 }
 
-func (s *Storage) GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error) {
-	return s.nodeOperations.GetNodeHistory(zone, net, node, domain)
+func (s *Storage) GetNodeHistory(ctx context.Context, zone, net, node int, domain string) ([]database.Node, error) {
+	return s.nodeOperations.GetNodeHistory(ctx, zone, net, node, domain)
 }
 
-func (s *Storage) GetNodeDateRange(zone, net, node int, domain string) (firstDate, lastDate time.Time, err error) {
-	return s.nodeOperations.GetNodeDateRange(zone, net, node, domain)
+func (s *Storage) GetNodeDateRange(ctx context.Context, zone, net, node int, domain string) (firstDate, lastDate time.Time, err error) {
+	return s.nodeOperations.GetNodeDateRange(ctx, zone, net, node, domain)
 }
 
 func (s *Storage) InsertNodes(nodes []database.Node) error {
@@ -153,97 +153,97 @@ func (s *Storage) FindConflictingNode(zone, net, node int, date time.Time, domai
 	return s.nodeOperations.FindConflictingNode(zone, net, node, date, domain)
 }
 
-func (s *Storage) GetMaxNodelistDate(domain string) (time.Time, error) {
-	return s.nodeOperations.GetMaxNodelistDate(domain)
+func (s *Storage) GetMaxNodelistDate(ctx context.Context, domain string) (time.Time, error) {
+	return s.nodeOperations.GetMaxNodelistDate(ctx, domain)
 }
 
-func (s *Storage) GetDomains() ([]DomainInfo, error) {
-	return s.nodeOperations.GetDomains()
+func (s *Storage) GetDomains(ctx context.Context) ([]DomainInfo, error) {
+	return s.nodeOperations.GetDomains(ctx)
 }
 
 // Point Operations delegated methods
-func (s *Storage) GetPointsByBoss(domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error) {
-	return s.pointOperations.GetPointsByBoss(domain, zone, net, node, asOf)
+func (s *Storage) GetPointsByBoss(ctx context.Context, domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error) {
+	return s.pointOperations.GetPointsByBoss(ctx, domain, zone, net, node, asOf)
 }
 
-func (s *Storage) GetPointHistory(domain string, zone, net, node, point int) ([]database.Point, error) {
-	return s.pointOperations.GetPointHistory(domain, zone, net, node, point)
+func (s *Storage) GetPointHistory(ctx context.Context, domain string, zone, net, node, point int) ([]database.Point, error) {
+	return s.pointOperations.GetPointHistory(ctx, domain, zone, net, node, point)
 }
 
-func (s *Storage) SearchPoints(filter database.PointFilter) ([]database.Point, error) {
-	return s.pointOperations.SearchPoints(filter)
+func (s *Storage) SearchPoints(ctx context.Context, filter database.PointFilter) ([]database.Point, error) {
+	return s.pointOperations.SearchPoints(ctx, filter)
 }
 
 func (s *Storage) SearchPointsWithLifetime(ctx context.Context, filter database.PointFilter) ([]PointSummary, error) {
 	return s.pointOperations.SearchPointsWithLifetime(ctx, filter)
 }
 
-func (s *Storage) GetPointStats(domain string, asOf *time.Time) (*PointStats, error) {
-	return s.pointOperations.GetPointStats(domain, asOf)
+func (s *Storage) GetPointStats(ctx context.Context, domain string, asOf *time.Time) (*PointStats, error) {
+	return s.pointOperations.GetPointStats(ctx, domain, asOf)
 }
 
-func (s *Storage) GetPointCountsByNet(domain string, zone, net int, asOf *time.Time) (map[int]uint64, error) {
-	return s.pointOperations.GetPointCountsByNet(domain, zone, net, asOf)
+func (s *Storage) GetPointCountsByNet(ctx context.Context, domain string, zone, net int, asOf *time.Time) (map[int]uint64, error) {
+	return s.pointOperations.GetPointCountsByNet(ctx, domain, zone, net, asOf)
 }
 
 // CountNodes returns how many nodes one nodelist holds in one network.
-func (s *Storage) CountNodes(date time.Time, domain string) (int, error) {
-	return s.nodeOperations.CountNodes(date, domain)
+func (s *Storage) CountNodes(ctx context.Context, date time.Time, domain string) (int, error) {
+	return s.nodeOperations.CountNodes(ctx, date, domain)
 }
 
 // GetNodeDomains lists the FTN networks a 3D address exists in.
-func (s *Storage) GetNodeDomains(zone, net, node int) ([]string, error) {
-	return s.nodeOperations.GetNodeDomains(zone, net, node)
+func (s *Storage) GetNodeDomains(ctx context.Context, zone, net, node int) ([]string, error) {
+	return s.nodeOperations.GetNodeDomains(ctx, zone, net, node)
 }
 
-func (s *Storage) GetPointDomains(zone, net, node int, point *int) ([]string, error) {
-	return s.pointOperations.GetPointDomains(zone, net, node, point)
+func (s *Storage) GetPointDomains(ctx context.Context, zone, net, node int, point *int) ([]string, error) {
+	return s.pointOperations.GetPointDomains(ctx, zone, net, node, point)
 }
 
-func (s *Storage) GetPointlistDates(domain, listSource string) ([]database.PointlistFile, error) {
-	return s.pointOperations.GetPointlistDates(domain, listSource)
+func (s *Storage) GetPointlistDates(ctx context.Context, domain, listSource string) ([]database.PointlistFile, error) {
+	return s.pointOperations.GetPointlistDates(ctx, domain, listSource)
 }
 
-func (s *Storage) GetPointlistSources(domain string) ([]PointlistSourceInfo, error) {
-	return s.pointOperations.GetPointlistSources(domain)
+func (s *Storage) GetPointlistSources(ctx context.Context, domain string) ([]PointlistSourceInfo, error) {
+	return s.pointOperations.GetPointlistSources(ctx, domain)
 }
 
-func (s *Storage) LatestPointlistDate(domain string) (time.Time, bool, error) {
-	return s.pointOperations.LatestPointlistDate(domain)
+func (s *Storage) LatestPointlistDate(ctx context.Context, domain string) (time.Time, bool, error) {
+	return s.pointOperations.LatestPointlistDate(ctx, domain)
 }
 
 // Search Operations delegated methods
-func (s *Storage) SearchNodesBySysop(sysopName string, limit int, domain string) ([]NodeSummary, error) {
-	return s.searchOperations.SearchNodesBySysop(sysopName, limit, domain)
+func (s *Storage) SearchNodesBySysop(ctx context.Context, sysopName string, limit int, domain string) ([]NodeSummary, error) {
+	return s.searchOperations.SearchNodesBySysop(ctx, sysopName, limit, domain)
 }
 
-func (s *Storage) GetNodeChanges(zone, net, node int, domain string) ([]database.NodeChange, error) {
-	return s.searchOperations.GetNodeChanges(zone, net, node, domain)
+func (s *Storage) GetNodeChanges(ctx context.Context, zone, net, node int, domain string) ([]database.NodeChange, error) {
+	return s.searchOperations.GetNodeChanges(ctx, zone, net, node, domain)
 }
 
-func (s *Storage) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
-	return s.searchOperations.GetUniqueSysops(nameFilter, limit, offset)
+func (s *Storage) GetUniqueSysops(ctx context.Context, nameFilter string, limit, offset int) ([]SysopInfo, error) {
+	return s.searchOperations.GetUniqueSysops(ctx, nameFilter, limit, offset)
 }
 
-func (s *Storage) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
-	return s.searchOperations.GetNodesBySysop(sysopName, limit)
+func (s *Storage) GetNodesBySysop(ctx context.Context, sysopName string, limit int) ([]database.Node, error) {
+	return s.searchOperations.GetNodesBySysop(ctx, sysopName, limit)
 }
 
-func (s *Storage) SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error) {
-	return s.searchOperations.SearchNodesWithLifetime(filter)
+func (s *Storage) SearchNodesWithLifetime(ctx context.Context, filter database.NodeFilter) ([]NodeSummary, error) {
+	return s.searchOperations.SearchNodesWithLifetime(ctx, filter)
 }
 
 // Analytics Operations delegated methods
-func (s *Storage) GetFlagFirstAppearance(flagName string, domain string) (*FlagFirstAppearance, error) {
-	return s.analyticsOperations.GetFlagFirstAppearance(flagName, domain)
+func (s *Storage) GetFlagFirstAppearance(ctx context.Context, flagName string, domain string) (*FlagFirstAppearance, error) {
+	return s.analyticsOperations.GetFlagFirstAppearance(ctx, flagName, domain)
 }
 
-func (s *Storage) GetFlagUsageByYear(flagName string, domain string) ([]FlagUsageByYear, error) {
-	return s.analyticsOperations.GetFlagUsageByYear(flagName, domain)
+func (s *Storage) GetFlagUsageByYear(ctx context.Context, flagName string, domain string) ([]FlagUsageByYear, error) {
+	return s.analyticsOperations.GetFlagUsageByYear(ctx, flagName, domain)
 }
 
-func (s *Storage) GetNetworkHistory(zone, net int, domain string) (*NetworkHistory, error) {
-	return s.analyticsOperations.GetNetworkHistory(zone, net, domain)
+func (s *Storage) GetNetworkHistory(ctx context.Context, zone, net int, domain string) (*NetworkHistory, error) {
+	return s.analyticsOperations.GetNetworkHistory(ctx, zone, net, domain)
 }
 
 func (s *Storage) UpdateFlagStatistics(nodelistDate time.Time, domain string) error {
@@ -251,226 +251,226 @@ func (s *Storage) UpdateFlagStatistics(nodelistDate time.Time, domain string) er
 }
 
 // Statistics Operations delegated methods
-func (s *Storage) GetStats(date time.Time, domain string) (*database.NetworkStats, error) {
-	return s.statsOperations.GetStats(date, domain)
+func (s *Storage) GetStats(ctx context.Context, date time.Time, domain string) (*database.NetworkStats, error) {
+	return s.statsOperations.GetStats(ctx, date, domain)
 }
 
-func (s *Storage) GetLatestStatsDate(domain string) (time.Time, error) {
-	return s.statsOperations.GetLatestStatsDate(domain)
+func (s *Storage) GetLatestStatsDate(ctx context.Context, domain string) (time.Time, error) {
+	return s.statsOperations.GetLatestStatsDate(ctx, domain)
 }
 
-func (s *Storage) GetAvailableDates(domain string) ([]time.Time, error) {
-	return s.statsOperations.GetAvailableDates(domain)
+func (s *Storage) GetAvailableDates(ctx context.Context, domain string) ([]time.Time, error) {
+	return s.statsOperations.GetAvailableDates(ctx, domain)
 }
 
-func (s *Storage) GetNearestAvailableDate(requestedDate time.Time, domain string) (time.Time, error) {
-	return s.statsOperations.GetNearestAvailableDate(requestedDate, domain)
+func (s *Storage) GetNearestAvailableDate(ctx context.Context, requestedDate time.Time, domain string) (time.Time, error) {
+	return s.statsOperations.GetNearestAvailableDate(ctx, requestedDate, domain)
 }
 
-func (s *Storage) GetNodeCountHistory(domain string) ([]NodeCountByDate, error) {
-	return s.statsOperations.GetNodeCountHistory(domain)
+func (s *Storage) GetNodeCountHistory(ctx context.Context, domain string) ([]NodeCountByDate, error) {
+	return s.statsOperations.GetNodeCountHistory(ctx, domain)
 }
 
-func (s *Storage) GetBrowseZones(date time.Time, domain string) ([]BrowseZone, error) {
-	return s.statsOperations.GetBrowseZones(date, domain)
+func (s *Storage) GetBrowseZones(ctx context.Context, date time.Time, domain string) ([]BrowseZone, error) {
+	return s.statsOperations.GetBrowseZones(ctx, date, domain)
 }
 
-func (s *Storage) GetBrowseRegions(date time.Time, zone int, domain string) ([]BrowseRegion, error) {
-	return s.statsOperations.GetBrowseRegions(date, zone, domain)
+func (s *Storage) GetBrowseRegions(ctx context.Context, date time.Time, zone int, domain string) ([]BrowseRegion, error) {
+	return s.statsOperations.GetBrowseRegions(ctx, date, zone, domain)
 }
 
-func (s *Storage) GetBrowseNets(date time.Time, zone, region int, domain string) ([]BrowseNet, error) {
-	return s.statsOperations.GetBrowseNets(date, zone, region, domain)
+func (s *Storage) GetBrowseNets(ctx context.Context, date time.Time, zone, region int, domain string) ([]BrowseNet, error) {
+	return s.statsOperations.GetBrowseNets(ctx, date, zone, region, domain)
 }
 
-func (s *Storage) GetBrowseNodes(date time.Time, zone, net int, domain string) ([]database.Node, error) {
-	return s.statsOperations.GetBrowseNodes(date, zone, net, domain)
+func (s *Storage) GetBrowseNodes(ctx context.Context, date time.Time, zone, net int, domain string) ([]database.Node, error) {
+	return s.statsOperations.GetBrowseNodes(ctx, date, zone, net, domain)
 }
 
 // Test Operations delegated methods
-func (s *Storage) GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
-	return s.testHistoryOperations.GetNodeTestHistory(zone, net, node, days, domain)
+func (s *Storage) GetNodeTestHistory(ctx context.Context, zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
+	return s.testHistoryOperations.GetNodeTestHistory(ctx, zone, net, node, days, domain)
 }
 
-func (s *Storage) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
-	return s.testHistoryOperations.GetDetailedTestResult(zone, net, node, testTime, domain)
+func (s *Storage) GetDetailedTestResult(ctx context.Context, zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
+	return s.testHistoryOperations.GetDetailedTestResult(ctx, zone, net, node, testTime, domain)
 }
 
-func (s *Storage) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
-	return s.reachabilityOperations.GetNodeReachabilityStats(zone, net, node, days, domain)
+func (s *Storage) GetNodeReachabilityStats(ctx context.Context, zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
+	return s.reachabilityOperations.GetNodeReachabilityStats(ctx, zone, net, node, days, domain)
 }
 
-func (s *Storage) GetReachabilityTrendsAllTime(domain string) ([]ReachabilityTrend, error) {
-	return s.reachabilityOperations.GetReachabilityTrendsAllTime(domain)
+func (s *Storage) GetReachabilityTrendsAllTime(ctx context.Context, domain string) ([]ReachabilityTrend, error) {
+	return s.reachabilityOperations.GetReachabilityTrendsAllTime(ctx, domain)
 }
 
-func (s *Storage) GetReachabilityTrends(days int, domain string) ([]ReachabilityTrend, error) {
-	return s.reachabilityOperations.GetReachabilityTrends(days, domain)
+func (s *Storage) GetReachabilityTrends(ctx context.Context, days int, domain string) ([]ReachabilityTrend, error) {
+	return s.reachabilityOperations.GetReachabilityTrends(ctx, days, domain)
 }
 
-func (s *Storage) SearchNodesByReachability(operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
-	return s.reachabilityOperations.SearchNodesByReachability(operational, limit, days, domain)
+func (s *Storage) SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
+	return s.reachabilityOperations.SearchNodesByReachability(ctx, operational, limit, days, domain)
 }
 
-func (s *Storage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.ipv6Operations.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetIPv6EnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.ipv6Operations.GetIPv6EnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.ipv6Operations.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetIPv6NonWorkingNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.ipv6Operations.GetIPv6NonWorkingNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.ipv6Operations.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetIPv6AdvertisedIPv4OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.ipv6Operations.GetIPv6AdvertisedIPv4OnlyNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.ipv6Operations.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetIPv6OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.ipv6Operations.GetIPv6OnlyNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.ipv6Operations.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetPureIPv6OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.ipv6Operations.GetPureIPv6OnlyNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
-	return s.ipv6Operations.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetIPv6NodeList(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
+	return s.ipv6Operations.GetIPv6NodeList(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
-	return s.ipv6Operations.GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
+func (s *Storage) GetIPv6WeeklyNews(ctx context.Context, limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
+	return s.ipv6Operations.GetIPv6WeeklyNews(ctx, limit, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.protocolOperations.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetBinkPEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.protocolOperations.GetBinkPEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.protocolOperations.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetIfcicoEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.protocolOperations.GetIfcicoEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.protocolOperations.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetTelnetEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.protocolOperations.GetTelnetEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.protocolOperations.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetVModemEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.protocolOperations.GetVModemEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetVModemUnconfirmedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.protocolOperations.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetVModemUnconfirmedNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.protocolOperations.GetVModemUnconfirmedNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.protocolOperations.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetFTPEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.protocolOperations.GetFTPEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	return s.akaMismatchOperations.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetAKAMismatchNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+	return s.akaMismatchOperations.GetAKAMismatchNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
-	return s.akaMismatchOperations.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetIPv6IncorrectIPv4CorrectNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+	return s.akaMismatchOperations.GetIPv6IncorrectIPv4CorrectNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
-	return s.akaMismatchOperations.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetIPv4IncorrectIPv6CorrectNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+	return s.akaMismatchOperations.GetIPv4IncorrectIPv6CorrectNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
-	return s.otherNetworksOperations.GetOtherNetworksSummary(days, domain)
+func (s *Storage) GetOtherNetworksSummary(ctx context.Context, days int, domain string) ([]OtherNetworkSummary, error) {
+	return s.otherNetworksOperations.GetOtherNetworksSummary(ctx, days, domain)
 }
 
-func (s *Storage) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
-	return s.otherNetworksOperations.GetNodesInNetwork(networkName, limit, days, domain)
+func (s *Storage) GetNodesInNetwork(ctx context.Context, networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
+	return s.otherNetworksOperations.GetNodesInNetwork(ctx, networkName, limit, days, domain)
 }
 
-func (s *Storage) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
-	return s.softwareOperations.GetBinkPSoftwareDistribution(days, domain)
+func (s *Storage) GetBinkPSoftwareDistribution(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
+	return s.softwareOperations.GetBinkPSoftwareDistribution(ctx, days, domain)
 }
 
-func (s *Storage) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
-	return s.softwareOperations.GetIFCICOSoftwareDistribution(days, domain)
+func (s *Storage) GetIFCICOSoftwareDistribution(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
+	return s.softwareOperations.GetIFCICOSoftwareDistribution(ctx, days, domain)
 }
 
-func (s *Storage) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
-	return s.softwareOperations.GetBinkdDetailedStats(days, domain)
+func (s *Storage) GetBinkdDetailedStats(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
+	return s.softwareOperations.GetBinkdDetailedStats(ctx, days, domain)
 }
 
-func (s *Storage) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
-	return s.geoOperations.GetGeoHostingDistribution(days, domain)
+func (s *Storage) GetGeoHostingDistribution(ctx context.Context, days int, domain string) (*GeoHostingDistribution, error) {
+	return s.geoOperations.GetGeoHostingDistribution(ctx, days, domain)
 }
 
-func (s *Storage) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
-	return s.geoOperations.GetNodesByCountry(countryCode, days, domain)
+func (s *Storage) GetNodesByCountry(ctx context.Context, countryCode string, days int, domain string) ([]NodeTestResult, error) {
+	return s.geoOperations.GetNodesByCountry(ctx, countryCode, days, domain)
 }
 
-func (s *Storage) GetNodesByProvider(provider string, days int, domain string) ([]NodeTestResult, error) {
-	return s.geoOperations.GetNodesByProvider(provider, days, domain)
+func (s *Storage) GetNodesByProvider(ctx context.Context, provider string, days int, domain string) ([]NodeTestResult, error) {
+	return s.geoOperations.GetNodesByProvider(ctx, provider, days, domain)
 }
 
-func (s *Storage) GetOnThisDayNodes(month, day, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
-	return s.analyticsOperations.GetOnThisDayNodes(month, day, limit, activeOnly, domain)
+func (s *Storage) GetOnThisDayNodes(ctx context.Context, month, day, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
+	return s.analyticsOperations.GetOnThisDayNodes(ctx, month, day, limit, activeOnly, domain)
 }
 
-func (s *Storage) GetPioneersByRegion(zone, region, limit int, domain string) ([]PioneerNode, error) {
-	return s.searchOperations.GetPioneersByRegion(zone, region, limit, domain)
+func (s *Storage) GetPioneersByRegion(ctx context.Context, zone, region, limit int, domain string) ([]PioneerNode, error) {
+	return s.searchOperations.GetPioneersByRegion(ctx, zone, region, limit, domain)
 }
 
-func (s *Storage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
-	return s.analyticsOperations.GetPSTNCMNodes(limit)
+func (s *Storage) GetPSTNCMNodes(ctx context.Context, limit int) ([]PSTNNode, error) {
+	return s.analyticsOperations.GetPSTNCMNodes(ctx, limit)
 }
 
-func (s *Storage) GetPSTNNodes(limit int, zone int, domain string) ([]PSTNNode, error) {
-	return s.analyticsOperations.GetPSTNNodes(limit, zone, domain)
+func (s *Storage) GetPSTNNodes(ctx context.Context, limit int, zone int, domain string) ([]PSTNNode, error) {
+	return s.analyticsOperations.GetPSTNNodes(ctx, limit, zone, domain)
 }
 
-func (s *Storage) MarkPSTNDead(zone, net, node int, reason, markedBy string) error {
-	return s.pstnDeadOperations.MarkDead(zone, net, node, reason, markedBy)
+func (s *Storage) MarkPSTNDead(ctx context.Context, zone, net, node int, reason, markedBy string) error {
+	return s.pstnDeadOperations.MarkDead(ctx, zone, net, node, reason, markedBy)
 }
 
-func (s *Storage) UnmarkPSTNDead(zone, net, node int, markedBy string) error {
-	return s.pstnDeadOperations.UnmarkDead(zone, net, node, markedBy)
+func (s *Storage) UnmarkPSTNDead(ctx context.Context, zone, net, node int, markedBy string) error {
+	return s.pstnDeadOperations.UnmarkDead(ctx, zone, net, node, markedBy)
 }
 
-func (s *Storage) GetPSTNDeadNodes() ([]PSTNDeadNode, error) {
-	return s.pstnDeadOperations.GetAllDeadNodes()
+func (s *Storage) GetPSTNDeadNodes(ctx context.Context) ([]PSTNDeadNode, error) {
+	return s.pstnDeadOperations.GetAllDeadNodes(ctx)
 }
 
-func (s *Storage) GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error) {
-	return s.analyticsOperations.GetFileRequestNodes(limit, domain)
+func (s *Storage) GetFileRequestNodes(ctx context.Context, limit int, domain string) ([]FileRequestNode, error) {
+	return s.analyticsOperations.GetFileRequestNodes(ctx, limit, domain)
 }
 
-func (s *Storage) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
-	return s.analyticsOperations.GetEmailCapableNodes(limit, useFieldFallback, domain)
+func (s *Storage) GetEmailCapableNodes(ctx context.Context, limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
+	return s.analyticsOperations.GetEmailCapableNodes(ctx, limit, useFieldFallback, domain)
 }
 
-func (s *Storage) GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error) {
-	return s.analyticsOperations.GetEmailFlagTrend(domain)
+func (s *Storage) GetEmailFlagTrend(ctx context.Context, domain string) ([]EmailFlagTrendPoint, error) {
+	return s.analyticsOperations.GetEmailFlagTrend(ctx, domain)
 }
 
-func (s *Storage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
-	return s.modemOperations.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetModemAccessibleNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
+	return s.modemOperations.GetModemAccessibleNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
-	return s.modemOperations.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
+func (s *Storage) GetModemNoAnswerNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
+	return s.modemOperations.GetModemNoAnswerNodes(ctx, limit, days, includeZeroNodes, domain)
 }
 
-func (s *Storage) GetRecentModemSuccessPhones(days int) ([]string, error) {
-	return s.modemOperations.GetRecentModemSuccessPhones(days)
+func (s *Storage) GetRecentModemSuccessPhones(ctx context.Context, days int) ([]string, error) {
+	return s.modemOperations.GetRecentModemSuccessPhones(ctx, days)
 }
 
-func (s *Storage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
-	return s.modemOperations.GetDetailedModemTestResult(zone, net, node, testTime)
+func (s *Storage) GetDetailedModemTestResult(ctx context.Context, zone, net, node int, testTime string) (*ModemTestDetail, error) {
+	return s.modemOperations.GetDetailedModemTestResult(ctx, zone, net, node, testTime)
 }
 
 // WHOIS Operations delegated methods
-func (s *Storage) GetAllWhoisResults(domain string) ([]DomainWhoisResult, error) {
-	return s.whoisOperations.GetAllWhoisResults(domain)
+func (s *Storage) GetAllWhoisResults(ctx context.Context, domain string) ([]DomainWhoisResult, error) {
+	return s.whoisOperations.GetAllWhoisResults(ctx, domain)
 }
 
-func (s *Storage) GetNodesByDomain(domain string, days int) ([]NodeTestResult, error) {
-	return s.whoisOperations.GetNodesByDomain(domain, days)
+func (s *Storage) GetNodesByDomain(ctx context.Context, domain string, days int) ([]NodeTestResult, error) {
+	return s.whoisOperations.GetNodesByDomain(ctx, domain, days)
 }
 
 // --- Utility Methods ---

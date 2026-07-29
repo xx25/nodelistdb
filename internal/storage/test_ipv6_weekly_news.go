@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -17,7 +18,7 @@ type IPv6WeeklyNews struct {
 }
 
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes
-func (ipv6 *IPv6QueryOperations) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6WeeklyNews(ctx context.Context, limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -25,30 +26,30 @@ func (ipv6 *IPv6QueryOperations) GetIPv6WeeklyNews(limit int, includeZeroNodes b
 	var err error
 
 	// Get new nodes with working IPv6
-	news.NewNodesWorking, err = ipv6.getNewNodesWithWorkingIPv6(limit, includeZeroNodes, domain)
+	news.NewNodesWorking, err = ipv6.getNewNodesWithWorkingIPv6(ctx, limit, includeZeroNodes, domain)
 	if err != nil {
-		logging.Error("GetIPv6WeeklyNews: Failed to get new nodes with working IPv6", slog.Any("error", err))
+		logQueryFailure("GetIPv6WeeklyNews: Failed to get new nodes with working IPv6", err)
 		return nil, fmt.Errorf("failed to get new nodes with working IPv6: %w", err)
 	}
 
 	// Get new nodes with non-working IPv6
-	news.NewNodesNonWorking, err = ipv6.getNewNodesWithNonWorkingIPv6(limit, includeZeroNodes, domain)
+	news.NewNodesNonWorking, err = ipv6.getNewNodesWithNonWorkingIPv6(ctx, limit, includeZeroNodes, domain)
 	if err != nil {
-		logging.Error("GetIPv6WeeklyNews: Failed to get new nodes with non-working IPv6", slog.Any("error", err))
+		logQueryFailure("GetIPv6WeeklyNews: Failed to get new nodes with non-working IPv6", err)
 		return nil, fmt.Errorf("failed to get new nodes with non-working IPv6: %w", err)
 	}
 
 	// Get old nodes that lost IPv6
-	news.OldNodesLostIPv6, err = ipv6.getOldNodesThatLostIPv6(limit, includeZeroNodes, domain)
+	news.OldNodesLostIPv6, err = ipv6.getOldNodesThatLostIPv6(ctx, limit, includeZeroNodes, domain)
 	if err != nil {
-		logging.Error("GetIPv6WeeklyNews: Failed to get old nodes that lost IPv6", slog.Any("error", err))
+		logQueryFailure("GetIPv6WeeklyNews: Failed to get old nodes that lost IPv6", err)
 		return nil, fmt.Errorf("failed to get old nodes that lost IPv6: %w", err)
 	}
 
 	// Get old nodes that gained IPv6
-	news.OldNodesGainedIPv6, err = ipv6.getOldNodesThatGainedIPv6(limit, includeZeroNodes, domain)
+	news.OldNodesGainedIPv6, err = ipv6.getOldNodesThatGainedIPv6(ctx, limit, includeZeroNodes, domain)
 	if err != nil {
-		logging.Error("GetIPv6WeeklyNews: Failed to get old nodes that gained IPv6", slog.Any("error", err))
+		logQueryFailure("GetIPv6WeeklyNews: Failed to get old nodes that gained IPv6", err)
 		return nil, fmt.Errorf("failed to get old nodes that gained IPv6: %w", err)
 	}
 
@@ -57,7 +58,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6WeeklyNews(limit int, includeZeroNodes b
 
 // getNewNodesWithWorkingIPv6 returns nodes that appeared in nodelist in the last 7 days
 // (were not in nodelist 7-14 days ago) and have working IPv6 services
-func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(ctx context.Context, limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	conn := ipv6.db.Conn()
 
 	nodeFilter := ""
@@ -137,9 +138,9 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 
 	// rowserrcheck is intraprocedural: rows.Err() is checked by
 	// parseTestResults, which owns the scan loop.
-	rows, err := conn.Query(query, limit) //nolint:rowserrcheck
+	rows, err := conn.QueryContext(ctx, query, limit) //nolint:rowserrcheck
 	if err != nil {
-		logging.Error("getNewNodesWithWorkingIPv6: Query failed", slog.Any("error", err))
+		logQueryFailure("getNewNodesWithWorkingIPv6: Query failed", err)
 		return nil, fmt.Errorf("failed to query new nodes with working IPv6: %w", err)
 	}
 	defer rows.Close()
@@ -149,7 +150,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 
 // getNewNodesWithNonWorkingIPv6 returns nodes that appeared in nodelist in the last 7 days
 // but have IPv6 addresses with non-working services
-func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(ctx context.Context, limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	conn := ipv6.db.Conn()
 
 	nodeFilter := ""
@@ -245,9 +246,9 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 
 	// rowserrcheck is intraprocedural: rows.Err() is checked by
 	// parseTestResults, which owns the scan loop.
-	rows, err := conn.Query(query, limit) //nolint:rowserrcheck
+	rows, err := conn.QueryContext(ctx, query, limit) //nolint:rowserrcheck
 	if err != nil {
-		logging.Error("getNewNodesWithNonWorkingIPv6: Query failed", slog.Any("error", err))
+		logQueryFailure("getNewNodesWithNonWorkingIPv6: Query failed", err)
 		return nil, fmt.Errorf("failed to query new nodes with non-working IPv6: %w", err)
 	}
 	defer rows.Close()
@@ -257,7 +258,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 
 // getOldNodesThatLostIPv6 returns nodes that have been in nodelist for >14 days
 // had IPv6 7-14 days ago, but lost it in the last 7 days
-func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(ctx context.Context, limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	conn := ipv6.db.Conn()
 
 	nodeFilter := ""
@@ -345,9 +346,9 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 
 	// rowserrcheck is intraprocedural: rows.Err() is checked by
 	// parseTestResults, which owns the scan loop.
-	rows, err := conn.Query(query, limit) //nolint:rowserrcheck
+	rows, err := conn.QueryContext(ctx, query, limit) //nolint:rowserrcheck
 	if err != nil {
-		logging.Error("getOldNodesThatLostIPv6: Query failed", slog.Any("error", err))
+		logQueryFailure("getOldNodesThatLostIPv6: Query failed", err)
 		return nil, fmt.Errorf("failed to query old nodes that lost IPv6: %w", err)
 	}
 	defer rows.Close()
@@ -357,7 +358,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 
 // getOldNodesThatGainedIPv6 returns nodes that have been in nodelist for >14 days
 // did not have working IPv6 7-14 days ago, but gained it in the last 7 days
-func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(ctx context.Context, limit int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	conn := ipv6.db.Conn()
 
 	nodeFilter := ""
@@ -454,9 +455,9 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 
 	// rowserrcheck is intraprocedural: rows.Err() is checked by
 	// parseTestResults, which owns the scan loop.
-	rows, err := conn.Query(query, limit) //nolint:rowserrcheck
+	rows, err := conn.QueryContext(ctx, query, limit) //nolint:rowserrcheck
 	if err != nil {
-		logging.Error("getOldNodesThatGainedIPv6: Query failed", slog.Any("error", err))
+		logQueryFailure("getOldNodesThatGainedIPv6: Query failed", err)
 		return nil, fmt.Errorf("failed to query old nodes that gained IPv6: %w", err)
 	}
 	defer rows.Close()

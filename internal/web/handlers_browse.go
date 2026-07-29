@@ -55,7 +55,7 @@ type browseData struct {
 func (s *Server) resolveBrowseDate(r *http.Request, domain string) (actual time.Time, raw string, adjusted bool, err error) {
 	raw = r.URL.Query().Get("date")
 	if raw == "" {
-		actual, err = s.storage.GetLatestStatsDate(domain)
+		actual, err = s.storage.GetLatestStatsDate(r.Context(), domain)
 		if err != nil {
 			return actual, raw, false, fmt.Errorf("failed to find latest nodelist date: %w", err)
 		}
@@ -63,13 +63,13 @@ func (s *Server) resolveBrowseDate(r *http.Request, domain string) (actual time.
 	}
 	parsed, perr := time.Parse("2006-01-02", raw)
 	if perr != nil {
-		actual, err = s.storage.GetLatestStatsDate(domain)
+		actual, err = s.storage.GetLatestStatsDate(r.Context(), domain)
 		if err != nil {
 			return actual, raw, true, fmt.Errorf("invalid date format and failed to get latest date: %w", err)
 		}
 		return actual, raw, true, nil
 	}
-	actual, err = s.storage.GetNearestAvailableDate(parsed, domain)
+	actual, err = s.storage.GetNearestAvailableDate(r.Context(), parsed, domain)
 	if err != nil {
 		return actual, raw, false, fmt.Errorf("failed to find available date: %w", err)
 	}
@@ -78,6 +78,11 @@ func (s *Server) resolveBrowseDate(r *http.Request, domain string) (actual time.
 
 // newBrowseData builds the common scaffolding (date, nav state) shared by every
 // browse page.
+// newBrowseData builds the shared payload for the four browse levels.
+//
+// ok == false means the handler must not carry on. It comes back two ways: with
+// a non-nil data carrying an Error for the caller to render, or with a nil data
+// when the request was cancelled and there is nothing left to render to.
 func (s *Server) newBrowseData(r *http.Request, level, title string) (*browseData, time.Time, bool) {
 	data := &browseData{
 		Title:      title,
@@ -86,11 +91,19 @@ func (s *Server) newBrowseData(r *http.Request, level, title string) (*browseDat
 		Version:    version.GetVersionInfo(),
 		Domain:     requestDomain(r),
 	}
-	data.AvailableDates, _ = s.storage.GetAvailableDates(data.Domain)
+	data.AvailableDates, _ = s.storage.GetAvailableDates(r.Context(), data.Domain)
 
 	actualDate, raw, adjusted, err := s.resolveBrowseDate(r, data.Domain)
 	data.SelectedDate = raw
 	if err != nil {
+		// resolveBrowseDate wraps with %w, so the cause survives the trip up.
+		// A nil payload is how "the client is gone, render nothing" is told
+		// apart from "render the error page": both are ok == false, and
+		// rendering a page for a closed connection is exactly the work the
+		// cancellation migration exists to skip.
+		if clientGone("Browse date resolution", err) {
+			return nil, time.Time{}, false
+		}
 		data.Error = "Failed to determine nodelist date: " + err.Error()
 		return data, time.Time{}, false
 	}
@@ -130,13 +143,19 @@ func (s *Server) renderBrowse(w http.ResponseWriter, data *browseData) {
 func (s *Server) BrowseZonesHandler(w http.ResponseWriter, r *http.Request) {
 	data, actualDate, ok := s.newBrowseData(r, "zones", "Browse Nodelist")
 	if !ok {
-		s.renderBrowse(w, data)
+		if data != nil {
+			s.renderBrowse(w, data)
+		}
 		return
 	}
 
-	zones, err := s.storage.GetBrowseZones(actualDate, data.Domain)
+	zones, err := s.storage.GetBrowseZones(r.Context(), actualDate, data.Domain)
 	if err != nil {
-		data.Error = "Failed to load zones: " + err.Error()
+		display, handled := storageFailure("Browse zones", "Failed to load zones: "+err.Error(), err)
+		if handled {
+			return
+		}
+		data.Error = display.Error()
 		s.renderBrowse(w, data)
 		return
 	}
@@ -149,7 +168,9 @@ func (s *Server) BrowseZonesHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) BrowseZoneHandler(w http.ResponseWriter, r *http.Request) {
 	data, actualDate, ok := s.newBrowseData(r, "regions", "Browse Nodelist")
 	if !ok {
-		s.renderBrowse(w, data)
+		if data != nil {
+			s.renderBrowse(w, data)
+		}
 		return
 	}
 
@@ -168,9 +189,13 @@ func (s *Server) BrowseZoneHandler(w http.ResponseWriter, r *http.Request) {
 	data.Zone = zone
 	data.Title = "Browse Zone " + parts[0]
 
-	regions, err := s.storage.GetBrowseRegions(actualDate, zone, data.Domain)
+	regions, err := s.storage.GetBrowseRegions(r.Context(), actualDate, zone, data.Domain)
 	if err != nil {
-		data.Error = "Failed to load regions: " + err.Error()
+		display, handled := storageFailure("Browse regions", "Failed to load regions: "+err.Error(), err)
+		if handled {
+			return
+		}
+		data.Error = display.Error()
 		s.renderBrowse(w, data)
 		return
 	}
@@ -183,7 +208,9 @@ func (s *Server) BrowseZoneHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) BrowseRegionHandler(w http.ResponseWriter, r *http.Request) {
 	data, actualDate, ok := s.newBrowseData(r, "nets", "Browse Nodelist")
 	if !ok {
-		s.renderBrowse(w, data)
+		if data != nil {
+			s.renderBrowse(w, data)
+		}
 		return
 	}
 
@@ -207,7 +234,7 @@ func (s *Server) BrowseRegionHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Pick up the region-coordinator name for the breadcrumb/heading.
 	if data.HasRegion {
-		if regions, err := s.storage.GetBrowseRegions(actualDate, zone, data.Domain); err == nil {
+		if regions, err := s.storage.GetBrowseRegions(r.Context(), actualDate, zone, data.Domain); err == nil {
 			for _, rg := range regions {
 				if rg.Region == region {
 					data.RegionName = rg.Name
@@ -217,9 +244,13 @@ func (s *Server) BrowseRegionHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	nets, err := s.storage.GetBrowseNets(actualDate, zone, region, data.Domain)
+	nets, err := s.storage.GetBrowseNets(r.Context(), actualDate, zone, region, data.Domain)
 	if err != nil {
-		data.Error = "Failed to load nets: " + err.Error()
+		display, handled := storageFailure("Browse nets", "Failed to load nets: "+err.Error(), err)
+		if handled {
+			return
+		}
+		data.Error = display.Error()
 		s.renderBrowse(w, data)
 		return
 	}
@@ -232,7 +263,9 @@ func (s *Server) BrowseRegionHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) BrowseNetHandler(w http.ResponseWriter, r *http.Request) {
 	data, actualDate, ok := s.newBrowseData(r, "nodes", "Browse Nodelist")
 	if !ok {
-		s.renderBrowse(w, data)
+		if data != nil {
+			s.renderBrowse(w, data)
+		}
 		return
 	}
 
@@ -253,9 +286,13 @@ func (s *Server) BrowseNetHandler(w http.ResponseWriter, r *http.Request) {
 	data.Net = net
 	data.Title = "Browse Net " + parts[0] + ":" + parts[1]
 
-	nodes, err := s.storage.GetBrowseNodes(actualDate, zone, net, data.Domain)
+	nodes, err := s.storage.GetBrowseNodes(r.Context(), actualDate, zone, net, data.Domain)
 	if err != nil {
-		data.Error = "Failed to load nodes: " + err.Error()
+		display, handled := storageFailure("Browse nodes", "Failed to load nodes: "+err.Error(), err)
+		if handled {
+			return
+		}
+		data.Error = display.Error()
 		s.renderBrowse(w, data)
 		return
 	}
@@ -269,7 +306,7 @@ func (s *Server) BrowseNetHandler(w http.ResponseWriter, r *http.Request) {
 	if data.SelectedDate != "" {
 		pointAsOf = &actualDate
 	}
-	data.PointCounts, _ = s.storage.GetPointCountsByNet(data.Domain, zone, net, pointAsOf)
+	data.PointCounts, _ = s.storage.GetPointCountsByNet(r.Context(), data.Domain, zone, net, pointAsOf)
 
 	// Derive breadcrumb context (region + host name) from the entries themselves
 	// so no extra queries are needed.

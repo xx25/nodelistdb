@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -31,7 +32,7 @@ func NewIPv6QueryOperations(db database.DatabaseInterface, queryBuilder *TestQue
 // that have IPv6, within one FTN network ("" = any). Callers pass the result
 // row's own domain so a scoped report never mixes in another network's
 // hostnames for a colliding zone:net/node.
-func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, days int, domain string) ([]string, error) {
+func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(ctx context.Context, zone, net, node int, days int, domain string) ([]string, error) {
 	conn := ipv6.db.Conn()
 
 	query := `
@@ -45,7 +46,7 @@ func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, day
 			AND length(resolved_ipv6) > 0
 		ORDER BY hostname_index`
 
-	rows, err := conn.Query(query, zone, net, node, days, domain, domain)
+	rows, err := conn.QueryContext(ctx, query, zone, net, node, days, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hostnames: %w", err)
 	}
@@ -70,7 +71,7 @@ func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, day
 }
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6
-func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -136,9 +137,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 
-	rows, err := conn.Query(query, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, limit)
 	if err != nil {
-		logging.Error("GetIPv6EnabledNodes: Query failed", slog.Any("error", err))
+		logQueryFailure("GetIPv6EnabledNodes: Query failed", err)
 		return nil, fmt.Errorf("failed to search IPv6 enabled nodes: %w", err)
 	}
 	defer rows.Close()
@@ -162,7 +163,13 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		hostnames, err := ipv6.getAllHostnamesForNode(ctx, results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		if cerr := contextErr(err); cerr != nil {
+			// One missing hostname list is worth degrading over; a cancelled
+			// request is not, and the rest of the loop would fail the same way.
+			// CachedStorage would otherwise store the half-filled result.
+			return nil, cerr
+		}
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -178,7 +185,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 }
 
 // GetIPv6NonWorkingNodes returns nodes that have IPv6 addresses but no working IPv6 services
-func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -261,9 +268,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 
-	rows, err := conn.Query(query, days, days, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, days, days, limit)
 	if err != nil {
-		logging.Error("GetIPv6NonWorkingNodes: Query failed", slog.Any("error", err))
+		logQueryFailure("GetIPv6NonWorkingNodes: Query failed", err)
 		return nil, fmt.Errorf("failed to search IPv6 non-working nodes: %w", err)
 	}
 	defer rows.Close()
@@ -287,7 +294,13 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		hostnames, err := ipv6.getAllHostnamesForNode(ctx, results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		if cerr := contextErr(err); cerr != nil {
+			// One missing hostname list is worth degrading over; a cancelled
+			// request is not, and the rest of the loop would fail the same way.
+			// CachedStorage would otherwise store the half-filled result.
+			return nil, cerr
+		}
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -304,7 +317,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 
 // GetIPv6AdvertisedIPv4OnlyNodes returns nodes that advertise IPv6 addresses but are only accessible via IPv4
 // (IPv4 services work, but IPv6 services don't work despite having IPv6 addresses)
-func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -391,9 +404,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
-	rows, err := conn.Query(query, days, days, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, days, days, limit)
 	if err != nil {
-		logging.Error("GetIPv6AdvertisedIPv4OnlyNodes: Query failed", slog.Any("error", err))
+		logQueryFailure("GetIPv6AdvertisedIPv4OnlyNodes: Query failed", err)
 		return nil, fmt.Errorf("failed to search IPv6-advertised IPv4-only nodes: %w", err)
 	}
 	defer rows.Close()
@@ -417,7 +430,13 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		hostnames, err := ipv6.getAllHostnamesForNode(ctx, results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		if cerr := contextErr(err); cerr != nil {
+			// One missing hostname list is worth degrading over; a cancelled
+			// request is not, and the rest of the loop would fail the same way.
+			// CachedStorage would otherwise store the half-filled result.
+			return nil, cerr
+		}
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -435,7 +454,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 // GetIPv6OnlyNodes returns nodes that have working IPv6 services but NO working IPv4 services
 // This shows nodes with IPv6 connectivity where IPv4 services failed or were not tested
 // (These nodes may still have IPv4 addresses configured, but IPv4 protocols don't work)
-func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -503,9 +522,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 
-	rows, err := conn.Query(query, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, limit)
 	if err != nil {
-		logging.Error("GetIPv6OnlyNodes: Query failed", slog.Any("error", err))
+		logQueryFailure("GetIPv6OnlyNodes: Query failed", err)
 		return nil, fmt.Errorf("failed to search IPv6-only nodes: %w", err)
 	}
 	defer rows.Close()
@@ -529,7 +548,13 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		hostnames, err := ipv6.getAllHostnamesForNode(ctx, results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		if cerr := contextErr(err); cerr != nil {
+			// One missing hostname list is worth degrading over; a cancelled
+			// request is not, and the rest of the loop would fail the same way.
+			// CachedStorage would otherwise store the half-filled result.
+			return nil, cerr
+		}
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -546,7 +571,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 
 // GetPureIPv6OnlyNodes returns nodes that ONLY advertise IPv6 addresses (no IPv4 addresses at all)
 // This is different from GetIPv6OnlyNodes which includes nodes with IPv4 addresses but non-working IPv4 services
-func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -612,9 +637,9 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 
-	rows, err := conn.Query(query, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, limit)
 	if err != nil {
-		logging.Error("GetPureIPv6OnlyNodes: Query failed", slog.Any("error", err))
+		logQueryFailure("GetPureIPv6OnlyNodes: Query failed", err)
 		return nil, fmt.Errorf("failed to search pure IPv6-only nodes: %w", err)
 	}
 	defer rows.Close()
@@ -638,7 +663,13 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 
 	// Fetch all hostnames for each node
 	for i := range results {
-		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		hostnames, err := ipv6.getAllHostnamesForNode(ctx, results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
+		if cerr := contextErr(err); cerr != nil {
+			// One missing hostname list is worth degrading over; a cancelled
+			// request is not, and the rest of the loop would fail the same way.
+			// CachedStorage would otherwise store the half-filled result.
+			return nil, cerr
+		}
 		if err != nil {
 			logging.Warn("Failed to get all hostnames for node",
 				slog.Int("zone", results[i].Zone),
@@ -658,7 +689,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 // Uses the general address_validated field (populated for all tests) rather than address_validated_ipv6
 // (only populated after the per-IPv4/IPv6 AKA split was deployed). As the daemon re-tests nodes,
 // address_validated_ipv6 will gradually be populated; this can be switched later if needed.
-func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
+func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
 	ipv6.mu.RLock()
 	defer ipv6.mu.RUnlock()
 
@@ -737,9 +768,9 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(limit int, days int, includeZer
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
-	rows, err := conn.Query(query, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, limit)
 	if err != nil {
-		logging.Error("GetIPv6NodeList: Query failed", slog.Any("error", err))
+		logQueryFailure("GetIPv6NodeList: Query failed", err)
 		return nil, fmt.Errorf("failed to query IPv6 node list: %w", err)
 	}
 	defer rows.Close()

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/nodelistdb/internal/querybudget"
 )
 
 // Server represents the API server
@@ -13,6 +15,21 @@ type Server struct {
 	healthChecker     HealthChecker
 	cacheStatsHandler http.HandlerFunc
 	ftpStatsHandler   http.HandlerFunc
+	budgets           Budgets
+}
+
+// Budgets are the per-route-group query deadlines. The zero value is no
+// deadline anywhere, which is what the server runs with until
+// query_budget.enabled is set.
+type Budgets struct {
+	Read      querybudget.Budget // ordinary node, point, stats and sysop reads
+	Analytics querybudget.Budget // the software and geo reports
+}
+
+// SetQueryBudgets installs the deadlines SetupRouter applies. It must be
+// called before SetupRouter, which reads them once while building the tree.
+func (s *Server) SetQueryBudgets(b Budgets) {
+	s.budgets = b
 }
 
 // SetModemHandler sets the modem handler for the server
@@ -45,7 +62,7 @@ func New(storage Storage) *Server {
 // HealthHandler handles health check requests
 func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	if s.healthChecker != nil {
-		WriteJSONSuccess(w, s.healthChecker.CheckHealth())
+		WriteJSONSuccess(w, s.healthChecker.CheckHealth(r.Context()))
 		return
 	}
 	// Fallback: backward-compatible trivial response

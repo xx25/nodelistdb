@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 )
@@ -24,24 +23,24 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Find the nearest available date
-		actualDate, err = s.storage.GetNearestAvailableDate(date, domain)
+		actualDate, err = s.storage.GetNearestAvailableDate(r.Context(), date, domain)
 		if err != nil {
-			WriteJSONError(w, fmt.Sprintf("Failed to find available date: %v", err), http.StatusInternalServerError)
+			writeStorageErrorf(w, "Failed to find available date", err)
 			return
 		}
 	} else {
 		// Default to latest available date
-		actualDate, err = s.storage.GetLatestStatsDate(domain)
+		actualDate, err = s.storage.GetLatestStatsDate(r.Context(), domain)
 		if err != nil {
-			WriteJSONError(w, fmt.Sprintf("Failed to get latest date: %v", err), http.StatusInternalServerError)
+			writeStorageErrorf(w, "Failed to get latest date", err)
 			return
 		}
 	}
 
 	// Get statistics for the actual date
-	stats, err := s.storage.GetStats(actualDate, domain)
+	stats, err := s.storage.GetStats(r.Context(), actualDate, domain)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get statistics: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get statistics", err)
 		return
 	}
 
@@ -61,9 +60,9 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 // latest nodelist date and node count.
 // GET /api/networks
 func (s *Server) NetworksHandler(w http.ResponseWriter, r *http.Request) {
-	networks, err := s.storage.GetDomains()
+	networks, err := s.storage.GetDomains(r.Context())
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get networks: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get networks", err)
 		return
 	}
 
@@ -78,9 +77,9 @@ func (s *Server) NetworksHandler(w http.ResponseWriter, r *http.Request) {
 // GetAvailableDatesHandler returns all available dates for stats.
 // GET /api/stats/dates?domain=fidonet
 func (s *Server) GetAvailableDatesHandler(w http.ResponseWriter, r *http.Request) {
-	dates, err := s.storage.GetAvailableDates(domainOrDefault(r))
+	dates, err := s.storage.GetAvailableDates(r.Context(), domainOrDefault(r))
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get available dates: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get available dates", err)
 		return
 	}
 

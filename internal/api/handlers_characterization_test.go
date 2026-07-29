@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -49,53 +50,53 @@ type sysopQuery struct {
 	limit, offset int
 }
 
-func (f *fakeOps) GetUniqueSysops(nameFilter string, limit, offset int) ([]storage.SysopInfo, error) {
+func (f *fakeOps) GetUniqueSysops(ctx context.Context, nameFilter string, limit, offset int) ([]storage.SysopInfo, error) {
 	f.sysopsFilters = append(f.sysopsFilters, sysopQuery{nameFilter, limit, offset})
 	return f.sysops, f.sysopsErr
 }
 
-func (f *fakeOps) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
+func (f *fakeOps) GetNodesBySysop(ctx context.Context, sysopName string, limit int) ([]database.Node, error) {
 	f.sysopNodesFor = sysopName
 	return f.sysopNodes, f.sysopNodesErr
 }
 
-func (f *fakeOps) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
+func (f *fakeOps) GetNodes(ctx context.Context, filter database.NodeFilter) ([]database.Node, error) {
 	f.nodesFilters = append(f.nodesFilters, filter)
 	return f.nodes, f.nodesErr
 }
 
-func (f *fakeOps) GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error) {
+func (f *fakeOps) GetNodeHistory(ctx context.Context, zone, net, node int, domain string) ([]database.Node, error) {
 	return f.history, f.historyErr
 }
 
-func (f *fakeOps) GetNodeDateRange(zone, net, node int, domain string) (time.Time, time.Time, error) {
+func (f *fakeOps) GetNodeDateRange(ctx context.Context, zone, net, node int, domain string) (time.Time, time.Time, error) {
 	if len(f.history) == 0 {
 		return time.Time{}, time.Time{}, nil
 	}
 	return f.history[0].NodelistDate, f.history[len(f.history)-1].NodelistDate, nil
 }
 
-func (f *fakeOps) GetNodeChanges(zone, net, node int, domain string) ([]database.NodeChange, error) {
+func (f *fakeOps) GetNodeChanges(ctx context.Context, zone, net, node int, domain string) ([]database.NodeChange, error) {
 	return f.changes, f.changesErr
 }
 
-func (f *fakeOps) GetNodeDomains(zone, net, node int) ([]string, error) {
+func (f *fakeOps) GetNodeDomains(ctx context.Context, zone, net, node int) ([]string, error) {
 	return f.nodeDomains, nil
 }
 
-func (f *fakeOps) GetPointDomains(zone, net, node int, point *int) ([]string, error) {
+func (f *fakeOps) GetPointDomains(ctx context.Context, zone, net, node int, point *int) ([]string, error) {
 	return f.pointDomains, nil
 }
 
-func (f *fakeOps) SearchPoints(filter database.PointFilter) ([]database.Point, error) {
+func (f *fakeOps) SearchPoints(ctx context.Context, filter database.PointFilter) ([]database.Point, error) {
 	return f.points, f.pointsErr
 }
 
-func (f *fakeOps) GetPointsByBoss(domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error) {
+func (f *fakeOps) GetPointsByBoss(ctx context.Context, domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error) {
 	return f.points, f.pointsErr
 }
 
-func (f *fakeOps) GetPointHistory(domain string, zone, net, node, point int) ([]database.Point, error) {
+func (f *fakeOps) GetPointHistory(ctx context.Context, domain string, zone, net, node, point int) ([]database.Point, error) {
 	return f.pointHistory, nil
 }
 

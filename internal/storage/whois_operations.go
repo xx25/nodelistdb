@@ -43,8 +43,7 @@ func NewWhoisOperations(db database.DatabaseInterface) *WhoisOperations {
 // network are dropped, so the registrar/expiry tables reflect only that
 // network. (The parameter is named ftnDomain, not domain, to avoid shadowing
 // the imported domain package used below.)
-func (w *WhoisOperations) GetAllWhoisResults(ftnDomain string) ([]DomainWhoisResult, error) {
-	ctx := context.Background()
+func (w *WhoisOperations) GetAllWhoisResults(ctx context.Context, ftnDomain string) ([]DomainWhoisResult, error) {
 
 	// Step 1: Get all WHOIS results from cache table
 	whoisResults, err := w.getWhoisEntries(ctx)
@@ -118,8 +117,7 @@ func (w *WhoisOperations) GetAllWhoisResults(ftnDomain string) ([]DomainWhoisRes
 // GetNodesByDomain returns all operational nodes whose hostname maps to the given domain.
 // Domain extraction uses publicsuffix in Go, so we fetch hostname→node mappings and filter in Go,
 // then query ClickHouse for full node details.
-func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]NodeTestResult, error) {
-	ctx := context.Background()
+func (w *WhoisOperations) GetNodesByDomain(ctx context.Context, targetDomain string, days int) ([]NodeTestResult, error) {
 
 	// Step 1: Get hostname→node mappings from recent test results. This
 	// drill-down is DNS-domain-centric ("nodes using example.com"), so it

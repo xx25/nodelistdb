@@ -9,15 +9,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nodelistdb/internal/querybudget"
+
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/links"
-	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 )
 
 // Server represents the web server
 type Server struct {
-	storage     storage.Operations
+	storage     Storage
+	budgets     Budgets
 	templates   map[string]*template.Template
 	templatesFS embed.FS
 	staticFS    embed.FS
@@ -78,7 +80,7 @@ func analyzeNodeActivity(history []database.Node) NodeActivityInfo {
 // deployment-stopping error, not something to discover on the first request:
 // the loader used to call log.Fatalf from inside this constructor, which made
 // every render test carry a comment about it.
-func New(storage storage.Operations, templatesFS embed.FS, staticFS embed.FS) (*Server, error) {
+func New(storage Storage, templatesFS embed.FS, staticFS embed.FS) (*Server, error) {
 	server := &Server{
 		storage:     storage,
 		templates:   make(map[string]*template.Template),
@@ -90,6 +92,20 @@ func New(storage storage.Operations, templatesFS embed.FS, staticFS embed.FS) (*
 		return nil, err
 	}
 	return server, nil
+}
+
+// Budgets are the per-path query deadlines SetupRoutes applies. The zero value
+// is no deadline anywhere, which is what the server runs with until
+// query_budget.enabled is set.
+type Budgets struct {
+	Read      querybudget.Budget // ordinary pages: search, browse, node, stats
+	Analytics querybudget.Budget // the analytics and reachability reports
+}
+
+// SetQueryBudgets installs the deadlines SetupRoutes applies. It must be
+// called before SetupRoutes, which reads them once while registering.
+func (s *Server) SetQueryBudgets(b Budgets) {
+	s.budgets = b
 }
 
 // SetLinksLoader sets the links loader for hot-reloadable links

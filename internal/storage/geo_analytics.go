@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -25,7 +26,7 @@ func NewGeoAnalyticsOperations(db database.DatabaseInterface) *GeoAnalyticsOpera
 
 // GetGeoHostingDistribution returns geographic hosting distribution statistics.
 // An empty domain means all FTN networks; otherwise results are scoped to that network.
-func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
+func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(ctx context.Context, days int, domain string) (*GeoHostingDistribution, error) {
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
 
@@ -57,7 +58,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 	`, domainFilter)
 	countryQuery = applyNodelistGate(countryQuery, "", domainFilter, "")
 
-	rows, err := conn.Query(countryQuery, days)
+	rows, err := conn.QueryContext(ctx, countryQuery, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query country distribution: %w", err)
 	}
@@ -115,7 +116,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 
 	providerQuery = applyNodelistGate(providerQuery, "", domainFilter, "")
 
-	rows2, err := conn.Query(providerQuery, days)
+	rows2, err := conn.QueryContext(ctx, providerQuery, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query provider distribution: %w", err)
 	}
@@ -191,7 +192,7 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 
 // GetNodesByCountry returns all operational nodes for a specific country.
 // An empty domain means all FTN networks; otherwise results are scoped to that network.
-func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
+func (gao *GeoAnalyticsOperations) GetNodesByCountry(ctx context.Context, countryCode string, days int, domain string) ([]NodeTestResult, error) {
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
 
@@ -256,7 +257,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = applyNodelistGate(query, "", domainFilter, "")
 
-	rows, err := conn.Query(query, days, countryCode)
+	rows, err := conn.QueryContext(ctx, query, days, countryCode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query nodes by country: %w", err)
 	}
@@ -298,7 +299,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 
 // GetNodesByProvider returns all operational nodes for a specific provider.
 // An empty domain means all FTN networks; otherwise results are scoped to that network.
-func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, domain string) ([]NodeTestResult, error) {
+func (gao *GeoAnalyticsOperations) GetNodesByProvider(ctx context.Context, isp string, days int, domain string) ([]NodeTestResult, error) {
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
 
@@ -363,7 +364,7 @@ func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, doma
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = applyNodelistGate(query, "", domainFilter, "")
 
-	rows, err := conn.Query(query, days, isp)
+	rows, err := conn.QueryContext(ctx, query, days, isp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query nodes by provider: %w", err)
 	}

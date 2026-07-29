@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -28,7 +29,7 @@ func NewSearchOperations(db database.DatabaseInterface, queryBuilder QueryBuilde
 }
 
 // SearchNodesWithLifetime finds nodes based on filter criteria and returns them with lifetime information
-func (so *SearchOperations) SearchNodesWithLifetime(filter database.NodeFilter) ([]NodeSummary, error) {
+func (so *SearchOperations) SearchNodesWithLifetime(ctx context.Context, filter database.NodeFilter) ([]NodeSummary, error) {
 	// Validate filter
 	if err := so.resultParser.ValidateNodeFilter(filter); err != nil {
 		return nil, fmt.Errorf("invalid filter: %w", err)
@@ -49,7 +50,7 @@ func (so *SearchOperations) SearchNodesWithLifetime(filter database.NodeFilter) 
 	query := so.queryBuilder.NodeSummarySearchSQL(filter.ActiveOnly != nil && *filter.ActiveOnly)
 	args := so.buildNodeSummaryArgs(filter)
 
-	rows, err := conn.Query(query, args...)
+	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search nodes with lifetime: %w", err)
 	}
@@ -146,7 +147,7 @@ type PioneerNode struct {
 // A region is identified by zone:region (e.g., zone=2, region=50 means Region 50 in Zone 2)
 // Each sysop appears only once, showing their first node in the region.
 // An empty domain searches all FTN networks.
-func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int, domain string) ([]PioneerNode, error) {
+func (so *SearchOperations) GetPioneersByRegion(ctx context.Context, zone int, region int, limit int, domain string) ([]PioneerNode, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
@@ -191,7 +192,7 @@ func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int,
 	// '%' characters (formatDateTime pattern) that Sprintf would mangle.
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 
-	rows, err := so.db.Conn().Query(query, zone, region, limit)
+	rows, err := so.db.Conn().QueryContext(ctx, query, zone, region, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pioneers: %w", err)
 	}

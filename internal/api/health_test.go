@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,7 @@ type mockHealthChecker struct {
 	status *HealthStatus
 }
 
-func (m *mockHealthChecker) CheckHealth() *HealthStatus {
+func (m *mockHealthChecker) CheckHealth(ctx context.Context) *HealthStatus {
 	return m.status
 }
 

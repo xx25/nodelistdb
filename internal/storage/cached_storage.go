@@ -92,17 +92,22 @@ func NewCachedStorage(storage *Storage, cacheImpl cache.Cache, config *CacheStor
 	return cs
 }
 
-// warmupCache pre-populates cache with frequently accessed data
+// warmupCache pre-populates cache with frequently accessed data.
+//
+// Background context by design: the warmup runs on its own goroutine at
+// startup with no request behind it, so there is nothing whose cancellation
+// should abort it.
 func (cs *CachedStorage) warmupCache() {
+	ctx := context.Background()
 	logging.Info("Starting cache warmup")
 
 	// Pre-cache latest stats (default network)
-	if date, err := cs.Storage.StatsOps().GetLatestStatsDate(database.DefaultDomain); err == nil {
-		_, _ = cs.GetStats(date, database.DefaultDomain)
+	if date, err := cs.Storage.StatsOps().GetLatestStatsDate(ctx, database.DefaultDomain); err == nil {
+		_, _ = cs.GetStats(ctx, date, database.DefaultDomain)
 	}
 
 	// Pre-cache available dates
-	_, _ = cs.GetAvailableDates(database.DefaultDomain)
+	_, _ = cs.GetAvailableDates(ctx, database.DefaultDomain)
 
 	// Pre-cache some popular nodes (example addresses)
 	popularNodes := []struct{ Zone, Net, Node int }{
@@ -112,7 +117,7 @@ func (cs *CachedStorage) warmupCache() {
 	}
 
 	for _, node := range popularNodes {
-		_, _ = cs.GetNodeHistory(node.Zone, node.Net, node.Node, "")
+		_, _ = cs.GetNodeHistory(ctx, node.Zone, node.Net, node.Node, "")
 	}
 
 	logging.Info("Cache warmup completed")
@@ -132,6 +137,26 @@ func (cs *CachedStorage) Close() error {
 // miss - the shape of a stored value changes with the code that wrote it, and
 // a key whose shape moved without its version segment moving would otherwise
 // keep failing for its whole TTL.
+//
+// The three helpers keep their signatures now that reads carry a request
+// context: the fetch closure captures the caller's ctx, so cancellation
+// reaches the database without the cache layer having to know about it.
+//
+// The cache store itself deliberately stays on context.Background(), and that
+// is not an oversight left over from the migration:
+//
+//   - request ctx on Get would turn every cancelled request's lookup into an
+//     error, hence a miss, hence a thundering herd on whatever it was about to
+//     stop caring about;
+//   - request ctx on Set would drop the fill for a fetch that already
+//     succeeded, because the client happened to leave a millisecond later. The
+//     query has been paid for; store the answer.
+//   - and BadgerCache.Get/Set accept a ctx and never look at it - Get blocks on
+//     resetMu regardless - so there is no cancellation to propagate even if the
+//     first two reasons did not apply.
+//
+// All three helpers return early on a fetch error without calling cache.Set,
+// so a cancelled request can never poison the cache with a partial answer.
 func cachedFetch[T any](cs *CachedStorage, key string, ttl time.Duration, fetch func() (T, error)) (T, error) {
 	if !cs.config.Enabled {
 		return fetch()

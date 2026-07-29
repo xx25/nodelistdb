@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -21,7 +22,7 @@ func NewModemQueryOperations(db database.DatabaseInterface) *ModemQueryOperation
 // GetModemAccessibleNodes returns nodes that have been successfully reached via modem tests
 // within the specified time range. Returns the latest successful modem test per node.
 // An empty domain means all FTN networks; otherwise results are scoped to that network.
-func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
+func (mq *ModemQueryOperations) GetModemAccessibleNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
 	mq.mu.RLock()
 	defer mq.mu.RUnlock()
 
@@ -71,7 +72,7 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 		ORDER BY test_time DESC
 		LIMIT ?`, nodeFilter, domainFilterSQL(domain, ""))
 
-	rows, err := conn.Query(query, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query modem accessible nodes: %w", err)
 	}
@@ -104,7 +105,7 @@ func (mq *ModemQueryOperations) GetModemAccessibleNodes(limit int, days int, inc
 // GetModemNoAnswerNodes returns nodes that have been tested via modem but never answered
 // within the specified time range. Only includes nodes with zero successful modem connections.
 // An empty domain means all FTN networks; otherwise results are scoped to that network.
-func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
+func (mq *ModemQueryOperations) GetModemNoAnswerNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
 	mq.mu.RLock()
 	defer mq.mu.RUnlock()
 
@@ -156,7 +157,7 @@ func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, inclu
 		ORDER BY attempt_count DESC, test_time DESC
 		LIMIT ?`, domainFilter, nodeFilter, domainFilter)
 
-	rows, err := conn.Query(query, days, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, days, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query modem no-answer nodes: %w", err)
 	}
@@ -184,7 +185,7 @@ func (mq *ModemQueryOperations) GetModemNoAnswerNodes(limit int, days int, inclu
 }
 
 // GetDetailedModemTestResult returns a single detailed modem test result for a specific node and test time
-func (mq *ModemQueryOperations) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
+func (mq *ModemQueryOperations) GetDetailedModemTestResult(ctx context.Context, zone, net, node int, testTime string) (*ModemTestDetail, error) {
 	mq.mu.RLock()
 	defer mq.mu.RUnlock()
 
@@ -217,7 +218,7 @@ func (mq *ModemQueryOperations) GetDetailedModemTestResult(zone, net, node int, 
 		ORDER BY modem_tx_speed DESC, modem_connect_speed DESC, modem_response_ms ASC
 		LIMIT 1`
 
-	row := conn.QueryRow(query, zone, net, node, testTime)
+	row := conn.QueryRowContext(ctx, query, zone, net, node, testTime)
 
 	var d ModemTestDetail
 	err := row.Scan(
@@ -252,7 +253,7 @@ func (mq *ModemQueryOperations) GetDetailedModemTestResult(zone, net, node int, 
 
 // GetRecentModemSuccessPhones returns distinct phone numbers that had a successful
 // modem test within the specified number of days.
-func (mq *ModemQueryOperations) GetRecentModemSuccessPhones(days int) ([]string, error) {
+func (mq *ModemQueryOperations) GetRecentModemSuccessPhones(ctx context.Context, days int) ([]string, error) {
 	mq.mu.RLock()
 	defer mq.mu.RUnlock()
 
@@ -272,7 +273,7 @@ func (mq *ModemQueryOperations) GetRecentModemSuccessPhones(days int) ([]string,
 			AND modem_success = true
 			AND modem_phone_dialed != ''`
 
-	rows, err := conn.Query(query, days)
+	rows, err := conn.QueryContext(ctx, query, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query recent modem success phones: %w", err)
 	}

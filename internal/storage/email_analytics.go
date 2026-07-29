@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -60,7 +61,7 @@ func anyEmailPresenceSQL() string {
 // clarity is worth more than pushing the logic into ClickHouse.
 //
 // An empty domain searches all FTN networks.
-func (ao *AnalyticsOperations) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
+func (ao *AnalyticsOperations) GetEmailCapableNodes(ctx context.Context, limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -100,7 +101,7 @@ func (ao *AnalyticsOperations) GetEmailCapableNodes(limit int, useFieldFallback 
 		ORDER BY zone, net, node
 		LIMIT ?`, domainFilter, domainFilter, anyEmailPresenceSQL())
 
-	rows, err := conn.Query(query, limit)
+	rows, err := conn.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query email capable nodes: %w", err)
 	}
@@ -158,7 +159,7 @@ func (ao *AnalyticsOperations) GetEmailCapableNodes(limit int, useFieldFallback 
 		return nil, fmt.Errorf("error iterating email capable nodes: %w", err)
 	}
 
-	ao.attachEndpointStatus(results)
+	ao.attachEndpointStatus(ctx, results)
 	return results, nil
 }
 
@@ -167,7 +168,7 @@ func (ao *AnalyticsOperations) GetEmailCapableNodes(limit int, useFieldFallback 
 // Failures here are logged and swallowed: the verification table is optional
 // (a server that has not run migration 014 does not have it, and the sweep may
 // be disabled), and the report is useful without it.
-func (ao *AnalyticsOperations) attachEndpointStatus(nodes []EmailCapableNode) {
+func (ao *AnalyticsOperations) attachEndpointStatus(ctx context.Context, nodes []EmailCapableNode) {
 	if len(nodes) == 0 {
 		return
 	}
@@ -198,7 +199,7 @@ func (ao *AnalyticsOperations) attachEndpointStatus(nodes []EmailCapableNode) {
 		ORDER BY domain, last_attempt_time DESC
 		LIMIT 1 BY domain`
 
-	rows, err := ao.db.Conn().Query(query, domains)
+	rows, err := ao.db.Conn().QueryContext(ctx, query, domains)
 	if err != nil {
 		logging.Debugf("email endpoint status unavailable: %v", err)
 		return
@@ -260,7 +261,7 @@ func (ao *AnalyticsOperations) attachEndpointStatus(nodes []EmailCapableNode) {
 // the last nodelist of each year.
 //
 // An empty domain aggregates all FTN networks.
-func (ao *AnalyticsOperations) GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error) {
+func (ao *AnalyticsOperations) GetEmailFlagTrend(ctx context.Context, domain string) ([]EmailFlagTrendPoint, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -299,7 +300,7 @@ func (ao *AnalyticsOperations) GetEmailFlagTrend(domain string) ([]EmailFlagTren
 		ORDER BY year`,
 		strings.Join(counts, ",\n\t\t\t"), anyEmailPresenceSQL(), domainFilter, domainFilter)
 
-	rows, err := conn.Query(query)
+	rows, err := conn.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query email flag trend: %w", err)
 	}

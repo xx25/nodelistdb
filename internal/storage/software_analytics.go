@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -36,7 +37,7 @@ func NewSoftwareAnalyticsOperations(db database.DatabaseInterface) *SoftwareAnal
 
 // GetBinkPSoftwareDistribution returns BinkP software distribution statistics.
 // An empty domain covers all FTN networks.
-func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
+func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
 
@@ -63,7 +64,7 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int, d
 		ORDER BY count DESC
 	`, domainFilterSQL(domain, ""))
 
-	rows, err := conn.Query(query, days)
+	rows, err := conn.QueryContext(ctx, query, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query binkp versions: %w", err)
 	}
@@ -129,7 +130,7 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int, d
 
 // GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics.
 // An empty domain covers all FTN networks.
-func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
+func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
 
@@ -156,7 +157,7 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int, 
 		ORDER BY count DESC
 	`, domainFilterSQL(domain, ""))
 
-	rows, err := conn.Query(query, days)
+	rows, err := conn.QueryContext(ctx, query, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query ifcico versions: %w", err)
 	}
@@ -218,7 +219,7 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int, 
 
 // GetBinkdDetailedStats returns detailed binkd statistics.
 // An empty domain covers all FTN networks.
-func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
+func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
 
@@ -248,7 +249,7 @@ func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int, domain s
 	// '%' character (LIKE pattern) that Sprintf would mangle.
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 
-	rows, err := conn.Query(query, days)
+	rows, err := conn.QueryContext(ctx, query, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query binkd versions: %w", err)
 	}

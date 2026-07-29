@@ -50,15 +50,16 @@ func (nc *NetworkConfig) Pattern() *regexp.Regexp {
 
 // Config represents the complete application configuration
 type Config struct {
-	ClickHouse        ClickHouseConfig `yaml:"clickhouse"`
-	Cache             CacheConfig      `yaml:"cache"`
-	FTP               FTPConfig        `yaml:"ftp"`
-	ModemAPI          ModemAPIConfig   `yaml:"modem_api"`
-	Networks          []NetworkConfig  `yaml:"networks,omitempty"` // FTN networks (defaults to fidonet if absent)
-	LinksFile         string           `yaml:"links_file"`         // Path to links.yaml for external FidoNet links
-	ServerLogging     LoggingConfig    `yaml:"server_logging"`
-	ParserLogging     LoggingConfig    `yaml:"parser_logging"`
-	TestdaemonLogging LoggingConfig    `yaml:"testdaemon_logging"`
+	ClickHouse        ClickHouseConfig  `yaml:"clickhouse"`
+	Cache             CacheConfig       `yaml:"cache"`
+	FTP               FTPConfig         `yaml:"ftp"`
+	ModemAPI          ModemAPIConfig    `yaml:"modem_api"`
+	Networks          []NetworkConfig   `yaml:"networks,omitempty"` // FTN networks (defaults to fidonet if absent)
+	LinksFile         string            `yaml:"links_file"`         // Path to links.yaml for external FidoNet links
+	QueryBudget       QueryBudgetConfig `yaml:"query_budget,omitempty"`
+	ServerLogging     LoggingConfig     `yaml:"server_logging"`
+	ParserLogging     LoggingConfig     `yaml:"parser_logging"`
+	TestdaemonLogging LoggingConfig     `yaml:"testdaemon_logging"`
 
 	// Deprecated: Use component-specific logging configs instead
 	Logging LoggingConfig `yaml:"logging,omitempty"`
@@ -72,6 +73,38 @@ func (c *Config) Network(name string) *NetworkConfig {
 		}
 	}
 	return nil
+}
+
+// QueryBudgetConfig bounds how long one HTTP request's database work may run.
+//
+// Off by default, and deliberately so: cancellation (which needs no deadline)
+// ships on for everyone, while a deadline is a policy with real failure modes
+// - notably that clickhouse-go converts it into a max_execution_time setting
+// that readonly HTTP users are not permitted to send. See internal/querybudget
+// for the full reasoning; it withholds the budget on protocol: http by itself.
+//
+// The analytics pages get their own, longer value because the latest_nodes
+// CTEs behind them are the slow ones; everything else runs under Default.
+type QueryBudgetConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	Default   string `yaml:"default,omitempty"`   // budget for ordinary pages and API reads
+	Analytics string `yaml:"analytics,omitempty"` // budget for the heavy analytics reports
+}
+
+// Durations parses the two budgets. A budget left empty is zero, which
+// querybudget.New reads as "no budget for this group".
+func (q QueryBudgetConfig) Durations() (def, analytics time.Duration, err error) {
+	if q.Default != "" {
+		if def, err = time.ParseDuration(q.Default); err != nil {
+			return 0, 0, fmt.Errorf("invalid query_budget.default: %w", err)
+		}
+	}
+	if q.Analytics != "" {
+		if analytics, err = time.ParseDuration(q.Analytics); err != nil {
+			return 0, 0, fmt.Errorf("invalid query_budget.analytics: %w", err)
+		}
+	}
+	return def, analytics, nil
 }
 
 // LoggingConfig holds logging configuration
@@ -395,6 +428,21 @@ func (c *Config) validate() error {
 	}
 	if c.ClickHouse.Compression == "" {
 		c.ClickHouse.Compression = "lz4"
+	}
+
+	// Query budgets: parsed here so a typo fails at startup rather than being
+	// silently dropped on the first slow page. The defaults only apply once
+	// the feature is switched on.
+	if c.QueryBudget.Enabled {
+		if c.QueryBudget.Default == "" {
+			c.QueryBudget.Default = "30s"
+		}
+		if c.QueryBudget.Analytics == "" {
+			c.QueryBudget.Analytics = "120s"
+		}
+	}
+	if _, _, err := c.QueryBudget.Durations(); err != nil {
+		return err
 	}
 
 	// Validate logging configurations for all components

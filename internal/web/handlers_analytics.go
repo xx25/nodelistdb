@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -81,7 +82,7 @@ type analyticsPageData struct {
 }
 
 // protocolNodesFetcher is a function type for fetching protocol-specific nodes
-type protocolNodesFetcher func(limit, days int, includeZeroNodes bool, domain string) ([]storage.NodeTestResult, error)
+type protocolNodesFetcher func(ctx context.Context, limit, days int, includeZeroNodes bool, domain string) ([]storage.NodeTestResult, error)
 
 // renderAnalyticsNodes renders one config-driven analytics page: parse the
 // shared query parameters, fetch the rows, hand both to the template named by
@@ -97,12 +98,14 @@ func (s *Server) renderAnalyticsNodes(
 	base := config.base()
 	params := parseAnalyticsParams(r)
 
-	nodes, err := fetcher(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
+	nodes, err := fetcher(r.Context(), params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
 	var displayError error
 	if err != nil {
-		logging.Errorf("%s: Error fetching nodes: %v", base.PageTitle, err)
+		var handled bool
+		if displayError, handled = storageFailure(base.PageTitle, "Failed to fetch analytics data. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.NodeTestResult{}
-		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
@@ -172,7 +175,7 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 		data.Error = fmt.Errorf("Flag cannot be empty")
 	} else {
 		// Get first appearance
-		firstAppearance, err := s.storage.GetFlagFirstAppearance(flag, requestDomain(r))
+		firstAppearance, err := s.storage.GetFlagFirstAppearance(r.Context(), flag, requestDomain(r))
 		if err != nil {
 			data.Error = fmt.Errorf("Failed to get first appearance: %v", err)
 		} else {
@@ -181,7 +184,7 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Get yearly usage
 		if data.Error == nil {
-			yearlyUsage, err := s.storage.GetFlagUsageByYear(flag, requestDomain(r))
+			yearlyUsage, err := s.storage.GetFlagUsageByYear(r.Context(), flag, requestDomain(r))
 			if err != nil {
 				data.Error = fmt.Errorf("Failed to get yearly usage: %v", err)
 			} else {
@@ -229,7 +232,7 @@ func (s *Server) AnalyticsNetworkHandler(w http.ResponseWriter, r *http.Request)
 			data.Error = fmt.Errorf("Invalid network format. Use zone:net (e.g., 2:5000)")
 		} else {
 			// Get network history
-			history, err := s.storage.GetNetworkHistory(zone, net, requestDomain(r))
+			history, err := s.storage.GetNetworkHistory(r.Context(), zone, net, requestDomain(r))
 			if err != nil {
 				data.Error = fmt.Errorf("Failed to fetch network history: %v", err)
 			} else if history == nil {
@@ -517,12 +520,14 @@ func (s *Server) VModemUnavailableAnalyticsHandler(w http.ResponseWriter, r *htt
 
 	params := parseAnalyticsParams(r)
 
-	unconfirmed, err := s.storage.GetVModemUnconfirmedNodes(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
+	unconfirmed, err := s.storage.GetVModemUnconfirmedNodes(r.Context(), params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
 	var displayError error
 	if err != nil {
-		logging.Errorf("VModem Unavailable Analytics: Error fetching unconfirmed nodes: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("VModem Unavailable Analytics", "Failed to fetch analytics data. Please try again later", err); handled {
+			return
+		}
 		unconfirmed = []storage.NodeTestResult{}
-		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
@@ -599,13 +604,15 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	params := parseAnalyticsParams(r)
 
 	// Fetch mismatch nodes
-	mismatchNodes, err := s.storage.GetAKAMismatchNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
+	mismatchNodes, err := s.storage.GetAKAMismatchNodes(r.Context(), params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("AKA Mismatch Analytics: Error fetching nodes: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("AKA Mismatch Analytics", "Failed to fetch analytics data. Please try again later", err); handled {
+			return
+		}
 		mismatchNodes = []storage.NodeTestResult{}
-		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
@@ -614,13 +621,19 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	var ipv6IncorrectNodes []storage.AKAIPVersionMismatchNode
 	var ipv4IncorrectNodes []storage.AKAIPVersionMismatchNode
 
-	if ipv6Inc, err := s.storage.GetIPv6IncorrectIPv4CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r)); err != nil {
+	if ipv6Inc, err := s.storage.GetIPv6IncorrectIPv4CorrectNodes(r.Context(), params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r)); err != nil {
+		if clientGone("AKA Mismatch Analytics: IPv6 incorrect nodes", err) {
+			return
+		}
 		logging.Errorf("AKA Mismatch Analytics: Error fetching IPv6 incorrect nodes: %v", err)
 	} else {
 		ipv6IncorrectNodes = ipv6Inc
 	}
 
-	if ipv4Inc, err := s.storage.GetIPv4IncorrectIPv6CorrectNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r)); err != nil {
+	if ipv4Inc, err := s.storage.GetIPv4IncorrectIPv6CorrectNodes(r.Context(), params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r)); err != nil {
+		if clientGone("AKA Mismatch Analytics: IPv4 incorrect nodes", err) {
+			return
+		}
 		logging.Errorf("AKA Mismatch Analytics: Error fetching IPv4 incorrect nodes: %v", err)
 	} else {
 		ipv4IncorrectNodes = ipv4Inc
@@ -681,13 +694,15 @@ func (s *Server) OtherNetworksAnalyticsHandler(w http.ResponseWriter, r *http.Re
 	params := parseAnalyticsParams(r)
 
 	// Fetch networks summary
-	networks, err := s.storage.GetOtherNetworksSummary(params.Days, requestDomain(r))
+	networks, err := s.storage.GetOtherNetworksSummary(r.Context(), params.Days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("Other Networks Analytics: Error fetching networks: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("Other Networks Analytics", "Failed to fetch analytics data. Please try again later", err); handled {
+			return
+		}
 		networks = []storage.OtherNetworkSummary{}
-		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
@@ -751,13 +766,15 @@ func (s *Server) OtherNetworkNodesHandler(w http.ResponseWriter, r *http.Request
 	params := parseAnalyticsParams(r)
 
 	// Fetch nodes in network
-	nodes, err := s.storage.GetNodesInNetwork(networkName, params.Limit, params.Days, requestDomain(r))
+	nodes, err := s.storage.GetNodesInNetwork(r.Context(), networkName, params.Limit, params.Days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("Other Network Nodes: Error fetching nodes for %s: %v", networkName, err)
+		var handled bool
+		if displayError, handled = storageFailure("Other Network Nodes", "Failed to fetch analytics data. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.OtherNetworkNode{}
-		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
@@ -828,12 +845,14 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	limit := parseLimit(r, 5000, 10000)
 
 	// Fetch ALL PSTN nodes (CM and non-CM) from latest nodelist
-	pstnNodes, err := s.storage.GetPSTNNodes(limit, 0, requestDomain(r))
+	pstnNodes, err := s.storage.GetPSTNNodes(r.Context(), limit, 0, requestDomain(r))
 	var displayError error
 	if err != nil {
-		logging.Errorf("PSTN Analytics: Error fetching nodes: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("PSTN Analytics", "Failed to fetch PSTN analytics data. Please try again later", err); handled {
+			return
+		}
 		pstnNodes = []storage.PSTNNode{}
-		displayError = fmt.Errorf("Failed to fetch PSTN analytics data. Please try again later")
 	}
 
 	// Compute summary statistics
@@ -995,12 +1014,14 @@ func sortedModemZoneCounts(m map[int]int) []ModemAccessibleZoneCount {
 func (s *Server) ModemAccessibleAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	params := parseAnalyticsParams(r)
 
-	nodes, err := s.storage.GetModemAccessibleNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
+	nodes, err := s.storage.GetModemAccessibleNodes(r.Context(), params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
 	var displayError error
 	if err != nil {
-		logging.Errorf("Modem Accessible Analytics: Error fetching nodes: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("Modem Accessible Analytics", "Failed to fetch modem accessible analytics data. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.ModemAccessibleNode{}
-		displayError = fmt.Errorf("Failed to fetch modem accessible analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
@@ -1094,18 +1115,20 @@ func computeModemNoAnswerStats(nodes []storage.ModemNoAnswerNode) ModemNoAnswerS
 func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	params := parseAnalyticsParams(r)
 
-	nodes, err := s.storage.GetModemNoAnswerNodes(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
+	nodes, err := s.storage.GetModemNoAnswerNodes(r.Context(), params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
 	var displayError error
 	if err != nil {
-		logging.Errorf("Modem No Answer Analytics: Error fetching nodes: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("Modem No Answer Analytics", "Failed to fetch modem no-answer analytics data. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.ModemNoAnswerNode{}
-		displayError = fmt.Errorf("Failed to fetch modem no-answer analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
 
 	// Enrich with PSTN dead status
-	if deadNodes, err := s.storage.GetPSTNDeadNodes(); err == nil && len(deadNodes) > 0 {
+	if deadNodes, err := s.storage.GetPSTNDeadNodes(r.Context()); err == nil && len(deadNodes) > 0 {
 		deadSet := make(map[[3]int]string, len(deadNodes))
 		for _, d := range deadNodes {
 			deadSet[[3]int{d.Zone, d.Net, d.Node}] = d.Reason
@@ -1235,12 +1258,14 @@ func (s *Server) FileRequestAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	limit := parseLimit(r, 5000, 10000)
 
 	// Fetch file request nodes
-	fileRequestNodes, err := s.storage.GetFileRequestNodes(limit, requestDomain(r))
+	fileRequestNodes, err := s.storage.GetFileRequestNodes(r.Context(), limit, requestDomain(r))
 	var displayError error
 	if err != nil {
-		logging.Errorf("File Request Analytics: Error fetching nodes: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("File Request Analytics", "Failed to fetch file request analytics data. Please try again later", err); handled {
+			return
+		}
 		fileRequestNodes = []storage.FileRequestNode{}
-		displayError = fmt.Errorf("Failed to fetch file request analytics data. Please try again later")
 	}
 
 	// Compute summary statistics
@@ -1293,12 +1318,14 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 	includeZeroNodes := query.Get("includeZero") == "true"
 
 	// Fetch weekly news (uses cached version if CachedStorage is in use)
-	news, err := s.storage.GetIPv6WeeklyNews(limit, includeZeroNodes, requestDomain(r))
+	news, err := s.storage.GetIPv6WeeklyNews(r.Context(), limit, includeZeroNodes, requestDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("IPv6 Weekly News: Error fetching data: %v", err)
-		displayError = fmt.Errorf("Failed to fetch weekly IPv6 news. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("IPv6 Weekly News", "Failed to fetch weekly IPv6 news. Please try again later", err); handled {
+			return
+		}
 	} else if validationError != "" {
 		displayError = fmt.Errorf("%s", validationError)
 	}
@@ -1346,12 +1373,14 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 	days := geoDays(r)
 
 	// Get geo distribution
-	dist, err := s.storage.GetGeoHostingDistribution(days, requestDomain(r))
+	dist, err := s.storage.GetGeoHostingDistribution(r.Context(), days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("Geo Hosting Analytics: Error fetching data: %v", err)
-		displayError = fmt.Errorf("Failed to fetch geo hosting distribution. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("Geo Hosting Analytics", "Failed to fetch geo hosting distribution. Please try again later", err); handled {
+			return
+		}
 	}
 
 	// Build template data
@@ -1445,12 +1474,14 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 	days := geoDays(r)
 
 	// Get nodes for country
-	nodes, err := s.storage.GetNodesByCountry(countryCode, days, requestDomain(r))
+	nodes, err := s.storage.GetNodesByCountry(r.Context(), countryCode, days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("Geo Country Nodes: Error fetching data: %v", err)
-		displayError = fmt.Errorf("Failed to fetch nodes for country. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("Geo Country Nodes", "Failed to fetch nodes for country. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.NodeTestResult{}
 	}
 
@@ -1495,12 +1526,14 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 	days := geoDays(r)
 
 	// Get nodes for provider
-	nodes, err := s.storage.GetNodesByProvider(provider, days, requestDomain(r))
+	nodes, err := s.storage.GetNodesByProvider(r.Context(), provider, days, requestDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("Geo Provider Nodes: Error fetching data: %v", err)
-		displayError = fmt.Errorf("Failed to fetch nodes for provider. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("Geo Provider Nodes", "Failed to fetch nodes for provider. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.NodeTestResult{}
 	}
 
@@ -1546,12 +1579,14 @@ func (s *Server) OnThisDayHandler(w http.ResponseWriter, r *http.Request) {
 	activeOnly := query.Get("active") != "0"
 
 	// Fetch on this day nodes
-	nodes, err := s.storage.GetOnThisDayNodes(month, day, limit, activeOnly, requestDomain(r))
+	nodes, err := s.storage.GetOnThisDayNodes(r.Context(), month, day, limit, activeOnly, requestDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("On This Day: Error fetching data: %v", err)
-		displayError = fmt.Errorf("Failed to fetch On This Day data. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("On This Day", "Failed to fetch On This Day data. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.OnThisDayNode{}
 	}
 
@@ -1621,14 +1656,16 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("invalid zone or region parameters")
 		} else {
 			// Get pioneers for this zone:region (default to 50)
-			pioneers, err = s.storage.GetPioneersByRegion(zone, region, 50, requestDomain(r))
+			pioneers, err = s.storage.GetPioneersByRegion(r.Context(), zone, region, 50, requestDomain(r))
 		}
 	}
 
 	var displayError error
 	if err != nil {
-		logging.Errorf("Pioneers: Error fetching data: %v", err)
-		displayError = fmt.Errorf("Failed to fetch pioneer data. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("Pioneers", "Failed to fetch pioneer data. Please try again later", err); handled {
+			return
+		}
 		pioneers = []storage.PioneerNode{}
 	}
 
@@ -1659,7 +1696,7 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 	params := parseAnalyticsParams(r)
 
-	nodes, err := s.storage.GetIPv6NodeList(params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
+	nodes, err := s.storage.GetIPv6NodeList(r.Context(), params.Limit, params.Days, params.IncludeZeroNodes, requestDomain(r))
 
 	// Handle text format
 	if r.URL.Query().Get("format") == "text" {
@@ -1675,9 +1712,11 @@ func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 
 	var displayError error
 	if err != nil {
-		logging.Errorf("IPv6 Node List: Error fetching nodes: %v", err)
+		var handled bool
+		if displayError, handled = storageFailure("IPv6 Node List", "Failed to fetch IPv6 node list. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.IPv6NodeListEntry{}
-		displayError = fmt.Errorf("Failed to fetch IPv6 node list. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
@@ -1710,12 +1749,14 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 	// Scope the domain list to the globally selected FTN network. On this page
 	// ?domain= is a DNS hostname (drill-down), so the network comes from the
 	// switcher cookie only, never the URL.
-	results, err := s.storage.GetAllWhoisResults(cookieDomain(r))
+	results, err := s.storage.GetAllWhoisResults(r.Context(), cookieDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("Domain Expiration: Error fetching data: %v", err)
-		displayError = fmt.Errorf("Failed to fetch domain expiration data. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("Domain Expiration", "Failed to fetch domain expiration data. Please try again later", err); handled {
+			return
+		}
 		results = []storage.DomainWhoisResult{}
 	}
 
@@ -1778,12 +1819,14 @@ func (s *Server) DomainNodesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get nodes for domain
-	nodes, err := s.storage.GetNodesByDomain(domainName, 30)
+	nodes, err := s.storage.GetNodesByDomain(r.Context(), domainName, 30)
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("Domain Nodes: Error fetching data for %s: %v", domainName, err)
-		displayError = fmt.Errorf("Failed to fetch nodes for domain. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("Domain Nodes", "Failed to fetch nodes for domain. Please try again later", err); handled {
+			return
+		}
 		nodes = []storage.NodeTestResult{}
 	}
 
@@ -1918,12 +1961,14 @@ func (s *Server) RegistrarsHandler(w http.ResponseWriter, r *http.Request) {
 	// Scope to the globally selected FTN network. This page uses ?domain= for
 	// the registrar drill-down family (a DNS hostname on the linked pages), so
 	// the network comes from the switcher cookie only, never the URL.
-	results, err := s.storage.GetAllWhoisResults(cookieDomain(r))
+	results, err := s.storage.GetAllWhoisResults(r.Context(), cookieDomain(r))
 	var displayError error
 
 	if err != nil {
-		logging.Errorf("Registrars: Error fetching data: %v", err)
-		displayError = fmt.Errorf("Failed to fetch registrar data. Please try again later")
+		var handled bool
+		if displayError, handled = storageFailure("Registrars", "Failed to fetch registrar data. Please try again later", err); handled {
+			return
+		}
 		results = []storage.DomainWhoisResult{}
 	}
 

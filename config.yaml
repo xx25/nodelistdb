@@ -40,7 +40,7 @@ clickhouse:
   max_open_conns: 10           # Maximum open connections
   max_idle_conns: 5            # Maximum idle connections
   dial_timeout: 30s            # Connection timeout
-  read_timeout: 5m             # Query read timeout
+  read_timeout: 5m             # Query read timeout (per socket read, not per query)
   write_timeout: 1m            # Query write timeout
   compression: lz4             # Compression: none, lz4, zstd, gzip
 
@@ -49,6 +49,27 @@ clickhouse:
   flush_interval: 30s          # Batch flush interval
 
 # Production ClickHouse: host: 10.121.17.211
+
+# ============================================================================
+# QUERY BUDGET (Server only - optional, OFF by default)
+# ============================================================================
+# Bounds how long one HTTP request's database work may run.
+#
+# Client-disconnect cancellation is always on and needs none of this: when a
+# browser tab closes, the query is cancelled on ClickHouse regardless. This
+# section is only for putting a ceiling on requests nobody has abandoned.
+#
+# Two caveats before switching it on:
+#   * On `protocol: http` it is withheld automatically. The driver turns a
+#     context deadline into a max_execution_time setting, which readonly HTTP
+#     users are not permitted to send, so the query would fail outright.
+#   * A cancelled query does not return its connection to the pool - the driver
+#     closes it rather than draining it. With max_open_conns at 10, a route
+#     that times out often will churn connections. Raise the pool first.
+query_budget:
+  enabled: false               # Off by default: no behaviour change on upgrade
+  default: 30s                 # Ordinary pages and API reads
+  analytics: 120s              # The heavy analytics reports (latest_nodes CTEs)
 
 # ============================================================================
 # CACHE (Server only - optional)

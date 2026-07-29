@@ -166,12 +166,12 @@ func (s *Server) PointHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// Resolve the network like the node page does, but against the points
 	// table: the address may exist only in a network the node-level heuristic
 	// would not pick.
-	availableDomains, _ := s.storage.GetPointDomains(zone, net, node, &point)
+	availableDomains, _ := s.storage.GetPointDomains(r.Context(), zone, net, node, &point)
 	domain := resolveEntityDomain(r, availableDomains)
 
-	history, err := s.storage.GetPointHistory(domain, zone, net, node, point)
+	history, err := s.storage.GetPointHistory(r.Context(), domain, zone, net, node, point)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error retrieving point history: %v", err), http.StatusInternalServerError)
+		httpStorageError(w, "Error retrieving point history", "Error retrieving point history", err)
 		return
 	}
 

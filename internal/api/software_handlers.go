@@ -2,8 +2,6 @@ package api
 
 import (
 	"net/http"
-
-	"github.com/nodelistdb/internal/logging"
 )
 
 // GetBinkPSoftwareStats returns BinkP software distribution statistics
@@ -11,10 +9,9 @@ func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
 	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetBinkPSoftwareDistribution(days, domainOrAll(r))
+	dist, err := s.storage.GetBinkPSoftwareDistribution(r.Context(), days, domainOrAll(r))
 	if err != nil {
-		logging.Errorf("ERROR: GetBinkPSoftwareDistribution failed: %v", err)
-		WriteJSONError(w, "Failed to get BinkP software distribution", http.StatusInternalServerError)
+		writeStorageError(w, "Failed to get BinkP software distribution", err)
 		return
 	}
 
@@ -26,10 +23,9 @@ func (s *Server) GetIFCICOSoftwareStats(w http.ResponseWriter, r *http.Request) 
 	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetIFCICOSoftwareDistribution(days, domainOrAll(r))
+	dist, err := s.storage.GetIFCICOSoftwareDistribution(r.Context(), days, domainOrAll(r))
 	if err != nil {
-		logging.Errorf("ERROR: GetIFCICOSoftwareDistribution failed: %v", err)
-		WriteJSONError(w, "Failed to get IFCICO software distribution", http.StatusInternalServerError)
+		writeStorageError(w, "Failed to get IFCICO software distribution", err)
 		return
 	}
 
@@ -41,10 +37,9 @@ func (s *Server) GetBinkdDetailedStats(w http.ResponseWriter, r *http.Request) {
 	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.GetBinkdDetailedStats(days, domainOrAll(r))
+	dist, err := s.storage.GetBinkdDetailedStats(r.Context(), days, domainOrAll(r))
 	if err != nil {
-		logging.Errorf("ERROR: GetBinkdDetailedStats failed: %v", err)
-		WriteJSONError(w, "Failed to get detailed binkd statistics", http.StatusInternalServerError)
+		writeStorageError(w, "Failed to get detailed binkd statistics", err)
 		return
 	}
 

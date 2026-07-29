@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -46,7 +47,7 @@ func escapeLikePattern(s string) string {
 // The domain parameter scopes which tested nodes are considered (their
 // node_test_results.domain); empty means all networks. It does not affect the
 // announced network_name extraction or the imported-networks check.
-func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
+func (on *OtherNetworksOperations) GetOtherNetworksSummary(ctx context.Context, days int, domain string) ([]OtherNetworkSummary, error) {
 	on.mu.RLock()
 	defer on.mu.RUnlock()
 
@@ -109,7 +110,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain stri
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), "")
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
-	rows, err := conn.Query(query, days)
+	rows, err := conn.QueryContext(ctx, query, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query other networks summary: %w", err)
 	}
@@ -135,7 +136,7 @@ func (on *OtherNetworksOperations) GetOtherNetworksSummary(days int, domain stri
 // The domain parameter scopes which tested nodes are considered (their
 // node_test_results.domain); empty means all networks. It is independent of
 // networkName, which matches the announced AKA suffix.
-func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
+func (on *OtherNetworksOperations) GetNodesInNetwork(ctx context.Context, networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
 	on.mu.RLock()
 	defer on.mu.RUnlock()
 
@@ -220,7 +221,7 @@ func (on *OtherNetworksOperations) GetNodesInNetwork(networkName string, limit i
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), "")
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER_R}}", domainFilterSQL(domain, "r."))
 
-	rows, err := conn.Query(query, days, escapedName, escapedName, escapedName, limit)
+	rows, err := conn.QueryContext(ctx, query, days, escapedName, escapedName, escapedName, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query nodes in network %s: %w", networkName, err)
 	}

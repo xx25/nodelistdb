@@ -43,9 +43,13 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		AvailableDates: []time.Time{},
 	}
 
-	availableDates, err := s.storage.GetAvailableDates(domain)
+	availableDates, err := s.storage.GetAvailableDates(r.Context(), domain)
 	if err != nil {
-		data.Error = errors.New("Failed to get available dates: " + err.Error())
+		display, handled := storageFailure("Stats: available dates", "Failed to get available dates: "+err.Error(), err)
+		if handled {
+			return
+		}
+		data.Error = display
 		s.render(w, "stats", data)
 		return
 	}
@@ -57,6 +61,10 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	actualDate, rawDate, adjusted, err := s.resolveBrowseDate(r, domain)
 	data.SelectedDate = rawDate
 	if err != nil {
+		// resolveBrowseDate wraps with %w, so the cause survives the trip up.
+		if clientGone("Stats: date resolution", err) {
+			return
+		}
 		data.Error = err
 		s.render(w, "stats", data)
 		return
@@ -64,7 +72,14 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	data.ActualDate = actualDate.Format("2006-01-02")
 	data.DateAdjusted = adjusted
 
-	data.Stats, data.Error = s.storage.GetStats(actualDate, domain)
+	data.Stats, data.Error = s.storage.GetStats(r.Context(), actualDate, domain)
+	if data.Error != nil {
+		display, handled := storageFailure("Stats: network statistics", data.Error.Error(), data.Error)
+		if handled {
+			return
+		}
+		data.Error = display
+	}
 	data.NoData = data.Stats == nil || data.Stats.TotalNodes == 0
 	if data.NoData && data.Error == nil {
 		data.Error = errors.New("No nodelist data available. Please import nodelist files first.")
@@ -72,7 +87,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// The trend chart and the pointlist companion are both best-effort:
 	// neither is worth failing the page over.
-	data.NodeHistory, _ = s.storage.GetNodeCountHistory(domain)
+	data.NodeHistory, _ = s.storage.GetNodeCountHistory(r.Context(), domain)
 
 	// A zero TotalPoints hides the pointlist tile. For the current view (no
 	// explicit ?date=) anchor at the newest imported pointlist - the pointlist
@@ -82,7 +97,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	if rawDate != "" {
 		pointAsOf = &actualDate
 	}
-	data.PointStats, _ = s.storage.GetPointStats(domain, pointAsOf)
+	data.PointStats, _ = s.storage.GetPointStats(r.Context(), domain, pointAsOf)
 
 	s.render(w, "stats", data)
 }

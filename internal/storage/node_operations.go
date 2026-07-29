@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -41,7 +42,7 @@ func (no *NodeOperations) InsertNodes(nodes []database.Node) error {
 }
 
 // GetNodes retrieves nodes based on filter criteria using safe parameterized queries
-func (no *NodeOperations) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
+func (no *NodeOperations) GetNodes(ctx context.Context, filter database.NodeFilter) ([]database.Node, error) {
 	// Validate filter
 	if err := no.resultParser.ValidateNodeFilter(filter); err != nil {
 		return nil, fmt.Errorf("invalid filter: %w", err)
@@ -70,7 +71,7 @@ func (no *NodeOperations) GetNodes(filter database.NodeFilter) ([]database.Node,
 		fmt.Printf("[DEBUG SQL] UsedFTS = %v\n\n", usedFTS)
 	}
 
-	rows, err := conn.Query(query, args...)
+	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query nodes: %w", err)
 	}
@@ -94,7 +95,7 @@ func (no *NodeOperations) GetNodes(filter database.NodeFilter) ([]database.Node,
 
 // GetNodeHistory retrieves all historical entries for a specific node.
 // An empty domain matches all networks.
-func (no *NodeOperations) GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error) {
+func (no *NodeOperations) GetNodeHistory(ctx context.Context, zone, net, node int, domain string) ([]database.Node, error) {
 	// Validate input
 	if zone < 1 || zone > 65535 {
 		return nil, fmt.Errorf("invalid zone: %d", zone)
@@ -112,7 +113,7 @@ func (no *NodeOperations) GetNodeHistory(zone, net, node int, domain string) ([]
 	conn := no.db.Conn()
 
 	query := no.queryBuilder.NodeHistorySQL()
-	rows, err := conn.Query(query, zone, net, node, domain, domain)
+	rows, err := conn.QueryContext(ctx, query, zone, net, node, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query node history: %w", err)
 	}
@@ -136,7 +137,7 @@ func (no *NodeOperations) GetNodeHistory(zone, net, node int, domain string) ([]
 
 // GetNodeDateRange returns the first and last date when a node was active.
 // An empty domain matches all networks.
-func (no *NodeOperations) GetNodeDateRange(zone, net, node int, domain string) (firstDate, lastDate time.Time, err error) {
+func (no *NodeOperations) GetNodeDateRange(ctx context.Context, zone, net, node int, domain string) (firstDate, lastDate time.Time, err error) {
 	// Validate input
 	if zone < 1 || zone > 65535 {
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid zone: %d", zone)
@@ -154,7 +155,7 @@ func (no *NodeOperations) GetNodeDateRange(zone, net, node int, domain string) (
 	conn := no.db.Conn()
 
 	query := no.queryBuilder.NodeDateRangeSQL()
-	row := conn.QueryRow(query, zone, net, node, domain, domain)
+	row := conn.QueryRowContext(ctx, query, zone, net, node, domain, domain)
 
 	err = row.Scan(&firstDate, &lastDate)
 	if err != nil {
@@ -168,12 +169,12 @@ func (no *NodeOperations) GetNodeDateRange(zone, net, node int, domain string) (
 }
 
 // GetNodeDomains lists the FTN networks a 3D address exists in
-func (no *NodeOperations) GetNodeDomains(zone, net, node int) ([]string, error) {
+func (no *NodeOperations) GetNodeDomains(ctx context.Context, zone, net, node int) ([]string, error) {
 	no.mu.RLock()
 	defer no.mu.RUnlock()
 
 	conn := no.db.Conn()
-	rows, err := conn.Query(`SELECT DISTINCT domain FROM nodes WHERE zone = ? AND net = ? AND node = ? ORDER BY domain`, zone, net, node)
+	rows, err := conn.QueryContext(ctx, `SELECT DISTINCT domain FROM nodes WHERE zone = ? AND net = ? AND node = ? ORDER BY domain`, zone, net, node)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query node domains: %w", err)
 	}
@@ -259,7 +260,7 @@ func (no *NodeOperations) IsNodelistProcessed(nodelistDate time.Time, domain str
 
 // GetMaxNodelistDate returns the most recent nodelist date in the database.
 // An empty domain returns the newest date across all networks.
-func (no *NodeOperations) GetMaxNodelistDate(domain string) (time.Time, error) {
+func (no *NodeOperations) GetMaxNodelistDate(ctx context.Context, domain string) (time.Time, error) {
 	no.mu.RLock()
 	defer no.mu.RUnlock()
 
@@ -267,7 +268,7 @@ func (no *NodeOperations) GetMaxNodelistDate(domain string) (time.Time, error) {
 
 	var maxDate time.Time
 	query := no.queryBuilder.LatestDateSQL()
-	err := conn.QueryRow(query, domain, domain).Scan(&maxDate)
+	err := conn.QueryRowContext(ctx, query, domain, domain).Scan(&maxDate)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to get max nodelist date: %w", err)
 	}
@@ -277,12 +278,12 @@ func (no *NodeOperations) GetMaxNodelistDate(domain string) (time.Time, error) {
 
 // GetDomains lists all FTN networks present in the database with their latest
 // nodelist date and node count on that date.
-func (no *NodeOperations) GetDomains() ([]DomainInfo, error) {
+func (no *NodeOperations) GetDomains(ctx context.Context) ([]DomainInfo, error) {
 	no.mu.RLock()
 	defer no.mu.RUnlock()
 
 	conn := no.db.Conn()
-	rows, err := conn.Query(`
+	rows, err := conn.QueryContext(ctx, `
 		SELECT n.domain, l.latest AS latest_date, count(*) AS node_count
 		FROM nodes n
 		INNER JOIN (
@@ -308,7 +309,7 @@ func (no *NodeOperations) GetDomains() ([]DomainInfo, error) {
 
 // CountNodes returns the total number of nodes for a given date (or all if date
 // is zero). An empty domain counts across all networks.
-func (no *NodeOperations) CountNodes(date time.Time, domain string) (int, error) {
+func (no *NodeOperations) CountNodes(ctx context.Context, date time.Time, domain string) (int, error) {
 	no.mu.RLock()
 	defer no.mu.RUnlock()
 
@@ -326,7 +327,7 @@ func (no *NodeOperations) CountNodes(date time.Time, domain string) (int, error)
 	}
 
 	var count int
-	err := conn.QueryRow(query, args...).Scan(&count)
+	err := conn.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count nodes: %w", err)
 	}
@@ -335,7 +336,7 @@ func (no *NodeOperations) CountNodes(date time.Time, domain string) (int, error)
 }
 
 // GetNodesByZone retrieves all nodes for a specific zone
-func (no *NodeOperations) GetNodesByZone(zone int, limit int) ([]database.Node, error) {
+func (no *NodeOperations) GetNodesByZone(ctx context.Context, zone int, limit int) ([]database.Node, error) {
 	if limit <= 0 {
 		limit = DefaultSearchLimit
 	}
@@ -345,5 +346,5 @@ func (no *NodeOperations) GetNodesByZone(zone int, limit int) ([]database.Node, 
 		Limit: limit,
 	}
 
-	return no.GetNodes(filter)
+	return no.GetNodes(ctx, filter)
 }

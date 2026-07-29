@@ -286,15 +286,15 @@ type PointStats struct {
 
 // LatestPointlistDate returns the newest imported issue date for the domain
 // (empty = any domain). found is false when nothing is imported.
-func (po *PointOperations) LatestPointlistDate(domain string) (time.Time, bool, error) {
+func (po *PointOperations) LatestPointlistDate(ctx context.Context, domain string) (time.Time, bool, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
-	return po.latestPointlistDateLocked(domain)
+	return po.latestPointlistDateLocked(ctx, domain)
 }
 
-func (po *PointOperations) latestPointlistDateLocked(domain string) (time.Time, bool, error) {
+func (po *PointOperations) latestPointlistDateLocked(ctx context.Context, domain string) (time.Time, bool, error) {
 	var latest time.Time
-	err := po.db.Conn().QueryRow(po.queryBuilder.LatestPointlistDateSQL(), domain, domain).Scan(&latest)
+	err := po.db.Conn().QueryRowContext(ctx, po.queryBuilder.LatestPointlistDateSQL(), domain, domain).Scan(&latest)
 	if err == sql.ErrNoRows {
 		return time.Time{}, false, nil
 	}
@@ -311,11 +311,11 @@ func (po *PointOperations) latestPointlistDateLocked(domain string) (time.Time, 
 // resolveAsOf turns an optional as-of date into the snapshot anchor: nil means
 // "as of the newest imported issue" (per-domain), so views stay populated even
 // if the weekly sync lags. found=false means the domain has no pointlists.
-func (po *PointOperations) resolveAsOf(domain string, asOf *time.Time) (time.Time, bool, error) {
+func (po *PointOperations) resolveAsOf(ctx context.Context, domain string, asOf *time.Time) (time.Time, bool, error) {
 	if asOf != nil && !asOf.IsZero() {
 		return *asOf, true, nil
 	}
-	return po.latestPointlistDateLocked(domain)
+	return po.latestPointlistDateLocked(ctx, domain)
 }
 
 // snapshotArgs builds the bind list for pointSnapshotInnerSQL-based queries.
@@ -345,33 +345,33 @@ func (po *PointOperations) queryPoints(ctx context.Context, query string, args .
 
 // GetPointsByBoss returns the snapshot points under one boss node.
 // asOf nil = as of the newest imported issue.
-func (po *PointOperations) GetPointsByBoss(domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error) {
+func (po *PointOperations) GetPointsByBoss(ctx context.Context, domain string, zone, net, node int, asOf *time.Time) ([]database.Point, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
-	anchor, found, err := po.resolveAsOf(domain, asOf)
+	anchor, found, err := po.resolveAsOf(ctx, domain, asOf)
 	if err != nil || !found {
 		return nil, err
 	}
 
 	query := po.queryBuilder.PointSnapshotSQL("zone = ? AND net = ? AND node = ?", "", false)
-	return po.queryPoints(context.Background(), query, snapshotArgs(domain, anchor, zone, net, node)...)
+	return po.queryPoints(ctx, query, snapshotArgs(domain, anchor, zone, net, node)...)
 }
 
 // GetPointHistory returns every stored row of one 4-D address across all
 // sources and dates.
-func (po *PointOperations) GetPointHistory(domain string, zone, net, node, point int) ([]database.Point, error) {
+func (po *PointOperations) GetPointHistory(ctx context.Context, domain string, zone, net, node, point int) ([]database.Point, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
-	return po.queryPoints(context.Background(), po.queryBuilder.PointHistorySQL(), domain, domain, zone, net, node, point)
+	return po.queryPoints(ctx, po.queryBuilder.PointHistorySQL(), domain, domain, zone, net, node, point)
 }
 
 // SearchPoints searches points by filter. LatestOnly applies snapshot
 // semantics (DateTo doubles as the as-of anchor); otherwise every matching
 // historical row is returned, newest first.
-func (po *PointOperations) SearchPoints(filter database.PointFilter) ([]database.Point, error) {
-	return po.searchPoints(context.Background(), filter)
+func (po *PointOperations) SearchPoints(ctx context.Context, filter database.PointFilter) ([]database.Point, error) {
+	return po.searchPoints(ctx, filter)
 }
 
 // searchPoints is SearchPoints with an explicit context, shared with
@@ -399,7 +399,7 @@ func (po *PointOperations) searchPoints(ctx context.Context, filter database.Poi
 	}
 
 	if filter.LatestOnly != nil && *filter.LatestOnly {
-		anchor, found, err := po.resolveAsOf(domain, filter.DateTo)
+		anchor, found, err := po.resolveAsOf(ctx, domain, filter.DateTo)
 		if err != nil || !found {
 			return nil, err
 		}
@@ -523,7 +523,13 @@ func (po *PointOperations) SearchPointsWithLifetime(ctx context.Context, filter 
 		s := &summaries[i]
 		cutoff, ok := cutoffs[s.Domain]
 		if !ok {
-			latest, found, err := po.latestPointlistDateLocked(s.Domain)
+			latest, found, err := po.latestPointlistDateLocked(ctx, s.Domain)
+			if cerr := contextErr(err); cerr != nil {
+				// A zero cutoff mislabels every point in the domain
+				// Historical. Tolerable for a one-off failure, not for a
+				// cancelled request whose result would then be cached.
+				return nil, cerr
+			}
 			if err != nil {
 				// Zero cutoff labels the domain's rows Historical; say why
 				// instead of letting the mislabel pass silently.
@@ -539,13 +545,13 @@ func (po *PointOperations) SearchPointsWithLifetime(ctx context.Context, filter 
 }
 
 // GetPointStats summarizes the snapshot for one domain (totals + per zone).
-func (po *PointOperations) GetPointStats(domain string, asOf *time.Time) (*PointStats, error) {
+func (po *PointOperations) GetPointStats(ctx context.Context, domain string, asOf *time.Time) (*PointStats, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
 	stats := &PointStats{Domain: domain}
 
-	anchor, found, err := po.resolveAsOf(domain, asOf)
+	anchor, found, err := po.resolveAsOf(ctx, domain, asOf)
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +560,7 @@ func (po *PointOperations) GetPointStats(domain string, asOf *time.Time) (*Point
 	}
 	stats.AsOf = anchor
 
-	rows, err := po.db.Conn().Query(po.queryBuilder.PointStatsByZoneSQL(), snapshotArgs(domain, anchor)...)
+	rows, err := po.db.Conn().QueryContext(ctx, po.queryBuilder.PointStatsByZoneSQL(), snapshotArgs(domain, anchor)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query point stats: %w", err)
 	}
@@ -576,18 +582,18 @@ func (po *PointOperations) GetPointStats(domain string, asOf *time.Time) (*Point
 
 // GetPointCountsByNet returns snapshot point counts keyed by boss node number
 // for one net (browse net page column).
-func (po *PointOperations) GetPointCountsByNet(domain string, zone, net int, asOf *time.Time) (map[int]uint64, error) {
+func (po *PointOperations) GetPointCountsByNet(ctx context.Context, domain string, zone, net int, asOf *time.Time) (map[int]uint64, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
 	counts := make(map[int]uint64)
 
-	anchor, found, err := po.resolveAsOf(domain, asOf)
+	anchor, found, err := po.resolveAsOf(ctx, domain, asOf)
 	if err != nil || !found {
 		return counts, err
 	}
 
-	rows, err := po.db.Conn().Query(po.queryBuilder.PointCountsByNetSQL(), snapshotArgs(domain, anchor, zone, net)...)
+	rows, err := po.db.Conn().QueryContext(ctx, po.queryBuilder.PointCountsByNetSQL(), snapshotArgs(domain, anchor, zone, net)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query point counts: %w", err)
 	}
@@ -606,7 +612,7 @@ func (po *PointOperations) GetPointCountsByNet(domain string, zone, net int, asO
 
 // GetPointDomains lists the domains a 4-D address exists in. A nil point
 // resolves at boss level (any point under the boss).
-func (po *PointOperations) GetPointDomains(zone, net, node int, point *int) ([]string, error) {
+func (po *PointOperations) GetPointDomains(ctx context.Context, zone, net, node int, point *int) ([]string, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
@@ -614,7 +620,7 @@ func (po *PointOperations) GetPointDomains(zone, net, node int, point *int) ([]s
 	if point != nil {
 		pointNum = *point
 	}
-	rows, err := po.db.Conn().Query(po.queryBuilder.PointDomainsSQL(), zone, net, node, pointNum, pointNum)
+	rows, err := po.db.Conn().QueryContext(ctx, po.queryBuilder.PointDomainsSQL(), zone, net, node, pointNum, pointNum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query point domains: %w", err)
 	}
@@ -633,11 +639,11 @@ func (po *PointOperations) GetPointDomains(zone, net, node int, point *int) ([]s
 
 // GetPointlistDates lists imported pointlist files (gate rows), newest first.
 // Empty domain or listSource = no filter on that axis.
-func (po *PointOperations) GetPointlistDates(domain, listSource string) ([]database.PointlistFile, error) {
+func (po *PointOperations) GetPointlistDates(ctx context.Context, domain, listSource string) ([]database.PointlistFile, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
-	rows, err := po.db.Conn().Query(po.queryBuilder.PointlistDatesSQL(), domain, domain, listSource, listSource)
+	rows, err := po.db.Conn().QueryContext(ctx, po.queryBuilder.PointlistDatesSQL(), domain, domain, listSource, listSource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pointlist dates: %w", err)
 	}
@@ -659,11 +665,11 @@ func (po *PointOperations) GetPointlistDates(domain, listSource string) ([]datab
 
 // GetPointlistSources summarizes imported pointlist series. An empty domain
 // lists all networks.
-func (po *PointOperations) GetPointlistSources(domain string) ([]PointlistSourceInfo, error) {
+func (po *PointOperations) GetPointlistSources(ctx context.Context, domain string) ([]PointlistSourceInfo, error) {
 	po.mu.RLock()
 	defer po.mu.RUnlock()
 
-	rows, err := po.db.Conn().Query(po.queryBuilder.PointlistSourcesSQL(), domain, domain)
+	rows, err := po.db.Conn().QueryContext(ctx, po.queryBuilder.PointlistSourcesSQL(), domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pointlist sources: %w", err)
 	}

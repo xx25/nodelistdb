@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -72,7 +73,7 @@ func NewAnalyticsOperations(db database.DatabaseInterface, queryBuilder QueryBui
 
 // GetFlagFirstAppearance finds the first node that used a specific flag.
 // An empty domain searches all networks.
-func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string, domain string) (*FlagFirstAppearance, error) {
+func (ao *AnalyticsOperations) GetFlagFirstAppearance(ctx context.Context, flag string, domain string) (*FlagFirstAppearance, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -84,7 +85,7 @@ func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string, domain string
 	query := ao.queryBuilder.FlagFirstAppearanceSQL()
 
 	// Query uses pre-aggregated flag_statistics table
-	row := conn.QueryRow(query, flag, domain, domain)
+	row := conn.QueryRowContext(ctx, query, flag, domain, domain)
 
 	var fa FlagFirstAppearance
 	err := row.Scan(
@@ -110,7 +111,7 @@ func (ao *AnalyticsOperations) GetFlagFirstAppearance(flag string, domain string
 // GetFlagUsageByYear returns the usage statistics of a flag by year.
 // Pass a concrete domain: totals are stored per network, and mixing
 // networks would make the percentages meaningless.
-func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string, domain string) ([]FlagUsageByYear, error) {
+func (ao *AnalyticsOperations) GetFlagUsageByYear(ctx context.Context, flag string, domain string) ([]FlagUsageByYear, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -125,7 +126,7 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string, domain string) ([
 	query := ao.queryBuilder.FlagUsageByYearSQL()
 
 	// Query uses pre-aggregated flag_statistics table
-	rows, err := conn.Query(query, domain, domain, flag, domain, domain)
+	rows, err := conn.QueryContext(ctx, query, domain, domain, flag, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query flag usage by year: %w", err)
 	}
@@ -150,7 +151,7 @@ func (ao *AnalyticsOperations) GetFlagUsageByYear(flag string, domain string) ([
 
 // GetNetworkHistory returns the complete appearance history of a network.
 // An empty domain searches all FTN networks.
-func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int, domain string) (*NetworkHistory, error) {
+func (ao *AnalyticsOperations) GetNetworkHistory(ctx context.Context, zone, net int, domain string) (*NetworkHistory, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -159,7 +160,7 @@ func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int, domain string) (
 	// First, get the network name from node 0 if it exists
 	nameQuery := ao.queryBuilder.NetworkNameSQL()
 	var networkName string
-	err := conn.QueryRow(nameQuery, zone, net, domain, domain).Scan(&networkName)
+	err := conn.QueryRowContext(ctx, nameQuery, zone, net, domain, domain).Scan(&networkName)
 	if err != nil {
 		// Network might not have a coordinator, use default name
 		networkName = fmt.Sprintf("Network %d:%d", zone, net)
@@ -167,7 +168,7 @@ func (ao *AnalyticsOperations) GetNetworkHistory(zone, net int, domain string) (
 
 	// Get all appearances of the network
 	historyQuery := ao.queryBuilder.NetworkHistorySQL()
-	rows, err := conn.Query(historyQuery, zone, net, domain, domain)
+	rows, err := conn.QueryContext(ctx, historyQuery, zone, net, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query network history: %w", err)
 	}
@@ -397,7 +398,7 @@ func (ao *AnalyticsOperations) UpdateFlagStatistics(nodelistDate time.Time, doma
 // GetOnThisDayNodes finds nodes that were first added on this day (month/day) in previous years
 // A node is considered "new" when a sysop first appears with that node address
 // YearsActive is calculated from first appearance to final disappearance (ignoring temporary gaps)
-func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
+func (ao *AnalyticsOperations) GetOnThisDayNodes(ctx context.Context, month, day int, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -482,7 +483,7 @@ func (ao *AnalyticsOperations) GetOnThisDayNodes(month, day int, limit int, acti
 		%s
 	`, domainFilter, domainFilter, activeFilter, limitClause)
 
-	rows, err := conn.Query(query, month, day)
+	rows, err := conn.QueryContext(ctx, query, month, day)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query on this day nodes: %w", err)
 	}
@@ -548,7 +549,7 @@ const MaxPSTNSearchLimit = 10000
 // GetPSTNCMNodes returns nodes from the latest nodelist that have valid phone numbers and CM flag
 // Phone numbers like "-Unpublished-" and "000-000-000-000" are excluded
 // Down and Hold nodes are excluded as they are not operational
-func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
+func (ao *AnalyticsOperations) GetPSTNCMNodes(ctx context.Context, limit int) ([]PSTNNode, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -592,7 +593,7 @@ func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 		ORDER BY zone, net, node
 		LIMIT ?`
 
-	rows, err := conn.Query(query, limit)
+	rows, err := conn.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query PSTN CM nodes: %w", err)
 	}
@@ -638,7 +639,7 @@ func (ao *AnalyticsOperations) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
 // Unlike GetPSTNCMNodes, this includes both CM and non-CM nodes.
 // Excludes Down/Hold nodes, coordinators (node=0), and unpublished/invalid phones.
 // zone=0 returns all zones. An empty domain searches all FTN networks.
-func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int, domain string) ([]PSTNNode, error) {
+func (ao *AnalyticsOperations) GetPSTNNodes(ctx context.Context, limit int, zone int, domain string) ([]PSTNNode, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -692,7 +693,7 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int, domain string) 
 	query += " ORDER BY zone, net, node LIMIT ?"
 	args = append(args, limit)
 
-	rows, err := conn.Query(query, args...)
+	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query PSTN nodes: %w", err)
 	}
@@ -736,7 +737,12 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int, domain string) 
 	// recorded for fidonet — so skip the enrichment for other networks
 	// rather than mislabel an unrelated address that reuses the same 3-D key.
 	if ao.pstnDeadOps != nil && (domain == "" || domain == "fidonet") {
-		deadSet, err := ao.pstnDeadOps.GetDeadNodeSet()
+		deadSet, err := ao.pstnDeadOps.GetDeadNodeSet(ctx)
+		if cerr := contextErr(err); cerr != nil {
+			// Not "no markers"; the request is over. Returning the rows
+			// unenriched would cache every dead number as callable.
+			return nil, cerr
+		}
 		if err == nil && len(deadSet) > 0 {
 			for i := range results {
 				key := [3]int{results[i].Zone, results[i].Net, results[i].Node}
@@ -754,7 +760,7 @@ func (ao *AnalyticsOperations) GetPSTNNodes(limit int, zone int, domain string) 
 // GetFileRequestNodes returns nodes from the latest nodelist that have file request flags (XA-XX)
 // Excludes Down/Hold nodes, coordinators (node=0), and conflict duplicates.
 // An empty domain searches all FTN networks.
-func (ao *AnalyticsOperations) GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error) {
+func (ao *AnalyticsOperations) GetFileRequestNodes(ctx context.Context, limit int, domain string) ([]FileRequestNode, error) {
 	ao.mu.RLock()
 	defer ao.mu.RUnlock()
 
@@ -791,7 +797,7 @@ func (ao *AnalyticsOperations) GetFileRequestNodes(limit int, domain string) ([]
 		ORDER BY zone, net, node
 		LIMIT ?`, domainFilter, domainFilter)
 
-	rows, err := conn.Query(query, limit)
+	rows, err := conn.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query file request nodes: %w", err)
 	}

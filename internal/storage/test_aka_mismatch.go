@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -45,7 +46,7 @@ func NewAKAMismatchOperations(db database.DatabaseInterface, queryBuilder *TestQ
 
 // GetAKAMismatchNodes retrieves nodes where the announced AKA doesn't match the expected nodelist address
 // An empty domain means all FTN networks (no filtering).
-func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (am *AKAMismatchOperations) GetAKAMismatchNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
 
@@ -58,7 +59,7 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 
 	query := am.buildAKAMismatchQuery(nodeFilter, domain, days)
 
-	rows, err := conn.Query(query, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query AKA mismatch nodes: %w", err)
 	}
@@ -157,8 +158,8 @@ type AKAIPVersionMismatchNode struct {
 
 // GetIPv6IncorrectIPv4CorrectNodes retrieves nodes where IPv6 AKA is incorrect but IPv4 AKA is correct
 // An empty domain means all FTN networks (no filtering).
-func (am *AKAMismatchOperations) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
-	return am.getIPVersionMismatchNodes(limit, days, includeZeroNodes,
+func (am *AKAMismatchOperations) GetIPv6IncorrectIPv4CorrectNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+	return am.getIPVersionMismatchNodes(ctx, limit, days, includeZeroNodes,
 		"r.address_validated_ipv4 = true AND r.address_validated_ipv6 = false",
 		"(r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true) AND (length(r.binkp_ipv6_addresses) + length(r.ifcico_ipv6_addresses)) > 0",
 		domain,
@@ -167,8 +168,8 @@ func (am *AKAMismatchOperations) GetIPv6IncorrectIPv4CorrectNodes(limit int, day
 
 // GetIPv4IncorrectIPv6CorrectNodes retrieves nodes where IPv4 AKA is incorrect but IPv6 AKA is correct
 // An empty domain means all FTN networks (no filtering).
-func (am *AKAMismatchOperations) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
-	return am.getIPVersionMismatchNodes(limit, days, includeZeroNodes,
+func (am *AKAMismatchOperations) GetIPv4IncorrectIPv6CorrectNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+	return am.getIPVersionMismatchNodes(ctx, limit, days, includeZeroNodes,
 		"r.address_validated_ipv6 = true AND r.address_validated_ipv4 = false",
 		"(r.binkp_ipv4_success = true OR r.ifcico_ipv4_success = true) AND (length(r.binkp_ipv4_addresses) + length(r.ifcico_ipv4_addresses)) > 0",
 		domain,
@@ -176,7 +177,7 @@ func (am *AKAMismatchOperations) GetIPv4IncorrectIPv6CorrectNodes(limit int, day
 }
 
 // getIPVersionMismatchNodes is a shared helper for querying IPv4/IPv6 AKA discrepancies
-func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, includeZeroNodes bool, validationFilter string, protocolFilter string, domain string) ([]AKAIPVersionMismatchNode, error) {
+func (am *AKAMismatchOperations) getIPVersionMismatchNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, validationFilter string, protocolFilter string, domain string) ([]AKAIPVersionMismatchNode, error) {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
 
@@ -189,7 +190,7 @@ func (am *AKAMismatchOperations) getIPVersionMismatchNodes(limit int, days int, 
 
 	query := am.buildIPVersionMismatchQuery(nodeFilter, validationFilter, protocolFilter, domain, days)
 
-	rows, err := conn.Query(query, days, limit)
+	rows, err := conn.QueryContext(ctx, query, days, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query IP version AKA mismatch nodes: %w", err)
 	}

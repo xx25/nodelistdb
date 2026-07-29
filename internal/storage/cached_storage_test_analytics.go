@@ -11,137 +11,137 @@ import (
 // Test result analytics caching operations (IPv6, protocols, weekly news)
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6 (cached)
-func (cs *CachedStorage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIPv6EnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetIPv6EnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetIPv6NonWorkingNodes returns nodes with IPv6 but non-working services (cached)
-func (cs *CachedStorage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIPv6NonWorkingNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:nonworking", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetIPv6NonWorkingNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetIPv6AdvertisedIPv4OnlyNodes returns nodes advertising IPv6 but only accessible via IPv4 (cached)
-func (cs *CachedStorage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIPv6AdvertisedIPv4OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:ipv4only", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetIPv6AdvertisedIPv4OnlyNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetBinkPEnabledNodes returns nodes with working BinkP protocol (cached)
-func (cs *CachedStorage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetBinkPEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("binkp:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetBinkPEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetIfcicoEnabledNodes returns nodes with working IFCICO protocol (cached)
-func (cs *CachedStorage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIfcicoEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("ifcico:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetIfcicoEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetTelnetEnabledNodes returns nodes with working Telnet protocol (cached)
-func (cs *CachedStorage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetTelnetEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("telnet:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetTelnetEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetVModemEnabledNodes returns nodes with working VModem protocol (cached)
-func (cs *CachedStorage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetVModemEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("vmodem:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetVModemEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetVModemUnconfirmedNodes returns nodes whose VModem probe did not confirm a genuine VMP responder (cached)
-func (cs *CachedStorage) GetVModemUnconfirmedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetVModemUnconfirmedNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("vmodem:unconfirmed", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetVModemUnconfirmedNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetFTPEnabledNodes returns nodes with working FTP protocol (cached)
-func (cs *CachedStorage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetFTPEnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("ftp:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetFTPEnabledNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetBinkPSoftwareDistribution returns BinkP software distribution statistics (cached)
-func (cs *CachedStorage) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
+func (cs *CachedStorage) GetBinkPSoftwareDistribution(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
 	return cachedFetchPtr(cs, cs.analyticsKey("binkp:software", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
-		return cs.Storage.GetBinkPSoftwareDistribution(days, domain)
+		return cs.Storage.GetBinkPSoftwareDistribution(ctx, days, domain)
 	})
 }
 
 // GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics (cached)
-func (cs *CachedStorage) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
+func (cs *CachedStorage) GetIFCICOSoftwareDistribution(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
 	return cachedFetchPtr(cs, cs.analyticsKey("ifcico:software", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
-		return cs.Storage.GetIFCICOSoftwareDistribution(days, domain)
+		return cs.Storage.GetIFCICOSoftwareDistribution(ctx, days, domain)
 	})
 }
 
 // GetBinkdDetailedStats returns detailed Binkd statistics (cached)
-func (cs *CachedStorage) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
+func (cs *CachedStorage) GetBinkdDetailedStats(ctx context.Context, days int, domain string) (*SoftwareDistribution, error) {
 	return cachedFetchPtr(cs, cs.analyticsKey("binkd:stats", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
-		return cs.Storage.GetBinkdDetailedStats(days, domain)
+		return cs.Storage.GetBinkdDetailedStats(ctx, days, domain)
 	})
 }
 
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes (cached)
 // This is accessed via GetIPv6WeeklyNews(domain) in handlers,
 // but we provide a direct cached wrapper for it
-func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
+func (cs *CachedStorage) GetIPv6WeeklyNews(ctx context.Context, limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
 	return cachedFetchPtr(cs, cs.analyticsKey("ipv6:weeklynews", limit, includeZeroNodes, domain), cs.config.LongAnalyticsTTL, func() (*IPv6WeeklyNews, error) {
-		return cs.Storage.GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
+		return cs.Storage.GetIPv6WeeklyNews(ctx, limit, includeZeroNodes, domain)
 	})
 }
 
 // GetIPv6OnlyNodes returns nodes with working IPv6 but no working IPv4 (cached)
-func (cs *CachedStorage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetIPv6OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:only", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetIPv6OnlyNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetPureIPv6OnlyNodes returns nodes that only advertise IPv6 addresses (cached)
-func (cs *CachedStorage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetPureIPv6OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:pureonly", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetPureIPv6OnlyNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetIPv6NodeList returns verified working IPv6 nodes for the node list report (cached)
-func (cs *CachedStorage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
+func (cs *CachedStorage) GetIPv6NodeList(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:nodelist", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]IPv6NodeListEntry, error) {
-		return cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetIPv6NodeList(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetGeoHostingDistribution returns geographic hosting distribution (cached)
-func (cs *CachedStorage) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
+func (cs *CachedStorage) GetGeoHostingDistribution(ctx context.Context, days int, domain string) (*GeoHostingDistribution, error) {
 	return cachedFetchPtr(cs, cs.analyticsKey("geo:hosting", days, domain), cs.config.LongAnalyticsTTL, func() (*GeoHostingDistribution, error) {
-		return cs.Storage.GetGeoHostingDistribution(days, domain)
+		return cs.Storage.GetGeoHostingDistribution(ctx, days, domain)
 	})
 }
 
 // GetNodesByCountry returns nodes for a specific country (cached)
-func (cs *CachedStorage) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetNodesByCountry(ctx context.Context, countryCode string, days int, domain string) ([]NodeTestResult, error) {
 	return cachedGeoDrilldown(cs, cs.analyticsKey("geo:country:v2", countryCode, days, domain), func() ([]NodeTestResult, error) {
-		return cs.Storage.GetNodesByCountry(countryCode, days, domain)
+		return cs.Storage.GetNodesByCountry(ctx, countryCode, days, domain)
 	})
 }
 
 // GetNodesByProvider returns nodes for a specific provider (cached)
-func (cs *CachedStorage) GetNodesByProvider(provider string, days int, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetNodesByProvider(ctx context.Context, provider string, days int, domain string) ([]NodeTestResult, error) {
 	return cachedGeoDrilldown(cs, cs.analyticsKey("geo:provider:v2", cs.keyGen.ShortHash(provider), days, domain), func() ([]NodeTestResult, error) {
-		return cs.Storage.GetNodesByProvider(provider, days, domain)
+		return cs.Storage.GetNodesByProvider(ctx, provider, days, domain)
 	})
 }
 
@@ -188,154 +188,154 @@ func cachedGeoDrilldown(cs *CachedStorage, key string, fetch func() ([]NodeTestR
 const geoDrilldownEmptyTTL = 5 * time.Minute
 
 // GetOnThisDayNodes returns nodes first added on this day in previous years (cached)
-func (cs *CachedStorage) GetOnThisDayNodes(month, day, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
+func (cs *CachedStorage) GetOnThisDayNodes(ctx context.Context, month, day, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("onthisday", month, day, limit, activeOnly, domain), cs.config.LongAnalyticsTTL, func() ([]OnThisDayNode, error) {
-		return cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly, domain)
+		return cs.Storage.GetOnThisDayNodes(ctx, month, day, limit, activeOnly, domain)
 	})
 }
 
 // GetPioneersByRegion returns first sysops in a FidoNet region (cached)
-func (cs *CachedStorage) GetPioneersByRegion(zone, region, limit int, domain string) ([]PioneerNode, error) {
+func (cs *CachedStorage) GetPioneersByRegion(ctx context.Context, zone, region, limit int, domain string) ([]PioneerNode, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("pioneers", zone, region, limit, domain), cs.config.LongAnalyticsTTL, func() ([]PioneerNode, error) {
-		return cs.Storage.GetPioneersByRegion(zone, region, limit, domain)
+		return cs.Storage.GetPioneersByRegion(ctx, zone, region, limit, domain)
 	})
 }
 
 // GetOtherNetworksSummary returns a summary of non-FidoNet networks found in AKAs (cached)
-func (cs *CachedStorage) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
+func (cs *CachedStorage) GetOtherNetworksSummary(ctx context.Context, days int, domain string) ([]OtherNetworkSummary, error) {
 	return cachedFetchSlice(cs, fmt.Sprintf("%s:analytics:other_networks_summary:%d:%s", cs.keyGen.Prefix, days, domain), cs.config.LongAnalyticsTTL, func() ([]OtherNetworkSummary, error) {
-		return cs.Storage.GetOtherNetworksSummary(days, domain)
+		return cs.Storage.GetOtherNetworksSummary(ctx, days, domain)
 	})
 }
 
 // GetNodesInNetwork returns nodes that announce AKAs in a specific network (cached)
-func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
 	return cachedFetchSlice(cs, fmt.Sprintf("%s:analytics:ipv6_incorrect_ipv4_correct:%d:%d:%v:%s", cs.keyGen.Prefix, limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]AKAIPVersionMismatchNode, error) {
-		return cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
-func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
+func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
 	return cachedFetchSlice(cs, fmt.Sprintf("%s:analytics:ipv4_incorrect_ipv6_correct:%d:%d:%v:%s", cs.keyGen.Prefix, limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]AKAIPVersionMismatchNode, error) {
-		return cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
-func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
+func (cs *CachedStorage) GetNodesInNetwork(ctx context.Context, networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
 	return cachedFetchSlice(cs, fmt.Sprintf("%s:analytics:nodes_in_network:%s:%d:%d:%s", cs.keyGen.Prefix, networkName, limit, days, domain), cs.config.LongAnalyticsTTL, func() ([]OtherNetworkNode, error) {
-		return cs.Storage.GetNodesInNetwork(networkName, limit, days, domain)
+		return cs.Storage.GetNodesInNetwork(ctx, networkName, limit, days, domain)
 	})
 }
 
 // GetModemAccessibleNodes returns nodes successfully reached via modem tests (cached)
-func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
+func (cs *CachedStorage) GetModemAccessibleNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("modem:accessible", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]ModemAccessibleNode, error) {
-		return cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetModemAccessibleNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetModemNoAnswerNodes returns nodes tested via modem that never answered (cached)
-func (cs *CachedStorage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
+func (cs *CachedStorage) GetModemNoAnswerNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("modem:noanswer", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]ModemNoAnswerNode, error) {
-		return cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetModemNoAnswerNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // GetRecentModemSuccessPhones returns phone numbers successfully tested via modem (pass-through, no cache)
-func (cs *CachedStorage) GetRecentModemSuccessPhones(days int) ([]string, error) {
-	return cs.Storage.GetRecentModemSuccessPhones(days)
+func (cs *CachedStorage) GetRecentModemSuccessPhones(ctx context.Context, days int) ([]string, error) {
+	return cs.Storage.GetRecentModemSuccessPhones(ctx, days)
 }
 
 // GetDetailedModemTestResult returns detailed modem test data (cached)
-func (cs *CachedStorage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
+func (cs *CachedStorage) GetDetailedModemTestResult(ctx context.Context, zone, net, node int, testTime string) (*ModemTestDetail, error) {
 	return cachedFetchPtr(cs, cs.analyticsKey("modem:detail", zone, net, node, testTime), cs.config.TestAnalyticsTTL, func() (*ModemTestDetail, error) {
-		return cs.Storage.GetDetailedModemTestResult(zone, net, node, testTime)
+		return cs.Storage.GetDetailedModemTestResult(ctx, zone, net, node, testTime)
 	})
 }
 
 // GetPSTNCMNodes returns PSTN CM nodes (cached)
-func (cs *CachedStorage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
+func (cs *CachedStorage) GetPSTNCMNodes(ctx context.Context, limit int) ([]PSTNNode, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("pstn:cm", limit), cs.config.LongAnalyticsTTL, func() ([]PSTNNode, error) {
-		return cs.Storage.GetPSTNCMNodes(limit)
+		return cs.Storage.GetPSTNCMNodes(ctx, limit)
 	})
 }
 
 // GetPSTNNodes returns PSTN nodes (cached)
-func (cs *CachedStorage) GetPSTNNodes(limit int, zone int, domain string) ([]PSTNNode, error) {
+func (cs *CachedStorage) GetPSTNNodes(ctx context.Context, limit int, zone int, domain string) ([]PSTNNode, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("pstn:nodes", limit, zone, domain), cs.config.LongAnalyticsTTL, func() ([]PSTNNode, error) {
-		return cs.Storage.GetPSTNNodes(limit, zone, domain)
+		return cs.Storage.GetPSTNNodes(ctx, limit, zone, domain)
 	})
 }
 
 // GetFileRequestNodes returns file request capable nodes (cached)
-func (cs *CachedStorage) GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error) {
+func (cs *CachedStorage) GetFileRequestNodes(ctx context.Context, limit int, domain string) ([]FileRequestNode, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("filerequest", limit, domain), cs.config.LongAnalyticsTTL, func() ([]FileRequestNode, error) {
-		return cs.Storage.GetFileRequestNodes(limit, domain)
+		return cs.Storage.GetFileRequestNodes(ctx, limit, domain)
 	})
 }
 
 // GetEmailCapableNodes returns nodes advertising email transport (cached)
-func (cs *CachedStorage) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
+func (cs *CachedStorage) GetEmailCapableNodes(ctx context.Context, limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("email:nodes", limit, useFieldFallback, domain), cs.config.LongAnalyticsTTL, func() ([]EmailCapableNode, error) {
-		return cs.Storage.GetEmailCapableNodes(limit, useFieldFallback, domain)
+		return cs.Storage.GetEmailCapableNodes(ctx, limit, useFieldFallback, domain)
 	})
 }
 
 // GetEmailFlagTrend returns per-year email flag counts (cached).
 // The trend only changes when a new nodelist lands, so it is held longer.
-func (cs *CachedStorage) GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error) {
+func (cs *CachedStorage) GetEmailFlagTrend(ctx context.Context, domain string) ([]EmailFlagTrendPoint, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("email:trend", domain), cs.config.HistoricalTTL, func() ([]EmailFlagTrendPoint, error) {
-		return cs.Storage.GetEmailFlagTrend(domain)
+		return cs.Storage.GetEmailFlagTrend(ctx, domain)
 	})
 }
 
 // GetAKAMismatchNodes returns AKA mismatch nodes (cached)
-func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetAKAMismatchNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.analyticsKey("aka:mismatch", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
+		return cs.Storage.GetAKAMismatchNodes(ctx, limit, days, includeZeroNodes, domain)
 	})
 }
 
 // ===== Reachability Operations (cached) =====
 
 // GetReachabilityTrends returns reachability trend data (cached)
-func (cs *CachedStorage) GetReachabilityTrends(days int, domain string) ([]ReachabilityTrend, error) {
+func (cs *CachedStorage) GetReachabilityTrends(ctx context.Context, days int, domain string) ([]ReachabilityTrend, error) {
 	return cachedFetchSlice(cs, cs.keyGen.ReachabilityTrendsKey(days, domain), cs.config.TestAnalyticsTTL, func() ([]ReachabilityTrend, error) {
-		return cs.Storage.GetReachabilityTrends(days, domain)
+		return cs.Storage.GetReachabilityTrends(ctx, days, domain)
 	})
 }
 
 // GetReachabilityTrendsAllTime returns all-time reachability trend data (cached)
-func (cs *CachedStorage) GetReachabilityTrendsAllTime(domain string) ([]ReachabilityTrend, error) {
+func (cs *CachedStorage) GetReachabilityTrendsAllTime(ctx context.Context, domain string) ([]ReachabilityTrend, error) {
 	return cachedFetchSlice(cs, cs.keyGen.ReachabilityTrendsKey(0, domain), cs.config.TestAnalyticsTTL, func() ([]ReachabilityTrend, error) {
-		return cs.Storage.GetReachabilityTrendsAllTime(domain)
+		return cs.Storage.GetReachabilityTrendsAllTime(ctx, domain)
 	})
 }
 
 // SearchNodesByReachability returns nodes filtered by reachability status (cached)
-func (cs *CachedStorage) SearchNodesByReachability(operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.keyGen.SearchNodesByReachabilityKey(operational, limit, days, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.SearchNodesByReachability(operational, limit, days, domain)
+		return cs.Storage.SearchNodesByReachability(ctx, operational, limit, days, domain)
 	})
 }
 
 // GetNodeTestHistory returns test history for a specific node (cached)
-func (cs *CachedStorage) GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
+func (cs *CachedStorage) GetNodeTestHistory(ctx context.Context, zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
 	return cachedFetchSlice(cs, cs.keyGen.NodeTestHistoryKey(zone, net, node, days)+":"+domain, cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.GetNodeTestHistory(zone, net, node, days, domain)
+		return cs.Storage.GetNodeTestHistory(ctx, zone, net, node, days, domain)
 	})
 }
 
 // GetNodeReachabilityStats returns reachability statistics for a specific node (cached)
-func (cs *CachedStorage) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
+func (cs *CachedStorage) GetNodeReachabilityStats(ctx context.Context, zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
 	return cachedFetchPtr(cs, cs.keyGen.NodeReachabilityStatsKey(zone, net, node, days)+":"+domain, cs.config.TestAnalyticsTTL, func() (*NodeReachabilityStats, error) {
-		return cs.Storage.GetNodeReachabilityStats(zone, net, node, days, domain)
+		return cs.Storage.GetNodeReachabilityStats(ctx, zone, net, node, days, domain)
 	})
 }
 
 // GetDetailedTestResult returns detailed test result for a specific test (cached)
-func (cs *CachedStorage) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
+func (cs *CachedStorage) GetDetailedTestResult(ctx context.Context, zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
 	return cachedFetchPtr(cs, cs.keyGen.DetailedTestResultKey(zone, net, node, testTime)+":"+domain, cs.config.TestAnalyticsTTL, func() (*NodeTestResult, error) {
-		return cs.Storage.GetDetailedTestResult(zone, net, node, testTime, domain)
+		return cs.Storage.GetDetailedTestResult(ctx, zone, net, node, testTime, domain)
 	})
 }

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -11,9 +12,9 @@ import (
 // GetNodeChanges analyzes the history of a node and returns detected changes.
 // An empty domain matches all networks; gap detection then uses the union of
 // all networks' dates, so pass a concrete domain whenever it is known.
-func (so *SearchOperations) GetNodeChanges(zone, net, node int, domain string) ([]database.NodeChange, error) {
+func (so *SearchOperations) GetNodeChanges(ctx context.Context, zone, net, node int, domain string) ([]database.NodeChange, error) {
 	// Get all historical entries using node operations
-	history, err := so.nodeOps.GetNodeHistory(zone, net, node, domain)
+	history, err := so.nodeOps.GetNodeHistory(ctx, zone, net, node, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node history: %w", err)
 	}
@@ -23,7 +24,7 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, domain string) (
 	}
 
 	// Pre-load this network's nodelist dates for efficient gap checking
-	allDates, err := so.getAllNodelistDates(domain)
+	allDates, err := so.getAllNodelistDates(ctx, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load nodelist dates: %w", err)
 	}
@@ -53,7 +54,7 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, domain string) (
 		if !so.isConsecutiveNodelist(prev.NodelistDate, curr.NodelistDate, allDates) {
 			// Node was removed and then re-added
 			changes = append(changes, database.NodeChange{
-				Date:       so.getNextNodelistDate(prev.NodelistDate, domain),
+				Date:       so.getNextNodelistDate(ctx, prev.NodelistDate, domain),
 				DayNumber:  so.getNextDayNumber(prev.DayNumber),
 				ChangeType: "removed",
 				Changes:    make(map[string]string),
@@ -85,11 +86,16 @@ func (so *SearchOperations) GetNodeChanges(zone, net, node int, domain string) (
 		}
 	}
 
-	// Check if node is currently removed
+	// Check if node is currently removed. isCurrentlyActive reads false on any
+	// error, which for a cancelled request would invent a "removed" event and
+	// cache it - so ask the context first.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	lastNode := &history[len(history)-1]
-	if !so.isCurrentlyActive(lastNode, domain) {
+	if !so.isCurrentlyActive(ctx, lastNode, domain) {
 		changes = append(changes, database.NodeChange{
-			Date:       so.getNextNodelistDate(lastNode.NodelistDate, domain),
+			Date:       so.getNextNodelistDate(ctx, lastNode.NodelistDate, domain),
 			DayNumber:  so.getNextDayNumber(lastNode.DayNumber),
 			ChangeType: "removed",
 			Changes:    make(map[string]string),
@@ -168,11 +174,11 @@ func (so *SearchOperations) equalStringSlices(a, b []string) bool {
 
 // getAllNodelistDates loads all unique nodelist dates from the database.
 // An empty domain returns dates across all networks.
-func (so *SearchOperations) getAllNodelistDates(domain string) ([]time.Time, error) {
+func (so *SearchOperations) getAllNodelistDates(ctx context.Context, domain string) ([]time.Time, error) {
 	conn := so.db.Conn()
 	query := "SELECT DISTINCT nodelist_date FROM nodes WHERE " + optionalDomainSQL + " ORDER BY nodelist_date"
 
-	rows, err := conn.Query(query, domain, domain)
+	rows, err := conn.QueryContext(ctx, query, domain, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -203,11 +209,11 @@ func (so *SearchOperations) isConsecutiveNodelist(date1, date2 time.Time, allDat
 }
 
 // getNextNodelistDate gets the next nodelist date after the given date
-func (so *SearchOperations) getNextNodelistDate(afterDate time.Time, domain string) time.Time {
+func (so *SearchOperations) getNextNodelistDate(ctx context.Context, afterDate time.Time, domain string) time.Time {
 	conn := so.db.Conn()
 	var nextDate time.Time
 	query := so.queryBuilder.NextNodelistDateSQL()
-	err := conn.QueryRow(query, afterDate, domain, domain).Scan(&nextDate)
+	err := conn.QueryRowContext(ctx, query, afterDate, domain, domain).Scan(&nextDate)
 
 	if err != nil {
 		return afterDate.AddDate(0, 0, 7) // Assume weekly
@@ -223,16 +229,21 @@ func (so *SearchOperations) getNextDayNumber(afterDay int) int {
 
 // isCurrentlyActive checks if a node is currently active in the latest nodelist
 // of its network
-func (so *SearchOperations) isCurrentlyActive(node *database.Node, domain string) bool {
+func (so *SearchOperations) isCurrentlyActive(ctx context.Context, node *database.Node, domain string) bool {
 	if domain == "" && node.Domain != "" {
 		domain = node.Domain
 	}
 	conn := so.db.Conn()
 	var maxDate time.Time
 	query := so.queryBuilder.LatestDateSQL()
-	err := conn.QueryRow(query, domain, domain).Scan(&maxDate)
+	err := conn.QueryRowContext(ctx, query, domain, domain).Scan(&maxDate)
 
 	if err != nil {
+		// "Not in the latest nodelist" is the safe reading of a failed lookup
+		// here, but say so rather than letting a real outage look like a node
+		// removal. GetNodeChanges checks ctx.Err() before calling, so a
+		// cancelled request never reaches this.
+		logQueryFailure("isCurrentlyActive: latest nodelist date lookup failed", err)
 		return false
 	}
 

@@ -49,7 +49,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 			if sysopName != "" {
 				// Perform sysop search, scoped to the selected network
-				nodes, searchErr = s.storage.SearchNodesBySysop(sysopName, 100, requestDomain(r))
+				nodes, searchErr = s.storage.SearchNodesBySysop(r.Context(), sysopName, 100, requestDomain(r))
 				count = len(nodes)
 			} else {
 				// Perform node search
@@ -64,9 +64,19 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 					var pointErr error
 					points, pointErr = s.storage.SearchPointsWithLifetime(r.Context(), pointFilter)
 					if pointErr != nil {
+						if clientGone("Search: points", pointErr) {
+							return
+						}
 						logging.Warnf("point search failed: %v", pointErr)
 					}
 				}
+			}
+
+			// The node search reports failure by returning an error the page
+			// then shows. A cancelled request is not a failed search: the tab
+			// is gone, so there is nobody to show it to.
+			if searchErr != nil && clientGone("Search: nodes", searchErr) {
+				return
 			}
 		}
 	}
@@ -136,7 +146,7 @@ func (s *Server) performNodeSearchWithLifetime(r *http.Request) ([]storage.NodeS
 		}
 	}
 
-	nodes, err := s.storage.SearchNodesWithLifetime(filter)
+	nodes, err := s.storage.SearchNodesWithLifetime(r.Context(), filter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -154,11 +164,11 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the network: explicit ?domain= wins, then the global switcher,
 	// then the network(s) the address actually exists in
-	availableDomains, _ := s.storage.GetNodeDomains(zone, net, node)
+	availableDomains, _ := s.storage.GetNodeDomains(r.Context(), zone, net, node)
 	domain := resolveEntityDomain(r, availableDomains)
-	history, err := s.storage.GetNodeHistory(zone, net, node, domain)
+	history, err := s.storage.GetNodeHistory(r.Context(), zone, net, node, domain)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error retrieving node history: %v", err), http.StatusInternalServerError)
+		httpStorageError(w, "Error retrieving node history", "Error retrieving node history", err)
 		return
 	}
 
@@ -168,9 +178,9 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all node changes within the requested network
-	changes, err := s.storage.GetNodeChanges(zone, net, node, domain)
+	changes, err := s.storage.GetNodeChanges(r.Context(), zone, net, node, domain)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error retrieving node changes: %v", err), http.StatusInternalServerError)
+		httpStorageError(w, "Error retrieving node changes", "Error retrieving node changes", err)
 		return
 	}
 
@@ -182,7 +192,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Pointlist snapshot under this boss (empty for the vast majority of nodes)
-	points, _ := s.storage.GetPointsByBoss(resolvedDomain, zone, net, node, nil)
+	points, _ := s.storage.GetPointsByBoss(r.Context(), resolvedDomain, zone, net, node, nil)
 
 	data := struct {
 		Title            string

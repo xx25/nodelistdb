@@ -1,10 +1,13 @@
 package api
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // HealthChecker provides health check data to the API server.
 type HealthChecker interface {
-	CheckHealth() *HealthStatus
+	CheckHealth(ctx context.Context) *HealthStatus
 }
 
 // HealthStatus is the full health check response.

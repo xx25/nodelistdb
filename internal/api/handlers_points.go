@@ -16,7 +16,7 @@ import (
 // could 404 a point that exists only in a network the node-level heuristic
 // does not prefer. A nil point resolves at boss level.
 func (s *Server) resolvePointDomain(r *http.Request, zone, net, node int, point *int) (string, []string) {
-	domains, err := s.storage.GetPointDomains(zone, net, node, point)
+	domains, err := s.storage.GetPointDomains(r.Context(), zone, net, node, point)
 	if err != nil || domains == nil {
 		// Non-nil so JSON bodies carry "available_domains": [] rather than null
 		domains = []string{}
@@ -65,9 +65,9 @@ func (s *Server) SearchPointsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	points, err := s.storage.SearchPoints(filter)
+	points, err := s.storage.SearchPoints(r.Context(), filter)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Search failed", err)
 		return
 	}
 	if points == nil {
@@ -117,9 +117,9 @@ func (s *Server) GetNodePointsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domain, availableDomains := s.resolvePointDomain(r, zone, net, node, nil)
-	points, err := s.storage.GetPointsByBoss(domain, zone, net, node, asOf)
+	points, err := s.storage.GetPointsByBoss(r.Context(), domain, zone, net, node, asOf)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get points: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get points", err)
 		return
 	}
 	if points == nil {
@@ -160,9 +160,9 @@ func (s *Server) GetPointHandler(w http.ResponseWriter, r *http.Request) {
 		Limit:      1,
 	}
 
-	points, err := s.storage.SearchPoints(filter)
+	points, err := s.storage.SearchPoints(r.Context(), filter)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Point lookup failed: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Point lookup failed", err)
 		return
 	}
 
@@ -184,9 +184,9 @@ func (s *Server) GetPointHistoryHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	domain, availableDomains := s.resolvePointDomain(r, zone, net, node, &point)
-	history, err := s.storage.GetPointHistory(domain, zone, net, node, point)
+	history, err := s.storage.GetPointHistory(r.Context(), domain, zone, net, node, point)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get point history: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get point history", err)
 		return
 	}
 
@@ -207,9 +207,9 @@ func (s *Server) GetPointHistoryHandler(w http.ResponseWriter, r *http.Request) 
 // GET /api/pointlists/dates?domain=fidonet&source=z2
 func (s *Server) PointlistDatesHandler(w http.ResponseWriter, r *http.Request) {
 	source := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source")))
-	files, err := s.storage.GetPointlistDates(domainOrDefault(r), source)
+	files, err := s.storage.GetPointlistDates(r.Context(), domainOrDefault(r), source)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get pointlist dates: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get pointlist dates", err)
 		return
 	}
 
@@ -224,9 +224,9 @@ func (s *Server) PointlistDatesHandler(w http.ResponseWriter, r *http.Request) {
 // PointlistSourcesHandler summarizes the imported pointlist series.
 // GET /api/pointlists/sources?domain=fidonet
 func (s *Server) PointlistSourcesHandler(w http.ResponseWriter, r *http.Request) {
-	sources, err := s.storage.GetPointlistSources(domainOrDefault(r))
+	sources, err := s.storage.GetPointlistSources(r.Context(), domainOrDefault(r))
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get pointlist sources: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get pointlist sources", err)
 		return
 	}
 

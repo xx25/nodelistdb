@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -28,14 +29,14 @@ func NewTestHistoryOperations(db database.DatabaseInterface, queryBuilder *TestQ
 
 // GetNodeTestHistory retrieves test history for a specific node.
 // An empty domain matches all networks.
-func (th *TestHistoryOperations) GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
+func (th *TestHistoryOperations) GetNodeTestHistory(ctx context.Context, zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
 	th.mu.RLock()
 	defer th.mu.RUnlock()
 
 	conn := th.db.Conn()
 	query := th.queryBuilder.BuildTestHistoryQuery()
 
-	rows, err := conn.Query(query, zone, net, node, days, domain, domain)
+	rows, err := conn.QueryContext(ctx, query, zone, net, node, days, domain, domain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query node test history: %w", err)
 	}
@@ -59,14 +60,14 @@ func (th *TestHistoryOperations) GetNodeTestHistory(zone, net, node int, days in
 }
 
 // GetDetailedTestResult retrieves a detailed test result for a specific node and timestamp
-func (th *TestHistoryOperations) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
+func (th *TestHistoryOperations) GetDetailedTestResult(ctx context.Context, zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
 	th.mu.RLock()
 	defer th.mu.RUnlock()
 
 	conn := th.db.Conn()
 	query := th.queryBuilder.BuildDetailedTestResultQuery()
 
-	row := conn.QueryRow(query, zone, net, node, testTime, domain, domain)
+	row := conn.QueryRowContext(ctx, query, zone, net, node, testTime, domain, domain)
 
 	var result NodeTestResult
 	err := th.resultParser.ParseTestResultRow(&singleRowScanner{row}, &result)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -21,7 +22,7 @@ type serverHealthChecker struct {
 	startTime time.Time
 }
 
-func (h *serverHealthChecker) CheckHealth() *api.HealthStatus {
+func (h *serverHealthChecker) CheckHealth(ctx context.Context) *api.HealthStatus {
 	now := time.Now().UTC()
 	uptime := now.Sub(h.startTime)
 
@@ -50,8 +51,8 @@ func (h *serverHealthChecker) CheckHealth() *api.HealthStatus {
 	}
 
 	// Node count from the default network's latest nodelist
-	if latestDate, err := h.storage.GetLatestStatsDate(database.DefaultDomain); err == nil {
-		if count, err := h.storage.CountNodes(latestDate, database.DefaultDomain); err == nil {
+	if latestDate, err := h.storage.GetLatestStatsDate(ctx, database.DefaultDomain); err == nil {
+		if count, err := h.storage.CountNodes(ctx, latestDate, database.DefaultDomain); err == nil {
 			status.Nodes = api.NodeCountInfo{
 				LatestDate: latestDate.Format("2006-01-02"),
 				Count:      count,

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"net/http/httptest"
@@ -12,11 +13,11 @@ import (
 	"github.com/nodelistdb/internal/storage"
 )
 
-// stubStorage satisfies storage.Operations by embedding it. Only the methods a
+// stubStorage satisfies web.Storage by embedding it. Only the methods a
 // test explicitly overrides are usable; everything else panics on call, so a
 // test pins exactly which storage calls the handler under test makes.
 type stubStorage struct {
-	storage.Operations
+	Storage
 
 	availableDates    []time.Time
 	availableDatesErr error
@@ -30,33 +31,33 @@ type stubStorage struct {
 	pointStats        *storage.PointStats
 }
 
-func (s *stubStorage) GetAvailableDates(domain string) ([]time.Time, error) {
+func (s *stubStorage) GetAvailableDates(ctx context.Context, domain string) ([]time.Time, error) {
 	return s.availableDates, s.availableDatesErr
 }
 
-func (s *stubStorage) GetLatestStatsDate(domain string) (time.Time, error) {
+func (s *stubStorage) GetLatestStatsDate(ctx context.Context, domain string) (time.Time, error) {
 	return s.latestDate, s.latestDateErr
 }
 
-func (s *stubStorage) GetNearestAvailableDate(requested time.Time, domain string) (time.Time, error) {
+func (s *stubStorage) GetNearestAvailableDate(ctx context.Context, requested time.Time, domain string) (time.Time, error) {
 	return s.nearestDate, s.nearestDateErr
 }
 
-func (s *stubStorage) GetStats(date time.Time, domain string) (*database.NetworkStats, error) {
+func (s *stubStorage) GetStats(ctx context.Context, date time.Time, domain string) (*database.NetworkStats, error) {
 	return s.stats, s.statsErr
 }
 
-func (s *stubStorage) GetNodeCountHistory(domain string) ([]storage.NodeCountByDate, error) {
+func (s *stubStorage) GetNodeCountHistory(ctx context.Context, domain string) ([]storage.NodeCountByDate, error) {
 	return s.nodeHistory, nil
 }
 
-func (s *stubStorage) GetPointStats(domain string, asOf *time.Time) (*storage.PointStats, error) {
+func (s *stubStorage) GetPointStats(ctx context.Context, domain string, asOf *time.Time) (*storage.PointStats, error) {
 	return s.pointStats, nil
 }
 
 // newTestServer builds a Server with the real embedded templates and the given
 // storage stub.
-func newTestServer(t *testing.T, ops storage.Operations) *Server {
+func newTestServer(t *testing.T, ops Storage) *Server {
 	t.Helper()
 	s := &Server{
 		storage:     ops,

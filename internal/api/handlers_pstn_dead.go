@@ -29,8 +29,8 @@ func (s *Server) MarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := GetCallerIDFromContext(r.Context())
-	if err := s.storage.MarkPSTNDead(req.Zone, req.Net, req.Node, req.Reason, callerID); err != nil {
-		WriteJSONError(w, fmt.Sprintf("failed to mark node dead: %v", err), http.StatusInternalServerError)
+	if err := s.storage.MarkPSTNDead(r.Context(), req.Zone, req.Net, req.Node, req.Reason, callerID); err != nil {
+		writeStorageErrorf(w, "failed to mark node dead", err)
 		return
 	}
 
@@ -55,8 +55,8 @@ func (s *Server) UnmarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := GetCallerIDFromContext(r.Context())
-	if err := s.storage.UnmarkPSTNDead(req.Zone, req.Net, req.Node, callerID); err != nil {
-		WriteJSONError(w, fmt.Sprintf("failed to unmark node dead: %v", err), http.StatusInternalServerError)
+	if err := s.storage.UnmarkPSTNDead(r.Context(), req.Zone, req.Net, req.Node, callerID); err != nil {
+		writeStorageErrorf(w, "failed to unmark node dead", err)
 		return
 	}
 
@@ -69,9 +69,9 @@ func (s *Server) UnmarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 // ListPSTNDeadHandler returns all currently dead PSTN nodes.
 // GET /api/nodes/pstn/dead (unauthenticated)
 func (s *Server) ListPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
-	nodes, err := s.storage.GetPSTNDeadNodes()
+	nodes, err := s.storage.GetPSTNDeadNodes(r.Context())
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("failed to fetch PSTN dead nodes: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "failed to fetch PSTN dead nodes", err)
 		return
 	}
 

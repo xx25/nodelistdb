@@ -19,6 +19,7 @@ import (
 	"github.com/nodelistdb/internal/ftp"
 	"github.com/nodelistdb/internal/links"
 	"github.com/nodelistdb/internal/logging"
+	"github.com/nodelistdb/internal/querybudget"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 	"github.com/nodelistdb/internal/web"
@@ -113,6 +114,13 @@ func run(opts options) error {
 	if err != nil {
 		return fmt.Errorf("loading web templates: %w", err)
 	}
+
+	readBudget, analyticsBudget, err := buildQueryBudgets(cfg)
+	if err != nil {
+		return err
+	}
+	apiServer.SetQueryBudgets(api.Budgets{Read: readBudget, Analytics: analyticsBudget})
+	webServer.SetQueryBudgets(web.Budgets{Read: readBudget, Analytics: analyticsBudget})
 	if cfg.LinksFile != "" {
 		linksLoader := links.NewLoader(cfg.LinksFile)
 		defer linksLoader.Stop()
@@ -120,7 +128,43 @@ func run(opts options) error {
 		logging.Info("Links configuration enabled", slog.String("path", cfg.LinksFile))
 	}
 
-	return serve(buildHTTPServer(opts, apiServer, webServer), ftpServer)
+	return serve(buildHTTPServer(opts, apiServer, webServer, longestBudget(readBudget, analyticsBudget)), ftpServer)
+}
+
+// longestBudget returns whichever budget runs longest. Sizing WriteTimeout off
+// the analytics budget alone would be wrong the moment a config sets
+// query_budget.default above query_budget.analytics - an odd thing to write,
+// but nothing forbids it, and the failure would be the silent
+// connection-cut-before-the-deadline trap this sizing exists to avoid.
+func longestBudget(budgets ...querybudget.Budget) querybudget.Budget {
+	longest := querybudget.Budget{}
+	for _, b := range budgets {
+		if b.Duration() > longest.Duration() {
+			longest = b
+		}
+	}
+	return longest
+}
+
+// buildQueryBudgets turns the config into the two deadlines the routers apply.
+// Both come back zero - meaning no deadline - when the feature is off or when
+// ClickHouse is being spoken to over HTTP, where the driver would turn the
+// deadline into a max_execution_time that a readonly user may not send.
+func buildQueryBudgets(cfg *config.Config) (read, analytics querybudget.Budget, err error) {
+	readDur, analyticsDur, err := cfg.QueryBudget.Durations()
+	if err != nil {
+		return querybudget.Budget{}, querybudget.Budget{}, err
+	}
+	read = querybudget.New(cfg.QueryBudget.Enabled, readDur, cfg.ClickHouse.Protocol)
+	analytics = querybudget.New(cfg.QueryBudget.Enabled, analyticsDur, cfg.ClickHouse.Protocol)
+	if read.Duration() > 0 || analytics.Duration() > 0 {
+		logging.Info("Query budgets enabled",
+			slog.Duration("read", read.Duration()),
+			slog.Duration("analytics", analytics.Duration()))
+	} else if cfg.QueryBudget.Enabled {
+		logging.Info("Query budgets configured but withheld (clickhouse protocol is http)")
+	}
+	return read, analytics, nil
 }
 
 // serverDeps are the storage objects the rest of the server is built on.
@@ -241,22 +285,36 @@ func buildAPI(cfg *config.Config, db *database.ClickHouseDB, deps serverDeps, ft
 	return apiServer, nil
 }
 
-func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server) *http.Server {
+func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server, longest querybudget.Budget) *http.Server {
 	// The API is a Chi router mounted under /api/; the web pages are on a
 	// plain ServeMux. One logging middleware wraps both.
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiServer.SetupRouter())
 	webServer.SetupRoutes(mux)
 
+	// WriteTimeout is a TCP-level deadline that does NOT cancel r.Context(),
+	// so it silently caps every query budget: a route allowed 120s would still
+	// have its connection cut at 60. Keep it strictly above the longest budget
+	// rather than letting the two disagree.
+	writeTimeout := 60 * time.Second
+	if b := longest.Duration(); b+writeSlack > writeTimeout {
+		writeTimeout = b + writeSlack
+	}
+
 	return &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", opts.host, opts.port),
 		Handler:           loggingMiddleware(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		WriteTimeout:      writeTimeout,
 		IdleTimeout:       120 * time.Second,
 	}
 }
+
+// writeSlack is the head-room WriteTimeout keeps over the longest query
+// budget, so that a request which times out has room to render and send its
+// own 503 instead of having the connection dropped underneath it.
+const writeSlack = 15 * time.Second
 
 // serve runs the HTTP (and optionally FTP) servers until a signal arrives,
 // then shuts them down. It returns rather than exiting, so run's defers fire.

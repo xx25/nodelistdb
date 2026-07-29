@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,7 +11,7 @@ import (
 // resolveNodeDomain picks the FTN network for a node endpoint, along with the
 // full list of networks the address exists in for available_domains.
 func (s *Server) resolveNodeDomain(r *http.Request, zone, net, node int) (string, []string) {
-	domains, err := s.storage.GetNodeDomains(zone, net, node)
+	domains, err := s.storage.GetNodeDomains(r.Context(), zone, net, node)
 	if err != nil {
 		domains = nil
 	}
@@ -36,9 +35,9 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Search nodes
-	nodes, err := s.storage.GetNodes(filter)
+	nodes, err := s.storage.GetNodes(r.Context(), filter)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Search failed", err)
 		return
 	}
 
@@ -88,9 +87,9 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 		Limit:  1, // Get only the most recent version
 	}
 
-	nodes, err := s.storage.GetNodes(filter)
+	nodes, err := s.storage.GetNodes(r.Context(), filter)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Node lookup failed: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Node lookup failed", err)
 		return
 	}
 
@@ -113,9 +112,9 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get node history within the resolved network
 	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
-	history, err := s.storage.GetNodeHistory(zone, net, node, domain)
+	history, err := s.storage.GetNodeHistory(r.Context(), zone, net, node, domain)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get node history: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get node history", err)
 		return
 	}
 
@@ -128,7 +127,7 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// Note: Errors from GetNodeDateRange are not critical - if it fails,
 	// firstDate and lastDate will be zero values which is acceptable.
 	// The history data itself is sufficient for the response.
-	firstDate, lastDate, _ := s.storage.GetNodeDateRange(zone, net, node, domain)
+	firstDate, lastDate, _ := s.storage.GetNodeDateRange(r.Context(), zone, net, node, domain)
 
 	response := addressEnvelope(zone, net, node, -1, domain, availableDomains)
 	response["history"] = history
@@ -149,9 +148,9 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get all node changes within the resolved network
 	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
-	changes, err := s.storage.GetNodeChanges(zone, net, node, domain)
+	changes, err := s.storage.GetNodeChanges(r.Context(), zone, net, node, domain)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get node changes: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get node changes", err)
 		return
 	}
 
@@ -172,9 +171,9 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 
 	// Get node history within the resolved network
 	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
-	history, err := s.storage.GetNodeHistory(zone, net, node, domain)
+	history, err := s.storage.GetNodeHistory(r.Context(), zone, net, node, domain)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to get node history: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to get node history", err)
 		return
 	}
 
@@ -250,9 +249,9 @@ func (s *Server) GetPSTNNodesHandler(w http.ResponseWriter, r *http.Request) {
 
 	// queryDomain defaults to fidonet, preserving this endpoint's original
 	// fidonet-only behavior for the modem-test CLI
-	nodes, err := s.storage.GetPSTNNodes(limit, zone, domainOrDefault(r))
+	nodes, err := s.storage.GetPSTNNodes(r.Context(), limit, zone, domainOrDefault(r))
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to fetch PSTN nodes: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to fetch PSTN nodes", err)
 		return
 	}
 
@@ -278,9 +277,9 @@ func (s *Server) GetRecentModemSuccessPhonesHandler(w http.ResponseWriter, r *ht
 		days = parsed
 	}
 
-	phones, err := s.storage.GetRecentModemSuccessPhones(days)
+	phones, err := s.storage.GetRecentModemSuccessPhones(r.Context(), days)
 	if err != nil {
-		WriteJSONError(w, fmt.Sprintf("Failed to fetch recent modem success phones: %v", err), http.StatusInternalServerError)
+		writeStorageErrorf(w, "Failed to fetch recent modem success phones", err)
 		return
 	}
 

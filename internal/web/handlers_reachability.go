@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -51,11 +52,14 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	var trends []storage.ReachabilityTrend
 	var err error
 	if trendsPeriodFilter == 0 {
-		trends, err = s.storage.GetReachabilityTrendsAllTime(domain)
+		trends, err = s.storage.GetReachabilityTrendsAllTime(r.Context(), domain)
 	} else {
-		trends, err = s.storage.GetReachabilityTrends(trendsPeriodFilter, domain)
+		trends, err = s.storage.GetReachabilityTrends(r.Context(), trendsPeriodFilter, domain)
 	}
 	if err != nil {
+		if clientGone("Reachability: trends", err) {
+			return
+		}
 		logging.Errorf("Error getting reachability trends: %v", err)
 		trends = []storage.ReachabilityTrend{}
 	}
@@ -75,22 +79,31 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	// Always show data by default - get recently tested nodes for the last day
 	// If filters are applied, get filtered results
 	if statusFilter != "" || protocolFilter != "" || query.Get("nodes_period") != "" || query.Get("limit") != "" {
-		filteredNodes, err := s.getFilteredReachabilityNodes(statusFilter, protocolFilter, nodesPeriodFilter, limitFilter, domain)
+		filteredNodes, err := s.getFilteredReachabilityNodes(r.Context(), statusFilter, protocolFilter, nodesPeriodFilter, limitFilter, domain)
 		if err != nil {
+			if clientGone("Reachability: filtered nodes", err) {
+				return
+			}
 			logging.Errorf("Error getting filtered nodes: %v", err)
 			filteredNodes = []storage.NodeTestResult{}
 		}
 		data["FilteredNodes"] = filteredNodes
 	} else {
 		// Default behavior - get recently tested nodes (both operational and failed) for the last day
-		operational, err := s.storage.SearchNodesByReachability(true, 10, nodesPeriodFilter, domain)
+		operational, err := s.storage.SearchNodesByReachability(r.Context(), true, 10, nodesPeriodFilter, domain)
 		if err != nil {
+			if clientGone("Reachability: operational nodes", err) {
+				return
+			}
 			logging.Errorf("Error getting operational nodes: %v", err)
 			operational = []storage.NodeTestResult{}
 		}
 
-		failed, err := s.storage.SearchNodesByReachability(false, 10, nodesPeriodFilter, domain)
+		failed, err := s.storage.SearchNodesByReachability(r.Context(), false, 10, nodesPeriodFilter, domain)
 		if err != nil {
+			if clientGone("Reachability: failed nodes", err) {
+				return
+			}
 			logging.Errorf("Error getting failed nodes: %v", err)
 			failed = []storage.NodeTestResult{}
 		}
@@ -103,7 +116,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // getFilteredReachabilityNodes retrieves nodes based on the applied filters
-func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter string, periodFilter, limitFilter int, domain string) ([]storage.NodeTestResult, error) {
+func (s *Server) getFilteredReachabilityNodes(ctx context.Context, statusFilter, protocolFilter string, periodFilter, limitFilter int, domain string) ([]storage.NodeTestResult, error) {
 	// For now, use the existing SearchNodesByReachability method and apply additional filtering
 	// This could be optimized by adding dedicated database queries for these filters
 
@@ -111,13 +124,13 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 
 	switch statusFilter {
 	case "operational":
-		nodes, err := s.storage.SearchNodesByReachability(true, limitFilter*2, periodFilter, domain) // Get more than needed for protocol filtering
+		nodes, err := s.storage.SearchNodesByReachability(ctx, true, limitFilter*2, periodFilter, domain) // Get more than needed for protocol filtering
 		if err != nil {
 			return nil, err
 		}
 		allNodes = nodes
 	case "failed":
-		nodes, err := s.storage.SearchNodesByReachability(false, limitFilter*2, periodFilter, domain)
+		nodes, err := s.storage.SearchNodesByReachability(ctx, false, limitFilter*2, periodFilter, domain)
 		if err != nil {
 			return nil, err
 		}
@@ -127,11 +140,11 @@ func (s *Server) getFilteredReachabilityNodes(statusFilter, protocolFilter strin
 		// When status=all, we want to show a mix of both operational and failed
 		// Fetch more than needed to account for protocol filtering
 		fetchLimit := limitFilter * 2
-		operational, err := s.storage.SearchNodesByReachability(true, fetchLimit, periodFilter, domain)
+		operational, err := s.storage.SearchNodesByReachability(ctx, true, fetchLimit, periodFilter, domain)
 		if err != nil {
 			return nil, err
 		}
-		failed, err := s.storage.SearchNodesByReachability(false, fetchLimit, periodFilter, domain)
+		failed, err := s.storage.SearchNodesByReachability(ctx, false, fetchLimit, periodFilter, domain)
 		if err != nil {
 			return nil, err
 		}
@@ -232,10 +245,13 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	// the global switcher when the address exists there, then wherever the
 	// address actually lives — so the page never silently merges test
 	// history from several networks sharing one zone:net/node.
-	availableDomains, _ := s.storage.GetNodeDomains(zone, net, node)
+	availableDomains, _ := s.storage.GetNodeDomains(r.Context(), zone, net, node)
 	domain := resolveEntityDomain(r, availableDomains)
-	history, err := s.storage.GetNodeTestHistory(zone, net, node, days, domain)
+	history, err := s.storage.GetNodeTestHistory(r.Context(), zone, net, node, days, domain)
 	if err != nil {
+		if clientGone("Reachability: node test history", err) {
+			return
+		}
 		logging.Errorf("Error getting node test history: %v", err)
 		history = []storage.NodeTestResult{}
 	}
@@ -305,13 +321,16 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get statistics
-	stats, err := s.storage.GetNodeReachabilityStats(zone, net, node, days, domain)
+	stats, err := s.storage.GetNodeReachabilityStats(r.Context(), zone, net, node, days, domain)
 	if err != nil {
+		if clientGone("Reachability: node stats", err) {
+			return
+		}
 		logging.Errorf("Error getting node reachability stats: %v", err)
 	}
 
 	// Get node info from main database (same resolved network)
-	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, domain)
+	nodeHistory, err := s.storage.GetNodeHistory(r.Context(), zone, net, node, domain)
 	var nodeInfo *database.Node
 	if err == nil && len(nodeHistory) > 0 {
 		// Get the most recent entry
@@ -387,7 +406,7 @@ func (s *Server) TestResultDetailHandler(w http.ResponseWriter, r *http.Request)
 		template: "test_detail",
 		subject:  "test result",
 		fetch: func(zone, net, node int, testTime, domain string) (any, bool, error) {
-			result, err := s.storage.GetDetailedTestResult(zone, net, node, testTime, domain)
+			result, err := s.storage.GetDetailedTestResult(r.Context(), zone, net, node, testTime, domain)
 			return result, result != nil, err
 		},
 	})
@@ -400,7 +419,7 @@ func (s *Server) ModemTestDetailHandler(w http.ResponseWriter, r *http.Request) 
 		template: "modem_test_detail",
 		subject:  "modem test result",
 		fetch: func(zone, net, node int, testTime, domain string) (any, bool, error) {
-			result, err := s.storage.GetDetailedModemTestResult(zone, net, node, testTime)
+			result, err := s.storage.GetDetailedModemTestResult(r.Context(), zone, net, node, testTime)
 			return result, result != nil, err
 		},
 	})
@@ -420,8 +439,7 @@ func (s *Server) renderTestDetail(w http.ResponseWriter, r *http.Request, page t
 	domain := explicitDomain(r)
 	result, found, err := page.fetch(zone, net, node, testTime, domain)
 	if err != nil {
-		logging.Errorf("Error getting detailed %s: %v", page.subject, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		httpStorageError(w, "Reachability: detailed "+page.subject, "Internal server error", err)
 		return
 	}
 	if !found {
@@ -431,7 +449,7 @@ func (s *Server) renderTestDetail(w http.ResponseWriter, r *http.Request, page t
 
 	// Node info from the nodelist, for context on the page.
 	var nodeInfo *database.Node
-	if nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, domain); err == nil && len(nodeHistory) > 0 {
+	if nodeHistory, err := s.storage.GetNodeHistory(r.Context(), zone, net, node, domain); err == nil && len(nodeHistory) > 0 {
 		nodeInfo = &nodeHistory[len(nodeHistory)-1]
 	}
 

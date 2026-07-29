@@ -18,9 +18,13 @@ func NewPSTNDeadOperations(db database.DatabaseInterface) *PSTNDeadOperations {
 	return &PSTNDeadOperations{db: db}
 }
 
-// MarkDead marks a node's PSTN number as dead/disconnected
-func (p *PSTNDeadOperations) MarkDead(zone, net, node int, reason, markedBy string) error {
-	ctx := context.Background()
+// MarkDead marks a node's PSTN number as dead/disconnected.
+//
+// The two writers take the caller's context like the readers do. Each is a
+// single-row INSERT whose only observer is the HTTP client that asked for it,
+// so a client that disconnected mid-flight cannot tell whether the row landed
+// either way, and the modem tester re-sends on its next cycle.
+func (p *PSTNDeadOperations) MarkDead(ctx context.Context, zone, net, node int, reason, markedBy string) error {
 	conn := p.db.Conn()
 
 	query := `INSERT INTO pstn_dead_nodes (zone, net, node, reason, marked_by, marked_at, is_active, updated_at)
@@ -35,8 +39,7 @@ func (p *PSTNDeadOperations) MarkDead(zone, net, node int, reason, markedBy stri
 }
 
 // UnmarkDead revives a previously dead PSTN node by inserting an is_active=false row
-func (p *PSTNDeadOperations) UnmarkDead(zone, net, node int, markedBy string) error {
-	ctx := context.Background()
+func (p *PSTNDeadOperations) UnmarkDead(ctx context.Context, zone, net, node int, markedBy string) error {
 	conn := p.db.Conn()
 
 	query := `INSERT INTO pstn_dead_nodes (zone, net, node, reason, marked_by, marked_at, is_active, updated_at)
@@ -51,8 +54,7 @@ func (p *PSTNDeadOperations) UnmarkDead(zone, net, node int, markedBy string) er
 }
 
 // GetAllDeadNodes returns all currently dead PSTN nodes
-func (p *PSTNDeadOperations) GetAllDeadNodes() ([]PSTNDeadNode, error) {
-	ctx := context.Background()
+func (p *PSTNDeadOperations) GetAllDeadNodes(ctx context.Context) ([]PSTNDeadNode, error) {
 	conn := p.db.Conn()
 
 	query := `SELECT zone, net, node, reason, marked_by, marked_at
@@ -80,8 +82,8 @@ func (p *PSTNDeadOperations) GetAllDeadNodes() ([]PSTNDeadNode, error) {
 
 // GetDeadNodeSet returns a map of dead nodes for in-memory enrichment.
 // Key is [zone, net, node], value is reason.
-func (p *PSTNDeadOperations) GetDeadNodeSet() (map[[3]int]string, error) {
-	nodes, err := p.GetAllDeadNodes()
+func (p *PSTNDeadOperations) GetDeadNodeSet(ctx context.Context) (map[[3]int]string, error) {
+	nodes, err := p.GetAllDeadNodes(ctx)
 	if err != nil {
 		return nil, err
 	}

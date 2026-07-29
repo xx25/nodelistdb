@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -9,7 +10,7 @@ import (
 
 // SearchNodesBySysop finds all nodes associated with a sysop name.
 // An empty domain searches all networks.
-func (so *SearchOperations) SearchNodesBySysop(sysopName string, limit int, domain string) ([]NodeSummary, error) {
+func (so *SearchOperations) SearchNodesBySysop(ctx context.Context, sysopName string, limit int, domain string) ([]NodeSummary, error) {
 	// Validate and sanitize input
 	if sysopName == "" {
 		return nil, fmt.Errorf("sysop name cannot be empty")
@@ -29,7 +30,7 @@ func (so *SearchOperations) SearchNodesBySysop(sysopName string, limit int, doma
 	conn := so.db.Conn()
 
 	query := so.queryBuilder.SysopSearchSQL()
-	rows, err := conn.Query(query, sysopName, domain, domain, limit)
+	rows, err := conn.QueryContext(ctx, query, sysopName, domain, domain, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search nodes by sysop: %w", err)
 	}
@@ -52,7 +53,7 @@ func (so *SearchOperations) SearchNodesBySysop(sysopName string, limit int, doma
 }
 
 // GetUniqueSysops returns a list of unique sysops with their node counts
-func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
+func (so *SearchOperations) GetUniqueSysops(ctx context.Context, nameFilter string, limit, offset int) ([]SysopInfo, error) {
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
@@ -82,7 +83,7 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 		args = []interface{}{limit, offset}
 	}
 
-	rows, err := conn.Query(query, args...)
+	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query unique sysops: %w", err)
 	}
@@ -144,7 +145,7 @@ func (so *SearchOperations) GetUniqueSysops(nameFilter string, limit, offset int
 }
 
 // GetNodesBySysop returns all nodes for a specific sysop
-func (so *SearchOperations) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
+func (so *SearchOperations) GetNodesBySysop(ctx context.Context, sysopName string, limit int) ([]database.Node, error) {
 	if sysopName == "" {
 		return nil, fmt.Errorf("sysop name cannot be empty")
 	}
@@ -164,5 +165,5 @@ func (so *SearchOperations) GetNodesBySysop(sysopName string, limit int) ([]data
 		Limit:     limit,
 	}
 
-	return so.nodeOps.GetNodes(filter)
+	return so.nodeOps.GetNodes(ctx, filter)
 }
