@@ -3,24 +3,18 @@ package api
 import (
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
 // GetGeoHostingStats returns geographic hosting distribution statistics
 func (s *Server) GetGeoHostingStats(w http.ResponseWriter, r *http.Request) {
-	// Parse days parameter
-	daysStr := r.URL.Query().Get("days")
-	days := 365 // default
-	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 {
-		days = d
-	}
+	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get geo distribution from storage layer
 	// Optional ?domain= filter; empty keeps the pre-multi-network
 	// all-networks aggregation
 	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
-	dist, err := s.storage.TestOps().GetGeoHostingDistribution(days, domain)
+	dist, err := s.storage.GetGeoHostingDistribution(days, domain)
 	if err != nil {
 		log.Printf("ERROR: GetGeoHostingDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get geo hosting distribution", http.StatusInternalServerError)

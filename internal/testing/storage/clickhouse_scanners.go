@@ -192,6 +192,10 @@ func scanNodesNative(rows driver.Rows) ([]*models.Node, error) {
 
 		nodes = append(nodes, node)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read nodes: %w", err)
+	}
 	return nodes, nil
 }
 

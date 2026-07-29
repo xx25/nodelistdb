@@ -760,7 +760,7 @@ func (cs *CachedStorage) GetOtherNetworksSummary(days int, domain string) ([]Oth
 		return cs.Storage.GetOtherNetworksSummary(days, domain)
 	}
 
-	key := fmt.Sprintf("other_networks_summary:%d:%s", days, domain)
+	key := fmt.Sprintf("%s:analytics:other_networks_summary:%d:%s", cs.keyGen.Prefix, days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
@@ -795,7 +795,7 @@ func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, i
 		return cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := fmt.Sprintf("ipv6_incorrect_ipv4_correct:%d:%d:%v:%s", limit, days, includeZeroNodes, domain)
+	key := fmt.Sprintf("%s:analytics:ipv6_incorrect_ipv4_correct:%d:%d:%v:%s", cs.keyGen.Prefix, limit, days, includeZeroNodes, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []AKAIPVersionMismatchNode
@@ -826,7 +826,7 @@ func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, i
 		return cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
 	}
 
-	key := fmt.Sprintf("ipv4_incorrect_ipv6_correct:%d:%d:%v:%s", limit, days, includeZeroNodes, domain)
+	key := fmt.Sprintf("%s:analytics:ipv4_incorrect_ipv6_correct:%d:%d:%v:%s", cs.keyGen.Prefix, limit, days, includeZeroNodes, domain)
 
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []AKAIPVersionMismatchNode
@@ -857,7 +857,7 @@ func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days i
 		return cs.Storage.GetNodesInNetwork(networkName, limit, days, domain)
 	}
 
-	key := fmt.Sprintf("nodes_in_network:%s:%d:%d:%s", networkName, limit, days, domain)
+	key := fmt.Sprintf("%s:analytics:nodes_in_network:%s:%d:%d:%s", cs.keyGen.Prefix, networkName, limit, days, domain)
 
 	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {

@@ -700,56 +700,6 @@ func TestSysopNodesHandler_InvalidPath(t *testing.T) {
 	}
 }
 
-func TestNodeChangesHandler_NewExcludeFormat(t *testing.T) {
-	_, mockStorage := newMockServer()
-	handler := createNodeChangesHandler(mockStorage)
-
-	req := httptest.NewRequest("GET", "/api/nodes/1/234/56/changes?exclude=flags,phone,speed", nil)
-	w := httptest.NewRecorder()
-
-	handler(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
-	}
-
-	var response map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatalf("Failed to parse JSON response: %v", err)
-	}
-
-	// Filter is no longer included in response since filtering has been removed
-	_, hasFilter := response["filter"]
-	if hasFilter {
-		t.Fatal("Filter should not be in response anymore")
-	}
-}
-
-func TestNodeChangesHandler_OldFormatBackwardCompatibility(t *testing.T) {
-	_, mockStorage := newMockServer()
-	handler := createNodeChangesHandler(mockStorage)
-
-	req := httptest.NewRequest("GET", "/api/nodes/1/234/56/changes?noflags=1&nophone=1", nil)
-	w := httptest.NewRecorder()
-
-	handler(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
-	}
-
-	var response map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatalf("Failed to parse JSON response: %v", err)
-	}
-
-	// Filter is no longer included in response since filtering has been removed
-	_, hasFilter := response["filter"]
-	if hasFilter {
-		t.Fatal("Filter should not be in response anymore")
-	}
-}
-
 func TestSearchNodesHandler_WithSysopName(t *testing.T) {
 	_, mockStorage := newMockServer()
 	handler := createSearchNodesHandler(mockStorage)

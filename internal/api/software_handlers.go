@@ -3,7 +3,6 @@ package api
 import (
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -16,15 +15,10 @@ func softwareQueryDomain(r *http.Request) string {
 
 // GetBinkPSoftwareStats returns BinkP software distribution statistics
 func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
-	// Parse days parameter
-	daysStr := r.URL.Query().Get("days")
-	days := 365 // default
-	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 {
-		days = d
-	}
+	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.TestOps().GetBinkPSoftwareDistribution(days, softwareQueryDomain(r))
+	dist, err := s.storage.GetBinkPSoftwareDistribution(days, softwareQueryDomain(r))
 	if err != nil {
 		log.Printf("ERROR: GetBinkPSoftwareDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get BinkP software distribution", http.StatusInternalServerError)
@@ -36,15 +30,10 @@ func (s *Server) GetBinkPSoftwareStats(w http.ResponseWriter, r *http.Request) {
 
 // GetIFCICOSoftwareStats returns IFCICO software distribution statistics
 func (s *Server) GetIFCICOSoftwareStats(w http.ResponseWriter, r *http.Request) {
-	// Parse days parameter
-	daysStr := r.URL.Query().Get("days")
-	days := 365 // default
-	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 {
-		days = d
-	}
+	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.TestOps().GetIFCICOSoftwareDistribution(days, softwareQueryDomain(r))
+	dist, err := s.storage.GetIFCICOSoftwareDistribution(days, softwareQueryDomain(r))
 	if err != nil {
 		log.Printf("ERROR: GetIFCICOSoftwareDistribution failed: %v", err)
 		WriteJSONError(w, "Failed to get IFCICO software distribution", http.StatusInternalServerError)
@@ -56,15 +45,10 @@ func (s *Server) GetIFCICOSoftwareStats(w http.ResponseWriter, r *http.Request) 
 
 // GetBinkdDetailedStats returns detailed binkd statistics
 func (s *Server) GetBinkdDetailedStats(w http.ResponseWriter, r *http.Request) {
-	// Parse days parameter
-	daysStr := r.URL.Query().Get("days")
-	days := 365 // default
-	if d, err := strconv.Atoi(daysStr); err == nil && d > 0 {
-		days = d
-	}
+	days := parseDaysParam(r.URL.Query(), 365)
 
 	// Get software distribution from storage layer
-	dist, err := s.storage.TestOps().GetBinkdDetailedStats(days, softwareQueryDomain(r))
+	dist, err := s.storage.GetBinkdDetailedStats(days, softwareQueryDomain(r))
 	if err != nil {
 		log.Printf("ERROR: GetBinkdDetailedStats failed: %v", err)
 		WriteJSONError(w, "Failed to get detailed binkd statistics", http.StatusInternalServerError)

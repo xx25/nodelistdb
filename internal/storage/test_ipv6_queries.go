@@ -67,6 +67,10 @@ func (ipv6 *IPv6QueryOperations) getAllHostnamesForNode(zone, net, node int, day
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read node hostnames: %w", err)
+	}
+
 	return hostnames, nil
 }
 
@@ -213,6 +217,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(limit int, days int, includ
 			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
 		}
 		results = append(results, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read IPv6-enabled nodes: %w", err)
 	}
 
 	// Fetch all hostnames for each node
@@ -392,6 +400,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(limit int, days int, inc
 			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
 		}
 		results = append(results, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read IPv6 non-working nodes: %w", err)
 	}
 
 	// Fetch all hostnames for each node
@@ -578,6 +590,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days 
 		results = append(results, r)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read IPv6-advertised IPv4-only nodes: %w", err)
+	}
+
 	// Fetch all hostnames for each node
 	for i := range results {
 		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
@@ -744,6 +760,10 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(limit int, days int, includeZe
 		results = append(results, r)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read IPv6-only nodes: %w", err)
+	}
+
 	// Fetch all hostnames for each node
 	for i := range results {
 		hostnames, err := ipv6.getAllHostnamesForNode(results[i].Zone, results[i].Net, results[i].Node, days, results[i].Domain)
@@ -905,6 +925,10 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(limit int, days int, inclu
 			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
 		}
 		results = append(results, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read pure IPv6-only nodes: %w", err)
 	}
 
 	// Fetch all hostnames for each node

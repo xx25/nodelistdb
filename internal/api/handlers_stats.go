@@ -40,14 +40,14 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Find the nearest available date
-		actualDate, err = s.storage.StatsOps().GetNearestAvailableDate(date, domain)
+		actualDate, err = s.storage.GetNearestAvailableDate(date, domain)
 		if err != nil {
 			WriteJSONError(w, fmt.Sprintf("Failed to find available date: %v", err), http.StatusInternalServerError)
 			return
 		}
 	} else {
 		// Default to latest available date
-		actualDate, err = s.storage.StatsOps().GetLatestStatsDate(domain)
+		actualDate, err = s.storage.GetLatestStatsDate(domain)
 		if err != nil {
 			WriteJSONError(w, fmt.Sprintf("Failed to get latest date: %v", err), http.StatusInternalServerError)
 			return
@@ -55,7 +55,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get statistics for the actual date
-	stats, err := s.storage.StatsOps().GetStats(actualDate, domain)
+	stats, err := s.storage.GetStats(actualDate, domain)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get statistics: %v", err), http.StatusInternalServerError)
 		return
@@ -102,7 +102,7 @@ func (s *Server) GetAvailableDatesHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	dates, err := s.storage.StatsOps().GetAvailableDates(queryDomain(r))
+	dates, err := s.storage.GetAvailableDates(queryDomain(r))
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get available dates: %v", err), http.StatusInternalServerError)
 		return

@@ -58,6 +58,10 @@ func (pq *ProtocolQueryOperations) GetProtocolEnabledNodes(protocol string, limi
 		results = append(results, r)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read protocol-enabled nodes: %w", err)
+	}
+
 	return results, nil
 }
 

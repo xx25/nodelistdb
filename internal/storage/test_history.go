@@ -51,6 +51,10 @@ func (th *TestHistoryOperations) GetNodeTestHistory(zone, net, node int, days in
 		results = append(results, r)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read node test history: %w", err)
+	}
+
 	return results, nil
 }
 

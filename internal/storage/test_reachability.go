@@ -136,6 +136,10 @@ func (r *ReachabilityOperations) queryTrends(conn *sql.DB, days int, domain stri
 		trends = append(trends, t)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read reachability trends: %w", err)
+	}
+
 	return trends, nil
 }
 
@@ -162,6 +166,10 @@ func (r *ReachabilityOperations) SearchNodesByReachability(operational bool, lim
 			return nil, fmt.Errorf("failed to parse test result: %w", err)
 		}
 		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read nodes by reachability: %w", err)
 	}
 
 	return results, nil

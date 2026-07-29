@@ -1,0 +1,13 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    # A stream-level failure part-way through a result set surfaces only via
+    # rows.Err(): rows.Next() just stops, the caller returns a short slice and
+    # the cache layer stores it as a complete answer. Every scan loop must
+    # check it.
+    - rowserrcheck
+  exclusions:
+    presets:
+      - std-error-handling

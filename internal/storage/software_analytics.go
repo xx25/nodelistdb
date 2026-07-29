@@ -125,6 +125,10 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int, d
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read BinkP software distribution: %w", err)
+	}
+
 	dist.TotalNodes = total
 
 	// Convert maps to sorted slices with percentages
@@ -219,6 +223,10 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int, 
 			versionKey := fmt.Sprintf("%s %s", info.Software, info.Version)
 			versionMap[versionKey] += count
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read IFCICO software distribution: %w", err)
 	}
 
 	dist.TotalNodes = total
@@ -318,6 +326,10 @@ func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int, domain s
 		if info.OS != "" && info.OS != "Unknown" {
 			osMap[info.OS] += count
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read binkd detailed statistics: %w", err)
 	}
 
 	dist.TotalNodes = total

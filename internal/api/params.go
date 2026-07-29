@@ -21,6 +21,27 @@ func parseIntParam(query url.Values, key string) (int, bool) {
 	return 0, false
 }
 
+// maxAnalyticsDays bounds the ?days= look-back window on the analytics
+// endpoints. Those endpoints are unauthenticated and the window feeds
+// straight into the range of nodelist partitions a query reads, so an
+// unbounded value buys an arbitrary full-history scan per request. 3650 days
+// covers the entire test-results history several times over.
+const maxAnalyticsDays = 3650
+
+// parseDaysParam reads a ?days= look-back window, falling back to
+// defaultDays when the parameter is absent or unusable, and clamping the
+// result to maxAnalyticsDays.
+func parseDaysParam(query url.Values, defaultDays int) int {
+	days := defaultDays
+	if d, err := strconv.Atoi(query.Get("days")); err == nil && d > 0 {
+		days = d
+	}
+	if days > maxAnalyticsDays {
+		days = maxAnalyticsDays
+	}
+	return days
+}
+
 // parseBoolParam parses a boolean parameter from query string.
 // Returns the value, whether it was present, and any error.
 // Accepts: true/false, 1/0, yes/no (case-insensitive).

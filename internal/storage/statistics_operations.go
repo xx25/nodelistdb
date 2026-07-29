@@ -88,6 +88,10 @@ func (so *StatisticsOperations) GetStats(date time.Time, domain string) (*databa
 		stats.ZoneDistribution[zone] = count
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read zone distribution: %w", err)
+	}
+
 	// Get largest regions (top 10) - using optimized query
 	stats.LargestRegions = []database.RegionInfo{}
 	regionQuery := so.queryBuilder.OptimizedLargestRegionsSQL()
@@ -105,6 +109,10 @@ func (so *StatisticsOperations) GetStats(date time.Time, domain string) (*databa
 		stats.LargestRegions = append(stats.LargestRegions, region)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read largest regions: %w", err)
+	}
+
 	// Get largest nets (top 10) - using optimized query
 	stats.LargestNets = []database.NetInfo{}
 	netQuery := so.queryBuilder.OptimizedLargestNetsSQL()
@@ -120,6 +128,10 @@ func (so *StatisticsOperations) GetStats(date time.Time, domain string) (*databa
 			return nil, fmt.Errorf("failed to parse net info: %w", err)
 		}
 		stats.LargestNets = append(stats.LargestNets, net)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read largest nets: %w", err)
 	}
 
 	// Smart caching with TTL based on data recency
@@ -286,6 +298,10 @@ func (so *StatisticsOperations) GetDateRangeStats(startDate, endDate time.Time, 
 		dates = append(dates, date)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read date range stats: %w", err)
+	}
+
 	// Get stats for each date
 	var allStats []database.NetworkStats
 	for _, date := range dates {
@@ -373,6 +389,10 @@ func (so *StatisticsOperations) GetNodeCountHistory(domain string) ([]NodeCountB
 			return nil, fmt.Errorf("failed to scan node count: %w", err)
 		}
 		result = append(result, d)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read node count history: %w", err)
 	}
 	return result, nil
 }

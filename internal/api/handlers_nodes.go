@@ -233,7 +233,7 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get all node changes within the resolved network
 	domain, availableDomains := s.resolveNodeDomain(r, zone, net, node)
-	changes, err := s.storage.SearchOps().GetNodeChanges(zone, net, node, domain)
+	changes, err := s.storage.GetNodeChanges(zone, net, node, domain)
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get node changes: %v", err), http.StatusInternalServerError)
 		return

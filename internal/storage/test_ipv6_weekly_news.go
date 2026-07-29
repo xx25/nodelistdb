@@ -194,7 +194,9 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
-	rows, err := conn.Query(query, limit)
+	// rowserrcheck is intraprocedural: rows.Err() is checked by
+	// parseTestResults, which owns the scan loop.
+	rows, err := conn.Query(query, limit) //nolint:rowserrcheck
 	if err != nil {
 		logging.Error("getNewNodesWithWorkingIPv6: Query failed", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to query new nodes with working IPv6: %w", err)
@@ -358,7 +360,9 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
-	rows, err := conn.Query(query, limit)
+	// rowserrcheck is intraprocedural: rows.Err() is checked by
+	// parseTestResults, which owns the scan loop.
+	rows, err := conn.Query(query, limit) //nolint:rowserrcheck
 	if err != nil {
 		logging.Error("getNewNodesWithNonWorkingIPv6: Query failed", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to query new nodes with non-working IPv6: %w", err)
@@ -514,7 +518,9 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
-	rows, err := conn.Query(query, limit)
+	// rowserrcheck is intraprocedural: rows.Err() is checked by
+	// parseTestResults, which owns the scan loop.
+	rows, err := conn.Query(query, limit) //nolint:rowserrcheck
 	if err != nil {
 		logging.Error("getOldNodesThatLostIPv6: Query failed", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to query old nodes that lost IPv6: %w", err)
@@ -679,7 +685,9 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
-	rows, err := conn.Query(query, limit)
+	// rowserrcheck is intraprocedural: rows.Err() is checked by
+	// parseTestResults, which owns the scan loop.
+	rows, err := conn.Query(query, limit) //nolint:rowserrcheck
 	if err != nil {
 		logging.Error("getOldNodesThatGainedIPv6: Query failed", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to query old nodes that gained IPv6: %w", err)
@@ -693,6 +701,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 func (ipv6 *IPv6QueryOperations) parseTestResults(rows interface {
 	Next() bool
 	Scan(dest ...interface{}) error
+	Err() error
 }) ([]NodeTestResult, error) {
 	var results []NodeTestResult
 	rowCount := 0
@@ -705,6 +714,10 @@ func (ipv6 *IPv6QueryOperations) parseTestResults(rows interface {
 			return nil, fmt.Errorf("failed to parse test result row %d: %w", rowCount, err)
 		}
 		results = append(results, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read test results: %w", err)
 	}
 	return results, nil
 }

@@ -94,6 +94,10 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read country distribution: %w", err)
+	}
+
 	// Get provider distribution with countries
 	providerQuery := fmt.Sprintf(`
 		SELECT
@@ -148,6 +152,10 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 			NodeCount:    count,
 			Countries:    countries,
 		})
+	}
+
+	if err := rows2.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read provider distribution: %w", err)
 	}
 
 	// Calculate percentages for countries

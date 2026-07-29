@@ -34,6 +34,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			ActualDate     string
 			DateAdjusted   bool
 			Version        string
+			NodeHistory    []storage.NodeCountByDate
+			PointStats     *storage.PointStats
 		}{
 			Title:          "Network Statistics",
 			ActivePage:     "stats",
@@ -45,6 +47,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			ActualDate:     "",
 			DateAdjusted:   false,
 			Version:        version.GetVersionInfo(),
+			NodeHistory:    nil,
+			PointStats:     nil,
 		}
 
 		if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -72,6 +76,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					ActualDate     string
 					DateAdjusted   bool
 					Version        string
+					NodeHistory    []storage.NodeCountByDate
+					PointStats     *storage.PointStats
 				}{
 					Title:          "Network Statistics",
 					ActivePage:     "stats",
@@ -83,6 +89,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					ActualDate:     "",
 					DateAdjusted:   false,
 					Version:        version.GetVersionInfo(),
+					NodeHistory:    nil,
+					PointStats:     nil,
 				}
 
 				if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -106,6 +114,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					ActualDate     string
 					DateAdjusted   bool
 					Version        string
+					NodeHistory    []storage.NodeCountByDate
+					PointStats     *storage.PointStats
 				}{
 					Title:          "Network Statistics",
 					ActivePage:     "stats",
@@ -117,6 +127,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 					ActualDate:     "",
 					DateAdjusted:   false,
 					Version:        version.GetVersionInfo(),
+					NodeHistory:    nil,
+					PointStats:     nil,
 				}
 
 				if err := s.templates["stats"].Execute(w, data); err != nil {
@@ -141,6 +153,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 				ActualDate     string
 				DateAdjusted   bool
 				Version        string
+				NodeHistory    []storage.NodeCountByDate
+				PointStats     *storage.PointStats
 			}{
 				Title:          "Network Statistics",
 				ActivePage:     "stats",
@@ -152,6 +166,8 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 				ActualDate:     "",
 				DateAdjusted:   false,
 				Version:        version.GetVersionInfo(),
+				NodeHistory:    nil,
+				PointStats:     nil,
 			}
 
 			if err := s.templates["stats"].Execute(w, data); err != nil {

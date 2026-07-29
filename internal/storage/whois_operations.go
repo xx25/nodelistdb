@@ -264,6 +264,10 @@ func (w *WhoisOperations) GetNodesByDomain(targetDomain string, days int) ([]Nod
 		results = append(results, result)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read nodes by domain: %w", err)
+	}
+
 	return results, nil
 }
 
