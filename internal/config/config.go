@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nodelistdb/internal/cache"
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/ftp"
+	"github.com/nodelistdb/internal/storage"
 	"gopkg.in/yaml.v3"
 )
 
@@ -533,6 +536,62 @@ func CreateExampleConfig(dir string) error {
 	}
 
 	return nil
+}
+
+// ToCacheConfig converts CacheConfig to cache.Config.
+func (c *CacheConfig) ToCacheConfig() *cache.Config {
+	cacheType := c.Type
+	if cacheType == "" {
+		cacheType = "badger"
+	}
+	return &cache.Config{
+		Enabled:              true,
+		Type:                 cacheType,
+		BadgerPath:           c.Path,
+		BadgerMaxMemoryMB:    c.MaxMemoryMB,
+		BadgerValueLogMaxMB:  c.ValueLogMaxMB,
+		BadgerCompactL0:      c.CompactOnClose,
+		BadgerNumGoroutines:  4,
+		BadgerGCInterval:     c.GCInterval,
+		BadgerGCDiscardRatio: c.GCDiscardRatio,
+		BadgerMaxDiskMB:      c.MaxDiskMB,
+	}
+}
+
+// ToCacheStorageConfig converts CacheConfig to storage.CacheStorageConfig.
+func (c *CacheConfig) ToCacheStorageConfig() *storage.CacheStorageConfig {
+	return &storage.CacheStorageConfig{
+		Enabled:          true,
+		NodeTTL:          c.NodeTTL,
+		StatsTTL:         c.StatsTTL,
+		SearchTTL:        c.SearchTTL,
+		MaxSearchResults: c.MaxSearchResults,
+		WarmupOnStart:    c.WarmupOnStart,
+		TestAnalyticsTTL: c.TestAnalyticsTTL,
+		AnalyticsTTL:     c.AnalyticsTTL,
+		LongAnalyticsTTL: c.LongAnalyticsTTL,
+		HistoricalTTL:    c.HistoricalTTL,
+	}
+}
+
+// ToFTPConfig converts FTPConfig to ftp.Config.
+func (c *FTPConfig) ToFTPConfig() *ftp.Config {
+	mounts := make([]ftp.MountConfig, len(c.Mounts))
+	for i, m := range c.Mounts {
+		mounts[i] = ftp.MountConfig{VirtualPath: m.VirtualPath, RealPath: m.RealPath}
+	}
+	return &ftp.Config{
+		Enabled:              c.Enabled,
+		Host:                 c.Host,
+		Port:                 c.Port,
+		Mounts:               mounts,
+		MaxConnections:       c.MaxConnections,
+		PassivePortMin:       c.PassivePortMin,
+		PassivePortMax:       c.PassivePortMax,
+		IdleTimeout:          c.IdleTimeout,
+		PublicHost:           c.PublicHost,
+		DisableActiveIPCheck: c.DisableActiveIPCheck,
+	}
 }
 
 // ToClickHouseDatabaseConfig converts ClickHouseConfig to database.ClickHouseConfig

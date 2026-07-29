@@ -13,7 +13,11 @@ func (s *Server) SetupRouter() http.Handler {
 
 	// Built-in Chi middleware
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// No middleware.RealIP here: cmd/server derives the client address once,
+	// for logging, without rewriting r.RemoteAddr. Running RealIP on this
+	// router as well gave the API and the web pages different answers to the
+	// same question, and its rewrite is unconditional - a forged
+	// X-Forwarded-For became indistinguishable from a real peer address.
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
 
