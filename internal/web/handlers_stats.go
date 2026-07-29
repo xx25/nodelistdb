@@ -50,7 +50,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Error = display
-		s.render(w, "stats", data)
+		s.renderStatus(w, "stats", data, statusFor(data.Error))
 		return
 	}
 	data.AvailableDates = availableDates
@@ -66,7 +66,7 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Error = err
-		s.render(w, "stats", data)
+		s.renderStatus(w, "stats", data, statusFor(data.Error))
 		return
 	}
 	data.ActualDate = actualDate.Format("2006-01-02")
@@ -99,5 +99,5 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	data.PointStats, _ = s.storage.GetPointStats(r.Context(), domain, pointAsOf)
 
-	s.render(w, "stats", data)
+	s.renderStatus(w, "stats", data, statusFor(data.Error))
 }

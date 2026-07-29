@@ -110,7 +110,7 @@ func (s *Server) renderAnalyticsNodes(
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
 
-	s.render(w, templateName, analyticsPageData{
+	s.renderStatus(w, templateName, analyticsPageData{
 		Title:            base.PageTitle,
 		ActivePage:       "analytics",
 		Version:          version.GetVersionInfo(),
@@ -121,7 +121,7 @@ func (s *Server) renderAnalyticsNodes(
 		Error:            displayError,
 		Config:           config,
 		ProcessedInfo:    base.processInfoText(params.Days),
-	})
+	}, statusFor(displayError))
 }
 
 // AnalyticsHandler shows the analytics page
@@ -545,7 +545,7 @@ func (s *Server) VModemUnavailableAnalyticsHandler(w http.ResponseWriter, r *htt
 		ProcessedInfo:    config.processInfoText(params.Days),
 	}
 
-	s.render(w, "vmodem_unavailable_analytics", data)
+	s.renderStatus(w, "vmodem_unavailable_analytics", data, statusFor(displayError))
 }
 
 // FTPAnalyticsHandler shows FTP enabled nodes analytics
@@ -656,7 +656,7 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Use AKA mismatch analytics template
-	s.render(w, "aka_mismatch_analytics", data)
+	s.renderStatus(w, "aka_mismatch_analytics", data, statusFor(displayError))
 }
 
 // otherNetworksAnalyticsData holds template data for the other networks analytics page
@@ -722,7 +722,7 @@ func (s *Server) OtherNetworksAnalyticsHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	// Use other networks analytics template
-	s.render(w, "other_networks_analytics", data)
+	s.renderStatus(w, "other_networks_analytics", data, statusFor(displayError))
 }
 
 // otherNetworkNodesData holds template data for the network nodes detail page
@@ -795,7 +795,7 @@ func (s *Server) OtherNetworkNodesHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	// Use other network nodes template
-	s.render(w, "other_network_nodes", data)
+	s.renderStatus(w, "other_network_nodes", data, statusFor(displayError))
 }
 
 // PSTNSummaryStats holds summary statistics for PSTN nodes
@@ -878,7 +878,7 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Use PSTN analytics template
-	s.render(w, "pstn_analytics", data)
+	s.renderStatus(w, "pstn_analytics", data, statusFor(displayError))
 }
 
 // ModemAccessibleSpeedTier holds count for a single speed tier (for ordered display)
@@ -1050,7 +1050,7 @@ func (s *Server) ModemAccessibleAnalyticsHandler(w http.ResponseWriter, r *http.
 		Error:            displayError,
 	}
 
-	s.render(w, "pstn_accessible_analytics", data)
+	s.renderStatus(w, "pstn_accessible_analytics", data, statusFor(displayError))
 }
 
 // ModemNoAnswerDispositionCount holds count for a single Asterisk disposition (for ordered display)
@@ -1166,7 +1166,7 @@ func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Re
 		Error:            displayError,
 	}
 
-	s.render(w, "pstn_no_answer_analytics", data)
+	s.renderStatus(w, "pstn_no_answer_analytics", data, statusFor(displayError))
 }
 
 // FileRequestFlagCount holds count for a single flag (for ordered display)
@@ -1295,7 +1295,7 @@ func (s *Server) FileRequestAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Use file request analytics template
-	s.render(w, "filerequest_analytics", data)
+	s.renderStatus(w, "filerequest_analytics", data, statusFor(displayError))
 }
 
 // IPv6WeeklyNewsHandler shows weekly IPv6 connectivity changes
@@ -1362,7 +1362,7 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 		data.OldNodesGainedIPv6 = news.OldNodesGainedIPv6
 	}
 
-	s.render(w, "ipv6_weekly_news", data)
+	s.renderStatus(w, "ipv6_weekly_news", data, statusFor(displayError))
 }
 
 // GeoHostingAnalyticsHandler shows geographic hosting distribution
@@ -1405,7 +1405,7 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 		data.Updated = dist.LastUpdated.Format("2006-01-02 15:04:05")
 	}
 
-	s.render(w, "geo_analytics", data)
+	s.renderStatus(w, "geo_analytics", data, statusFor(displayError))
 }
 
 // geoWindowDays are the only windows the geo pages offer. Both drill-downs take
@@ -1434,7 +1434,7 @@ func geoDays(r *http.Request) int {
 // drill-downs. The three handlers differ only in how they find their nodes and
 // what they put in the config; the payload was written out three times.
 func (s *Server) renderGeoPage(w http.ResponseWriter, config GeoPageConfig, nodes []storage.NodeTestResult, err error) {
-	s.render(w, "geo_unified", geoPageData{
+	s.renderStatus(w, "geo_unified", geoPageData{
 		Title:         config.PageTitle,
 		ActivePage:    "analytics",
 		Version:       version.GetVersionInfo(),
@@ -1443,7 +1443,7 @@ func (s *Server) renderGeoPage(w http.ResponseWriter, config GeoPageConfig, node
 		Error:         err,
 		Config:        config,
 		ProcessedInfo: config.processInfoText(config.Days),
-	})
+	}, statusFor(err))
 }
 
 // geoPageData is what geo_unified.html reads.
@@ -1635,7 +1635,7 @@ func (s *Server) OnThisDayHandler(w http.ResponseWriter, r *http.Request) {
 		Error:       displayError,
 	}
 
-	s.render(w, "on_this_day", data)
+	s.renderStatus(w, "on_this_day", data, statusFor(displayError))
 }
 
 // PioneersHandler displays the first nodes (pioneers) in a FidoNet region
@@ -1688,7 +1688,7 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 		Error:      displayError,
 	}
 
-	s.render(w, "pioneers", data)
+	s.renderStatus(w, "pioneers", data, statusFor(displayError))
 }
 
 // IPv6NodeListHandler shows the IPv6 node list report in Michiel van der Vlist's format.
@@ -1741,7 +1741,7 @@ func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 		Error:            displayError,
 	}
 
-	s.render(w, "ipv6_node_list", data)
+	s.renderStatus(w, "ipv6_node_list", data, statusFor(displayError))
 }
 
 // DomainExpirationHandler shows WHOIS-based domain expiration analytics
@@ -1807,7 +1807,7 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 		Error:             displayError,
 	}
 
-	s.render(w, "domain_expiration", data)
+	s.renderStatus(w, "domain_expiration", data, statusFor(displayError))
 }
 
 // DomainNodesHandler shows nodes using a specific domain
@@ -2079,7 +2079,7 @@ func (s *Server) RegistrarsHandler(w http.ResponseWriter, r *http.Request) {
 		Error:             displayError,
 	}
 
-	s.render(w, "registrars", data)
+	s.renderStatus(w, "registrars", data, statusFor(displayError))
 }
 
 // parseLimit parses the "limit" query parameter with defaults and bounds.

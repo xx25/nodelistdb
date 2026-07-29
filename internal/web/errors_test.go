@@ -86,3 +86,60 @@ func TestClientGone(t *testing.T) {
 		t.Error("an ordinary error is not a cancelled client")
 	}
 }
+
+// TestStatusForDisplayError pins which banner errors change the status code.
+// Only a budget expiry does: a real storage failure and a bad query parameter
+// have always rendered a 200 page with a message, and still do.
+func TestStatusForDisplayError(t *testing.T) {
+	timedOut, _ := storageFailure("op", "msg", wrapped(context.DeadlineExceeded))
+	failed, _ := storageFailure("op", "msg", wrapped(errors.New("boom")))
+
+	cases := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"no error", nil, http.StatusOK},
+		{"budget expiry", timedOut, http.StatusServiceUnavailable},
+		{"storage failure", failed, http.StatusOK},
+		{"validation message", errors.New("days must be positive"), http.StatusOK},
+		// The handlers pass the display error around and some wrap it, so the
+		// marker has to survive that the same way the context errors do.
+		{"wrapped budget expiry", fmt.Errorf("page: %w", timedOut), http.StatusServiceUnavailable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := statusFor(tc.err); got != tc.want {
+				t.Errorf("statusFor(%v) = %d, want %d", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRenderStatusReachesTheClient is the end-to-end half: statusFor picking
+// 503 is worthless if renderStatus does not put it on the wire, and render()
+// writes its own 200 by default. Uses a real embedded template.
+func TestRenderStatusReachesTheClient(t *testing.T) {
+	srv := newTestServer(t, nil)
+	data := map[string]interface{}{
+		"Title": "Node Reachability History", "Version": "test", "ActivePage": "reachability",
+	}
+
+	rec := httptest.NewRecorder()
+	srv.renderStatus(rec, "reachability", data, http.StatusServiceUnavailable)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", rec.Code)
+	}
+	if rec.Body.Len() == 0 {
+		t.Error("503 answered with no page; the point is to render one anyway")
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Errorf("Content-Type = %q - it must be set before the status is written", ct)
+	}
+
+	rec = httptest.NewRecorder()
+	srv.render(rec, "reachability", data)
+	if rec.Code != http.StatusOK {
+		t.Errorf("plain render status = %d, want 200", rec.Code)
+	}
+}

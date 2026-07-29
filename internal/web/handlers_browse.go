@@ -15,6 +15,12 @@ import (
 // browseData is the unified template payload for every level of the FidoNet
 // hierarchy browser (/browse). Only the slice matching Level is populated.
 type browseData struct {
+	// status is what renderBrowse answers with. Zero means 200. It is
+	// unexported because it is plumbing, not something the template reads -
+	// Error carries the message, this carries the code, and they are set
+	// together whenever a query fails.
+	status int
+
 	Title          string
 	ActivePage     string
 	Level          string // "zones" | "regions" | "nets" | "nodes"
@@ -135,7 +141,11 @@ func pathSegments(path, prefix string) []string {
 
 // renderBrowse executes the browse template, mapping render failures to a 500.
 func (s *Server) renderBrowse(w http.ResponseWriter, data *browseData) {
-	s.render(w, "browse", data)
+	status := data.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	s.renderStatus(w, "browse", data, status)
 }
 
 // BrowseZonesHandler renders the top level of the hierarchy browser: every zone
@@ -156,6 +166,7 @@ func (s *Server) BrowseZonesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Error = display.Error()
+		data.status = statusFor(display)
 		s.renderBrowse(w, data)
 		return
 	}
@@ -196,6 +207,7 @@ func (s *Server) BrowseZoneHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Error = display.Error()
+		data.status = statusFor(display)
 		s.renderBrowse(w, data)
 		return
 	}
@@ -251,6 +263,7 @@ func (s *Server) BrowseRegionHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Error = display.Error()
+		data.status = statusFor(display)
 		s.renderBrowse(w, data)
 		return
 	}
@@ -293,6 +306,7 @@ func (s *Server) BrowseNetHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Error = display.Error()
+		data.status = statusFor(display)
 		s.renderBrowse(w, data)
 		return
 	}

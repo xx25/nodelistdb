@@ -27,15 +27,12 @@ const timeoutMessage = "This query exceeded its time budget. Try a shorter perio
 // wording the site already used, so the pages read exactly as they did; only
 // the two context cases are new.
 //
-// A rendered page still answers 200 when its budget runs out, including on the
-// DeadlineExceeded branch. That is deliberate and worth stating, because the
-// API side returns a real 503 for the same condition: every error path in this
-// package has always been "200 with a message in the banner" - that is what
-// data.Error means - and making these nineteen call sites the only ones that
-// answer 503 would be less consistent, not more. The machine-facing surfaces
-// do carry the status: WriteJSONError gives the API a 503, and
-// httpStorageError below gives one to the handlers that answer in plain text
-// rather than HTML.
+// A budget expiry gets a real 503, not just a banner on a 200 page: a page
+// that timed out has to be distinguishable from a page that rendered, or
+// nothing upstream - load balancer, uptime monitor, log aggregator - can tell
+// the difference. The display error carries that in its type rather than in a
+// second return value, so each handler threads it through one call
+// (renderStatus with statusFor) instead of carrying a status variable around.
 //
 // Like the API's writeStorageError this cannot live inside render(): the web
 // handlers replace the real error with a generic one before render() is
@@ -48,11 +45,30 @@ func storageFailure(op, msg string, err error) (display error, handled bool) {
 		return nil, true
 	case errors.Is(err, context.DeadlineExceeded):
 		logging.Warn("Query exceeded its time budget", slog.String("op", op))
-		return errors.New(timeoutMessage), false
+		return &timeoutError{}, false
 	default:
 		logging.Error(op, slog.Any("error", err))
 		return errors.New(msg), false
 	}
+}
+
+// timeoutError is the display error storageFailure returns when a query budget
+// ran out. It exists to be recognised by statusFor: a page carrying it answers
+// 503 rather than 200. Everything else a handler puts in its banner - a real
+// storage failure, a bad query parameter - stays a 200.
+type timeoutError struct{}
+
+func (*timeoutError) Error() string { return timeoutMessage }
+
+// statusFor is the status a page carrying this display error should answer
+// with. A nil error, or any error other than a budget expiry, is a 200: that
+// is what every error banner in this package has always meant.
+func statusFor(display error) int {
+	var t *timeoutError
+	if errors.As(display, &t) {
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusOK
 }
 
 // httpStorageError is storageFailure for the handlers that answer with

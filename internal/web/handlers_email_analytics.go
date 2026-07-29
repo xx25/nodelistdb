@@ -223,5 +223,5 @@ func (s *Server) EmailAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 		Error:            displayError,
 	}
 
-	s.render(w, "email_analytics", data)
+	s.renderStatus(w, "email_analytics", data, statusFor(displayError))
 }

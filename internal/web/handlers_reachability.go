@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/logging"
@@ -256,70 +255,6 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 		history = []storage.NodeTestResult{}
 	}
 
-	// Auto-detect data format
-	hasPerHostnameData := false
-	for _, r := range history {
-		if r.HostnameIndex >= 0 {
-			hasPerHostnameData = true
-			break
-		}
-	}
-
-	// Group results by test session if using per-hostname format
-	var groupedHistory []interface{}
-	if hasPerHostnameData {
-		// Group by test time
-		sessionMap := make(map[time.Time][]storage.NodeTestResult)
-		for _, r := range history {
-			sessionMap[r.TestTime] = append(sessionMap[r.TestTime], r)
-		}
-
-		// Convert to sorted list
-		type TestSession struct {
-			TestTime    time.Time
-			Aggregated  *storage.NodeTestResult
-			PerHostname []storage.NodeTestResult
-			HasMultiple bool
-		}
-
-		var sessions []TestSession
-		for testTime, results := range sessionMap {
-			session := TestSession{TestTime: testTime}
-
-			// Separate aggregated from per-hostname
-			for _, r := range results {
-				if r.IsAggregated {
-					session.Aggregated = &r
-				} else {
-					session.PerHostname = append(session.PerHostname, r)
-				}
-			}
-
-			// Sort per-hostname by index
-			sort.Slice(session.PerHostname, func(i, j int) bool {
-				return session.PerHostname[i].HostnameIndex < session.PerHostname[j].HostnameIndex
-			})
-
-			session.HasMultiple = len(session.PerHostname) > 1
-			sessions = append(sessions, session)
-		}
-
-		// Sort sessions by time (newest first)
-		sort.Slice(sessions, func(i, j int) bool {
-			return sessions[i].TestTime.After(sessions[j].TestTime)
-		})
-
-		// Convert to interface for template
-		for _, s := range sessions {
-			groupedHistory = append(groupedHistory, s)
-		}
-	} else {
-		// Legacy format - just use history as-is
-		for _, r := range history {
-			groupedHistory = append(groupedHistory, r)
-		}
-	}
-
 	// Get statistics
 	stats, err := s.storage.GetNodeReachabilityStats(r.Context(), zone, net, node, days, domain)
 	if err != nil {
@@ -338,20 +273,18 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	data := map[string]interface{}{
-		"Title":              "Node Reachability History",
-		"Version":            version.GetVersionInfo(),
-		"ActivePage":         "reachability",
-		"Zone":               zone,
-		"Net":                net,
-		"Node":               node,
-		"Address":            fmt.Sprintf("%d:%d/%d", zone, net, node),
-		"Days":               days,
-		"History":            history,
-		"GroupedHistory":     groupedHistory,
-		"Stats":              stats,
-		"NodeInfo":           nodeInfo,
-		"HasResults":         len(history) > 0,
-		"HasPerHostnameData": hasPerHostnameData,
+		"Title":      "Node Reachability History",
+		"Version":    version.GetVersionInfo(),
+		"ActivePage": "reachability",
+		"Zone":       zone,
+		"Net":        net,
+		"Node":       node,
+		"Address":    fmt.Sprintf("%d:%d/%d", zone, net, node),
+		"Days":       days,
+		"History":    history,
+		"Stats":      stats,
+		"NodeInfo":   nodeInfo,
+		"HasResults": len(history) > 0,
 	}
 
 	s.render(w, "reachability", data)
