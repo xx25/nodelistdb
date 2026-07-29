@@ -306,51 +306,6 @@ func (no *NodeOperations) GetDomains() ([]DomainInfo, error) {
 	return result, rows.Err()
 }
 
-// InsertSingleNode inserts a single node (convenience method for API usage)
-func (no *NodeOperations) InsertSingleNode(node database.Node) error {
-	return no.InsertNodes([]database.Node{node})
-}
-
-// NodeExists checks if a specific node exists in the database
-func (no *NodeOperations) NodeExists(zone, net, node int) (bool, error) {
-	filter := database.NodeFilter{
-		Zone:  &zone,
-		Net:   &net,
-		Node:  &node,
-		Limit: 1,
-	}
-
-	nodes, err := no.GetNodes(filter)
-	if err != nil {
-		return false, err
-	}
-
-	return len(nodes) > 0, nil
-}
-
-// GetLatestNodeVersion gets the most recent version of a specific node
-func (no *NodeOperations) GetLatestNodeVersion(zone, net, node int) (*database.Node, error) {
-	latestOnly := true
-	filter := database.NodeFilter{
-		Zone:       &zone,
-		Net:        &net,
-		Node:       &node,
-		LatestOnly: &latestOnly,
-		Limit:      1,
-	}
-
-	nodes, err := no.GetNodes(filter)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("node %d:%d/%d not found", zone, net, node)
-	}
-
-	return &nodes[0], nil
-}
-
 // CountNodes returns the total number of nodes for a given date (or all if date
 // is zero). An empty domain counts across all networks.
 func (no *NodeOperations) CountNodes(date time.Time, domain string) (int, error) {
@@ -379,33 +334,6 @@ func (no *NodeOperations) CountNodes(date time.Time, domain string) (int, error)
 	return count, nil
 }
 
-// DeleteNodesForDate removes all nodes for a specific date within one network
-// (for re-import scenarios)
-func (no *NodeOperations) DeleteNodesForDate(date time.Time, domain string) error {
-	no.mu.Lock()
-	defer no.mu.Unlock()
-
-	if domain == "" {
-		domain = database.DefaultDomain
-	}
-
-	conn := no.db.Conn()
-
-	tx, err := conn.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	query := "DELETE FROM nodes WHERE nodelist_date = ? AND domain = ?"
-	_, err = tx.Exec(query, date, domain)
-	if err != nil {
-		return fmt.Errorf("failed to delete nodes for date %v: %w", date, err)
-	}
-
-	return tx.Commit()
-}
-
 // GetNodesByZone retrieves all nodes for a specific zone
 func (no *NodeOperations) GetNodesByZone(zone int, limit int) ([]database.Node, error) {
 	if limit <= 0 {
@@ -414,21 +342,6 @@ func (no *NodeOperations) GetNodesByZone(zone int, limit int) ([]database.Node, 
 
 	filter := database.NodeFilter{
 		Zone:  &zone,
-		Limit: limit,
-	}
-
-	return no.GetNodes(filter)
-}
-
-// GetNodesByNet retrieves all nodes for a specific net within a zone
-func (no *NodeOperations) GetNodesByNet(zone, net int, limit int) ([]database.Node, error) {
-	if limit <= 0 {
-		limit = DefaultSearchLimit
-	}
-
-	filter := database.NodeFilter{
-		Zone:  &zone,
-		Net:   &net,
 		Limit: limit,
 	}
 

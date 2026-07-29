@@ -106,13 +106,6 @@ func (h *ModemHandler) SizeLimitMiddleware() func(http.Handler) http.Handler {
 	return RequestSizeLimitMiddleware(maxBytes)
 }
 
-// HashAPIKey generates a hash string for a given API key
-// Use this to generate the api_key_hash value for config.yaml
-func HashAPIKey(apiKey string) string {
-	hash := sha256.Sum256([]byte(apiKey))
-	return "sha256:" + hex.EncodeToString(hash[:])
-}
-
 // RequestSizeLimitMiddleware creates a middleware that limits request body size
 func RequestSizeLimitMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

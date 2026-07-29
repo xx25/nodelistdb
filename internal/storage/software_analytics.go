@@ -40,18 +40,6 @@ func (sao *SoftwareAnalyticsOperations) GetBinkPSoftwareDistribution(days int, d
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
 
-	// This feature is only available for ClickHouse
-	if _, isClickHouse := sao.db.(*database.ClickHouseDB); !isClickHouse {
-		return &SoftwareDistribution{
-			Protocol:         "BinkP",
-			TotalNodes:       0,
-			SoftwareTypes:    []SoftwareTypeStats{},
-			VersionBreakdown: []SoftwareVersionStats{},
-			OSDistribution:   []OSStats{},
-			LastUpdated:      time.Now(),
-		}, nil
-	}
-
 	conn := sao.db.Conn()
 
 	// Get latest test result per node, then count software distribution
@@ -145,18 +133,6 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int, 
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
 
-	// This feature is only available for ClickHouse
-	if _, isClickHouse := sao.db.(*database.ClickHouseDB); !isClickHouse {
-		return &SoftwareDistribution{
-			Protocol:         "IFCICO/EMSI",
-			TotalNodes:       0,
-			SoftwareTypes:    []SoftwareTypeStats{},
-			VersionBreakdown: []SoftwareVersionStats{},
-			OSDistribution:   []OSStats{},
-			LastUpdated:      time.Now(),
-		}, nil
-	}
-
 	conn := sao.db.Conn()
 
 	// Get latest test result per node, then count software distribution
@@ -245,18 +221,6 @@ func (sao *SoftwareAnalyticsOperations) GetIFCICOSoftwareDistribution(days int, 
 func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
 	sao.mu.RLock()
 	defer sao.mu.RUnlock()
-
-	// This feature is only available for ClickHouse
-	if _, isClickHouse := sao.db.(*database.ClickHouseDB); !isClickHouse {
-		return &SoftwareDistribution{
-			Protocol:         "BinkP (binkd only)",
-			TotalNodes:       0,
-			SoftwareTypes:    []SoftwareTypeStats{},
-			VersionBreakdown: []SoftwareVersionStats{},
-			OSDistribution:   []OSStats{},
-			LastUpdated:      time.Now(),
-		}, nil
-	}
 
 	conn := sao.db.Conn()
 

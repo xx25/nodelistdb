@@ -18,14 +18,14 @@ var mailerVersion = version.GetVersionInfo()
 
 // IfcicoTester implements IFCICO/EMSI protocol testing
 type IfcicoTester struct {
-	timeout      time.Duration
-	ourAddress   string
-	systemName   string
-	sysop        string
-	location     string
-	defaultPort  int
-	debug        bool
-	configMgr    *emsi.ConfigManager // Per-node EMSI configuration manager
+	timeout     time.Duration
+	ourAddress  string
+	systemName  string
+	sysop       string
+	location    string
+	defaultPort int
+	debug       bool
+	configMgr   *emsi.ConfigManager // Per-node EMSI configuration manager
 }
 
 // NewIfcicoTester creates a new IFCICO tester. ourAddress must come from
@@ -68,12 +68,12 @@ func (t *IfcicoTester) GetProtocolName() string {
 // Test performs an IFCICO/EMSI connectivity test
 func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expectedAddress string) TestResult {
 	startTime := time.Now()
-	
+
 	// Use default port if not specified
 	if port == 0 {
 		port = t.defaultPort
 	}
-	
+
 	// Always log for debugging
 	logging.Debugf("IFCICO: Testing %s:%d (expected address: %s) [debug=%v]", host, port, expectedAddress, t.debug)
 
@@ -83,20 +83,20 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 			t.ourAddress, t.systemName, t.sysop, t.location)
 		logging.Debugf("IFCICO: Connection timeout: %v", t.timeout)
 	}
-	
+
 	// Create connection with timeout
 	dialer := net.Dialer{
 		Timeout: t.timeout,
 	}
-	
+
 	if t.debug {
 		logging.Debugf("IFCICO: Attempting TCP connection to %s:%d...", host, port)
 	}
-	
+
 	connStart := time.Now()
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 	connDuration := time.Since(connStart)
-	
+
 	if err != nil {
 		if t.debug {
 			logging.Debugf("IFCICO: Connection failed after %v: %v", connDuration, err)
@@ -111,7 +111,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		}
 	}
 	defer conn.Close()
-	
+
 	if t.debug {
 		logging.Debugf("IFCICO: TCP connection established in %v", connDuration)
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
@@ -120,7 +120,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 			logging.Debugf("IFCICO: Local: %s -> Remote: %s", localAddr, remoteAddr)
 		}
 	}
-	
+
 	// Get per-node EMSI configuration if available
 	var emsiCfg *emsi.Config
 	if t.configMgr != nil {
@@ -153,7 +153,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	if t.debug {
 		logging.Debugf("IFCICO: Starting EMSI handshake...")
 	}
-	
+
 	handshakeStart := time.Now()
 	// We always dial, so run the FSC-0056 calling side explicitly: a peer that
 	// solicits with EMSI_REQ is answered with EMSI_INQ before our EMSI_DAT.
@@ -162,7 +162,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 	// discards our unsolicited DAT and re-sends EMSI_REQ until it gives up.
 	err = session.HandshakeCaller()
 	handshakeDuration := time.Since(handshakeStart)
-	
+
 	if err != nil {
 		if t.debug {
 			logging.Debugf("IFCICO: Handshake failed after %v: %v", handshakeDuration, err)
@@ -176,14 +176,14 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 			},
 		}
 	}
-	
+
 	if t.debug {
 		logging.Debugf("IFCICO: Handshake completed successfully in %v", handshakeDuration)
 	}
-	
+
 	// Get remote node information
 	remoteInfo := session.GetRemoteInfo()
-	
+
 	// Build result
 	result := &IfcicoTestResult{
 		BaseTestResult: BaseTestResult{
@@ -195,7 +195,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		ResponseType: "EMSI",
 		AddressValid: false, // Initialize to false
 	}
-	
+
 	if remoteInfo != nil {
 		result.SystemName = remoteInfo.SystemName
 		result.MailerInfo = fmt.Sprintf("%s %s", remoteInfo.MailerName, remoteInfo.MailerVersion)
@@ -240,7 +240,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		result.SystemName = "[No EMSI data received]"
 		result.MailerInfo = "[Unknown]"
 	}
-	
+
 	// Close session gracefully
 	if t.debug {
 		logging.Debugf("IFCICO: Closing session gracefully...")
@@ -255,7 +255,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 				result.SystemName, result.MailerInfo, result.Addresses)
 		}
 	}
-	
+
 	return result
 }
 
@@ -269,4 +269,3 @@ func (t *IfcicoTester) SetDebug(enabled bool) {
 func (t *IfcicoTester) SetEMSIConfigManager(mgr *emsi.ConfigManager) {
 	t.configMgr = mgr
 }
-

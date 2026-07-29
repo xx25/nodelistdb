@@ -11,10 +11,6 @@ import (
 // FlagsDocumentationHandler returns flag descriptions and categories.
 // GET /api/flags
 func (s *Server) FlagsDocumentationHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Get flag filter from query parameters
 	category := r.URL.Query().Get("category")
 	specificFlag := r.URL.Query().Get("flag")

@@ -104,7 +104,6 @@ func (b *FilterBuilder) WithOffset(offset int) *FilterBuilder {
 	return b
 }
 
-
 // WithCM filters for CM nodes
 func (b *FilterBuilder) WithCM(isCM bool) *FilterBuilder {
 	b.filter.IsCM = &isCM

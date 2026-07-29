@@ -10,9 +10,9 @@ import (
 
 // Server represents the API server
 type Server struct {
-	storage          storage.Operations
-	modemHandler     *ModemHandler
-	healthChecker    HealthChecker
+	storage           storage.Operations
+	modemHandler      *ModemHandler
+	healthChecker     HealthChecker
 	cacheStatsHandler http.HandlerFunc
 	ftpStatsHandler   http.HandlerFunc
 }
@@ -58,4 +58,3 @@ func (s *Server) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
 }
-

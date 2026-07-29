@@ -327,15 +327,15 @@ func (kg *KeyGenerator) ExtractNodeAddress(key string) (zone, net, node int, ok 
 	if len(parts) < 5 {
 		return 0, 0, 0, false
 	}
-	
+
 	// Try to parse the address components
 	_, err1 := fmt.Sscanf(parts[2], "%d", &zone)
 	_, err2 := fmt.Sscanf(parts[3], "%d", &net)
 	_, err3 := fmt.Sscanf(parts[4], "%d", &node)
-	
+
 	if err1 != nil || err2 != nil || err3 != nil {
 		return 0, 0, 0, false
 	}
-	
+
 	return zone, net, node, true
 }

@@ -131,16 +131,18 @@ func (m *MountFs) Stat(name string) (os.FileInfo, error) {
 }
 
 // Read-only operations that always fail
-func (m *MountFs) Create(name string) (afero.File, error)                         { return nil, os.ErrPermission }
-func (m *MountFs) Mkdir(name string, perm os.FileMode) error                      { return os.ErrPermission }
-func (m *MountFs) MkdirAll(path string, perm os.FileMode) error                   { return os.ErrPermission }
-func (m *MountFs) Remove(name string) error                                        { return os.ErrPermission }
-func (m *MountFs) RemoveAll(path string) error                                     { return os.ErrPermission }
-func (m *MountFs) Rename(oldname, newname string) error                            { return os.ErrPermission }
-func (m *MountFs) Chmod(name string, mode os.FileMode) error                       { return os.ErrPermission }
-func (m *MountFs) Chown(name string, uid, gid int) error                           { return os.ErrPermission }
-func (m *MountFs) Chtimes(name string, atime time.Time, mtime time.Time) error { return os.ErrPermission }
-func (m *MountFs) Name() string                                                     { return "MountFs" }
+func (m *MountFs) Create(name string) (afero.File, error)       { return nil, os.ErrPermission }
+func (m *MountFs) Mkdir(name string, perm os.FileMode) error    { return os.ErrPermission }
+func (m *MountFs) MkdirAll(path string, perm os.FileMode) error { return os.ErrPermission }
+func (m *MountFs) Remove(name string) error                     { return os.ErrPermission }
+func (m *MountFs) RemoveAll(path string) error                  { return os.ErrPermission }
+func (m *MountFs) Rename(oldname, newname string) error         { return os.ErrPermission }
+func (m *MountFs) Chmod(name string, mode os.FileMode) error    { return os.ErrPermission }
+func (m *MountFs) Chown(name string, uid, gid int) error        { return os.ErrPermission }
+func (m *MountFs) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	return os.ErrPermission
+}
+func (m *MountFs) Name() string { return "MountFs" }
 
 func (m *MountFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
 	// Only allow read-only access
@@ -157,16 +159,16 @@ type virtualDir struct {
 	index    int
 }
 
-func (v *virtualDir) Close() error               { return nil }
-func (v *virtualDir) Read(p []byte) (n int, err error) { return 0, os.ErrInvalid }
-func (v *virtualDir) ReadAt(p []byte, off int64) (n int, err error) { return 0, os.ErrInvalid }
-func (v *virtualDir) Seek(offset int64, whence int) (int64, error) { return 0, os.ErrInvalid }
-func (v *virtualDir) Write(p []byte) (n int, err error) { return 0, os.ErrPermission }
+func (v *virtualDir) Close() error                                   { return nil }
+func (v *virtualDir) Read(p []byte) (n int, err error)               { return 0, os.ErrInvalid }
+func (v *virtualDir) ReadAt(p []byte, off int64) (n int, err error)  { return 0, os.ErrInvalid }
+func (v *virtualDir) Seek(offset int64, whence int) (int64, error)   { return 0, os.ErrInvalid }
+func (v *virtualDir) Write(p []byte) (n int, err error)              { return 0, os.ErrPermission }
 func (v *virtualDir) WriteAt(p []byte, off int64) (n int, err error) { return 0, os.ErrPermission }
-func (v *virtualDir) WriteString(s string) (n int, err error) { return 0, os.ErrPermission }
-func (v *virtualDir) Name() string { return v.path }
-func (v *virtualDir) Sync() error  { return nil }
-func (v *virtualDir) Truncate(size int64) error { return os.ErrPermission }
+func (v *virtualDir) WriteString(s string) (n int, err error)        { return 0, os.ErrPermission }
+func (v *virtualDir) Name() string                                   { return v.path }
+func (v *virtualDir) Sync() error                                    { return nil }
+func (v *virtualDir) Truncate(size int64) error                      { return os.ErrPermission }
 
 func (v *virtualDir) Readdir(count int) ([]os.FileInfo, error) {
 	if count <= 0 {

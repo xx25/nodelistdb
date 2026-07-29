@@ -14,7 +14,7 @@ type ProblemAnalyzer struct {
 	// Thresholds for problem detection
 	failureThreshold      float64 // Percentage of failures to consider problematic
 	responseTimeThreshold uint32  // Response time in ms to consider slow
-	
+
 	// Problem tracking
 	problemNodes map[string]*ProblemNode
 }
@@ -32,8 +32,8 @@ type ProblemNode struct {
 
 // Problem represents a specific issue detected
 type Problem struct {
-	Type        string    // dns_failure, protocol_failure, slow_response, etc.
-	Protocol    string    // Which protocol if applicable
+	Type        string // dns_failure, protocol_failure, slow_response, etc.
+	Protocol    string // Which protocol if applicable
 	Description string
 	FirstSeen   time.Time
 	LastSeen    time.Time
@@ -42,12 +42,12 @@ type Problem struct {
 
 // ProblemReport represents a complete problem analysis report
 type ProblemReport struct {
-	GeneratedAt    time.Time
-	TotalNodes     int
+	GeneratedAt      time.Time
+	TotalNodes       int
 	ProblematicNodes int
-	Problems       []ProblemSummary
-	TopIssues      []IssueStatistic
-	Recommendations []string
+	Problems         []ProblemSummary
+	TopIssues        []IssueStatistic
+	Recommendations  []string
 }
 
 // ProblemSummary summarizes problems for a node
@@ -59,9 +59,9 @@ type ProblemSummary struct {
 
 // IssueStatistic represents statistics for a type of issue
 type IssueStatistic struct {
-	IssueType    string
-	Count        int
-	Percentage   float64
+	IssueType     string
+	Count         int
+	Percentage    float64
 	AffectedNodes []string
 }
 
@@ -82,47 +82,47 @@ func (a *ProblemAnalyzer) AnalyzeResults(results []*models.TestResult) *ProblemR
 		Problems:    []ProblemSummary{},
 		TopIssues:   []IssueStatistic{},
 	}
-	
+
 	// Track issue types
 	issueCount := make(map[string][]string)
-	
+
 	for _, result := range results {
 		problems := a.detectProblems(result)
 		if len(problems) > 0 {
 			nodeKey := result.Address
-			
+
 			// Update or create problem node
 			pNode, exists := a.problemNodes[nodeKey]
 			if !exists {
 				pNode = &ProblemNode{
-					Address: result.Address,
-					Zone:    result.Zone,
-					Net:     result.Net,
-					Node:    result.Node,
+					Address:  result.Address,
+					Zone:     result.Zone,
+					Net:      result.Net,
+					Node:     result.Node,
 					Problems: []Problem{},
 				}
 				a.problemNodes[nodeKey] = pNode
 			}
-			
+
 			// Update node statistics
 			pNode.LastSeen = result.TestTime
 			pNode.TotalTests++
-			
+
 			// Add new problems
 			for _, p := range problems {
 				a.addProblem(pNode, p)
-				
+
 				// Track for statistics
 				if issueCount[p.Type] == nil {
 					issueCount[p.Type] = []string{}
 				}
 				issueCount[p.Type] = append(issueCount[p.Type], nodeKey)
 			}
-			
+
 			// Create problem summary
 			severity := a.determineSeverity(pNode)
 			issues := a.formatIssues(pNode)
-			
+
 			report.Problems = append(report.Problems, ProblemSummary{
 				Node:     pNode,
 				Severity: severity,
@@ -130,10 +130,10 @@ func (a *ProblemAnalyzer) AnalyzeResults(results []*models.TestResult) *ProblemR
 			})
 		}
 	}
-	
+
 	// Calculate statistics
 	report.ProblematicNodes = len(report.Problems)
-	
+
 	// Generate top issues
 	for issueType, nodes := range issueCount {
 		report.TopIssues = append(report.TopIssues, IssueStatistic{
@@ -143,15 +143,15 @@ func (a *ProblemAnalyzer) AnalyzeResults(results []*models.TestResult) *ProblemR
 			AffectedNodes: nodes,
 		})
 	}
-	
+
 	// Sort by count
 	sort.Slice(report.TopIssues, func(i, j int) bool {
 		return report.TopIssues[i].Count > report.TopIssues[j].Count
 	})
-	
+
 	// Generate recommendations
 	report.Recommendations = a.generateRecommendations(report)
-	
+
 	return report
 }
 
@@ -159,7 +159,7 @@ func (a *ProblemAnalyzer) AnalyzeResults(results []*models.TestResult) *ProblemR
 func (a *ProblemAnalyzer) detectProblems(result *models.TestResult) []Problem {
 	problems := []Problem{}
 	now := time.Now()
-	
+
 	// Check DNS issues
 	if result.DNSError != "" {
 		problems = append(problems, Problem{
@@ -170,7 +170,7 @@ func (a *ProblemAnalyzer) detectProblems(result *models.TestResult) []Problem {
 			Occurrences: 1,
 		})
 	}
-	
+
 	// Check if no IPs were resolved but hostname exists
 	if result.Hostname != "" && len(result.ResolvedIPv4) == 0 && len(result.ResolvedIPv6) == 0 {
 		problems = append(problems, Problem{
@@ -181,7 +181,7 @@ func (a *ProblemAnalyzer) detectProblems(result *models.TestResult) []Problem {
 			Occurrences: 1,
 		})
 	}
-	
+
 	// Check BinkP issues
 	if result.BinkPResult != nil && result.BinkPResult.Tested {
 		if !result.BinkPResult.Success {
@@ -204,7 +204,7 @@ func (a *ProblemAnalyzer) detectProblems(result *models.TestResult) []Problem {
 			})
 		}
 	}
-	
+
 	// Check IFCICO issues
 	if result.IfcicoResult != nil && result.IfcicoResult.Tested {
 		if !result.IfcicoResult.Success {
@@ -218,7 +218,7 @@ func (a *ProblemAnalyzer) detectProblems(result *models.TestResult) []Problem {
 			})
 		}
 	}
-	
+
 	// Check if node is not operational at all
 	if !result.IsOperational && len(result.ResolvedIPv4) > 0 {
 		problems = append(problems, Problem{
@@ -229,7 +229,7 @@ func (a *ProblemAnalyzer) detectProblems(result *models.TestResult) []Problem {
 			Occurrences: 1,
 		})
 	}
-	
+
 	// Check address validation
 	if !result.AddressValidated && result.IsOperational {
 		problems = append(problems, Problem{
@@ -240,7 +240,7 @@ func (a *ProblemAnalyzer) detectProblems(result *models.TestResult) []Problem {
 			Occurrences: 1,
 		})
 	}
-	
+
 	return problems
 }
 
@@ -255,7 +255,7 @@ func (a *ProblemAnalyzer) addProblem(node *ProblemNode, newProblem Problem) {
 			return
 		}
 	}
-	
+
 	// Add new problem
 	node.Problems = append(node.Problems, newProblem)
 }
@@ -268,7 +268,7 @@ func (a *ProblemAnalyzer) determineSeverity(node *ProblemNode) string {
 			return "critical"
 		}
 	}
-	
+
 	// Warning: Multiple protocol failures or consistent failures
 	protocolFailures := 0
 	for _, p := range node.Problems {
@@ -276,11 +276,11 @@ func (a *ProblemAnalyzer) determineSeverity(node *ProblemNode) string {
 			protocolFailures++
 		}
 	}
-	
+
 	if protocolFailures >= 2 {
 		return "warning"
 	}
-	
+
 	// Warning: High failure rate
 	if node.TotalTests > 0 {
 		failureRate := float64(node.TotalFailures) / float64(node.TotalTests)
@@ -288,14 +288,14 @@ func (a *ProblemAnalyzer) determineSeverity(node *ProblemNode) string {
 			return "warning"
 		}
 	}
-	
+
 	return "info"
 }
 
 // formatIssues formats issues for display
 func (a *ProblemAnalyzer) formatIssues(node *ProblemNode) []string {
 	issues := []string{}
-	
+
 	for _, p := range node.Problems {
 		issue := p.Type
 		if p.Protocol != "" {
@@ -306,14 +306,14 @@ func (a *ProblemAnalyzer) formatIssues(node *ProblemNode) []string {
 		}
 		issues = append(issues, issue)
 	}
-	
+
 	return issues
 }
 
 // generateRecommendations generates recommendations based on problems
 func (a *ProblemAnalyzer) generateRecommendations(report *ProblemReport) []string {
 	recommendations := []string{}
-	
+
 	// Check for widespread DNS issues
 	dnsFailures := 0
 	for _, issue := range report.TopIssues {
@@ -322,7 +322,7 @@ func (a *ProblemAnalyzer) generateRecommendations(report *ProblemReport) []strin
 			break
 		}
 	}
-	
+
 	if dnsFailures > 0 {
 		percentage := float64(dnsFailures) / float64(report.TotalNodes) * 100
 		if percentage > 10 {
@@ -330,7 +330,7 @@ func (a *ProblemAnalyzer) generateRecommendations(report *ProblemReport) []strin
 				fmt.Sprintf("%.1f%% of nodes have DNS failures - check DNS resolver configuration", percentage))
 		}
 	}
-	
+
 	// Check for protocol-specific issues
 	protocolIssues := make(map[string]int)
 	for _, issue := range report.TopIssues {
@@ -344,14 +344,14 @@ func (a *ProblemAnalyzer) generateRecommendations(report *ProblemReport) []strin
 			}
 		}
 	}
-	
+
 	for protocol, count := range protocolIssues {
 		if count > 5 {
 			recommendations = append(recommendations,
 				fmt.Sprintf("%d nodes have %s failures - investigate %s connectivity", count, protocol, protocol))
 		}
 	}
-	
+
 	// Check for slow responses
 	slowNodes := 0
 	for _, summary := range report.Problems {
@@ -362,12 +362,12 @@ func (a *ProblemAnalyzer) generateRecommendations(report *ProblemReport) []strin
 			}
 		}
 	}
-	
+
 	if slowNodes > 0 {
 		recommendations = append(recommendations,
 			fmt.Sprintf("%d nodes have slow response times - consider adjusting timeout thresholds", slowNodes))
 	}
-	
+
 	return recommendations
 }
 
@@ -377,35 +377,35 @@ func (a *ProblemAnalyzer) GetProblemNodes() []*ProblemNode {
 	for _, node := range a.problemNodes {
 		nodes = append(nodes, node)
 	}
-	
+
 	// Sort by severity and address
 	sort.Slice(nodes, func(i, j int) bool {
 		sev1 := a.determineSeverity(nodes[i])
 		sev2 := a.determineSeverity(nodes[j])
-		
+
 		if sev1 != sev2 {
 			// Critical > Warning > Info
 			sevOrder := map[string]int{"critical": 0, "warning": 1, "info": 2}
 			return sevOrder[sev1] < sevOrder[sev2]
 		}
-		
+
 		return nodes[i].Address < nodes[j].Address
 	})
-	
+
 	return nodes
 }
 
 // FormatReport formats a problem report as text
 func (a *ProblemAnalyzer) FormatReport(report *ProblemReport) string {
 	var sb strings.Builder
-	
+
 	sb.WriteString("=== FidoNet Node Problem Analysis Report ===\n")
 	sb.WriteString(fmt.Sprintf("Generated: %s\n", report.GeneratedAt.Format("2006-01-02 15:04:05")))
 	sb.WriteString(fmt.Sprintf("Total Nodes Tested: %d\n", report.TotalNodes))
 	sb.WriteString(fmt.Sprintf("Problematic Nodes: %d (%.1f%%)\n\n",
 		report.ProblematicNodes,
 		float64(report.ProblematicNodes)/float64(report.TotalNodes)*100))
-	
+
 	// Top issues
 	if len(report.TopIssues) > 0 {
 		sb.WriteString("=== Top Issues ===\n")
@@ -418,7 +418,7 @@ func (a *ProblemAnalyzer) FormatReport(report *ProblemReport) string {
 		}
 		sb.WriteString("\n")
 	}
-	
+
 	// Recommendations
 	if len(report.Recommendations) > 0 {
 		sb.WriteString("=== Recommendations ===\n")
@@ -427,7 +427,7 @@ func (a *ProblemAnalyzer) FormatReport(report *ProblemReport) string {
 		}
 		sb.WriteString("\n")
 	}
-	
+
 	// Problem nodes by severity
 	criticalNodes := []ProblemSummary{}
 	warningNodes := []ProblemSummary{}
@@ -440,7 +440,7 @@ func (a *ProblemAnalyzer) FormatReport(report *ProblemReport) string {
 			warningNodes = append(warningNodes, summary)
 		}
 	}
-	
+
 	// Critical nodes
 	if len(criticalNodes) > 0 {
 		sb.WriteString("=== Critical Issues ===\n")
@@ -451,7 +451,7 @@ func (a *ProblemAnalyzer) FormatReport(report *ProblemReport) string {
 		}
 		sb.WriteString("\n")
 	}
-	
+
 	// Warning nodes
 	if len(warningNodes) > 0 {
 		sb.WriteString("=== Warning Issues ===\n")
@@ -467,6 +467,6 @@ func (a *ProblemAnalyzer) FormatReport(report *ProblemReport) string {
 		}
 		sb.WriteString("\n")
 	}
-	
+
 	return sb.String()
 }

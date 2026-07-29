@@ -3,7 +3,7 @@ package daemon
 import (
 	"testing"
 	"time"
-	
+
 	"github.com/nodelistdb/internal/testing/models"
 )
 
@@ -42,32 +42,32 @@ func TestNodeResultAlignment(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Failed to validate config: %v", err)
 	}
-	
+
 	t.Log("Configuration validation passed")
-	
+
 	// Test node result pairing logic
 	type nodeResult struct {
 		node   *models.Node
 		result *models.TestResult
 	}
-	
+
 	// Create test nodes
 	nodes := []*models.Node{
 		{Zone: 1, Net: 1, Node: 1},
 		{Zone: 1, Net: 1, Node: 2},
 		{Zone: 1, Net: 1, Node: 3},
 	}
-	
+
 	// Simulate concurrent result collection
 	var results []nodeResult
 	for _, node := range nodes {
 		results = append(results, nodeResult{
-			node:   node,
+			node: node,
 			result: &models.TestResult{
 				Zone: node.Zone,
 				Net:  node.Net,
@@ -75,19 +75,19 @@ func TestNodeResultAlignment(t *testing.T) {
 			},
 		})
 	}
-	
+
 	// Verify alignment
 	for i, nr := range results {
 		if nr.node.Zone != nr.result.Zone ||
-		   nr.node.Net != nr.result.Net ||
-		   nr.node.Node != nr.result.Node {
+			nr.node.Net != nr.result.Net ||
+			nr.node.Node != nr.result.Node {
 			t.Errorf("Misalignment at index %d: node(%d:%d/%d) != result(%d:%d/%d)",
 				i,
 				nr.node.Zone, nr.node.Net, nr.node.Node,
 				nr.result.Zone, nr.result.Net, nr.result.Node)
 		}
 	}
-	
+
 	t.Log("Node-result alignment test passed")
 }
 
@@ -95,10 +95,10 @@ func TestNodeResultAlignment(t *testing.T) {
 func TestReloadConfig(t *testing.T) {
 	// This test verifies the logic, not the actual daemon
 	// Real integration testing would require a running daemon
-	
+
 	initialTimeout := 10 * time.Second
 	newTimeout := 20 * time.Second
-	
+
 	cfg1 := &Config{
 		Daemon: DaemonConfig{
 			TestInterval: 60 * time.Second,
@@ -120,7 +120,7 @@ func TestReloadConfig(t *testing.T) {
 			},
 		},
 	}
-	
+
 	cfg2 := &Config{
 		Daemon: DaemonConfig{
 			TestInterval: 120 * time.Second,
@@ -142,19 +142,19 @@ func TestReloadConfig(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Verify that the configurations are different
 	if cfg1.Protocols.BinkP.Timeout == cfg2.Protocols.BinkP.Timeout {
 		t.Error("Test setup error: timeouts should be different")
 	}
-	
+
 	if cfg1.Protocols.BinkP.OurAddress == cfg2.Protocols.BinkP.OurAddress {
 		t.Error("Test setup error: addresses should be different")
 	}
-	
+
 	if cfg1.Services.DNS.CacheTTL == cfg2.Services.DNS.CacheTTL {
 		t.Error("Test setup error: cache TTLs should be different")
 	}
-	
+
 	t.Log("Config reload test structures validated")
 }

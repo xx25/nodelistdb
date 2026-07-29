@@ -61,15 +61,15 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"Title":               "Reachability History",
-		"Version":             version.GetVersionInfo(),
-		"ActivePage":          "reachability",
-		"Trends":              trends,
-		"StatusFilter":        statusFilter,
-		"TrendsPeriodFilter":  trendsPeriodFilter,
-		"NodesPeriodFilter":   nodesPeriodFilter,
-		"ProtocolFilter":      protocolFilter,
-		"LimitFilter":         limitFilter,
+		"Title":              "Reachability History",
+		"Version":            version.GetVersionInfo(),
+		"ActivePage":         "reachability",
+		"Trends":             trends,
+		"StatusFilter":       statusFilter,
+		"TrendsPeriodFilter": trendsPeriodFilter,
+		"NodesPeriodFilter":  nodesPeriodFilter,
+		"ProtocolFilter":     protocolFilter,
+		"LimitFilter":        limitFilter,
 	}
 
 	// Always show data by default - get recently tested nodes for the last day
@@ -308,10 +308,10 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 
 		// Convert to sorted list
 		type TestSession struct {
-			TestTime     time.Time
-			Aggregated   *storage.NodeTestResult
-			PerHostname  []storage.NodeTestResult
-			HasMultiple  bool
+			TestTime    time.Time
+			Aggregated  *storage.NodeTestResult
+			PerHostname []storage.NodeTestResult
+			HasMultiple bool
 		}
 
 		var sessions []TestSession

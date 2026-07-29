@@ -31,7 +31,7 @@ type CLIServer struct {
 	timeout    time.Duration
 	prompt     string
 	welcome    string
-	
+
 	mu       sync.RWMutex
 	clients  map[net.Conn]*Client
 	listener net.Listener
@@ -74,7 +74,7 @@ func NewServer(daemon DaemonInterface, config Config) *CLIServer {
 	if config.Welcome == "" {
 		config.Welcome = "NodelistDB Test Daemon CLI v1.0.0\nType 'help' for available commands.\n"
 	}
-	
+
 	return &CLIServer{
 		daemon:     daemon,
 		host:       config.Host,
@@ -89,19 +89,19 @@ func NewServer(daemon DaemonInterface, config Config) *CLIServer {
 
 func (s *CLIServer) Start(ctx context.Context) error {
 	s.ctx, s.cancel = context.WithCancel(ctx)
-	
+
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to start CLI server on %s: %w", addr, err)
 	}
 	s.listener = listener
-	
+
 	fmt.Printf("CLI server listening on %s\n", addr)
-	
+
 	go s.acceptLoop()
 	go s.cleanupLoop()
-	
+
 	<-s.ctx.Done()
 	return s.shutdown()
 }
@@ -119,7 +119,7 @@ func (s *CLIServer) acceptLoop() {
 				}
 				continue
 			}
-			
+
 			s.mu.Lock()
 			if len(s.clients) >= s.maxClients {
 				s.mu.Unlock()
@@ -127,7 +127,7 @@ func (s *CLIServer) acceptLoop() {
 				conn.Close()
 				continue
 			}
-			
+
 			client := &Client{
 				conn:     conn,
 				reader:   bufio.NewReader(conn),
@@ -136,7 +136,7 @@ func (s *CLIServer) acceptLoop() {
 			}
 			s.clients[conn] = client
 			s.mu.Unlock()
-			
+
 			go s.handleClient(client)
 		}
 	}
@@ -149,17 +149,17 @@ func (s *CLIServer) handleClient(client *Client) {
 		s.mu.Unlock()
 		client.conn.Close()
 	}()
-	
+
 	_, _ = client.writer.WriteString(s.welcome)
 	_, _ = client.writer.WriteString("\r\n")
 	_, _ = client.writer.WriteString(s.prompt)
 	client.writer.Flush()
-	
+
 	handler := NewHandler(s.daemon, client.writer)
-	
+
 	for {
 		_ = client.conn.SetReadDeadline(time.Now().Add(s.timeout))
-		
+
 		line, err := client.reader.ReadString('\n')
 		if err != nil {
 			if err != io.EOF && !strings.Contains(err.Error(), "timeout") {
@@ -167,22 +167,22 @@ func (s *CLIServer) handleClient(client *Client) {
 			}
 			return
 		}
-		
+
 		client.lastSeen = time.Now()
-		
+
 		line = strings.TrimSpace(line)
 		if line == "" {
 			_, _ = client.writer.WriteString(s.prompt)
 			client.writer.Flush()
 			continue
 		}
-		
+
 		if line == "exit" || line == "quit" {
 			_, _ = client.writer.WriteString("Goodbye!\r\n")
 			client.writer.Flush()
 			return
 		}
-		
+
 		if err := handler.HandleCommand(s.ctx, line); err != nil {
 			if err == io.EOF {
 				return
@@ -199,7 +199,7 @@ func (s *CLIServer) handleClient(client *Client) {
 func (s *CLIServer) cleanupLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -223,17 +223,17 @@ func (s *CLIServer) cleanupLoop() {
 func (s *CLIServer) shutdown() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	for conn, client := range s.clients {
 		_, _ = client.writer.WriteString("\r\nServer shutting down\r\n")
 		client.writer.Flush()
 		conn.Close()
 	}
-	
+
 	if s.listener != nil {
 		s.listener.Close()
 	}
-	
+
 	return nil
 }
 

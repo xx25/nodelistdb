@@ -23,21 +23,21 @@ func GetFieldDescriptions() map[string]FieldDescription {
 		"phone":    {Icon: "📞", Description: "Phone"},
 		"speed":    {Icon: "⚡", Description: "Speed"},
 		"flags":    {Icon: "🏷️", Description: "Flags"},
-		
+
 		// Boolean connectivity fields
 		"binkp":    {Icon: "🌐", Description: "Binkp Support"},
 		"telnet":   {Icon: "📡", Description: "Telnet Support"},
 		"has_inet": {Icon: "🌍", Description: "Internet Connectivity"},
-		
+
 		// Modem and protocol fields
 		"modem_flags": {Icon: "📞", Description: "Modem Flags"},
-		
+
 		// Legacy internet fields
 		"internet_protocols": {Icon: "🌐", Description: "Internet Protocols (Legacy)"},
 		"internet_hostnames": {Icon: "🏠", Description: "Internet Hostnames (Legacy)"},
 		"internet_ports":     {Icon: "🔌", Description: "Internet Ports (Legacy)"},
 		"internet_emails":    {Icon: "📧", Description: "Internet Emails (Legacy)"},
-		
+
 		// Modern internet configuration
 		"internet_config": {Icon: "🌐", Description: "Internet Configuration"},
 	}
@@ -50,13 +50,13 @@ func GetFieldDescriptionWithFlag(field string) FieldDescription {
 	if desc, exists := staticDescs[field]; exists {
 		return desc
 	}
-	
+
 	// Check if it's an inet_* field
 	if strings.HasPrefix(field, "inet_") {
 		// Extract flag name from field name (inet_IBN -> IBN, inet_flag_ICM -> ICM)
 		flagName := strings.TrimPrefix(field, "inet_")
 		flagName = strings.TrimPrefix(flagName, "flag_")
-		
+
 		// Get flag description
 		flagDescs := flags.GetFlagDescriptions()
 		if flagInfo, exists := flagDescs[flagName]; exists {
@@ -90,7 +90,7 @@ func GetFieldDescriptionWithFlag(field string) FieldDescription {
 			case "ICM":
 				icon = "📞" // Internet CM
 			}
-			
+
 			// Include flag name in parentheses for clarity
 			return FieldDescription{
 				Icon:        icon,
@@ -98,7 +98,7 @@ func GetFieldDescriptionWithFlag(field string) FieldDescription {
 			}
 		}
 	}
-	
+
 	// Default: return field name as-is
 	return FieldDescription{
 		Icon:        "",

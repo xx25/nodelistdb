@@ -12,18 +12,18 @@ import (
 // mockTestRunner simulates the test execution for failover testing.
 // It returns predefined results in sequence.
 type mockTestRunner struct {
-	mu           sync.Mutex
-	results      []testResult      // Results to return in order
-	callIndex    int               // Current position in results
-	callLog      []mockTestCall    // Log of all calls made
-	defaultResult testResult       // Result to return if results exhausted
+	mu            sync.Mutex
+	results       []testResult   // Results to return in order
+	callIndex     int            // Current position in results
+	callLog       []mockTestCall // Log of all calls made
+	defaultResult testResult     // Result to return if results exhausted
 }
 
 // mockTestCall records a single call to runTest.
 type mockTestCall struct {
-	DialPhone     string
-	OriginalPhone string
-	OperatorName  string
+	DialPhone      string
+	OriginalPhone  string
+	OperatorName   string
 	OperatorPrefix string
 }
 
@@ -397,9 +397,9 @@ func TestRunTestWithFailover_AllOperatorsFail(t *testing.T) {
 
 func TestRunTestWithFailover_UserBusyContinuesFailover(t *testing.T) {
 	runner := newMockTestRunner(
-		userBusyResult(),                  // First operator returns user busy
-		userBusyResult(),                  // Second operator also busy
-		failResult("third also failed"),   // Third operator fails
+		userBusyResult(),                // First operator returns user busy
+		userBusyResult(),                // Second operator also busy
+		failResult("third also failed"), // Third operator fails
 	)
 	cache := newMockOperatorCache()
 

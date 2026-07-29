@@ -64,14 +64,14 @@ func New(config *Config) (Cache, error) {
 			return nil, fmt.Errorf("BadgerPath is required when cache type is badger")
 		}
 		return NewBadgerCache(&BadgerConfig{
-			Path:              config.BadgerPath,
-			MaxMemoryMB:       config.BadgerMaxMemoryMB,
-			ValueLogMaxMB:     config.BadgerValueLogMaxMB,
-			CompactL0OnClose:  config.BadgerCompactL0,
-			NumGoroutines:     config.BadgerNumGoroutines,
-			GCInterval:        config.BadgerGCInterval,
-			GCDiscardRatio:    config.BadgerGCDiscardRatio,
-			MaxDiskMB:         config.BadgerMaxDiskMB,
+			Path:             config.BadgerPath,
+			MaxMemoryMB:      config.BadgerMaxMemoryMB,
+			ValueLogMaxMB:    config.BadgerValueLogMaxMB,
+			CompactL0OnClose: config.BadgerCompactL0,
+			NumGoroutines:    config.BadgerNumGoroutines,
+			GCInterval:       config.BadgerGCInterval,
+			GCDiscardRatio:   config.BadgerGCDiscardRatio,
+			MaxDiskMB:        config.BadgerMaxDiskMB,
 		})
 
 	default:
@@ -89,13 +89,13 @@ func NewBadgerCacheFromConfig(config *Config) (Cache, error) {
 		return nil, fmt.Errorf("BadgerPath is required")
 	}
 	return NewBadgerCache(&BadgerConfig{
-		Path:              config.BadgerPath,
-		MaxMemoryMB:       config.BadgerMaxMemoryMB,
-		ValueLogMaxMB:     config.BadgerValueLogMaxMB,
-		CompactL0OnClose:  config.BadgerCompactL0,
-		NumGoroutines:     config.BadgerNumGoroutines,
-		GCInterval:        config.BadgerGCInterval,
-		GCDiscardRatio:    config.BadgerGCDiscardRatio,
-		MaxDiskMB:         config.BadgerMaxDiskMB,
+		Path:             config.BadgerPath,
+		MaxMemoryMB:      config.BadgerMaxMemoryMB,
+		ValueLogMaxMB:    config.BadgerValueLogMaxMB,
+		CompactL0OnClose: config.BadgerCompactL0,
+		NumGoroutines:    config.BadgerNumGoroutines,
+		GCInterval:       config.BadgerGCInterval,
+		GCDiscardRatio:   config.BadgerGCDiscardRatio,
+		MaxDiskMB:        config.BadgerMaxDiskMB,
 	})
 }

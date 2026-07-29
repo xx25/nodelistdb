@@ -16,11 +16,11 @@ func createTestNodes() []*models.Node {
 	}
 
 	// Set protocols for some nodes
-	nodes[0].InternetProtocols = []string{"IBN"}       // BinkP
-	nodes[1].InternetProtocols = []string{"IFC"}       // EMSI/Ifcico
+	nodes[0].InternetProtocols = []string{"IBN"}        // BinkP
+	nodes[1].InternetProtocols = []string{"IFC"}        // EMSI/Ifcico
 	nodes[2].InternetProtocols = []string{"IBN", "IFC"} // Both
-	nodes[3].InternetProtocols = []string{"ITN"}       // Telnet
-	nodes[4].InternetProtocols = []string{"IBN"}       // BinkP
+	nodes[3].InternetProtocols = []string{"ITN"}        // Telnet
+	nodes[4].InternetProtocols = []string{"IBN"}        // BinkP
 
 	// Set some flags
 	nodes[0].Flags = []string{"CM", "XA"} // Continuous Mail
@@ -311,9 +311,9 @@ func TestFilterByNetwork(t *testing.T) {
 func TestFilterHubs(t *testing.T) {
 	filter := NewNodeFilter()
 	nodes := []*models.Node{
-		{Zone: 1, Net: 100, Node: 0},  // Hub (node 0)
+		{Zone: 1, Net: 100, Node: 0}, // Hub (node 0)
 		{Zone: 1, Net: 100, Node: 1},
-		{Zone: 2, Net: 450, Node: 0},  // Hub (node 0)
+		{Zone: 2, Net: 450, Node: 0}, // Hub (node 0)
 		{Zone: 2, Net: 450, Node: 100},
 	}
 

@@ -18,12 +18,12 @@ type ZMHZone struct {
 // ZMHDefaults contains the official ZMH windows for each FidoNet zone.
 // Per FidoNet standards, these are the times when non-CM nodes must be available.
 var ZMHDefaults = []ZMHZone{
-	{Zone: 1, StartHour: 9, StartMinute: 0, EndHour: 10, EndMinute: 0, Days: allDays()},   // 09:00-10:00 UTC
-	{Zone: 2, StartHour: 2, StartMinute: 30, EndHour: 3, EndMinute: 30, Days: allDays()},  // 02:30-03:30 UTC
-	{Zone: 3, StartHour: 18, StartMinute: 0, EndHour: 19, EndMinute: 0, Days: allDays()},  // 18:00-19:00 UTC
-	{Zone: 4, StartHour: 8, StartMinute: 0, EndHour: 9, EndMinute: 0, Days: allDays()},    // 08:00-09:00 UTC
-	{Zone: 5, StartHour: 2, StartMinute: 30, EndHour: 3, EndMinute: 30, Days: allDays()},  // 02:30-03:30 UTC (same as Zone 2)
-	{Zone: 6, StartHour: 22, StartMinute: 0, EndHour: 23, EndMinute: 0, Days: allDays()},  // 22:00-23:00 UTC
+	{Zone: 1, StartHour: 9, StartMinute: 0, EndHour: 10, EndMinute: 0, Days: allDays()},  // 09:00-10:00 UTC
+	{Zone: 2, StartHour: 2, StartMinute: 30, EndHour: 3, EndMinute: 30, Days: allDays()}, // 02:30-03:30 UTC
+	{Zone: 3, StartHour: 18, StartMinute: 0, EndHour: 19, EndMinute: 0, Days: allDays()}, // 18:00-19:00 UTC
+	{Zone: 4, StartHour: 8, StartMinute: 0, EndHour: 9, EndMinute: 0, Days: allDays()},   // 08:00-09:00 UTC
+	{Zone: 5, StartHour: 2, StartMinute: 30, EndHour: 3, EndMinute: 30, Days: allDays()}, // 02:30-03:30 UTC (same as Zone 2)
+	{Zone: 6, StartHour: 22, StartMinute: 0, EndHour: 23, EndMinute: 0, Days: allDays()}, // 22:00-23:00 UTC
 }
 
 // GetZMHWindow returns the ZMH time window for a given zone.

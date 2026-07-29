@@ -24,14 +24,14 @@ type LineStats struct {
 	Modulation  string // V.32bis, V.34, V.90, etc.
 
 	// Line quality
-	LineQuality   int     // 0-100, higher is better (some modems use 0-255)
-	RxLevel       int     // Signal level in -dBm (as positive integer)
-	TxPower       int     // Transmit power in -dBm (as positive integer)
-	SNR           float64 // Signal-to-noise ratio in dB
-	EQMSum        int     // Error Quality Metric (hex value)
-	DigitalLoss   string
-	RateDrops     int
-	RoundTripDelay int    // Round trip delay in ms
+	LineQuality    int     // 0-100, higher is better (some modems use 0-255)
+	RxLevel        int     // Signal level in -dBm (as positive integer)
+	TxPower        int     // Transmit power in -dBm (as positive integer)
+	SNR            float64 // Signal-to-noise ratio in dB
+	EQMSum         int     // Error Quality Metric (hex value)
+	DigitalLoss    string
+	RateDrops      int
+	RoundTripDelay int // Round trip delay in ms
 
 	// Echo levels (ZyXEL)
 	NearEndEcho float64 // Near end echo in dB
@@ -281,12 +281,13 @@ func parseZyXELATI12Line(stats *LineStats, line string) {
 // parseZyXELEqualsLine parses lines with "Key = Value" format (ATI12, ATI14)
 // Can have two key-value pairs per line
 // Examples:
-//   "Modulation mode   =     V32b"
-//   "Tx Bit Rate       =    14400 bps      Rx Bit Rate           =    14400 bps"
-//   "SNR               =    71.27 dB       Round Trip Delay      =   234.00 ms"
-//   "Local  Modem V.9x Capability  =  V.92 / APCM"
-//   "SNR (dB)          =    71.27"
-//   "Tx/Rx Bit Rate    =    14400 bps"
+//
+//	"Modulation mode   =     V32b"
+//	"Tx Bit Rate       =    14400 bps      Rx Bit Rate           =    14400 bps"
+//	"SNR               =    71.27 dB       Round Trip Delay      =   234.00 ms"
+//	"Local  Modem V.9x Capability  =  V.92 / APCM"
+//	"SNR (dB)          =    71.27"
+//	"Tx/Rx Bit Rate    =    14400 bps"
 func parseZyXELEqualsLine(stats *LineStats, line string) {
 	// Use regex to find all "Key = Value" patterns
 	// Pattern matches: key (letters/numbers/spaces/periods/punctuation), =, spaces, value

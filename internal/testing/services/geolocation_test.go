@@ -49,16 +49,16 @@ func TestGeolocationIPAPI(t *testing.T) {
 	// Mock server is created but not used in this version
 
 	ctx := context.Background()
-	
+
 	// Test with valid IP
 	testIP := "8.8.8.8"
-	
+
 	// Since we can't easily override the URL without refactoring,
 	// we'll test the actual API with rate limiting
 	t.Run("ValidIP", func(t *testing.T) {
 		// Create a new geolocation service
 		geo := NewGeolocationWithConfig("ip-api", "", time.Hour, 150)
-		
+
 		result := geo.GetLocation(ctx, testIP)
 		if result == nil {
 			// API might be down or rate limited, skip test
@@ -104,7 +104,7 @@ func TestGeolocationIPInfo(t *testing.T) {
 
 	t.Run("ValidIP", func(t *testing.T) {
 		geo := NewGeolocationWithConfig("ipinfo", "", time.Hour, 150)
-		
+
 		// Test with actual API (with rate limiting consideration)
 		result := geo.GetLocation(context.Background(), "8.8.8.8")
 		if result == nil {
@@ -126,10 +126,10 @@ func TestGeolocationIPInfo(t *testing.T) {
 func TestGeolocationIPGeolocation(t *testing.T) {
 	t.Run("WithoutAPIKey", func(t *testing.T) {
 		geo := NewGeolocationWithConfig("ipgeolocation", "", time.Hour, 150)
-		
+
 		// Test behavior without API key
 		result := geo.GetLocation(context.Background(), "8.8.8.8")
-		
+
 		// IPGeolocation might work with limited free tier or return error
 		if result != nil {
 			if result.Source == "ipgeolocation" {
@@ -229,7 +229,7 @@ func TestGeolocationProviderFallback(t *testing.T) {
 	// The implementation defaults to ip-api for unknown providers
 	ctx := context.Background()
 	result := geo.GetLocation(ctx, "8.8.8.8")
-	
+
 	if result == nil {
 		t.Skip("Skipping test - API returned no result")
 		return
@@ -246,17 +246,17 @@ func TestGeolocationInvalidIP(t *testing.T) {
 	geo := NewGeolocationWithConfig("ip-api", "", time.Hour, 150)
 
 	testCases := []string{
-		"",             // Empty IP
-		"not-an-ip",    // Invalid format
+		"",                // Empty IP
+		"not-an-ip",       // Invalid format
 		"999.999.999.999", // Invalid octets
-		"::invalid::",  // Invalid IPv6
+		"::invalid::",     // Invalid IPv6
 	}
 
 	for _, testIP := range testCases {
 		t.Run(testIP, func(t *testing.T) {
 			ctx := context.Background()
 			result := geo.GetLocation(ctx, testIP)
-			
+
 			// Should either return nil or empty result for invalid IPs
 			if result != nil && result.Country != "" {
 				// API might accept and handle invalid IPs differently
@@ -271,7 +271,7 @@ func TestGeolocationTimeout(t *testing.T) {
 	// Note: Testing timeout behavior would require URL override capability
 	// which would need refactoring of the production code.
 	// For now, we test the timeout context behavior
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
@@ -309,11 +309,11 @@ func TestGeolocationConcurrency(t *testing.T) {
 
 	// Run multiple goroutines accessing the service
 	done := make(chan bool, 10)
-	
+
 	for i := 0; i < 10; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
-			
+
 			// Try to get location (might fail due to rate limits)
 			ip := fmt.Sprintf("8.8.8.%d", id)
 			_ = geo.GetLocation(ctx, ip)
@@ -331,4 +331,3 @@ func TestGeolocationConcurrency(t *testing.T) {
 		}
 	}
 }
-

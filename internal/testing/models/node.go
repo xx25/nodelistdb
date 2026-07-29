@@ -13,22 +13,22 @@ const DefaultDomain = "fidonet"
 
 // Node represents an FTN node from the database
 type Node struct {
-	Zone              int                `db:"zone"`
-	Net               int                `db:"net"`
-	Node              int                `db:"node"`
-	Domain            string             `db:"domain"` // FTN network (fidonet, fsxnet, ...)
-	SystemName        string             `db:"system_name"`
-	SysopName         string             `db:"sysop_name"`
-	Location          string             `db:"location"`
-	InternetHostnames []string           `db:"internet_hostnames"`
-	InternetProtocols []string           `db:"internet_protocols"`
-	ProtocolPorts     map[string]int     `db:"-"` // Custom ports for protocols (e.g., "IFC" -> 5983)
-	InternetConfig    map[string]interface{} `db:"internet_config"` // Raw JSON config from database
-	HasInet           bool               `db:"has_inet"`
-	TestReason        string             `db:"-"` // Reason for current test: "stale", "new", "config_changed", "scheduled", "failed_retry"
-	Availability      *timeavail.NodeAvailability `db:"-"` // Time availability windows for calling
-	Flags             []string           `db:"flags"` // Node flags from nodelist
-	InfoFlags         []string           `db:"-"` // Information flags from InternetConfig (INO4, ICM)
+	Zone              int                         `db:"zone"`
+	Net               int                         `db:"net"`
+	Node              int                         `db:"node"`
+	Domain            string                      `db:"domain"` // FTN network (fidonet, fsxnet, ...)
+	SystemName        string                      `db:"system_name"`
+	SysopName         string                      `db:"sysop_name"`
+	Location          string                      `db:"location"`
+	InternetHostnames []string                    `db:"internet_hostnames"`
+	InternetProtocols []string                    `db:"internet_protocols"`
+	ProtocolPorts     map[string]int              `db:"-"`               // Custom ports for protocols (e.g., "IFC" -> 5983)
+	InternetConfig    map[string]interface{}      `db:"internet_config"` // Raw JSON config from database
+	HasInet           bool                        `db:"has_inet"`
+	TestReason        string                      `db:"-"`     // Reason for current test: "stale", "new", "config_changed", "scheduled", "failed_retry"
+	Availability      *timeavail.NodeAvailability `db:"-"`     // Time availability windows for calling
+	Flags             []string                    `db:"flags"` // Node flags from nodelist
+	InfoFlags         []string                    `db:"-"`     // Information flags from InternetConfig (INO4, ICM)
 }
 
 // Address returns the FTN address string

@@ -89,10 +89,10 @@ func TestCalculateBackoffLevel(t *testing.T) {
 		{"no failures", 0, 0},
 		{"one failure", 1, 1},
 		{"two failures", 2, 2},
-		{"three failures", 3, 2},  // log2(3) + 1 = 2
-		{"four failures", 4, 3},   // log2(4) + 1 = 3
-		{"eight failures", 8, 4},  // log2(8) + 1 = 4
-		{"sixteen failures", 16, 5}, // log2(16) + 1 = 5 (capped)
+		{"three failures", 3, 2},       // log2(3) + 1 = 2
+		{"four failures", 4, 3},        // log2(4) + 1 = 3
+		{"eight failures", 8, 4},       // log2(8) + 1 = 4
+		{"sixteen failures", 16, 5},    // log2(16) + 1 = 5 (capped)
 		{"thirty-two failures", 32, 5}, // log2(32) + 1 = 6, but capped at 5
 		{"negative failures", -1, 0},
 	}

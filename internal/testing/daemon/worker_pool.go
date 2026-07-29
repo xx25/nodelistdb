@@ -10,12 +10,12 @@ type Job func()
 
 // WorkerPool manages a pool of worker goroutines
 type WorkerPool struct {
-	workers      int
-	jobQueue     chan Job
-	wg           sync.WaitGroup
-	stopChan     chan struct{}
-	stopOnce     sync.Once
-	activeCount  int32 // Atomic counter for active workers
+	workers     int
+	jobQueue    chan Job
+	wg          sync.WaitGroup
+	stopChan    chan struct{}
+	stopOnce    sync.Once
+	activeCount int32 // Atomic counter for active workers
 }
 
 // NewWorkerPool creates a new worker pool
@@ -23,7 +23,7 @@ func NewWorkerPool(workers int) *WorkerPool {
 	if workers <= 0 {
 		workers = 1
 	}
-	
+
 	return &WorkerPool{
 		workers:  workers,
 		jobQueue: make(chan Job, workers*2), // Buffer size = 2x workers
@@ -61,7 +61,7 @@ func (p *WorkerPool) Submit(job Job) {
 // worker is the worker goroutine
 func (p *WorkerPool) worker(id int) {
 	defer p.wg.Done()
-	
+
 	for {
 		select {
 		case job, ok := <-p.jobQueue:
@@ -77,7 +77,7 @@ func (p *WorkerPool) worker(id int) {
 				// Decrement active count after completing job
 				atomic.AddInt32(&p.activeCount, -1)
 			}
-			
+
 		case <-p.stopChan:
 			// Stop signal received
 			return

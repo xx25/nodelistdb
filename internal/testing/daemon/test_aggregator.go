@@ -168,9 +168,9 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 	}
 
 	// Track successful hostnames and protocols
-	var successfulHostnames []string  // DNS successful hostnames
+	var successfulHostnames []string // DNS successful hostnames
 	var failedHostnames []string
-	var operationalHostnames []string  // Protocol successful hostnames
+	var operationalHostnames []string // Protocol successful hostnames
 	hasAnyDNSSuccess := false
 	hasAnyProtocolSuccess := false
 	// Tracks whether the VModem details on the aggregated row came from a
@@ -342,7 +342,7 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 	// Set hostname count info
 	aggregated.TotalHostnames = int32(len(node.InternetHostnames))
 	aggregated.HostnamesTested = int32(len(results))
-	aggregated.HostnamesOperational = int32(len(operationalHostnames))  // Count protocol-successful hostnames, not DNS-successful
+	aggregated.HostnamesOperational = int32(len(operationalHostnames)) // Count protocol-successful hostnames, not DNS-successful
 
 	return aggregated
 }

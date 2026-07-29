@@ -1,64 +1,6 @@
 package storage
 
-// StatsQueryBuilder handles statistics-related SQL queries
-type StatsQueryBuilder struct {
-	base *QueryBuilder
-}
-
-// NetworkStats returns SQL for network statistics
-func (sqb *StatsQueryBuilder) NetworkStats() string {
-	return sqb.base.StatsSQL()
-}
-
-// ZoneDistribution returns SQL for zone distribution stats
-func (sqb *StatsQueryBuilder) ZoneDistribution() string {
-	return sqb.base.ZoneDistributionSQL()
-}
-
-// LargestRegions returns SQL for largest regions stats
-func (sqb *StatsQueryBuilder) LargestRegions() string {
-	return sqb.base.LargestRegionsSQL()
-}
-
-// OptimizedLargestRegions returns optimized SQL for largest regions stats
-func (sqb *StatsQueryBuilder) OptimizedLargestRegions() string {
-	return sqb.base.OptimizedLargestRegionsSQL()
-}
-
-// LargestNets returns SQL for largest nets stats
-func (sqb *StatsQueryBuilder) LargestNets() string {
-	return sqb.base.LargestNetsSQL()
-}
-
-// OptimizedLargestNets returns optimized SQL for largest nets stats
-func (sqb *StatsQueryBuilder) OptimizedLargestNets() string {
-	return sqb.base.OptimizedLargestNetsSQL()
-}
-
-// BrowseZones returns SQL for the hierarchy browser zone listing
-func (sqb *StatsQueryBuilder) BrowseZones() string {
-	return sqb.base.BrowseZonesSQL()
-}
-
-// BrowseRegions returns SQL for the hierarchy browser region listing
-func (sqb *StatsQueryBuilder) BrowseRegions() string {
-	return sqb.base.BrowseRegionsSQL()
-}
-
-// BrowseNets returns SQL for the hierarchy browser net listing
-func (sqb *StatsQueryBuilder) BrowseNets() string {
-	return sqb.base.BrowseNetsSQL()
-}
-
-// BrowseNodes returns SQL for the hierarchy browser node listing
-func (sqb *StatsQueryBuilder) BrowseNodes() string {
-	return sqb.base.BrowseNodesSQL()
-}
-
-// LEGACY METHODS - Statistics-related SQL query methods (kept for backward compatibility)
-
 // StatsSQL returns SQL for network statistics
-// Deprecated: Use QueryBuilder.Stats().NetworkStats() instead
 func (qb *QueryBuilder) StatsSQL() string {
 	// ClickHouse-compatible statistics query using countIf instead of FILTER
 	return `
@@ -208,7 +150,7 @@ func (qb *QueryBuilder) BrowseNetsSQL() string {
 }
 
 // BrowseNodesSQL returns SQL listing every entry within a zone+net for a single
-// nodelist date. Column order matches ResultParser.ParseNodeRow. Used by the
+// nodelist date. Column order matches ClickHouseResultParser.ParseNodeRow. Used by the
 // hierarchy browser.
 func (qb *QueryBuilder) BrowseNodesSQL() string {
 	return `

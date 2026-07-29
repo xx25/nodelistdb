@@ -71,10 +71,6 @@ func parse4DPathParams(w http.ResponseWriter, r *http.Request, withPoint bool) (
 // SearchPointsHandler handles point search requests.
 // GET /api/points?zone=2&net=5001&sysop_name=...&latest_only=true&limit=100
 func (s *Server) SearchPointsHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	filter, hasConstraint, err := parsePointFilter(r)
 	if err != nil {
 		WriteJSONError(w, err.Error(), http.StatusBadRequest)
@@ -122,10 +118,6 @@ func (s *Server) SearchPointsHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodePointsHandler returns the snapshot points under a boss node.
 // GET /api/nodes/{zone}/{net}/{node}/points?date=2024-01-01&domain=fidonet
 func (s *Server) GetNodePointsHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	zone, net, node, _, ok := parse4DPathParams(w, r, false)
 	if !ok {
 		return
@@ -168,10 +160,6 @@ func (s *Server) GetNodePointsHandler(w http.ResponseWriter, r *http.Request) {
 // GetPointHandler returns the current snapshot entry of one 4-D address.
 // GET /api/points/{zone}/{net}/{node}/{point}
 func (s *Server) GetPointHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	zone, net, node, point, ok := parse4DPathParams(w, r, true)
 	if !ok {
 		return
@@ -211,10 +199,6 @@ func (s *Server) GetPointHandler(w http.ResponseWriter, r *http.Request) {
 // all pointlist sources and dates.
 // GET /api/points/{zone}/{net}/{node}/{point}/history
 func (s *Server) GetPointHistoryHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	zone, net, node, point, ok := parse4DPathParams(w, r, true)
 	if !ok {
 		return
@@ -247,10 +231,6 @@ func (s *Server) GetPointHistoryHandler(w http.ResponseWriter, r *http.Request) 
 // series), newest first.
 // GET /api/pointlists/dates?domain=fidonet&source=z2
 func (s *Server) PointlistDatesHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	source := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source")))
 	files, err := s.storage.GetPointlistDates(queryDomain(r), source)
 	if err != nil {
@@ -269,10 +249,6 @@ func (s *Server) PointlistDatesHandler(w http.ResponseWriter, r *http.Request) {
 // PointlistSourcesHandler summarizes the imported pointlist series.
 // GET /api/pointlists/sources?domain=fidonet
 func (s *Server) PointlistSourcesHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	sources, err := s.storage.GetPointlistSources(queryDomain(r))
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get pointlist sources: %v", err), http.StatusInternalServerError)

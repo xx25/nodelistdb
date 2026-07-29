@@ -51,7 +51,6 @@ func parseNodeURLPath(path string) (zone, net, node int, err error) {
 	return zone, net, node, nil
 }
 
-
 // NodeActivityInfo holds information about a node's activity
 type NodeActivityInfo struct {
 	FirstDate       time.Time

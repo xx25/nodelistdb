@@ -12,10 +12,10 @@ import (
 
 // Driver implements the ftpserver.MainDriver interface for nodelist serving
 type Driver struct {
-	rootFs       afero.Fs // Root filesystem (mount-based)
-	settings     *ftpserver.Settings
-	maxClients   int32         // Maximum allowed concurrent connections (0 = unlimited)
-	activeConns  atomic.Int32  // Current number of active connections
+	rootFs      afero.Fs // Root filesystem (mount-based)
+	settings    *ftpserver.Settings
+	maxClients  int32        // Maximum allowed concurrent connections (0 = unlimited)
+	activeConns atomic.Int32 // Current number of active connections
 }
 
 // NewDriver creates a new FTP driver

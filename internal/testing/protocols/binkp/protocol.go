@@ -54,17 +54,17 @@ func (f *Frame) String() string {
 	if typeName == "" {
 		typeName = fmt.Sprintf("0x%02X", f.Type)
 	}
-	
+
 	if f.Command {
 		typeName = "CMD:" + typeName
 	}
-	
+
 	if f.Type == M_NUL && len(f.Data) > 0 {
 		// Parse M_NUL data as "KEY value"
 		dataStr := string(f.Data)
 		return fmt.Sprintf("%s %s", typeName, dataStr)
 	}
-	
+
 	return fmt.Sprintf("%s [%d bytes]", typeName, len(f.Data))
 }
 
@@ -83,7 +83,7 @@ func ReadFrame(conn net.Conn) (*Frame, error) {
 	if n != 2 {
 		return nil, fmt.Errorf("short header read: %d bytes", n)
 	}
-	
+
 	// Parse header (network/big-endian byte order)
 	headerValue := binary.BigEndian.Uint16(header)
 	isCommand := (headerValue & 0x8000) != 0
@@ -131,12 +131,12 @@ func WriteFrame(conn net.Conn, frame *Frame) error {
 	}
 
 	dataLen := len(frame.Data)
-	
+
 	// BinkP header format (2 bytes, network byte order):
 	// Bit 15: Command flag (1=command, 0=data)
 	// Bits 14-0: Data length (up to 32767 bytes)
 	// For command frames, data includes 1 byte command type + arguments
-	
+
 	var fullData []byte
 	if frame.Command {
 		// For command frames, prepend the command type to data
@@ -147,11 +147,11 @@ func WriteFrame(conn net.Conn, frame *Frame) error {
 	} else {
 		fullData = frame.Data
 	}
-	
+
 	if dataLen > 0x7FFF {
 		return fmt.Errorf("data too large: %d bytes (max 32767)", dataLen)
 	}
-	
+
 	// Create header with length and command flag (network/big-endian byte order)
 	header := make([]byte, 2)
 	headerValue := uint16(dataLen)
@@ -159,19 +159,19 @@ func WriteFrame(conn net.Conn, frame *Frame) error {
 		headerValue |= 0x8000 // Set command flag
 	}
 	binary.BigEndian.PutUint16(header, headerValue)
-	
+
 	// Write header
 	if _, err := conn.Write(header); err != nil {
 		return fmt.Errorf("failed to write header: %w", err)
 	}
-	
+
 	// Write data
 	if dataLen > 0 {
 		if _, err := conn.Write(fullData); err != nil {
 			return fmt.Errorf("failed to write data: %w", err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -179,20 +179,20 @@ func WriteFrame(conn net.Conn, frame *Frame) error {
 // Format: "KEY value" or just "value" for some fields
 func ParseM_NUL(data []byte) (key, value string) {
 	dataStr := string(data)
-	
+
 	// Trim leading/trailing null bytes and spaces
 	dataStr = strings.Trim(dataStr, "\x00 ")
-	
+
 	// Find first space
 	spaceIdx := strings.Index(dataStr, " ")
 	if spaceIdx == -1 {
 		// No space, entire string is the value (some implementations do this)
 		return "", dataStr
 	}
-	
+
 	key = dataStr[:spaceIdx]
 	value = dataStr[spaceIdx+1:]
-	
+
 	return key, value
 }
 

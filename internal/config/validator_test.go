@@ -80,12 +80,12 @@ func TestCacheValidation(t *testing.T) {
 		{
 			name: "valid config",
 			config: CacheConfig{
-				Path:              "/tmp/cache",
-				MaxMemoryMB:       256,
-				ValueLogMaxMB:     100,
-				MaxSearchResults:  500,
-				GCDiscardRatio:    0.5,
-				Enabled:           true,
+				Path:             "/tmp/cache",
+				MaxMemoryMB:      256,
+				ValueLogMaxMB:    100,
+				MaxSearchResults: 500,
+				GCDiscardRatio:   0.5,
+				Enabled:          true,
 			},
 			wantErr: false,
 		},

@@ -186,11 +186,11 @@ func TestDetermineOperationalStatus_NilProtocolResults(t *testing.T) {
 	te := &TestExecutor{}
 
 	result := &models.TestResult{
-		BinkPResult:   nil,
-		IfcicoResult:  nil,
-		TelnetResult:  nil,
-		FTPResult:     nil,
-		VModemResult:  nil,
+		BinkPResult:  nil,
+		IfcicoResult: nil,
+		TelnetResult: nil,
+		FTPResult:    nil,
+		VModemResult: nil,
 	}
 
 	status := te.determineOperationalStatus(result)

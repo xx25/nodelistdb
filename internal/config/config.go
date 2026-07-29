@@ -52,7 +52,7 @@ type Config struct {
 	FTP               FTPConfig        `yaml:"ftp"`
 	ModemAPI          ModemAPIConfig   `yaml:"modem_api"`
 	Networks          []NetworkConfig  `yaml:"networks,omitempty"` // FTN networks (defaults to fidonet if absent)
-	LinksFile         string           `yaml:"links_file"` // Path to links.yaml for external FidoNet links
+	LinksFile         string           `yaml:"links_file"`         // Path to links.yaml for external FidoNet links
 	ServerLogging     LoggingConfig    `yaml:"server_logging"`
 	ParserLogging     LoggingConfig    `yaml:"parser_logging"`
 	TestdaemonLogging LoggingConfig    `yaml:"testdaemon_logging"`
@@ -85,22 +85,22 @@ type LoggingConfig struct {
 // CacheConfig holds cache configuration
 // Supported types: "badger" (disk-based) and "memory" (in-process).
 type CacheConfig struct {
-	Enabled           bool          `yaml:"enabled"`
-	Type              string        `yaml:"type"` // "badger" or "memory" (default: "badger")
-	Path              string        `yaml:"path"`
-	MaxMemoryMB       int           `yaml:"max_memory_mb"`
-	ValueLogMaxMB     int           `yaml:"value_log_max_mb"`
-	DefaultTTL        time.Duration `yaml:"default_ttl"`
-	NodeTTL           time.Duration `yaml:"node_ttl"`
-	StatsTTL          time.Duration `yaml:"stats_ttl"`
-	SearchTTL         time.Duration `yaml:"search_ttl"`
-	MaxSearchResults  int           `yaml:"max_search_results"`
-	WarmupOnStart     bool          `yaml:"warmup_on_start"`
-	CompactOnClose    bool          `yaml:"compact_on_close"`
-	ClearAllOnImport  bool          `yaml:"clear_all_on_import"`
-	GCInterval        time.Duration `yaml:"gc_interval"`
-	GCDiscardRatio    float64       `yaml:"gc_discard_ratio"`
-	MaxDiskMB         int           `yaml:"max_disk_mb"`
+	Enabled          bool          `yaml:"enabled"`
+	Type             string        `yaml:"type"` // "badger" or "memory" (default: "badger")
+	Path             string        `yaml:"path"`
+	MaxMemoryMB      int           `yaml:"max_memory_mb"`
+	ValueLogMaxMB    int           `yaml:"value_log_max_mb"`
+	DefaultTTL       time.Duration `yaml:"default_ttl"`
+	NodeTTL          time.Duration `yaml:"node_ttl"`
+	StatsTTL         time.Duration `yaml:"stats_ttl"`
+	SearchTTL        time.Duration `yaml:"search_ttl"`
+	MaxSearchResults int           `yaml:"max_search_results"`
+	WarmupOnStart    bool          `yaml:"warmup_on_start"`
+	CompactOnClose   bool          `yaml:"compact_on_close"`
+	ClearAllOnImport bool          `yaml:"clear_all_on_import"`
+	GCInterval       time.Duration `yaml:"gc_interval"`
+	GCDiscardRatio   float64       `yaml:"gc_discard_ratio"`
+	MaxDiskMB        int           `yaml:"max_disk_mb"`
 }
 
 // FTPMount represents a virtual path mount in the FTP server
@@ -111,17 +111,17 @@ type FTPMount struct {
 
 // FTPConfig holds FTP server configuration
 type FTPConfig struct {
-	Enabled                    bool          `yaml:"enabled"`
-	Host                       string        `yaml:"host"`
-	Port                       int           `yaml:"port"`
-	NodelistPath               string        `yaml:"nodelist_path"`               // Deprecated: use mounts instead
-	Mounts                     []FTPMount    `yaml:"mounts,omitempty"`            // Virtual path mounts
-	MaxConnections             int           `yaml:"max_connections"`
-	PassivePortMin             int           `yaml:"passive_port_min"`
-	PassivePortMax             int           `yaml:"passive_port_max"`
-	IdleTimeout                time.Duration `yaml:"idle_timeout"`
-	PublicHost                 string        `yaml:"public_host"`
-	DisableActiveIPCheck       bool          `yaml:"disable_active_ip_check"` // Disable IP matching for active mode (PORT/EPRT)
+	Enabled              bool          `yaml:"enabled"`
+	Host                 string        `yaml:"host"`
+	Port                 int           `yaml:"port"`
+	NodelistPath         string        `yaml:"nodelist_path"`    // Deprecated: use mounts instead
+	Mounts               []FTPMount    `yaml:"mounts,omitempty"` // Virtual path mounts
+	MaxConnections       int           `yaml:"max_connections"`
+	PassivePortMin       int           `yaml:"passive_port_min"`
+	PassivePortMax       int           `yaml:"passive_port_max"`
+	IdleTimeout          time.Duration `yaml:"idle_timeout"`
+	PublicHost           string        `yaml:"public_host"`
+	DisableActiveIPCheck bool          `yaml:"disable_active_ip_check"` // Disable IP matching for active mode (PORT/EPRT)
 }
 
 // Default configurations
@@ -144,20 +144,20 @@ func DefaultClickHouseConfig() ClickHouseConfig {
 
 func DefaultCacheConfig() *CacheConfig {
 	return &CacheConfig{
-		Enabled:           false,
-		Path:              "./cache/badger",
-		MaxMemoryMB:       256,
-		ValueLogMaxMB:     100,
-		DefaultTTL:        5 * time.Minute,
-		NodeTTL:           15 * time.Minute,
-		StatsTTL:          1 * time.Hour,
-		SearchTTL:         5 * time.Minute,
-		MaxSearchResults:  500,
-		WarmupOnStart:     false,
-		CompactOnClose:    true,
-		ClearAllOnImport:  false,
-		GCInterval:        10 * time.Minute,
-		GCDiscardRatio:    0.5,
+		Enabled:          false,
+		Path:             "./cache/badger",
+		MaxMemoryMB:      256,
+		ValueLogMaxMB:    100,
+		DefaultTTL:       5 * time.Minute,
+		NodeTTL:          15 * time.Minute,
+		StatsTTL:         1 * time.Hour,
+		SearchTTL:        5 * time.Minute,
+		MaxSearchResults: 500,
+		WarmupOnStart:    false,
+		CompactOnClose:   true,
+		ClearAllOnImport: false,
+		GCInterval:       10 * time.Minute,
+		GCDiscardRatio:   0.5,
 	}
 }
 
@@ -504,7 +504,6 @@ func CreateExampleConfig(dir string) error {
 
 	return nil
 }
-
 
 // ToClickHouseDatabaseConfig converts ClickHouseConfig to database.ClickHouseConfig
 func (c *ClickHouseConfig) ToClickHouseDatabaseConfig() (*database.ClickHouseConfig, error) {

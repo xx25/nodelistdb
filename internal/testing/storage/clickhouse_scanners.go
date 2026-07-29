@@ -198,4 +198,3 @@ func scanNodesNative(rows driver.Rows) ([]*models.Node, error) {
 	}
 	return nodes, nil
 }
-

@@ -183,10 +183,10 @@ func (p *MultiProcessor) ProcessFiles(ctx context.Context, files []string) error
 		}
 
 		if p.verbose {
-			fmt.Printf("  ✓ [%d/%d] %s: %d nodes in %v%s\n", 
+			fmt.Printf("  ✓ [%d/%d] %s: %d nodes in %v%s\n",
 				processedFiles, len(files), result.FilePath, result.NodesCount, result.Duration, etaStr)
 		} else if !p.quiet {
-			fmt.Printf("  ✓ [%d/%d] %s: %d nodes%s\n", 
+			fmt.Printf("  ✓ [%d/%d] %s: %d nodes%s\n",
 				processedFiles, len(files), result.FilePath, result.NodesCount, etaStr)
 		}
 	}
@@ -302,7 +302,7 @@ func (p *MultiProcessor) processFileWithParser(ctx context.Context, job Job, fil
 		}
 		if isProcessed {
 			if p.verbose {
-				fmt.Printf("  [%d] ALREADY IMPORTED: %s (date: %s)\n", 
+				fmt.Printf("  [%d] ALREADY IMPORTED: %s (date: %s)\n",
 					job.JobID, job.FilePath, nodelistDate.Format("2006-01-02"))
 			}
 			result.Duration = time.Since(startTime)

@@ -144,7 +144,7 @@ func (l *Logger) configure() error {
 		// Setup log rotation
 		rotator := &lumberjack.Logger{
 			Filename:   l.config.File,
-			MaxSize:    l.config.MaxSize,    // megabytes
+			MaxSize:    l.config.MaxSize, // megabytes
 			MaxBackups: l.config.MaxBackups,
 			MaxAge:     l.config.MaxAge, // days
 			Compress:   true,

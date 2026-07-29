@@ -543,23 +543,6 @@ const (
 // Do NOT "optimize" this back to a bare `internet_config`.
 const internetConfigSelectSQL = `toString(internet_config) AS internet_config`
 
-// Common SQL field lists to avoid duplication
-const (
-	NodeSelectFields = `zone, net, node, nodelist_date, day_number,
-		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo,
-		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, ` + internetConfigSelectSQL
-
-	NodeInsertFields = `zone, net, node, nodelist_date, day_number,
-		system_name, location, sysop_name, phone, node_type, region, max_speed,
-		is_cm, is_mo,
-		flags, modem_flags,
-		conflict_sequence, has_conflict, has_inet, internet_config`
-
-	NodeInsertPlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
-)
-
 // PSTNNode represents a node with PSTN (phone) access from the nodelist
 // Used for PSTN analytics reports showing nodes with phone numbers
 type PSTNNode struct {
@@ -770,18 +753,3 @@ type IPv6NodeListEntry struct {
 	IsUnstable   bool   `json:"is_unstable"`    // 6UNS: failed >2 times in 30 days
 	Remarks      string `json:"remarks"`        // Combined remarks string
 }
-
-// Error messages for consistent error handling
-const (
-	ErrNodeNotFound       = "node not found"
-	ErrInvalidZone        = "invalid zone number"
-	ErrInvalidNet         = "invalid net number"
-	ErrInvalidNode        = "invalid node number"
-	ErrInvalidDateFormat  = "invalid date format"
-	ErrNoDataAvailable    = "no data available for the specified criteria"
-	ErrDatabaseConnection = "database connection error"
-	ErrQueryExecution     = "query execution error"
-	ErrResultParsing      = "result parsing error"
-	ErrTransactionFailed  = "transaction failed"
-	ErrBatchInsertFailed  = "batch insert failed"
-)

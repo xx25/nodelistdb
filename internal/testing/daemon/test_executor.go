@@ -254,4 +254,3 @@ func (te *TestExecutor) determineOperationalStatus(result *models.TestResult) bo
 
 	return false
 }
-

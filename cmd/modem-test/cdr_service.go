@@ -31,9 +31,9 @@ type CDRData struct {
 	RemotePacketLoss int // remote packet loss
 
 	// MOS/R-Factor scores (raw values from CDR)
-	LocalMOSCQ   int // MOS score (typically 0-50, representing 0.0-5.0)
-	RemoteMOSCQ  int
-	LocalRFactor int // R-factor (0-100)
+	LocalMOSCQ    int // MOS score (typically 0-50, representing 0.0-5.0)
+	RemoteMOSCQ   int
+	LocalRFactor  int // R-factor (0-100)
 	RemoteRFactor int
 
 	// Termination info

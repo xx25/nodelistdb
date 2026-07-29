@@ -61,8 +61,8 @@ type TestRecord struct {
 	// CDR VoIP Quality Metrics (from AudioCodes gateway)
 	CDRSessionID        string
 	CDRCodec            string
-	CDRRTPJitter        int     // ms
-	CDRRTPDelay         int     // ms
+	CDRRTPJitter        int // ms
+	CDRRTPDelay         int // ms
 	CDRPacketLoss       int
 	CDRRemotePacketLoss int
 	CDRLocalMOS         float64 // 1.0-5.0 scale

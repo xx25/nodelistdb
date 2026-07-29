@@ -2,8 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -27,11 +25,6 @@ type Storage struct {
 	pstnDeadOperations  *PSTNDeadOperations
 
 	mu sync.RWMutex
-}
-
-// GetDatabase returns the underlying database interface
-func (s *Storage) GetDatabase() database.DatabaseInterface {
-	return s.db
 }
 
 // NodeOps returns the node operations component for CRUD operations on nodes
@@ -451,62 +444,4 @@ func (s *Storage) GetNodesByDomain(domain string, days int) ([]NodeTestResult, e
 
 // --- Utility Methods ---
 
-// GetQueryBuilder returns the query builder for direct access
-func (s *Storage) GetQueryBuilder() QueryBuilderInterface {
-	return s.queryBuilder
-}
-
-// GetResultParser returns the result parser for direct access
-func (s *Storage) GetResultParser() *ResultParser {
-	// Type assert to get concrete type when needed
-	if rp, ok := s.resultParser.(*ResultParser); ok {
-		return rp
-	}
-	// For ClickHouse, extract the embedded ResultParser
-	if crp, ok := s.resultParser.(*ClickHouseResultParser); ok {
-		return crp.ResultParser
-	}
-	return nil
-}
-
 // --- Health and Monitoring ---
-
-// HealthCheck performs a basic health check on all storage components
-func (s *Storage) HealthCheck() error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Test database connection
-	if err := s.db.Ping(); err != nil {
-		return fmt.Errorf("database connection failed: %w", err)
-	}
-
-	// Test basic query functionality
-	_, err := s.statsOperations.GetLatestStatsDate("")
-	if err != nil {
-		// This might fail if no data exists, which is okay
-		// Only fail if it's a connection or query syntax error
-		if !strings.Contains(err.Error(), "no rows") {
-			return fmt.Errorf("query execution failed: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// GetComponentInfo returns information about the storage components
-func (s *Storage) GetComponentInfo() map[string]interface{} {
-	return map[string]interface{}{
-		"version":              "3.0.0-refactored",
-		"architecture":         "component-based with direct access",
-		"query_builder":        "safe parameterized queries",
-		"result_parser":        "type-safe parsing",
-		"node_operations":      "CRUD operations with validation",
-		"search_operations":    "advanced search and change detection",
-		"stats_operations":     "comprehensive statistics",
-		"analytics_operations": "historical analytics",
-		"test_operations":      "node testing and reachability",
-		"thread_safety":        "mutex-protected operations",
-		"boilerplate_removed":  "~200 lines of delegation eliminated",
-	}
-}

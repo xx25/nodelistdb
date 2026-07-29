@@ -19,67 +19,6 @@ func NewResultParser() *ResultParser {
 	return &ResultParser{}
 }
 
-// ParseNodeRow parses a database row into a Node struct (supports both DuckDB and ClickHouse)
-func (rp *ResultParser) ParseNodeRow(scanner RowScanner) (database.Node, error) {
-	var node database.Node
-	var flags, modemFlags interface{}
-	var internetConfig interface{} // Use interface{} to support both DuckDB and ClickHouse JSON types
-
-	err := scanner.Scan(
-		&node.Zone, &node.Net, &node.Node, &node.NodelistDate, &node.DayNumber,
-		&node.SystemName, &node.Location, &node.SysopName, &node.Phone,
-		&node.NodeType, &node.Region, &node.MaxSpeed,
-		&node.IsCM, &node.IsMO,
-		&flags, &modemFlags,
-		&node.ConflictSequence, &node.HasConflict,
-		&node.HasInet, &internetConfig, &node.FtsId, &node.RawLine, &node.Domain,
-	)
-	if err != nil {
-		return node, fmt.Errorf("failed to scan node: %w", err)
-	}
-
-	// Parse arrays (compatible with both DuckDB and ClickHouse)
-	node.Flags = rp.parseInterfaceToStringArray(flags)
-	node.ModemFlags = rp.parseInterfaceToStringArray(modemFlags)
-
-	// Handle JSON field (support both DuckDB sql.NullString and ClickHouse JSON types)
-	rp.parseInternetConfig(&node, internetConfig)
-
-	return node, nil
-}
-
-// parseInternetConfig handles JSON parsing for both DuckDB and ClickHouse
-func (rp *ResultParser) parseInternetConfig(node *database.Node, internetConfig interface{}) {
-	if internetConfig == nil {
-		return
-	}
-
-	switch config := internetConfig.(type) {
-	case sql.NullString:
-		// DuckDB format
-		if config.Valid && config.String != "" && config.String != "{}" {
-			node.InternetConfig = json.RawMessage(config.String)
-		}
-	case string:
-		// ClickHouse string format
-		if config != "" && config != "{}" {
-			node.InternetConfig = json.RawMessage(config)
-		}
-	case []byte:
-		// ClickHouse byte array format
-		if len(config) > 0 && string(config) != "{}" {
-			node.InternetConfig = json.RawMessage(config)
-		}
-	case map[string]interface{}:
-		// ClickHouse JSON object format
-		if len(config) > 0 {
-			if jsonBytes, err := json.Marshal(config); err == nil {
-				node.InternetConfig = json.RawMessage(jsonBytes)
-			}
-		}
-	}
-}
-
 // ParsePointRow parses a database row into a Point struct.
 // Column order matches pointsColumnsSQL (query_builder_points.go).
 func (rp *ResultParser) ParsePointRow(scanner RowScanner) (database.Point, error) {

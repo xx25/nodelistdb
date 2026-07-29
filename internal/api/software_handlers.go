@@ -57,12 +57,3 @@ func (s *Server) GetBinkdDetailedStats(w http.ResponseWriter, r *http.Request) {
 
 	WriteJSONSuccess(w, dist)
 }
-
-// GetSoftwareTrends returns software usage trends over time
-func (s *Server) GetSoftwareTrends(w http.ResponseWriter, r *http.Request) {
-	// This feature is not yet implemented in the storage layer
-	// Return empty response for now
-	emptyTrends := make(map[string]interface{})
-
-	WriteJSONSuccess(w, emptyTrends)
-}

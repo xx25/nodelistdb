@@ -336,11 +336,11 @@ func TestWindowMerger(t *testing.T) {
 
 func TestZMHDefaults(t *testing.T) {
 	tests := []struct {
-		zone        int
-		wantStart   int
-		wantStartM  int // minute
-		wantEnd     int
-		wantEndM    int // minute
+		zone       int
+		wantStart  int
+		wantStartM int // minute
+		wantEnd    int
+		wantEndM   int // minute
 	}{
 		{zone: 1, wantStart: 9, wantStartM: 0, wantEnd: 10, wantEndM: 0},
 		{zone: 2, wantStart: 2, wantStartM: 30, wantEnd: 3, wantEndM: 30}, // 02:30-03:30 UTC
@@ -380,18 +380,18 @@ func TestParseNumberFlag(t *testing.T) {
 	parser := NewParser(2)
 
 	tests := []struct {
-		flag      string
-		wantHour  int
-		wantNil   bool
+		flag     string
+		wantHour int
+		wantNil  bool
 	}{
 		{"#09", 9, false},
 		{"#00", 0, false},
 		{"#23", 23, false},
-		{"#24", 0, true},  // Invalid hour
-		{"#99", 0, true},  // Invalid hour
-		{"#9", 0, true},   // Wrong format
-		{"09", 0, true},   // Missing #
-		{"#AB", 0, true},  // Not a number
+		{"#24", 0, true}, // Invalid hour
+		{"#99", 0, true}, // Invalid hour
+		{"#9", 0, true},  // Wrong format
+		{"09", 0, true},  // Missing #
+		{"#AB", 0, true}, // Not a number
 	}
 
 	for _, tt := range tests {

@@ -6,16 +6,16 @@ import (
 
 func TestFileRequestCapabilities(t *testing.T) {
 	tests := []struct {
-		flag               string
-		valid              bool
-		barkFile           bool
-		barkUpdate         bool
-		wazooFile          bool
-		wazooUpdate        bool
-		hasAny             bool
-		hasBark            bool
-		hasWaZOO           bool
-		hasFull            bool
+		flag        string
+		valid       bool
+		barkFile    bool
+		barkUpdate  bool
+		wazooFile   bool
+		wazooUpdate bool
+		hasAny      bool
+		hasBark     bool
+		hasWaZOO    bool
+		hasFull     bool
 	}{
 		// XA: All capabilities
 		{"XA", true, true, true, true, true, true, true, true, true},

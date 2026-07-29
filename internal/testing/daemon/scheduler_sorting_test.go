@@ -282,12 +282,12 @@ func TestCalculateAdaptiveScore_ZeroTime(t *testing.T) {
 	now := time.Now()
 
 	schedule := &NodeSchedule{
-		Node:            &models.Node{},
-		Priority:        50,
-		LastTestTime:    time.Time{}, // Zero time
-		LastTestSuccess: false,
+		Node:             &models.Node{},
+		Priority:         50,
+		LastTestTime:     time.Time{}, // Zero time
+		LastTestSuccess:  false,
 		ConsecutiveFails: 1,
-		NextTestTime:    now.Add(1 * time.Hour),
+		NextTestTime:     now.Add(1 * time.Hour),
 	}
 
 	score := s.calculateAdaptiveScore(schedule, now)
@@ -323,10 +323,10 @@ func TestCalculateAdaptiveScore_ConsecutiveFails_Boundaries(t *testing.T) {
 		expectedBonus    float64 // Approximate expected fail bonus
 	}{
 		{"no failures", 0, 0},
-		{"one failure", 1, 50},   // 20 + 30
-		{"three failures", 3, 50}, // 20 + 30
-		{"four failures", 4, 40},  // 20 + 20
-		{"ten failures", 10, 40},  // 20 + 20
+		{"one failure", 1, 50},     // 20 + 30
+		{"three failures", 3, 50},  // 20 + 30
+		{"four failures", 4, 40},   // 20 + 20
+		{"ten failures", 10, 40},   // 20 + 20
 		{"eleven failures", 11, 9}, // 20 - 11
 		{"twenty failures", 20, 0}, // 20 - 20
 	}

@@ -7,11 +7,11 @@ type SubmitResultsRequest struct {
 
 // ModemTestResultRequest contains the result of a modem test
 type ModemTestResultRequest struct {
-	Zone             uint16   `json:"zone"`
-	Net              uint16   `json:"net"`
-	Node             uint16   `json:"node"`
-	ConflictSequence uint8    `json:"conflict_sequence"`
-	TestTime         string   `json:"test_time"` // RFC3339 format
+	Zone             uint16 `json:"zone"`
+	Net              uint16 `json:"net"`
+	Node             uint16 `json:"node"`
+	ConflictSequence uint8  `json:"conflict_sequence"`
+	TestTime         string `json:"test_time"` // RFC3339 format
 
 	// EMSI results
 	Success        bool     `json:"success"`

@@ -224,7 +224,7 @@ func (w *NodelistDBWriter) convertRecord(rec *TestRecord) nodelistDBResultReques
 		ConnectSpeed:   uint32(rec.ConnectSpeed),
 		ModemProtocol:  rec.Protocol,
 		PhoneDialed:    rec.Phone,
-		RingCount:      0,  // Not tracked
+		RingCount:      0, // Not tracked
 		CarrierTimeMs:  uint32(rec.DialTime.Milliseconds()),
 		ModemUsed:      rec.ModemName,
 		ConnectString:  rec.ConnectString,

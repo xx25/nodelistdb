@@ -1,34 +1,6 @@
 package storage
 
-// AnalyticsQueryBuilder handles analytics-related SQL queries
-type AnalyticsQueryBuilder struct {
-	base *QueryBuilder
-}
-
-// FlagFirstAppearance returns SQL for finding the first appearance of a flag
-func (aqb *AnalyticsQueryBuilder) FlagFirstAppearance() string {
-	return aqb.base.FlagFirstAppearanceSQL()
-}
-
-// FlagUsageByYear returns SQL for counting flag usage by year
-func (aqb *AnalyticsQueryBuilder) FlagUsageByYear() string {
-	return aqb.base.FlagUsageByYearSQL()
-}
-
-// NetworkName returns SQL for getting network name from coordinator node
-func (aqb *AnalyticsQueryBuilder) NetworkName() string {
-	return aqb.base.NetworkNameSQL()
-}
-
-// NetworkHistory returns SQL for getting network appearance periods
-func (aqb *AnalyticsQueryBuilder) NetworkHistory() string {
-	return aqb.base.NetworkHistorySQL()
-}
-
-// LEGACY METHODS - Analytics-related SQL query methods (kept for backward compatibility)
-
 // FlagFirstAppearanceSQL returns SQL for finding the first appearance of a flag in ClickHouse
-// Deprecated: Use QueryBuilder.Analytics().FlagFirstAppearance() instead
 // Optimized: Uses pre-aggregated flag_statistics table for instant lookups
 func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
 	return `
@@ -48,7 +20,6 @@ func (qb *QueryBuilder) FlagFirstAppearanceSQL() string {
 }
 
 // FlagUsageByYearSQL returns SQL for counting flag usage by year in ClickHouse
-// Deprecated: Use QueryBuilder.Analytics().FlagUsageByYear() instead
 // Optimized: Uses pre-aggregated flag_statistics table for instant lookups
 func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 	return `
@@ -86,7 +57,6 @@ func (qb *QueryBuilder) FlagUsageByYearSQL() string {
 }
 
 // NetworkNameSQL returns SQL for getting network name from coordinator node in ClickHouse
-// Deprecated: Use QueryBuilder.Analytics().NetworkName() instead
 func (qb *QueryBuilder) NetworkNameSQL() string {
 	return `
 		SELECT system_name
@@ -98,7 +68,6 @@ func (qb *QueryBuilder) NetworkNameSQL() string {
 }
 
 // NetworkHistorySQL returns SQL for getting network appearance periods in ClickHouse
-// Deprecated: Use QueryBuilder.Analytics().NetworkHistory() instead
 func (qb *QueryBuilder) NetworkHistorySQL() string {
 	return `
 		WITH network_dates AS (

@@ -5,9 +5,9 @@ import (
 
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/protocols"
-	"github.com/xx25/fidomail/pkg/emsi"
 	"github.com/nodelistdb/internal/testing/services"
 	"github.com/nodelistdb/internal/testing/storage"
+	"github.com/xx25/fidomail/pkg/emsi"
 )
 
 // ReloadConfig reloads the configuration from file

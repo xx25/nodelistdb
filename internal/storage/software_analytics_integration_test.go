@@ -3,6 +3,7 @@ package storage
 import (
 	"testing"
 )
+
 func TestSortingBehavior(t *testing.T) {
 	t.Run("SoftwareTypeStats sorting", func(t *testing.T) {
 		input := map[string]int{
@@ -30,7 +31,7 @@ func TestSortingBehavior(t *testing.T) {
 
 	t.Run("VersionStats sorting", func(t *testing.T) {
 		input := map[string]int{
-			"binkd 1.0.4":   25,
+			"binkd 1.0.4":    25,
 			"binkd 1.1a-112": 100,
 			"Mystic 1.12A48": 50,
 		}
@@ -78,13 +79,13 @@ func TestSortingBehavior(t *testing.T) {
 }
 func TestVersionStatsWithComplexData(t *testing.T) {
 	input := map[string]int{
-		"binkd 1.0.4":     250,
-		"binkd 1.1a-112":  180,
-		"binkd 1.1a-114":  120,
-		"Mystic 1.12A48":  95,
-		"Mystic 1.12A47":  45,
-		"mbcico 1.1.8":    30,
-		"Argus 4.20":      15,
+		"binkd 1.0.4":    250,
+		"binkd 1.1a-112": 180,
+		"binkd 1.1a-114": 120,
+		"Mystic 1.12A48": 95,
+		"Mystic 1.12A47": 45,
+		"mbcico 1.1.8":   30,
+		"Argus 4.20":     15,
 	}
 
 	result := mapToVersionStats(input, 735)
@@ -120,12 +121,12 @@ func TestVersionStatsWithComplexData(t *testing.T) {
 // TestOSDistributionWithRealData tests OS distribution with realistic data
 func TestOSDistributionWithRealData(t *testing.T) {
 	input := map[string]int{
-		"Linux":           450,
-		"Windows 32-bit":  280,
-		"Windows 64-bit":  150,
-		"FreeBSD":         45,
-		"OS/2":            20,
-		"macOS":           5,
+		"Linux":          450,
+		"Windows 32-bit": 280,
+		"Windows 64-bit": 150,
+		"FreeBSD":        45,
+		"OS/2":           20,
+		"macOS":          5,
 	}
 
 	result := mapToOSStats(input, 950)
@@ -148,11 +149,11 @@ func TestOSDistributionWithRealData(t *testing.T) {
 }
 func TestBinkdVersionStatsWithRealWorldData(t *testing.T) {
 	input := map[string]int{
-		"1.0.4":     180,
-		"1.1a-112":  120,
-		"1.1a-114":  95,
-		"1.1a-115":  45,
-		"0.9.11":    20,
+		"1.0.4":    180,
+		"1.1a-112": 120,
+		"1.1a-114": 95,
+		"1.1a-115": 45,
+		"0.9.11":   20,
 	}
 
 	result := mapToBinkdVersionStats(input, 460)

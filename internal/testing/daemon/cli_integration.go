@@ -26,13 +26,13 @@ func (d *Daemon) StartCLIServer(ctx context.Context) error {
 		logging.Debugf("Run-once mode: not starting the CLI server on %s:%d", d.config.CLI.Host, d.config.CLI.Port)
 		return nil
 	}
-	
+
 	// Create adapter
 	adapter := &CLIAdapter{
 		daemon:     d,
 		configPath: d.config.ConfigPath, // We'll need to add this to config
 	}
-	
+
 	// Use simple telnet server for better compatibility
 	telnetConfig := cli.TelnetConfig{
 		Host:    d.config.CLI.Host,
@@ -41,17 +41,17 @@ func (d *Daemon) StartCLIServer(ctx context.Context) error {
 		Welcome: d.config.CLI.WelcomeMessage,
 		Timeout: 30 * time.Minute,
 	}
-	
+
 	// Create and start telnet server
 	telnetServer := cli.NewTelnetServer(adapter, telnetConfig)
-	
+
 	if err := telnetServer.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start telnet server: %w", err)
 	}
-	
+
 	// Note: telnetServer will run in background goroutine
 	// and will be stopped when context is cancelled
-	
+
 	return nil
 }
 
@@ -67,7 +67,7 @@ func (a *CLIAdapter) TestNode(ctx context.Context, zone, net, node uint16, hostn
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert to CLI format
 	return a.convertTestResult(result), nil
 }
@@ -75,20 +75,20 @@ func (a *CLIAdapter) TestNode(ctx context.Context, zone, net, node uint16, hostn
 func (a *CLIAdapter) GetStatus() cli.DaemonStatus {
 	a.daemon.stats.Lock()
 	defer a.daemon.stats.Unlock()
-	
+
 	uptime := time.Since(a.daemon.stats.startTime)
 	successRate := float64(0)
 	if a.daemon.stats.totalTested > 0 {
 		successRate = float64(a.daemon.stats.totalSuccesses) / float64(a.daemon.stats.totalTested) * 100
 	}
-	
+
 	status := "running"
 	if a.daemon.config.Daemon.CLIOnly {
 		status = "cli-only mode"
 	} else if a.daemon.IsPaused() {
 		status = "paused"
 	}
-	
+
 	return cli.DaemonStatus{
 		Uptime:         uptime,
 		TestsCompleted: a.daemon.stats.totalTested,
@@ -104,14 +104,14 @@ func (a *CLIAdapter) GetWorkerStatus() cli.WorkerStatus {
 	active := 0
 	idle := a.daemon.config.Daemon.Workers
 	queueLength := 0
-	
+
 	if a.daemon.workerPool != nil {
 		// Get actual status from worker pool
 		active = a.daemon.workerPool.GetActiveCount()
 		idle = a.daemon.config.Daemon.Workers - active
 		queueLength = a.daemon.workerPool.GetQueueSize()
 	}
-	
+
 	return cli.WorkerStatus{
 		TotalWorkers: a.daemon.config.Daemon.Workers,
 		Active:       active,
@@ -157,7 +157,7 @@ func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {
 	if r == nil {
 		return nil
 	}
-	
+
 	result := &cli.TestResult{
 		TestID:                r.Address, // Use address as ID for now
 		Address:               r.Address,
@@ -169,7 +169,7 @@ func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {
 		HasConnectivityIssues: r.HasConnectivityIssues,
 		AddressValidated:      r.AddressValidated,
 	}
-	
+
 	// Convert geolocation
 	if r.Country != "" {
 		result.Geolocation = &cli.GeolocationInfo{
@@ -185,7 +185,7 @@ func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {
 			result.Geolocation.ASN = fmt.Sprintf("AS%d", r.ASN)
 		}
 	}
-	
+
 	// Convert BinkP results
 	if r.BinkPResult != nil && r.BinkPResult.Tested {
 		result.BinkPResult = &cli.ProtocolResult{
@@ -194,7 +194,7 @@ func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {
 			ResponseTime: int(r.BinkPResult.ResponseMs),
 			Error:        r.BinkPResult.Error,
 		}
-		
+
 		// Extract BinkP details from map if present
 		if r.BinkPResult.Details != nil {
 			if sysName, ok := r.BinkPResult.Details["system_name"].(string); ok {
@@ -217,7 +217,7 @@ func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {
 			}
 		}
 	}
-	
+
 	// Convert IFCICO results
 	if r.IfcicoResult != nil && r.IfcicoResult.Tested {
 		result.IFCICOResult = &cli.ProtocolResult{
@@ -226,7 +226,7 @@ func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {
 			ResponseTime: int(r.IfcicoResult.ResponseMs),
 			Error:        r.IfcicoResult.Error,
 		}
-		
+
 		// Extract IFCICO details from map if present
 		if r.IfcicoResult.Details != nil {
 			if mailerInfo, ok := r.IfcicoResult.Details["mailer_info"].(string); ok {
@@ -234,7 +234,7 @@ func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {
 			}
 		}
 	}
-	
+
 	// Convert Telnet results
 	if r.TelnetResult != nil && r.TelnetResult.Tested {
 		result.TelnetResult = &cli.ProtocolResult{
@@ -244,6 +244,6 @@ func (a *CLIAdapter) convertTestResult(r *models.TestResult) *cli.TestResult {
 			Error:        r.TelnetResult.Error,
 		}
 	}
-	
+
 	return result
 }

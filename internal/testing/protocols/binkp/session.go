@@ -2,8 +2,8 @@ package binkp
 
 import (
 	"fmt"
-	"io"
 	"github.com/nodelistdb/internal/testing/logging"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -114,7 +114,7 @@ func (s *Session) sendOurInfo() error {
 		// Don't advertise CRAM-MD5 since we're not implementing it for testing
 		// CreateM_NUL("OPT", "CRAM-MD5"),
 	}
-	
+
 	for _, frame := range frames {
 		if s.debug {
 			logging.Debugf("BinkP: Sending %s", frame)
@@ -123,7 +123,7 @@ func (s *Session) sendOurInfo() error {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -149,11 +149,11 @@ func (s *Session) sendPassword(password string) error {
 func (s *Session) receiveRemoteInfo() error {
 	// Set overall timeout for receiving all frames
 	_ = s.conn.SetReadDeadline(time.Now().Add(s.timeout))
-	
+
 	receivedADR := false
 	frameCount := 0
 	maxFrames := 50 // Prevent infinite loop
-	
+
 	for frameCount < maxFrames {
 		frame, err := ReadFrame(s.conn)
 		if err != nil {
@@ -163,13 +163,13 @@ func (s *Session) receiveRemoteInfo() error {
 			}
 			return fmt.Errorf("failed to read frame: %w", err)
 		}
-		
+
 		frameCount++
-		
+
 		if s.debug {
 			logging.Debugf("BinkP: Received %s", frame)
 		}
-		
+
 		switch frame.Type {
 		case M_NUL:
 			// Parse M_NUL frame
@@ -178,7 +178,7 @@ func (s *Session) receiveRemoteInfo() error {
 				logging.Debugf("BinkP: M_NUL parsed: key=[%s] value=[%s] (raw=%q)", key, value, frame.Data)
 			}
 			s.parseM_NUL(key, value)
-			
+
 		case M_ADR:
 			// Parse addresses
 			s.remoteInfo.Addresses = ParseAddresses(frame.Data)
@@ -186,11 +186,11 @@ func (s *Session) receiveRemoteInfo() error {
 			if s.debug {
 				logging.Debugf("BinkP: Remote addresses: %v", s.remoteInfo.Addresses)
 			}
-			
+
 		case M_PWD:
 			// Remote sent password
 			s.remoteInfo.Password = string(frame.Data)
-			
+
 		case M_OK:
 			// Remote accepts our handshake
 			if s.debug {
@@ -198,16 +198,16 @@ func (s *Session) receiveRemoteInfo() error {
 			}
 			// Handshake complete - authentication accepted
 			return nil
-			
+
 		case M_ERR:
 			// Remote reported error
 			errMsg := string(frame.Data)
 			return fmt.Errorf("remote error: %s", errMsg)
-			
+
 		case M_BSY:
 			// Remote is busy
 			return fmt.Errorf("remote is busy")
-			
+
 		case M_EOB:
 			// End of batch - remote has no files for us
 			s.remoteEOBRecvd = true
@@ -230,7 +230,7 @@ func (s *Session) receiveRemoteInfo() error {
 			}
 			// Handshake complete - no files to transfer
 			return nil
-			
+
 		default:
 			// Unknown or file transfer frame - skip for testing
 			if s.debug {
@@ -259,7 +259,7 @@ func (s *Session) receiveRemoteInfo() error {
 func (s *Session) parseM_NUL(key, value string) {
 	// Convert to uppercase for comparison
 	keyUpper := strings.ToUpper(key)
-	
+
 	switch keyUpper {
 	case "SYS":
 		s.remoteInfo.SystemName = value
@@ -373,13 +373,13 @@ func (s *Session) Close() error {
 func (s *Session) ValidateAddress(expectedAddress string) bool {
 	// Normalize addresses for comparison
 	expected := normalizeAddress(expectedAddress)
-	
+
 	for _, addr := range s.remoteInfo.Addresses {
 		if normalizeAddress(addr) == expected {
 			return true
 		}
 	}
-	
+
 	return false
 }
 

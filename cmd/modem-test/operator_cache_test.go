@@ -85,12 +85,12 @@ func TestFindOperatorByName(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		operators     []OperatorConfig
-		searchName    string
-		wantOp        OperatorConfig
-		wantIndex     int
-		wantFound     bool
+		name       string
+		operators  []OperatorConfig
+		searchName string
+		wantOp     OperatorConfig
+		wantIndex  int
+		wantFound  bool
 	}{
 		{
 			name:       "finds operator by exact name",

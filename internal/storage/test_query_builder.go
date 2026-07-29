@@ -1,17 +1,13 @@
 package storage
 
-import (
-	"fmt"
-
-	"github.com/nodelistdb/internal/database"
-)
+import "fmt"
 
 // TestQueryBuilder centralizes query generation for test operations
 // ClickHouse-only implementation
 type TestQueryBuilder struct{}
 
 // NewTestQueryBuilder creates a new test query builder
-func NewTestQueryBuilder(db database.DatabaseInterface) *TestQueryBuilder {
+func NewTestQueryBuilder() *TestQueryBuilder {
 	return &TestQueryBuilder{}
 }
 
@@ -308,27 +304,6 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 		ORDER BY report_date ASC`
 }
 
-// BuildReachabilityTrendsFromDailyStatsQuery reads pre-aggregated data from node_test_daily_stats.
-// Much faster than the CROSS JOIN approach — suitable for long date ranges (all time).
-func (tqb *TestQueryBuilder) BuildReachabilityTrendsFromDailyStatsQuery() string {
-	return `
-		SELECT
-			date AS test_date,
-			max(total_nodes_tested) AS total_nodes,
-			max(nodes_operational) AS operational_nodes,
-			max(total_nodes_tested) - max(nodes_operational) AS failed_nodes,
-			if(max(total_nodes_tested) > 0,
-				max(nodes_operational) / max(total_nodes_tested) * 100, 0) AS success_rate,
-			least(
-				if(max(avg_binkp_response_ms) > 0, max(avg_binkp_response_ms), 999999),
-				if(max(avg_ifcico_response_ms) > 0, max(avg_ifcico_response_ms), 999999)
-			) AS avg_response_ms
-		FROM node_test_daily_stats
-		WHERE date >= '2025-09-01'
-		GROUP BY date
-		ORDER BY date ASC`
-}
-
 // protocolSuccessPredicates maps a protocol to the SQL condition that decides
 // whether a test row counts as a working instance of it. `%[1]s` is the table
 // alias prefix, so the same condition can be applied both where rows are
@@ -574,14 +549,4 @@ func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
 		WHERE rn = 1 AND is_operational = ?
 		ORDER BY test_time DESC
 		LIMIT ?`
-}
-
-// IntervalFunc returns the appropriate time interval function (ClickHouse)
-func (tqb *TestQueryBuilder) IntervalFunc() string {
-	return "now() - INTERVAL ? DAY"
-}
-
-// ArrayLengthFunc returns the appropriate array length function (ClickHouse)
-func (tqb *TestQueryBuilder) ArrayLengthFunc(column string) string {
-	return fmt.Sprintf("length(%s)", column)
 }

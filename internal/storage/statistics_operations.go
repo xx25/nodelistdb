@@ -9,22 +9,12 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// CacheEntry represents a cached statistics entry with TTL information
-type CacheEntry struct {
-	Stats     *database.NetworkStats
-	CachedAt  time.Time
-	TTL       time.Duration
-}
-
 // StatisticsOperations handles all statistics-related database operations
 type StatisticsOperations struct {
 	db           database.DatabaseInterface
 	queryBuilder QueryBuilderInterface
 	resultParser ResultParserInterface
 	mu           sync.RWMutex
-	// Enhanced cache with TTL support for better performance
-	statsCache map[string]*CacheEntry
-	cacheMu    sync.RWMutex
 }
 
 // NewStatisticsOperations creates a new StatisticsOperations instance
@@ -33,27 +23,13 @@ func NewStatisticsOperations(db database.DatabaseInterface, queryBuilder QueryBu
 		db:           db,
 		queryBuilder: queryBuilder,
 		resultParser: resultParser,
-		statsCache:   make(map[string]*CacheEntry),
 	}
 }
 
-// GetStats retrieves network statistics for a specific date with smart TTL-based caching.
-// An empty domain aggregates across all networks.
+// GetStats retrieves network statistics for a specific date.
+// An empty domain aggregates across all networks. Caching belongs to
+// CachedStorage, which wraps this call.
 func (so *StatisticsOperations) GetStats(date time.Time, domain string) (*database.NetworkStats, error) {
-	cacheKey := domain + "@" + date.Format("2006-01-02")
-
-	// Check cache with TTL validation
-	so.cacheMu.RLock()
-	if entry, exists := so.statsCache[cacheKey]; exists {
-		// Check if cache entry is still valid
-		if time.Since(entry.CachedAt) < entry.TTL {
-			so.cacheMu.RUnlock()
-			return entry.Stats, nil
-		}
-		// Cache entry expired, will be replaced
-	}
-	so.cacheMu.RUnlock()
-
 	so.mu.RLock()
 	defer so.mu.RUnlock()
 
@@ -133,33 +109,6 @@ func (so *StatisticsOperations) GetStats(date time.Time, domain string) (*databa
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to read largest nets: %w", err)
 	}
-
-	// Smart caching with TTL based on data recency
-	var ttl time.Duration
-	now := time.Now()
-	
-	if date.Before(now.AddDate(0, 0, -30)) {
-		// Historical data (>30 days old): cache permanently
-		ttl = 24 * time.Hour * 365 // 1 year
-	} else if date.Before(now.AddDate(0, 0, -7)) {
-		// Recent data (7-30 days old): cache for 6 hours
-		ttl = 6 * time.Hour
-	} else if date.Before(now.AddDate(0, 0, -1)) {
-		// Very recent data (1-7 days old): cache for 2 hours
-		ttl = 2 * time.Hour
-	} else {
-		// Today's data: cache for 30 minutes
-		ttl = 30 * time.Minute
-	}
-	
-	// Cache the result with appropriate TTL
-	so.cacheMu.Lock()
-	so.statsCache[cacheKey] = &CacheEntry{
-		Stats:    stats,
-		CachedAt: time.Now(),
-		TTL:      ttl,
-	}
-	so.cacheMu.Unlock()
 
 	return stats, nil
 }
@@ -267,95 +216,6 @@ func (so *StatisticsOperations) GetNearestAvailableDate(requestedDate time.Time,
 	return so.GetLatestStatsDate(domain)
 }
 
-// GetDateRangeStats returns statistics for a range of dates
-func (so *StatisticsOperations) GetDateRangeStats(startDate, endDate time.Time, domain string) ([]database.NetworkStats, error) {
-	if startDate.After(endDate) {
-		return nil, fmt.Errorf("start date cannot be after end date")
-	}
-
-	so.mu.RLock()
-	defer so.mu.RUnlock()
-
-	conn := so.db.Conn()
-
-	// Get all dates in the range first
-	query := `SELECT DISTINCT nodelist_date FROM nodes
-		WHERE nodelist_date >= ? AND nodelist_date <= ? AND ` + optionalDomainSQL + `
-		ORDER BY nodelist_date ASC`
-
-	rows, err := conn.Query(query, startDate, endDate, domain, domain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get dates in range: %w", err)
-	}
-	defer rows.Close()
-
-	var dates []time.Time
-	for rows.Next() {
-		var date time.Time
-		if err := rows.Scan(&date); err != nil {
-			return nil, fmt.Errorf("failed to scan date: %w", err)
-		}
-		dates = append(dates, date)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read date range stats: %w", err)
-	}
-
-	// Get stats for each date
-	var allStats []database.NetworkStats
-	for _, date := range dates {
-		stats, err := so.GetStats(date, domain)
-		if err != nil {
-			// Log error but continue with other dates
-			continue
-		}
-		allStats = append(allStats, *stats)
-	}
-
-	return allStats, nil
-}
-
-// GetZoneStats returns statistics for a specific zone across all dates
-func (so *StatisticsOperations) GetZoneStats(zone int) (map[time.Time]int, error) {
-	if zone < 1 || zone > 65535 {
-		return nil, fmt.Errorf("invalid zone: %d", zone)
-	}
-
-	so.mu.RLock()
-	defer so.mu.RUnlock()
-
-	conn := so.db.Conn()
-
-	query := `SELECT nodelist_date, COUNT(*) as node_count 
-		FROM nodes 
-		WHERE zone = ? 
-		GROUP BY nodelist_date 
-		ORDER BY nodelist_date ASC`
-
-	rows, err := conn.Query(query, zone)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get zone stats: %w", err)
-	}
-	defer rows.Close()
-
-	zoneStats := make(map[time.Time]int)
-	for rows.Next() {
-		var date time.Time
-		var count int
-		if err := rows.Scan(&date, &count); err != nil {
-			return nil, fmt.Errorf("failed to scan zone stats: %w", err)
-		}
-		zoneStats[date] = count
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating zone stats: %w", err)
-	}
-
-	return zoneStats, nil
-}
-
 // NodeCountByDate holds a single data point for the node count history chart.
 type NodeCountByDate struct {
 	Date       time.Time
@@ -395,194 +255,6 @@ func (so *StatisticsOperations) GetNodeCountHistory(domain string) ([]NodeCountB
 		return nil, fmt.Errorf("failed to read node count history: %w", err)
 	}
 	return result, nil
-}
-
-// GetNodeTypeDistribution returns the distribution of node types for a given date
-func (so *StatisticsOperations) GetNodeTypeDistribution(date time.Time) (map[string]int, error) {
-	so.mu.RLock()
-	defer so.mu.RUnlock()
-
-	conn := so.db.Conn()
-
-	query := `SELECT node_type, COUNT(*) as count 
-		FROM nodes 
-		WHERE nodelist_date = ? 
-		GROUP BY node_type 
-		ORDER BY count DESC`
-
-	rows, err := conn.Query(query, date)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get node type distribution: %w", err)
-	}
-	defer rows.Close()
-
-	distribution := make(map[string]int)
-	for rows.Next() {
-		var nodeType string
-		var count int
-		if err := rows.Scan(&nodeType, &count); err != nil {
-			return nil, fmt.Errorf("failed to scan node type distribution: %w", err)
-		}
-		distribution[nodeType] = count
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating node type distribution: %w", err)
-	}
-
-	return distribution, nil
-}
-
-// GetTopSysops returns the sysops managing the most nodes for a given date
-func (so *StatisticsOperations) GetTopSysops(date time.Time, limit int) ([]SysopStats, error) {
-	if limit <= 0 {
-		limit = 10
-	} else if limit > 100 {
-		limit = 100
-	}
-
-	so.mu.RLock()
-	defer so.mu.RUnlock()
-
-	conn := so.db.Conn()
-
-	query := `SELECT sysop_name, COUNT(*) as node_count,
-		COUNT(DISTINCT zone) as zones,
-		COUNT(DISTINCT CONCAT(zone, ':', net)) as nets
-	FROM nodes 
-	WHERE nodelist_date = ? AND sysop_name != '' 
-	GROUP BY sysop_name 
-	ORDER BY node_count DESC 
-	LIMIT ?`
-
-	rows, err := conn.Query(query, date, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get top sysops: %w", err)
-	}
-	defer rows.Close()
-
-	var sysops []SysopStats
-	for rows.Next() {
-		var sysop SysopStats
-		if err := rows.Scan(&sysop.SysopName, &sysop.NodeCount, &sysop.ZoneCount, &sysop.NetCount); err != nil {
-			return nil, fmt.Errorf("failed to scan sysop stats: %w", err)
-		}
-		sysop.Date = date
-		sysops = append(sysops, sysop)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating sysop stats: %w", err)
-	}
-
-	return sysops, nil
-}
-
-// GetGrowthStats calculates growth statistics between two dates
-func (so *StatisticsOperations) GetGrowthStats(startDate, endDate time.Time, domain string) (*GrowthStats, error) {
-	if startDate.After(endDate) {
-		return nil, fmt.Errorf("start date cannot be after end date")
-	}
-
-	startStats, err := so.GetStats(startDate, domain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get start date stats: %w", err)
-	}
-
-	endStats, err := so.GetStats(endDate, domain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get end date stats: %w", err)
-	}
-
-	growth := &GrowthStats{
-		StartDate:      startDate,
-		EndDate:        endDate,
-		StartStats:     *startStats,
-		EndStats:       *endStats,
-		NodeGrowth:     endStats.TotalNodes - startStats.TotalNodes,
-		ActiveGrowth:   endStats.ActiveNodes - startStats.ActiveNodes,
-		BinkpGrowth:    endStats.BinkpNodes - startStats.BinkpNodes,
-		InternetGrowth: endStats.InternetNodes - startStats.InternetNodes,
-	}
-
-	// Calculate growth percentages
-	if startStats.TotalNodes > 0 {
-		growth.NodeGrowthPercent = float64(growth.NodeGrowth) / float64(startStats.TotalNodes) * 100
-	}
-	if startStats.ActiveNodes > 0 {
-		growth.ActiveGrowthPercent = float64(growth.ActiveGrowth) / float64(startStats.ActiveNodes) * 100
-	}
-	if startStats.BinkpNodes > 0 {
-		growth.BinkpGrowthPercent = float64(growth.BinkpGrowth) / float64(startStats.BinkpNodes) * 100
-	}
-	if startStats.InternetNodes > 0 {
-		growth.InternetGrowthPercent = float64(growth.InternetGrowth) / float64(startStats.InternetNodes) * 100
-	}
-
-	return growth, nil
-}
-
-// ClearStatsCache clears the statistics cache - useful for maintenance or testing
-func (so *StatisticsOperations) ClearStatsCache() {
-	so.cacheMu.Lock()
-	so.statsCache = make(map[string]*CacheEntry)
-	so.cacheMu.Unlock()
-}
-
-// GetCacheStats returns information about the enhanced TTL-based stats cache
-func (so *StatisticsOperations) GetCacheStats() map[string]interface{} {
-	so.cacheMu.RLock()
-	defer so.cacheMu.RUnlock()
-
-	validEntries := 0
-	expiredEntries := 0
-	
-	for _, entry := range so.statsCache {
-		if time.Since(entry.CachedAt) < entry.TTL {
-			validEntries++
-		} else {
-			expiredEntries++
-		}
-	}
-
-	return map[string]interface{}{
-		"total_cached_entries": len(so.statsCache),
-		"valid_entries":        validEntries,
-		"expired_entries":      expiredEntries,
-		"cache_enabled":        true,
-		"cache_strategy":       "TTL-based with smart expiration",
-		"ttl_rules": map[string]string{
-			"historical_data":     "1 year (>30 days old)",
-			"recent_data":         "6 hours (7-30 days old)", 
-			"very_recent_data":    "2 hours (1-7 days old)",
-			"today_data":          "30 minutes",
-		},
-	}
-}
-
-// SysopStats represents statistics for individual sysops
-type SysopStats struct {
-	Date      time.Time `json:"date"`
-	SysopName string    `json:"sysop_name"`
-	NodeCount int       `json:"node_count"`
-	ZoneCount int       `json:"zone_count"`
-	NetCount  int       `json:"net_count"`
-}
-
-// GrowthStats represents growth statistics between two dates
-type GrowthStats struct {
-	StartDate             time.Time             `json:"start_date"`
-	EndDate               time.Time             `json:"end_date"`
-	StartStats            database.NetworkStats `json:"start_stats"`
-	EndStats              database.NetworkStats `json:"end_stats"`
-	NodeGrowth            int                   `json:"node_growth"`
-	ActiveGrowth          int                   `json:"active_growth"`
-	BinkpGrowth           int                   `json:"binkp_growth"`
-	InternetGrowth        int                   `json:"internet_growth"`
-	NodeGrowthPercent     float64               `json:"node_growth_percent"`
-	ActiveGrowthPercent   float64               `json:"active_growth_percent"`
-	BinkpGrowthPercent    float64               `json:"binkp_growth_percent"`
-	InternetGrowthPercent float64               `json:"internet_growth_percent"`
 }
 
 // BrowseZone is one row of the hierarchy browser's zone listing.

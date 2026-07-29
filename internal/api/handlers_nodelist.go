@@ -15,10 +15,6 @@ import (
 // LatestNodelistAPIHandler returns the latest nodelist file.
 // GET /api/nodelist/latest
 func (s *Server) LatestNodelistAPIHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Find the latest nodelist file
 	latest, err := findLatestNodelistAPI()
 	if err != nil {

@@ -28,7 +28,7 @@ GOMOD=$(GO) mod
 ARM64_CC ?= aarch64-linux-gnu-gcc
 ARM64_CXX ?= aarch64-linux-gnu-g++
 
-.PHONY: help build clean test run-parser deps build-daemon run-daemon build-modem-test run-modem-test
+.PHONY: help build clean test run-parser deps build-daemon run-daemon build-modem-test run-modem-test fmt fmt-check lint
 
 # Default target
 help: ## Show this help message
@@ -199,6 +199,15 @@ docker-build: ## Build Docker image
 # Format code
 fmt: ## Format Go code
 	go fmt ./...
+
+fmt-check: ## Fail if any Go file is not gofmt-clean
+	@unformatted=$$(gofmt -l ./cmd ./internal); \
+	if [ -n "$$unformatted" ]; then \
+		echo "These files are not gofmt-clean; run 'make fmt':"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
+	@echo "All Go files are gofmt-clean"
 
 # Lint code  
 lint: ## Run linter

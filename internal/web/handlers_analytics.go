@@ -73,8 +73,8 @@ type protocolAnalyticsData struct {
 	Limit            int
 	IncludeZeroNodes bool
 	Error            error
-	Config           ProtocolPageConfig  // Configuration for the page
-	ProcessedInfo    []template.HTML     // Processed InfoText with days substituted
+	Config           ProtocolPageConfig // Configuration for the page
+	ProcessedInfo    []template.HTML    // Processed InfoText with days substituted
 }
 
 // protocolNodesFetcher is a function type for fetching protocol-specific nodes
@@ -657,8 +657,8 @@ func (s *Server) VModemUnavailableAnalyticsHandler(w http.ResponseWriter, r *htt
 // FTPAnalyticsHandler shows FTP enabled nodes analytics
 func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{
-		PageTitle:    "FTP Enabled Nodes",
-		PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with FTP protocol</p>`),
+		PageTitle:     "FTP Enabled Nodes",
+		PageSubtitle:  template.HTML(`<p class="subtitle">Nodes that have been successfully tested with FTP protocol</p>`),
 		StatsHeading:  "FTP Enabled",
 		ShowVersion:   false,
 		ShowAnonLogin: true,
@@ -1478,27 +1478,27 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Build template data
 	data := struct {
-		Title                  string
-		ActivePage             string
-		Version                string
-		NewNodesWorking        []storage.NodeTestResult
-		NewNodesNonWorking     []storage.NodeTestResult
-		OldNodesLostIPv6       []storage.NodeTestResult
-		OldNodesGainedIPv6     []storage.NodeTestResult
-		Limit                  int
-		IncludeZeroNodes       bool
-		Error                  error
+		Title              string
+		ActivePage         string
+		Version            string
+		NewNodesWorking    []storage.NodeTestResult
+		NewNodesNonWorking []storage.NodeTestResult
+		OldNodesLostIPv6   []storage.NodeTestResult
+		OldNodesGainedIPv6 []storage.NodeTestResult
+		Limit              int
+		IncludeZeroNodes   bool
+		Error              error
 	}{
-		Title:                  "Weekly IPv6 News",
-		ActivePage:             "analytics",
-		Version:                version.GetVersionInfo(),
-		NewNodesWorking:        []storage.NodeTestResult{},
-		NewNodesNonWorking:     []storage.NodeTestResult{},
-		OldNodesLostIPv6:       []storage.NodeTestResult{},
-		OldNodesGainedIPv6:     []storage.NodeTestResult{},
-		Limit:                  limit,
-		IncludeZeroNodes:       includeZeroNodes,
-		Error:                  displayError,
+		Title:              "Weekly IPv6 News",
+		ActivePage:         "analytics",
+		Version:            version.GetVersionInfo(),
+		NewNodesWorking:    []storage.NodeTestResult{},
+		NewNodesNonWorking: []storage.NodeTestResult{},
+		OldNodesLostIPv6:   []storage.NodeTestResult{},
+		OldNodesGainedIPv6: []storage.NodeTestResult{},
+		Limit:              limit,
+		IncludeZeroNodes:   includeZeroNodes,
+		Error:              displayError,
 	}
 
 	if news != nil {
@@ -2008,27 +2008,27 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 
 	// Build template data
 	data := struct {
-		Title            string
-		ActivePage       string
-		Version          string
-		Results          []storage.DomainWhoisResult
-		Now              time.Time
-		TotalDomains     int
-		ExpiredCount     int
+		Title             string
+		ActivePage        string
+		Version           string
+		Results           []storage.DomainWhoisResult
+		Now               time.Time
+		TotalDomains      int
+		ExpiredCount      int
 		ExpiringSoonCount int
-		UnknownCount     int
-		Error            error
+		UnknownCount      int
+		Error             error
 	}{
-		Title:            "Domain Expiration Report",
-		ActivePage:       "analytics",
-		Version:          version.GetVersionInfo(),
-		Results:          results,
-		Now:              now,
-		TotalDomains:     totalDomains,
-		ExpiredCount:     expiredCount,
+		Title:             "Domain Expiration Report",
+		ActivePage:        "analytics",
+		Version:           version.GetVersionInfo(),
+		Results:           results,
+		Now:               now,
+		TotalDomains:      totalDomains,
+		ExpiredCount:      expiredCount,
 		ExpiringSoonCount: expiringSoonCount,
-		UnknownCount:     unknownCount,
-		Error:            displayError,
+		UnknownCount:      unknownCount,
+		Error:             displayError,
 	}
 
 	tmpl, exists := s.templates["domain_expiration"]

@@ -190,7 +190,6 @@ The REST API is available at `/api` when the server is running.
 - `GET /api/software/binkp` - BinkP software distribution
 - `GET /api/software/ifcico` - IFCico software distribution
 - `GET /api/software/binkd` - Detailed Binkd statistics
-- `GET /api/software/trends` - Software usage trends (stub)
 
 **Reference & Documentation:**
 - `GET /api/flags` - Get FidoNet flag documentation

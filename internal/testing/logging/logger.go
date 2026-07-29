@@ -23,10 +23,10 @@ type Logger struct {
 type Config struct {
 	Level      string `yaml:"level"`
 	File       string `yaml:"file"`
-	MaxSize    int    `yaml:"max_size"`    // megabytes
+	MaxSize    int    `yaml:"max_size"` // megabytes
 	MaxBackups int    `yaml:"max_backups"`
-	MaxAge     int    `yaml:"max_age"`     // days
-	Console    bool   `yaml:"console"`     // log to console as well
+	MaxAge     int    `yaml:"max_age"` // days
+	Console    bool   `yaml:"console"` // log to console as well
 }
 
 var globalLogger *Logger
@@ -88,7 +88,7 @@ func (l *Logger) configure() error {
 		// Setup log rotation
 		rotator := &lumberjack.Logger{
 			Filename:   l.config.File,
-			MaxSize:    l.config.MaxSize,    // megabytes
+			MaxSize:    l.config.MaxSize, // megabytes
 			MaxBackups: l.config.MaxBackups,
 			MaxAge:     l.config.MaxAge, // days
 			Compress:   true,
@@ -113,10 +113,10 @@ func (l *Logger) configure() error {
 
 	// Create logger
 	l.logger = zerolog.New(writer).With().Timestamp().Logger()
-	
+
 	// Set global logger
 	log.Logger = l.logger
-	
+
 	return nil
 }
 
@@ -245,7 +245,7 @@ func Printf(format string, v ...interface{}) {
 	GetLogger().Infof(format, v...)
 }
 
-// Println implements a log.Println compatible interface  
+// Println implements a log.Println compatible interface
 func Println(v ...interface{}) {
 	GetLogger().Info(fmt.Sprint(v...))
 }

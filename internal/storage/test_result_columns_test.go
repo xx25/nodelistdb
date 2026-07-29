@@ -45,7 +45,7 @@ func TestTestResultQueryColumnCounts(t *testing.T) {
 		"BuildProtocolEnabledQuery",
 		"BuildSearchByReachabilityQuery",
 	}
-	qb := NewTestQueryBuilder(nil)
+	qb := NewTestQueryBuilder()
 	queries := []string{
 		qb.BuildTestHistoryQuery(),
 		qb.BuildDetailedTestResultQuery(),

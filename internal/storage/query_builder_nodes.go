@@ -7,95 +7,14 @@ import (
 	"github.com/nodelistdb/internal/database"
 )
 
-// NodeQueryBuilder handles node-related SQL queries with a cleaner API
-type NodeQueryBuilder struct {
-	base *QueryBuilder
-}
-
-// Select returns the base SELECT statement for nodes
-func (nqb *NodeQueryBuilder) Select() string {
-	return nqb.base.NodeSelectSQL()
-}
-
-// Insert returns a parameterized INSERT statement
-func (nqb *NodeQueryBuilder) Insert() string {
-	return nqb.base.InsertNodeSQL()
-}
-
-// BatchInsert creates a batch INSERT statement with proper parameterization
-func (nqb *NodeQueryBuilder) BatchInsert(batchSize int) string {
-	return nqb.base.BuildBatchInsertSQL(batchSize)
-}
-
-// BuildQuery builds the main nodes query with filters
-func (nqb *NodeQueryBuilder) BuildQuery(filter database.NodeFilter) (string, []interface{}) {
-	return nqb.base.BuildNodesQuery(filter)
-}
-
-// BuildFTSQuery builds a full-text search query
-func (nqb *NodeQueryBuilder) BuildFTSQuery(filter database.NodeFilter) (string, []interface{}, bool) {
-	return nqb.base.BuildFTSQuery(filter)
-}
-
-// History returns SQL for retrieving node history
-func (nqb *NodeQueryBuilder) History() string {
-	return nqb.base.NodeHistorySQL()
-}
-
-// DateRange returns SQL for getting first and last dates of a node
-func (nqb *NodeQueryBuilder) DateRange() string {
-	return nqb.base.NodeDateRangeSQL()
-}
-
-// CheckConflict returns SQL for checking if a node already exists for a date
-func (nqb *NodeQueryBuilder) CheckConflict() string {
-	return nqb.base.ConflictCheckSQL()
-}
-
-// MarkConflict returns SQL for marking original entry as conflicted
-func (nqb *NodeQueryBuilder) MarkConflict() string {
-	return nqb.base.MarkConflictSQL()
-}
-
-// SearchSysop returns SQL for sysop search with window functions
-func (nqb *NodeQueryBuilder) SearchSysop() string {
-	return nqb.base.SysopSearchSQL()
-}
-
-// SearchNodeSummary returns SQL for searching nodes with lifetime information
-func (nqb *NodeQueryBuilder) SearchNodeSummary(activeOnly bool) string {
-	return nqb.base.NodeSummarySearchSQL(activeOnly)
-}
-
-// UniqueSysops returns SQL for getting unique sysops with statistics
-func (nqb *NodeQueryBuilder) UniqueSysops() string {
-	return nqb.base.UniqueSysopsSQL()
-}
-
-// UniqueSysopsWithFilter returns SQL for getting unique sysops with filter
-func (nqb *NodeQueryBuilder) UniqueSysopsWithFilter() string {
-	return nqb.base.UniqueSysopsWithFilterSQL()
-}
-
-// InsertNodesInChunks performs optimized batch inserts.
-// Deprecated: Use NodeOperations.InsertNodes instead, which uses
-// the native ClickHouse batch API for better safety and performance.
-func (nqb *NodeQueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error {
-	return nqb.base.InsertNodesInChunks(db, nodes)
-}
-
-// BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT.
-// Deprecated: This method uses string interpolation which has SQL injection risks.
-// Use NodeOperations.InsertNodes instead, which uses parameterized batch inserts.
-func (nqb *NodeQueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
-	return nqb.base.BuildDirectBatchInsertSQL(nodes, rp)
-}
-
 // Node-related SQL query methods (LEGACY - These methods are kept on QueryBuilder for backward compatibility)
 
-// InsertNodesInChunks performs optimized batch inserts for ClickHouse with proper array formatting.
-// Deprecated: This method uses string interpolation via BuildDirectBatchInsertSQL.
-// Use NodeOperations.InsertNodes instead for safe parameterized inserts.
+// InsertNodesInChunks performs optimized batch inserts for ClickHouse with
+// proper array formatting. This is the live import path: NodeOperations.InsertNodes
+// calls it, so it cannot be deprecated in favour of that method. It builds its
+// statements through BuildDirectBatchInsertSQL, whose escaping is incomplete -
+// replacing both with clickhouse-go's parameterized batch API is tracked
+// separately.
 func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes []database.Node) error {
 	if len(nodes) == 0 {
 		return nil
@@ -136,7 +55,8 @@ func (qb *QueryBuilder) InsertNodesInChunks(db database.DatabaseInterface, nodes
 }
 
 // BuildDirectBatchInsertSQL creates a direct VALUES-based INSERT for ClickHouse with proper array handling.
-// Deprecated: This method uses string interpolation with escapeSQL() which has incomplete escaping.
+// WARNING: this interpolates sysop-controlled strings through escapeSQL(),
+// whose escaping is incomplete. It is reached from every nodelist import.
 // Use NodeOperations.InsertNodes instead, which uses the native batch API (PrepareBatch/Append).
 func (qb *QueryBuilder) BuildDirectBatchInsertSQL(nodes []database.Node, rp *ResultParser) string {
 	if len(nodes) == 0 {

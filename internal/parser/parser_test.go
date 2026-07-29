@@ -491,17 +491,17 @@ func TestParseNodeFields(t *testing.T) {
 	p := New(false)
 
 	tests := []struct {
-		name        string
-		line        string
-		wantType    string
-		wantNum     string
-		wantSystem  string
-		wantLoc     string
-		wantSysop   string
-		wantPhone   string
-		wantSpeed   uint32
-		wantFlags   string
-		wantError   bool
+		name       string
+		line       string
+		wantType   string
+		wantNum    string
+		wantSystem string
+		wantLoc    string
+		wantSysop  string
+		wantPhone  string
+		wantSpeed  uint32
+		wantFlags  string
+		wantError  bool
 	}{
 		{
 			name:       "standard node line",
@@ -634,16 +634,16 @@ func TestParseNodeFields(t *testing.T) {
 
 func TestParseNodeType(t *testing.T) {
 	tests := []struct {
-		name       string
-		nodeType   string
-		nodeNum    string
-		initZone   int
-		initNet    int
-		wantType   string
-		wantZone   int
-		wantNet    int
-		wantNode   int
-		wantError  bool
+		name      string
+		nodeType  string
+		nodeNum   string
+		initZone  int
+		initNet   int
+		wantType  string
+		wantZone  int
+		wantNet   int
+		wantNode  int
+		wantError bool
 	}{
 		{
 			name:      "empty type (normal node)",
@@ -1344,11 +1344,11 @@ func TestParseAdvancedFlags(t *testing.T) {
 	p := New(false)
 
 	tests := []struct {
-		name           string
-		flagsStr       string
-		wantAllLen     int
-		wantModemLen   int
-		wantProtoLen   int
+		name         string
+		flagsStr     string
+		wantAllLen   int
+		wantModemLen int
+		wantProtoLen int
 	}{
 		{
 			name:         "empty flags",

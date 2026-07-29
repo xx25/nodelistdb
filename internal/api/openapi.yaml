@@ -1046,27 +1046,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/software/trends:
-    get:
-      summary: Get Software Trends
-      description: |
-        Get software usage trends over time.
-
-        **Note:** This endpoint is currently a stub and returns empty data. Implementation pending.
-      operationId: getSoftwareTrends
-      tags:
-        - Software Analytics
-      responses:
-        '200':
-          description: Software trends (currently empty)
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
   /api/analytics/geo-hosting:
     get:
       summary: Get Geographic Hosting Distribution

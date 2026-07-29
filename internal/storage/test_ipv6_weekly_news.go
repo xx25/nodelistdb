@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/logging"
 )
 
@@ -66,129 +65,124 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(limit int, includeZe
 		nodeFilter = "AND node != 0"
 	}
 
-	var query string
-	if _, isClickHouse := ipv6.db.(*database.ClickHouseDB); isClickHouse {
-		query = fmt.Sprintf(`
-			WITH
-			-- Nodes that were NOT in nodelist 7-14 days ago
-			old_period_nodes AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM nodes
-				WHERE nodelist_date >= now() - INTERVAL 14 DAY
-					AND nodelist_date < now() - INTERVAL 7 DAY
-					{{DOMAIN_FILTER}}
-			),
-			-- Nodes that ARE in nodelist in last 7 days (new arrivals)
-			recent_nodes AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM nodes
-				WHERE nodelist_date >= now() - INTERVAL 7 DAY
-					AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM old_period_nodes)
-					%s
-					{{DOMAIN_FILTER}}
-			),
-			-- Get latest test results for these new nodes with working IPv6
-			latest_tests AS (
-				SELECT
-					domain, zone, net, node,
-					max(test_time) as latest_test_time
-				FROM node_test_results
-				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND length(resolved_ipv6) > 0
-					AND is_operational = true
-					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true OR ftp_success = true)
-					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM recent_nodes)
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					argMax(system_name, nodelist_date) as system_name
-				FROM nodes
-				WHERE 1 = 1
-					{{NODE_WINDOW}}
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			ranked_results AS (
-				SELECT
-					r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-					r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-					r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-					r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
-					r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-					r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info, r.ifcico_system_name,
-					r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-					r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-					r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-					r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-					r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-					r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-					r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-					r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
-					r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
-					r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
-					r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
-					r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
-					r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
-					r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
-					r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
-					r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
-					r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
-					r.is_operational, r.has_connectivity_issues, r.address_validated,
-					r.tested_hostname, r.hostname_index, r.is_aggregated,
-					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success, r.domain, r.derived_from_address,
-					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
-				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND {{CYCLE_LT}}
-				-- Re-apply the report's criteria; see GetIPv6EnabledNodes. The
-				-- window admits every hostname of the cycle, including ones with no
-				-- working IPv6.
-				WHERE length(r.resolved_ipv6) > 0
-					AND r.is_operational = true
-					AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true OR r.ftp_success = true)
-			)
+	query := fmt.Sprintf(`
+		WITH
+		-- Nodes that were NOT in nodelist 7-14 days ago
+		old_period_nodes AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM nodes
+			WHERE nodelist_date >= now() - INTERVAL 14 DAY
+				AND nodelist_date < now() - INTERVAL 7 DAY
+				{{DOMAIN_FILTER}}
+		),
+		-- Nodes that ARE in nodelist in last 7 days (new arrivals)
+		recent_nodes AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM nodes
+			WHERE nodelist_date >= now() - INTERVAL 7 DAY
+				AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM old_period_nodes)
+				%s
+				{{DOMAIN_FILTER}}
+		),
+		-- Get latest test results for these new nodes with working IPv6
+		latest_tests AS (
 			SELECT
-				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
-				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
-				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
-				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
-				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
-				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
-				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
-				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
-				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
-				rr.vmodem_tested, rr.vmodem_success, rr.vmodem_response_ms, rr.vmodem_error,
-				rr.vmodem_variant, rr.vmodem_conformant, rr.vmodem_software, rr.vmodem_system_name,
-				rr.vmodem_sysop, rr.vmodem_location, rr.vmodem_addresses,
-				rr.vmodem_detail, rr.vmodem_call_outcome, rr.vmodem_banner,
-				rr.binkp_ipv4_tested, rr.binkp_ipv4_success, rr.binkp_ipv4_response_ms, rr.binkp_ipv4_address, rr.binkp_ipv4_error,
-				rr.binkp_ipv6_tested, rr.binkp_ipv6_success, rr.binkp_ipv6_response_ms, rr.binkp_ipv6_address, rr.binkp_ipv6_error,
-				rr.ifcico_ipv4_tested, rr.ifcico_ipv4_success, rr.ifcico_ipv4_response_ms, rr.ifcico_ipv4_address, rr.ifcico_ipv4_error,
-				rr.ifcico_ipv6_tested, rr.ifcico_ipv6_success, rr.ifcico_ipv6_response_ms, rr.ifcico_ipv6_address, rr.ifcico_ipv6_error,
-				rr.telnet_ipv4_tested, rr.telnet_ipv4_success, rr.telnet_ipv4_response_ms, rr.telnet_ipv4_address, rr.telnet_ipv4_error,
-				rr.telnet_ipv6_tested, rr.telnet_ipv6_success, rr.telnet_ipv6_response_ms, rr.telnet_ipv6_address, rr.telnet_ipv6_error,
-				rr.ftp_ipv4_tested, rr.ftp_ipv4_success, rr.ftp_ipv4_response_ms, rr.ftp_ipv4_address, rr.ftp_ipv4_error,
-				rr.ftp_ipv6_tested, rr.ftp_ipv6_success, rr.ftp_ipv6_response_ms, rr.ftp_ipv6_address, rr.ftp_ipv6_error,
-				rr.vmodem_ipv4_tested, rr.vmodem_ipv4_success, rr.vmodem_ipv4_response_ms, rr.vmodem_ipv4_address, rr.vmodem_ipv4_error,
-				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
-				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
-				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success, rr.domain, rr.derived_from_address
-			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
-			WHERE rr.rn = 1
-			ORDER BY rr.test_time DESC
-			LIMIT ?`, nodeFilter)
-	} else {
-		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
-	}
+				domain, zone, net, node,
+				max(test_time) as latest_test_time
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 7 DAY
+				AND length(resolved_ipv6) > 0
+				AND is_operational = true
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true OR ftp_success = true)
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM recent_nodes)
+				{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		latest_nodes AS (
+			SELECT
+				domain, zone, net, node,
+				argMax(system_name, nodelist_date) as system_name
+			FROM nodes
+			WHERE 1 = 1
+				{{NODE_WINDOW}}
+				{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		ranked_results AS (
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info, r.ifcico_system_name,
+				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
+				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
+				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
+				r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
+				r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
+				r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
+				r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
+				r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
+				r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
+				r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success, r.domain, r.derived_from_address,
+				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+			FROM node_test_results r
+			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				AND {{CYCLE_LT}}
+			-- Re-apply the report's criteria; see GetIPv6EnabledNodes. The
+			-- window admits every hostname of the cycle, including ones with no
+			-- working IPv6.
+			WHERE length(r.resolved_ipv6) > 0
+				AND r.is_operational = true
+				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true OR r.ftp_success = true)
+		)
+		SELECT
+			rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
+			rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
+			rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
+			rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
+			COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
+			rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
+			rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
+			COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
+			rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
+			rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
+			rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
+			rr.vmodem_tested, rr.vmodem_success, rr.vmodem_response_ms, rr.vmodem_error,
+			rr.vmodem_variant, rr.vmodem_conformant, rr.vmodem_software, rr.vmodem_system_name,
+			rr.vmodem_sysop, rr.vmodem_location, rr.vmodem_addresses,
+			rr.vmodem_detail, rr.vmodem_call_outcome, rr.vmodem_banner,
+			rr.binkp_ipv4_tested, rr.binkp_ipv4_success, rr.binkp_ipv4_response_ms, rr.binkp_ipv4_address, rr.binkp_ipv4_error,
+			rr.binkp_ipv6_tested, rr.binkp_ipv6_success, rr.binkp_ipv6_response_ms, rr.binkp_ipv6_address, rr.binkp_ipv6_error,
+			rr.ifcico_ipv4_tested, rr.ifcico_ipv4_success, rr.ifcico_ipv4_response_ms, rr.ifcico_ipv4_address, rr.ifcico_ipv4_error,
+			rr.ifcico_ipv6_tested, rr.ifcico_ipv6_success, rr.ifcico_ipv6_response_ms, rr.ifcico_ipv6_address, rr.ifcico_ipv6_error,
+			rr.telnet_ipv4_tested, rr.telnet_ipv4_success, rr.telnet_ipv4_response_ms, rr.telnet_ipv4_address, rr.telnet_ipv4_error,
+			rr.telnet_ipv6_tested, rr.telnet_ipv6_success, rr.telnet_ipv6_response_ms, rr.telnet_ipv6_address, rr.telnet_ipv6_error,
+			rr.ftp_ipv4_tested, rr.ftp_ipv4_success, rr.ftp_ipv4_response_ms, rr.ftp_ipv4_address, rr.ftp_ipv4_error,
+			rr.ftp_ipv6_tested, rr.ftp_ipv6_success, rr.ftp_ipv6_response_ms, rr.ftp_ipv6_address, rr.ftp_ipv6_error,
+			rr.vmodem_ipv4_tested, rr.vmodem_ipv4_success, rr.vmodem_ipv4_response_ms, rr.vmodem_ipv4_address, rr.vmodem_ipv4_error,
+			rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
+			rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
+			rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
+			rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+			rr.ftp_anon_success, rr.domain, rr.derived_from_address
+		FROM ranked_results rr
+		LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+		WHERE rr.rn = 1
+		ORDER BY rr.test_time DESC
+		LIMIT ?`, nodeFilter)
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
@@ -216,145 +210,140 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(limit int, includ
 		nodeFilter = "AND node != 0"
 	}
 
-	var query string
-	if _, isClickHouse := ipv6.db.(*database.ClickHouseDB); isClickHouse {
-		query = fmt.Sprintf(`
-			WITH
-			-- Nodes that were NOT in nodelist 7-14 days ago
-			old_period_nodes AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM nodes
-				WHERE nodelist_date >= now() - INTERVAL 14 DAY
-					AND nodelist_date < now() - INTERVAL 7 DAY
-					{{DOMAIN_FILTER}}
-			),
-			-- Nodes that ARE in nodelist in last 7 days (new arrivals)
-			recent_nodes AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM nodes
-				WHERE nodelist_date >= now() - INTERVAL 7 DAY
-					AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM old_period_nodes)
-					%s
-					{{DOMAIN_FILTER}}
-			),
-			-- Nodes with IPv6 but no working services
-			nodes_with_ipv6 AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM node_test_results
-				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND length(resolved_ipv6) > 0
-					AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
-					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM recent_nodes)
-					{{DOMAIN_FILTER}}
-			),
-			-- Count successful IPv6 tests
-			ipv6_success_counts AS (
-				SELECT
-					domain, zone, net, node,
-					countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
-				FROM node_test_results
-				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM nodes_with_ipv6)
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			-- Get latest test for nodes with zero successes
-			latest_failed_tests AS (
-				SELECT
-					domain, zone, net, node,
-					max(test_time) as latest_test_time
-				FROM node_test_results
-				WHERE (domain, zone, net, node) IN (
-					SELECT domain, zone, net, node
-					FROM ipv6_success_counts
-					WHERE success_count = 0
-				)
-				AND test_time >= now() - INTERVAL 7 DAY
+	query := fmt.Sprintf(`
+		WITH
+		-- Nodes that were NOT in nodelist 7-14 days ago
+		old_period_nodes AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM nodes
+			WHERE nodelist_date >= now() - INTERVAL 14 DAY
+				AND nodelist_date < now() - INTERVAL 7 DAY
 				{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					argMax(system_name, nodelist_date) as system_name
-				FROM nodes
-				WHERE 1 = 1
-					{{NODE_WINDOW}}
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			ranked_results AS (
-				SELECT
-					r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-					r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-					r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-					r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
-					r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-					r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info, r.ifcico_system_name,
-					r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-					r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-					r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-					r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-					r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-					r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-					r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-					r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
-					r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
-					r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
-					r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
-					r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
-					r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
-					r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
-					r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
-					r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
-					r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
-					r.is_operational, r.has_connectivity_issues, r.address_validated,
-					r.tested_hostname, r.hostname_index, r.is_aggregated,
-					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success, r.domain, r.derived_from_address,
-					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
-				FROM node_test_results r
-				INNER JOIN latest_failed_tests lft ON r.domain = lft.domain AND r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
-					AND {{CYCLE_LFT}}
-			)
+		),
+		-- Nodes that ARE in nodelist in last 7 days (new arrivals)
+		recent_nodes AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM nodes
+			WHERE nodelist_date >= now() - INTERVAL 7 DAY
+				AND (domain, zone, net, node) NOT IN (SELECT domain, zone, net, node FROM old_period_nodes)
+				%s
+				{{DOMAIN_FILTER}}
+		),
+		-- Nodes with IPv6 but no working services
+		nodes_with_ipv6 AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 7 DAY
+				AND length(resolved_ipv6) > 0
+				AND (binkp_ipv6_tested = true OR ifcico_ipv6_tested = true OR telnet_ipv6_tested = true)
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM recent_nodes)
+				{{DOMAIN_FILTER}}
+		),
+		-- Count successful IPv6 tests
+		ipv6_success_counts AS (
 			SELECT
-				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
-				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
-				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
-				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
-				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
-				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
-				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
-				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
-				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
-				rr.vmodem_tested, rr.vmodem_success, rr.vmodem_response_ms, rr.vmodem_error,
-				rr.vmodem_variant, rr.vmodem_conformant, rr.vmodem_software, rr.vmodem_system_name,
-				rr.vmodem_sysop, rr.vmodem_location, rr.vmodem_addresses,
-				rr.vmodem_detail, rr.vmodem_call_outcome, rr.vmodem_banner,
-				rr.binkp_ipv4_tested, rr.binkp_ipv4_success, rr.binkp_ipv4_response_ms, rr.binkp_ipv4_address, rr.binkp_ipv4_error,
-				rr.binkp_ipv6_tested, rr.binkp_ipv6_success, rr.binkp_ipv6_response_ms, rr.binkp_ipv6_address, rr.binkp_ipv6_error,
-				rr.ifcico_ipv4_tested, rr.ifcico_ipv4_success, rr.ifcico_ipv4_response_ms, rr.ifcico_ipv4_address, rr.ifcico_ipv4_error,
-				rr.ifcico_ipv6_tested, rr.ifcico_ipv6_success, rr.ifcico_ipv6_response_ms, rr.ifcico_ipv6_address, rr.ifcico_ipv6_error,
-				rr.telnet_ipv4_tested, rr.telnet_ipv4_success, rr.telnet_ipv4_response_ms, rr.telnet_ipv4_address, rr.telnet_ipv4_error,
-				rr.telnet_ipv6_tested, rr.telnet_ipv6_success, rr.telnet_ipv6_response_ms, rr.telnet_ipv6_address, rr.telnet_ipv6_error,
-				rr.ftp_ipv4_tested, rr.ftp_ipv4_success, rr.ftp_ipv4_response_ms, rr.ftp_ipv4_address, rr.ftp_ipv4_error,
-				rr.ftp_ipv6_tested, rr.ftp_ipv6_success, rr.ftp_ipv6_response_ms, rr.ftp_ipv6_address, rr.ftp_ipv6_error,
-				rr.vmodem_ipv4_tested, rr.vmodem_ipv4_success, rr.vmodem_ipv4_response_ms, rr.vmodem_ipv4_address, rr.vmodem_ipv4_error,
-				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
-				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
-				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success, rr.domain, rr.derived_from_address
-			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
-			WHERE rr.rn = 1
-			ORDER BY rr.test_time DESC
-			LIMIT ?`, nodeFilter)
-	} else {
-		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
-	}
+				domain, zone, net, node,
+				countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 7 DAY
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM nodes_with_ipv6)
+				{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		-- Get latest test for nodes with zero successes
+		latest_failed_tests AS (
+			SELECT
+				domain, zone, net, node,
+				max(test_time) as latest_test_time
+			FROM node_test_results
+			WHERE (domain, zone, net, node) IN (
+				SELECT domain, zone, net, node
+				FROM ipv6_success_counts
+				WHERE success_count = 0
+			)
+			AND test_time >= now() - INTERVAL 7 DAY
+			{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		latest_nodes AS (
+			SELECT
+				domain, zone, net, node,
+				argMax(system_name, nodelist_date) as system_name
+			FROM nodes
+			WHERE 1 = 1
+				{{NODE_WINDOW}}
+				{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		ranked_results AS (
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info, r.ifcico_system_name,
+				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
+				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
+				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
+				r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
+				r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
+				r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
+				r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
+				r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
+				r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
+				r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success, r.domain, r.derived_from_address,
+				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+			FROM node_test_results r
+			INNER JOIN latest_failed_tests lft ON r.domain = lft.domain AND r.zone = lft.zone AND r.net = lft.net AND r.node = lft.node
+				AND {{CYCLE_LFT}}
+		)
+		SELECT
+			rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
+			rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
+			rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
+			rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
+			COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
+			rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
+			rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
+			COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
+			rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
+			rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
+			rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
+			rr.vmodem_tested, rr.vmodem_success, rr.vmodem_response_ms, rr.vmodem_error,
+			rr.vmodem_variant, rr.vmodem_conformant, rr.vmodem_software, rr.vmodem_system_name,
+			rr.vmodem_sysop, rr.vmodem_location, rr.vmodem_addresses,
+			rr.vmodem_detail, rr.vmodem_call_outcome, rr.vmodem_banner,
+			rr.binkp_ipv4_tested, rr.binkp_ipv4_success, rr.binkp_ipv4_response_ms, rr.binkp_ipv4_address, rr.binkp_ipv4_error,
+			rr.binkp_ipv6_tested, rr.binkp_ipv6_success, rr.binkp_ipv6_response_ms, rr.binkp_ipv6_address, rr.binkp_ipv6_error,
+			rr.ifcico_ipv4_tested, rr.ifcico_ipv4_success, rr.ifcico_ipv4_response_ms, rr.ifcico_ipv4_address, rr.ifcico_ipv4_error,
+			rr.ifcico_ipv6_tested, rr.ifcico_ipv6_success, rr.ifcico_ipv6_response_ms, rr.ifcico_ipv6_address, rr.ifcico_ipv6_error,
+			rr.telnet_ipv4_tested, rr.telnet_ipv4_success, rr.telnet_ipv4_response_ms, rr.telnet_ipv4_address, rr.telnet_ipv4_error,
+			rr.telnet_ipv6_tested, rr.telnet_ipv6_success, rr.telnet_ipv6_response_ms, rr.telnet_ipv6_address, rr.telnet_ipv6_error,
+			rr.ftp_ipv4_tested, rr.ftp_ipv4_success, rr.ftp_ipv4_response_ms, rr.ftp_ipv4_address, rr.ftp_ipv4_error,
+			rr.ftp_ipv6_tested, rr.ftp_ipv6_success, rr.ftp_ipv6_response_ms, rr.ftp_ipv6_address, rr.ftp_ipv6_error,
+			rr.vmodem_ipv4_tested, rr.vmodem_ipv4_success, rr.vmodem_ipv4_response_ms, rr.vmodem_ipv4_address, rr.vmodem_ipv4_error,
+			rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
+			rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
+			rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
+			rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+			rr.ftp_anon_success, rr.domain, rr.derived_from_address
+		FROM ranked_results rr
+		LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+		WHERE rr.rn = 1
+		ORDER BY rr.test_time DESC
+		LIMIT ?`, nodeFilter)
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
@@ -382,137 +371,132 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(limit int, includeZeroN
 		nodeFilter = "AND node != 0"
 	}
 
-	var query string
-	if _, isClickHouse := ipv6.db.(*database.ClickHouseDB); isClickHouse {
-		query = fmt.Sprintf(`
-			WITH
-			-- Nodes that have been in nodelist for >14 days
-			old_nodes AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM nodes
-				WHERE nodelist_date < now() - INTERVAL 14 DAY
-					%s
-					{{DOMAIN_FILTER}}
-			),
-			-- Nodes with working IPv6 in 7-14 days ago period
-			had_ipv6_before AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM node_test_results
-				WHERE test_time >= now() - INTERVAL 14 DAY
-					AND test_time < now() - INTERVAL 7 DAY
-					AND length(resolved_ipv6) > 0
-					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
-					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM old_nodes)
-					{{DOMAIN_FILTER}}
-			),
-			-- Nodes without working IPv6 in last 7 days
-			no_ipv6_now AS (
-				SELECT domain, zone, net, node
-				FROM (
-					SELECT
-						domain, zone, net, node,
-						countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
-					FROM node_test_results
-					WHERE test_time >= now() - INTERVAL 7 DAY
-						AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM had_ipv6_before)
-						{{DOMAIN_FILTER}}
-					GROUP BY domain, zone, net, node
-				)
-				WHERE ipv6_success_count = 0
-			),
-			-- Get latest test results
-			latest_tests AS (
+	query := fmt.Sprintf(`
+		WITH
+		-- Nodes that have been in nodelist for >14 days
+		old_nodes AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM nodes
+			WHERE nodelist_date < now() - INTERVAL 14 DAY
+				%s
+				{{DOMAIN_FILTER}}
+		),
+		-- Nodes with working IPv6 in 7-14 days ago period
+		had_ipv6_before AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 14 DAY
+				AND test_time < now() - INTERVAL 7 DAY
+				AND length(resolved_ipv6) > 0
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM old_nodes)
+				{{DOMAIN_FILTER}}
+		),
+		-- Nodes without working IPv6 in last 7 days
+		no_ipv6_now AS (
+			SELECT domain, zone, net, node
+			FROM (
 				SELECT
 					domain, zone, net, node,
-					max(test_time) as latest_test_time
+					countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM no_ipv6_now)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM had_ipv6_before)
 					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					argMax(system_name, nodelist_date) as system_name
-				FROM nodes
-				WHERE 1 = 1
-					{{NODE_WINDOW}}
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			ranked_results AS (
-				SELECT
-					r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-					r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-					r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-					r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
-					r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-					r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info, r.ifcico_system_name,
-					r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-					r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-					r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-					r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-					r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-					r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-					r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-					r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
-					r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
-					r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
-					r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
-					r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
-					r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
-					r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
-					r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
-					r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
-					r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
-					r.is_operational, r.has_connectivity_issues, r.address_validated,
-					r.tested_hostname, r.hostname_index, r.is_aggregated,
-					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success, r.domain, r.derived_from_address,
-					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
-				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND {{CYCLE_LT}}
 			)
+			WHERE ipv6_success_count = 0
+		),
+		-- Get latest test results
+		latest_tests AS (
 			SELECT
-				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
-				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
-				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
-				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
-				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
-				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
-				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
-				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
-				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
-				rr.vmodem_tested, rr.vmodem_success, rr.vmodem_response_ms, rr.vmodem_error,
-				rr.vmodem_variant, rr.vmodem_conformant, rr.vmodem_software, rr.vmodem_system_name,
-				rr.vmodem_sysop, rr.vmodem_location, rr.vmodem_addresses,
-				rr.vmodem_detail, rr.vmodem_call_outcome, rr.vmodem_banner,
-				rr.binkp_ipv4_tested, rr.binkp_ipv4_success, rr.binkp_ipv4_response_ms, rr.binkp_ipv4_address, rr.binkp_ipv4_error,
-				rr.binkp_ipv6_tested, rr.binkp_ipv6_success, rr.binkp_ipv6_response_ms, rr.binkp_ipv6_address, rr.binkp_ipv6_error,
-				rr.ifcico_ipv4_tested, rr.ifcico_ipv4_success, rr.ifcico_ipv4_response_ms, rr.ifcico_ipv4_address, rr.ifcico_ipv4_error,
-				rr.ifcico_ipv6_tested, rr.ifcico_ipv6_success, rr.ifcico_ipv6_response_ms, rr.ifcico_ipv6_address, rr.ifcico_ipv6_error,
-				rr.telnet_ipv4_tested, rr.telnet_ipv4_success, rr.telnet_ipv4_response_ms, rr.telnet_ipv4_address, rr.telnet_ipv4_error,
-				rr.telnet_ipv6_tested, rr.telnet_ipv6_success, rr.telnet_ipv6_response_ms, rr.telnet_ipv6_address, rr.telnet_ipv6_error,
-				rr.ftp_ipv4_tested, rr.ftp_ipv4_success, rr.ftp_ipv4_response_ms, rr.ftp_ipv4_address, rr.ftp_ipv4_error,
-				rr.ftp_ipv6_tested, rr.ftp_ipv6_success, rr.ftp_ipv6_response_ms, rr.ftp_ipv6_address, rr.ftp_ipv6_error,
-				rr.vmodem_ipv4_tested, rr.vmodem_ipv4_success, rr.vmodem_ipv4_response_ms, rr.vmodem_ipv4_address, rr.vmodem_ipv4_error,
-				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
-				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
-				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success, rr.domain, rr.derived_from_address
-			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
-			WHERE rr.rn = 1
-			ORDER BY rr.test_time DESC
-			LIMIT ?`, nodeFilter)
-	} else {
-		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
-	}
+				domain, zone, net, node,
+				max(test_time) as latest_test_time
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 7 DAY
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM no_ipv6_now)
+				{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		latest_nodes AS (
+			SELECT
+				domain, zone, net, node,
+				argMax(system_name, nodelist_date) as system_name
+			FROM nodes
+			WHERE 1 = 1
+				{{NODE_WINDOW}}
+				{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		ranked_results AS (
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info, r.ifcico_system_name,
+				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
+				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
+				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
+				r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
+				r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
+				r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
+				r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
+				r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
+				r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
+				r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success, r.domain, r.derived_from_address,
+				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+			FROM node_test_results r
+			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				AND {{CYCLE_LT}}
+		)
+		SELECT
+			rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
+			rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
+			rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
+			rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
+			COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
+			rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
+			rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
+			COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
+			rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
+			rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
+			rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
+			rr.vmodem_tested, rr.vmodem_success, rr.vmodem_response_ms, rr.vmodem_error,
+			rr.vmodem_variant, rr.vmodem_conformant, rr.vmodem_software, rr.vmodem_system_name,
+			rr.vmodem_sysop, rr.vmodem_location, rr.vmodem_addresses,
+			rr.vmodem_detail, rr.vmodem_call_outcome, rr.vmodem_banner,
+			rr.binkp_ipv4_tested, rr.binkp_ipv4_success, rr.binkp_ipv4_response_ms, rr.binkp_ipv4_address, rr.binkp_ipv4_error,
+			rr.binkp_ipv6_tested, rr.binkp_ipv6_success, rr.binkp_ipv6_response_ms, rr.binkp_ipv6_address, rr.binkp_ipv6_error,
+			rr.ifcico_ipv4_tested, rr.ifcico_ipv4_success, rr.ifcico_ipv4_response_ms, rr.ifcico_ipv4_address, rr.ifcico_ipv4_error,
+			rr.ifcico_ipv6_tested, rr.ifcico_ipv6_success, rr.ifcico_ipv6_response_ms, rr.ifcico_ipv6_address, rr.ifcico_ipv6_error,
+			rr.telnet_ipv4_tested, rr.telnet_ipv4_success, rr.telnet_ipv4_response_ms, rr.telnet_ipv4_address, rr.telnet_ipv4_error,
+			rr.telnet_ipv6_tested, rr.telnet_ipv6_success, rr.telnet_ipv6_response_ms, rr.telnet_ipv6_address, rr.telnet_ipv6_error,
+			rr.ftp_ipv4_tested, rr.ftp_ipv4_success, rr.ftp_ipv4_response_ms, rr.ftp_ipv4_address, rr.ftp_ipv4_error,
+			rr.ftp_ipv6_tested, rr.ftp_ipv6_success, rr.ftp_ipv6_response_ms, rr.ftp_ipv6_address, rr.ftp_ipv6_error,
+			rr.vmodem_ipv4_tested, rr.vmodem_ipv4_success, rr.vmodem_ipv4_response_ms, rr.vmodem_ipv4_address, rr.vmodem_ipv4_error,
+			rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
+			rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
+			rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
+			rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+			rr.ftp_anon_success, rr.domain, rr.derived_from_address
+		FROM ranked_results rr
+		LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+		WHERE rr.rn = 1
+		ORDER BY rr.test_time DESC
+		LIMIT ?`, nodeFilter)
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
@@ -540,146 +524,141 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(limit int, includeZer
 		nodeFilter = "AND node != 0"
 	}
 
-	var query string
-	if _, isClickHouse := ipv6.db.(*database.ClickHouseDB); isClickHouse {
-		query = fmt.Sprintf(`
-			WITH
-			-- Nodes that have been in nodelist for >14 days
-			old_nodes AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM nodes
-				WHERE nodelist_date < now() - INTERVAL 14 DAY
-					%s
-					{{DOMAIN_FILTER}}
-			),
-			-- Nodes tested 7-14 days ago (to check previous state)
-			tested_before AS (
-				SELECT DISTINCT domain, zone, net, node
+	query := fmt.Sprintf(`
+		WITH
+		-- Nodes that have been in nodelist for >14 days
+		old_nodes AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM nodes
+			WHERE nodelist_date < now() - INTERVAL 14 DAY
+				%s
+				{{DOMAIN_FILTER}}
+		),
+		-- Nodes tested 7-14 days ago (to check previous state)
+		tested_before AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 14 DAY
+				AND test_time < now() - INTERVAL 7 DAY
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM old_nodes)
+				{{DOMAIN_FILTER}}
+		),
+		-- Nodes without working IPv6 in 7-14 days ago period
+		no_ipv6_before AS (
+			SELECT domain, zone, net, node
+			FROM (
+				SELECT
+					domain, zone, net, node,
+					countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 14 DAY
 					AND test_time < now() - INTERVAL 7 DAY
-					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM old_nodes)
-					{{DOMAIN_FILTER}}
-			),
-			-- Nodes without working IPv6 in 7-14 days ago period
-			no_ipv6_before AS (
-				SELECT domain, zone, net, node
-				FROM (
-					SELECT
-						domain, zone, net, node,
-						countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
-					FROM node_test_results
-					WHERE test_time >= now() - INTERVAL 14 DAY
-						AND test_time < now() - INTERVAL 7 DAY
-						AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM tested_before)
-						{{DOMAIN_FILTER}}
-					GROUP BY domain, zone, net, node
-				)
-				WHERE ipv6_success_count = 0
-			),
-			-- Nodes with working IPv6 in last 7 days
-			has_ipv6_now AS (
-				SELECT DISTINCT domain, zone, net, node
-				FROM node_test_results
-				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND length(resolved_ipv6) > 0
-					AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
-					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM no_ipv6_before)
-					{{DOMAIN_FILTER}}
-			),
-			-- Get latest test results
-			latest_tests AS (
-				SELECT
-					domain, zone, net, node,
-					max(test_time) as latest_test_time
-				FROM node_test_results
-				WHERE test_time >= now() - INTERVAL 7 DAY
-					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM has_ipv6_now)
+					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM tested_before)
 					{{DOMAIN_FILTER}}
 				GROUP BY domain, zone, net, node
-			),
-			latest_nodes AS (
-				SELECT
-					domain, zone, net, node,
-					argMax(system_name, nodelist_date) as system_name
-				FROM nodes
-				WHERE 1 = 1
-					{{NODE_WINDOW}}
-					{{DOMAIN_FILTER}}
-				GROUP BY domain, zone, net, node
-			),
-			ranked_results AS (
-				SELECT
-					r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-					r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-					r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-					r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
-					r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-					r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info, r.ifcico_system_name,
-					r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-					r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-					r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-					r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-					r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-					r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-					r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-					r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
-					r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
-					r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
-					r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
-					r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
-					r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
-					r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
-					r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
-					r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
-					r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
-					r.is_operational, r.has_connectivity_issues, r.address_validated,
-					r.tested_hostname, r.hostname_index, r.is_aggregated,
-					r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-					r.ftp_anon_success, r.domain, r.derived_from_address,
-					row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
-				FROM node_test_results r
-				INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
-					AND {{CYCLE_LT}}
 			)
+			WHERE ipv6_success_count = 0
+		),
+		-- Nodes with working IPv6 in last 7 days
+		has_ipv6_now AS (
+			SELECT DISTINCT domain, zone, net, node
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 7 DAY
+				AND length(resolved_ipv6) > 0
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM no_ipv6_before)
+				{{DOMAIN_FILTER}}
+		),
+		-- Get latest test results
+		latest_tests AS (
 			SELECT
-				rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
-				rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
-				rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
-				rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
-				COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
-				rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
-				rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
-				COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
-				rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
-				rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
-				rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
-				rr.vmodem_tested, rr.vmodem_success, rr.vmodem_response_ms, rr.vmodem_error,
-				rr.vmodem_variant, rr.vmodem_conformant, rr.vmodem_software, rr.vmodem_system_name,
-				rr.vmodem_sysop, rr.vmodem_location, rr.vmodem_addresses,
-				rr.vmodem_detail, rr.vmodem_call_outcome, rr.vmodem_banner,
-				rr.binkp_ipv4_tested, rr.binkp_ipv4_success, rr.binkp_ipv4_response_ms, rr.binkp_ipv4_address, rr.binkp_ipv4_error,
-				rr.binkp_ipv6_tested, rr.binkp_ipv6_success, rr.binkp_ipv6_response_ms, rr.binkp_ipv6_address, rr.binkp_ipv6_error,
-				rr.ifcico_ipv4_tested, rr.ifcico_ipv4_success, rr.ifcico_ipv4_response_ms, rr.ifcico_ipv4_address, rr.ifcico_ipv4_error,
-				rr.ifcico_ipv6_tested, rr.ifcico_ipv6_success, rr.ifcico_ipv6_response_ms, rr.ifcico_ipv6_address, rr.ifcico_ipv6_error,
-				rr.telnet_ipv4_tested, rr.telnet_ipv4_success, rr.telnet_ipv4_response_ms, rr.telnet_ipv4_address, rr.telnet_ipv4_error,
-				rr.telnet_ipv6_tested, rr.telnet_ipv6_success, rr.telnet_ipv6_response_ms, rr.telnet_ipv6_address, rr.telnet_ipv6_error,
-				rr.ftp_ipv4_tested, rr.ftp_ipv4_success, rr.ftp_ipv4_response_ms, rr.ftp_ipv4_address, rr.ftp_ipv4_error,
-				rr.ftp_ipv6_tested, rr.ftp_ipv6_success, rr.ftp_ipv6_response_ms, rr.ftp_ipv6_address, rr.ftp_ipv6_error,
-				rr.vmodem_ipv4_tested, rr.vmodem_ipv4_success, rr.vmodem_ipv4_response_ms, rr.vmodem_ipv4_address, rr.vmodem_ipv4_error,
-				rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
-				rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
-				rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
-				rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
-				rr.ftp_anon_success, rr.domain, rr.derived_from_address
-			FROM ranked_results rr
-			LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
-			WHERE rr.rn = 1
-			ORDER BY rr.test_time DESC
-			LIMIT ?`, nodeFilter)
-	} else {
-		return nil, fmt.Errorf("DuckDB support not implemented for weekly IPv6 news")
-	}
+				domain, zone, net, node,
+				max(test_time) as latest_test_time
+			FROM node_test_results
+			WHERE test_time >= now() - INTERVAL 7 DAY
+				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM has_ipv6_now)
+				{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		latest_nodes AS (
+			SELECT
+				domain, zone, net, node,
+				argMax(system_name, nodelist_date) as system_name
+			FROM nodes
+			WHERE 1 = 1
+				{{NODE_WINDOW}}
+				{{DOMAIN_FILTER}}
+			GROUP BY domain, zone, net, node
+		),
+		ranked_results AS (
+			SELECT
+				r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
+				r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
+				r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
+				r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
+				r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
+				r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info, r.ifcico_system_name,
+				r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
+				r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
+				r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
+				r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
+				r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
+				r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
+				r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
+				r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
+				r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
+				r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
+				r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
+				r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
+				r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
+				r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
+				r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
+				r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
+				r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
+				r.is_operational, r.has_connectivity_issues, r.address_validated,
+				r.tested_hostname, r.hostname_index, r.is_aggregated,
+				r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
+				r.ftp_anon_success, r.domain, r.derived_from_address,
+				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node ORDER BY r.is_aggregated DESC, r.hostname_index ASC) as rn
+			FROM node_test_results r
+			INNER JOIN latest_tests lt ON r.domain = lt.domain AND r.zone = lt.zone AND r.net = lt.net AND r.node = lt.node
+				AND {{CYCLE_LT}}
+		)
+		SELECT
+			rr.test_time, rr.zone, rr.net, rr.node, rr.address, rr.hostname,
+			rr.resolved_ipv4, rr.resolved_ipv6, rr.dns_error,
+			rr.country, rr.country_code, rr.city, rr.region, rr.latitude, rr.longitude, rr.isp, rr.org, rr.asn,
+			rr.binkp_tested, rr.binkp_success, rr.binkp_response_ms,
+			COALESCE(NULLIF(n.system_name, ''), rr.binkp_system_name) as binkp_system_name,
+			rr.binkp_sysop, rr.binkp_location, rr.binkp_version, rr.binkp_addresses, rr.binkp_capabilities, rr.binkp_error,
+			rr.ifcico_tested, rr.ifcico_success, rr.ifcico_response_ms, rr.ifcico_mailer_info,
+			COALESCE(NULLIF(n.system_name, ''), rr.ifcico_system_name) as ifcico_system_name,
+			rr.ifcico_addresses, rr.ifcico_response_type, rr.ifcico_error,
+			rr.telnet_tested, rr.telnet_success, rr.telnet_response_ms, rr.telnet_error,
+			rr.ftp_tested, rr.ftp_success, rr.ftp_response_ms, rr.ftp_error,
+			rr.vmodem_tested, rr.vmodem_success, rr.vmodem_response_ms, rr.vmodem_error,
+			rr.vmodem_variant, rr.vmodem_conformant, rr.vmodem_software, rr.vmodem_system_name,
+			rr.vmodem_sysop, rr.vmodem_location, rr.vmodem_addresses,
+			rr.vmodem_detail, rr.vmodem_call_outcome, rr.vmodem_banner,
+			rr.binkp_ipv4_tested, rr.binkp_ipv4_success, rr.binkp_ipv4_response_ms, rr.binkp_ipv4_address, rr.binkp_ipv4_error,
+			rr.binkp_ipv6_tested, rr.binkp_ipv6_success, rr.binkp_ipv6_response_ms, rr.binkp_ipv6_address, rr.binkp_ipv6_error,
+			rr.ifcico_ipv4_tested, rr.ifcico_ipv4_success, rr.ifcico_ipv4_response_ms, rr.ifcico_ipv4_address, rr.ifcico_ipv4_error,
+			rr.ifcico_ipv6_tested, rr.ifcico_ipv6_success, rr.ifcico_ipv6_response_ms, rr.ifcico_ipv6_address, rr.ifcico_ipv6_error,
+			rr.telnet_ipv4_tested, rr.telnet_ipv4_success, rr.telnet_ipv4_response_ms, rr.telnet_ipv4_address, rr.telnet_ipv4_error,
+			rr.telnet_ipv6_tested, rr.telnet_ipv6_success, rr.telnet_ipv6_response_ms, rr.telnet_ipv6_address, rr.telnet_ipv6_error,
+			rr.ftp_ipv4_tested, rr.ftp_ipv4_success, rr.ftp_ipv4_response_ms, rr.ftp_ipv4_address, rr.ftp_ipv4_error,
+			rr.ftp_ipv6_tested, rr.ftp_ipv6_success, rr.ftp_ipv6_response_ms, rr.ftp_ipv6_address, rr.ftp_ipv6_error,
+			rr.vmodem_ipv4_tested, rr.vmodem_ipv4_success, rr.vmodem_ipv4_response_ms, rr.vmodem_ipv4_address, rr.vmodem_ipv4_error,
+			rr.vmodem_ipv6_tested, rr.vmodem_ipv6_success, rr.vmodem_ipv6_response_ms, rr.vmodem_ipv6_address, rr.vmodem_ipv6_error,
+			rr.is_operational, rr.has_connectivity_issues, rr.address_validated,
+			rr.tested_hostname, rr.hostname_index, rr.is_aggregated,
+			rr.total_hostnames, rr.hostnames_tested, rr.hostnames_operational,
+			rr.ftp_anon_success, rr.domain, rr.derived_from_address
+		FROM ranked_results rr
+		LEFT JOIN latest_nodes n ON rr.domain = n.domain AND rr.zone = n.zone AND rr.net = n.net AND rr.node = n.node
+		WHERE rr.rn = 1
+		ORDER BY rr.test_time DESC
+		LIMIT ?`, nodeFilter)
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))

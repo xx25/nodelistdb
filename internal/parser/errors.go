@@ -120,10 +120,10 @@ func NewDateError(source, value, message string) *DateError {
 
 // ConversionError represents type conversion errors (optimized for common cases)
 type ConversionError struct {
-	Field    string `json:"field"`
-	Value    string `json:"value"`
+	Field      string `json:"field"`
+	Value      string `json:"value"`
 	TargetType string `json:"target_type"`
-	Cause    error  `json:"cause,omitempty"`
+	Cause      error  `json:"cause,omitempty"`
 }
 
 func (e *ConversionError) Error() string {
@@ -175,7 +175,7 @@ func ParseInt(field, value string) (int, error) {
 			Cause:      fmt.Errorf("empty value"),
 		}
 	}
-	
+
 	result, err := strconv.Atoi(value)
 	if err != nil {
 		return 0, &ConversionError{
@@ -198,7 +198,7 @@ func ParseUint32(field, value string) (uint32, error) {
 			Cause:      fmt.Errorf("empty value"),
 		}
 	}
-	
+
 	result, err := strconv.ParseUint(value, 10, 32)
 	if err != nil {
 		return 0, &ConversionError{

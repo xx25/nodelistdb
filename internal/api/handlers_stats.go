@@ -21,10 +21,6 @@ func queryDomain(r *http.Request) string {
 // StatsHandler handles statistics requests.
 // GET /api/stats?date=2023-01-01&domain=fidonet
 func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	domain := queryDomain(r)
 
 	// Parse date parameter
@@ -77,10 +73,6 @@ func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
 // latest nodelist date and node count.
 // GET /api/networks
 func (s *Server) NetworksHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	networks, err := s.storage.GetDomains()
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get networks: %v", err), http.StatusInternalServerError)
@@ -98,10 +90,6 @@ func (s *Server) NetworksHandler(w http.ResponseWriter, r *http.Request) {
 // GetAvailableDatesHandler returns all available dates for stats.
 // GET /api/stats/dates?domain=fidonet
 func (s *Server) GetAvailableDatesHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	dates, err := s.storage.GetAvailableDates(queryDomain(r))
 	if err != nil {
 		WriteJSONError(w, fmt.Sprintf("Failed to get available dates: %v", err), http.StatusInternalServerError)

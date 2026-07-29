@@ -23,12 +23,12 @@ type CachedStorage struct {
 // validation, so by the time a config reaches this layer every TTL is already
 // specific. Carrying it further would just be a second field nobody reads.
 type CacheStorageConfig struct {
-	Enabled           bool
-	NodeTTL           time.Duration
-	StatsTTL          time.Duration
-	SearchTTL         time.Duration
-	MaxSearchResults  int
-	WarmupOnStart     bool
+	Enabled          bool
+	NodeTTL          time.Duration
+	StatsTTL         time.Duration
+	SearchTTL        time.Duration
+	MaxSearchResults int
+	WarmupOnStart    bool
 }
 
 // NewCachedStorage creates a new CachedStorage instance
@@ -55,14 +55,6 @@ func NewCachedStorage(storage *Storage, cacheImpl cache.Cache, config *CacheStor
 	}
 
 	return cs
-}
-
-// GetCacheMetrics returns cache performance metrics
-func (cs *CachedStorage) GetCacheMetrics() *cache.Metrics {
-	if cs.cache == nil {
-		return nil
-	}
-	return cs.cache.GetMetrics()
 }
 
 // warmupCache pre-populates cache with frequently accessed data
@@ -97,12 +89,4 @@ func (cs *CachedStorage) Close() error {
 		return cs.cache.Close()
 	}
 	return nil
-}
-
-// SetTemporaryTTL temporarily reduces TTL for cache entries (used after imports)
-func (cs *CachedStorage) SetTemporaryTTL(ttl time.Duration) {
-	// This would require a more complex implementation to track
-	// and restore the original TTL values
-	// For now, we'll just log the intent
-	logging.Warnf("Would set temporary TTL to %v (not implemented)", ttl)
 }

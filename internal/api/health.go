@@ -9,10 +9,10 @@ type HealthChecker interface {
 
 // HealthStatus is the full health check response.
 type HealthStatus struct {
-	Status    string         `json:"status"`          // "ok" or "degraded"
+	Status    string         `json:"status"` // "ok" or "degraded"
 	Time      time.Time      `json:"time"`
-	Uptime    string         `json:"uptime"`          // human-readable
-	UptimeSec float64        `json:"uptime_seconds"`  // machine-readable
+	Uptime    string         `json:"uptime"`         // human-readable
+	UptimeSec float64        `json:"uptime_seconds"` // machine-readable
 	Version   VersionInfo    `json:"version"`
 	Database  DatabaseHealth `json:"database"`
 	Cache     *CacheHealth   `json:"cache,omitempty"`

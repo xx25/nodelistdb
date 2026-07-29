@@ -94,11 +94,11 @@ func TestCalculatePriorityInterval(t *testing.T) {
 	}, nil)
 
 	tests := []struct {
-		name             string
-		priority         int
-		lastTestSuccess  bool
-		maxExpected      time.Duration
-		minExpected      time.Duration
+		name            string
+		priority        int
+		lastTestSuccess bool
+		maxExpected     time.Duration
+		minExpected     time.Duration
 	}{
 		{
 			name:            "high priority (100) success",
@@ -208,9 +208,9 @@ func TestAddJitter_Negative(t *testing.T) {
 
 func TestCalculateNextTestTime_PastDue(t *testing.T) {
 	s := NewScheduler(SchedulerConfig{
-		BaseInterval: 1 * time.Hour,
-		MinInterval:  5 * time.Minute,
-		MaxInterval:  24 * time.Hour,
+		BaseInterval:  1 * time.Hour,
+		MinInterval:   5 * time.Minute,
+		MaxInterval:   24 * time.Hour,
 		JitterPercent: 0,
 	}, nil)
 
@@ -257,10 +257,10 @@ func TestCalculateNextTestTime_StrategySelection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewScheduler(SchedulerConfig{
-				BaseInterval: 72 * time.Hour,
-				MinInterval:  1 * time.Hour,
-				MaxInterval:  96 * time.Hour,
-				Strategy:     tt.strategy,
+				BaseInterval:  72 * time.Hour,
+				MinInterval:   1 * time.Hour,
+				MaxInterval:   96 * time.Hour,
+				Strategy:      tt.strategy,
 				JitterPercent: 0,
 			}, nil)
 

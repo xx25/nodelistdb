@@ -29,18 +29,6 @@ func (gao *GeoAnalyticsOperations) GetGeoHostingDistribution(days int, domain st
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
 
-	// This feature is only available for ClickHouse
-	if _, isClickHouse := gao.db.(*database.ClickHouseDB); !isClickHouse {
-		return &GeoHostingDistribution{
-			TotalNodes:           0,
-			CountryDistribution:  []CountryStats{},
-			ProviderDistribution: []ProviderStats{},
-			TopCountries:         []CountryStats{},
-			TopProviders:         []ProviderStats{},
-			LastUpdated:          time.Now(),
-		}, nil
-	}
-
 	conn := gao.db.Conn()
 
 	domainFilter := domainFilterSQL(domain, "")
@@ -207,11 +195,6 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
 
-	// This feature is only available for ClickHouse
-	if _, isClickHouse := gao.db.(*database.ClickHouseDB); !isClickHouse {
-		return []NodeTestResult{}, nil
-	}
-
 	conn := gao.db.Conn()
 
 	domainFilter := domainFilterSQL(domain, "")
@@ -318,11 +301,6 @@ func (gao *GeoAnalyticsOperations) GetNodesByCountry(countryCode string, days in
 func (gao *GeoAnalyticsOperations) GetNodesByProvider(isp string, days int, domain string) ([]NodeTestResult, error) {
 	gao.mu.RLock()
 	defer gao.mu.RUnlock()
-
-	// This feature is only available for ClickHouse
-	if _, isClickHouse := gao.db.(*database.ClickHouseDB); !isClickHouse {
-		return []NodeTestResult{}, nil
-	}
 
 	conn := gao.db.Conn()
 

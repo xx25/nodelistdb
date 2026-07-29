@@ -247,23 +247,6 @@ func (po *PointOperations) NearestPointsCount(domain, listSource string, date ti
 	return count, nearestDate, true, nil
 }
 
-// CountPointsForFile counts stored point rows of one file (verification).
-func (po *PointOperations) CountPointsForFile(domain, listSource string, date time.Time) (int, error) {
-	po.mu.RLock()
-	defer po.mu.RUnlock()
-
-	if domain == "" {
-		domain = database.DefaultDomain
-	}
-
-	var count int
-	err := po.db.Conn().QueryRow(po.queryBuilder.CountPointsForFileSQL(), domain, listSource, date).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count point rows: %w", err)
-	}
-	return count, nil
-}
-
 // --- Phase 2 readers ---
 // "Current/as-of" readers use snapshot semantics: per source the latest issue
 // at or before the as-of date (within the staleness window), overlap resolved

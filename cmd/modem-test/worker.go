@@ -8,22 +8,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xx25/fidomail/pkg/modem"
-	"github.com/xx25/fidomail/pkg/emsi"
 	"github.com/nodelistdb/internal/testing/timeavail"
+	"github.com/xx25/fidomail/pkg/emsi"
+	"github.com/xx25/fidomail/pkg/modem"
 )
 
 // WorkerResult holds the result of a single test from a worker.
 type WorkerResult struct {
 	WorkerID       int
 	WorkerName     string
-	Phone          string // Original phone number (without operator prefix)
-	OperatorName   string // Operator friendly name
-	OperatorPrefix string // Dial prefix used
-	NodeAddress    string // FidoNet address from API (e.g., "2:5020/100")
-	NodeSystemName string // BBS name from API
-	NodeLocation   string // Location from API
-	NodeSysop      string // Sysop name from API
+	Phone          string      // Original phone number (without operator prefix)
+	OperatorName   string      // Operator friendly name
+	OperatorPrefix string      // Dial prefix used
+	NodeAddress    string      // FidoNet address from API (e.g., "2:5020/100")
+	NodeSystemName string      // BBS name from API
+	NodeLocation   string      // Location from API
+	NodeSysop      string      // Sysop name from API
 	NodeTarget     *NodeTarget // Original node target for deferred re-queue
 	TestNum        int
 	Result         testResult
@@ -387,7 +387,6 @@ func (w *ModemWorker) Run(ctx context.Context) {
 		}
 	}
 }
-
 
 // RetryAttemptCallback is called for each retry attempt before waiting.
 // operatorName and operatorPrefix identify which operator was being tried.

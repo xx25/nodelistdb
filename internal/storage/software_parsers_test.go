@@ -3,10 +3,11 @@ package storage
 import (
 	"testing"
 )
+
 func TestParseBinkPVersion(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
+		name             string
+		input            string
 		expectedSoftware string
 		expectedVersion  string
 		expectedOS       string
@@ -86,9 +87,9 @@ func TestParseBinkPVersion(t *testing.T) {
 			expectedProtocol: "binkp/1.0",
 		},
 		{
-			name:           "Empty string",
-			input:          "",
-			shouldBeNil:    true,
+			name:        "Empty string",
+			input:       "",
+			shouldBeNil: true,
 		},
 		{
 			name:             "Unknown software",
@@ -136,8 +137,8 @@ func TestParseBinkPVersion(t *testing.T) {
 
 func TestParseIFCICOMailerInfo(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
+		name             string
+		input            string
 		expectedSoftware string
 		expectedVersion  string
 		expectedProtocol string

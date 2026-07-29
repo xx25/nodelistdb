@@ -20,7 +20,7 @@ import (
 	"github.com/nodelistdb/internal/ftp"
 	"github.com/nodelistdb/internal/links"
 	"github.com/nodelistdb/internal/logging"
-"github.com/nodelistdb/internal/storage"
+	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 	"github.com/nodelistdb/internal/web"
 )
@@ -163,9 +163,6 @@ func main() {
 		fmt.Println("============================")
 		os.Setenv("DEBUG_SQL", "true")
 	}
-
-	// Skip schema creation in read-only mode
-	logging.Info("Running in read-only mode - schema creation skipped")
 
 	logging.Info("Database initialized successfully")
 

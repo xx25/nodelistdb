@@ -62,7 +62,7 @@ func (m *MockStorage) GetStoreCalls() []*models.TestResult {
 
 // MockDNSResolver is a mock implementation of DNSResolver
 type MockDNSResolver struct {
-	ResolveFunc func(ctx context.Context, hostname string) *models.DNSResult
+	ResolveFunc  func(ctx context.Context, hostname string) *models.DNSResult
 	ResolveCalls []string
 }
 
@@ -84,7 +84,7 @@ func (m *MockDNSResolver) Resolve(ctx context.Context, hostname string) *models.
 
 // MockProtocolTester is a mock implementation of protocol testers
 type MockProtocolTester struct {
-	TestFunc func(ctx context.Context, host string, port int, addr string) protocols.TestResult
+	TestFunc  func(ctx context.Context, host string, port int, addr string) protocols.TestResult
 	TestCalls []TestCall
 }
 
@@ -123,7 +123,7 @@ func (m *MockProtocolTester) GetProtocolName() string {
 
 // MockGeolocation is a mock implementation of Geolocation service
 type MockGeolocation struct {
-	GetLocationFunc func(ctx context.Context, ip string) *models.GeolocationResult
+	GetLocationFunc  func(ctx context.Context, ip string) *models.GeolocationResult
 	GetLocationCalls []string
 }
 
@@ -152,7 +152,7 @@ func (m *MockGeolocation) GetLocation(ctx context.Context, ip string) *models.Ge
 
 // MockScheduler is a mock implementation of Scheduler
 type MockScheduler struct {
-	ShouldTestFunc func(node *models.Node, lastResult *models.TestResult) bool
+	ShouldTestFunc   func(node *models.Node, lastResult *models.TestResult) bool
 	RecordResultFunc func(node *models.Node, result *models.TestResult)
 }
 

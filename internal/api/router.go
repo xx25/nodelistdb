@@ -67,7 +67,6 @@ func (s *Server) SetupRouter() http.Handler {
 		r.Get("/binkp", s.GetBinkPSoftwareStats)
 		r.Get("/ifcico", s.GetIFCICOSoftwareStats)
 		r.Get("/binkd", s.GetBinkdDetailedStats)
-		r.Get("/trends", s.GetSoftwareTrends)
 	})
 
 	// Geographic analytics routes

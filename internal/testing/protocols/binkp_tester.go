@@ -32,7 +32,7 @@ func (t *BinkPTester) GetProtocolName() string {
 func NewBinkPTester(timeout time.Duration, ourAddress string) *BinkPTester {
 	// Enable debug mode if DEBUG_BINKP env var is set
 	debug := os.Getenv("DEBUG_BINKP") != ""
-	
+
 	return &BinkPTester{
 		timeout:     timeout,
 		ourAddress:  ourAddress,
@@ -48,7 +48,7 @@ func NewBinkPTester(timeout time.Duration, ourAddress string) *BinkPTester {
 func NewBinkPTesterWithInfo(timeout time.Duration, ourAddress, systemName, sysop, location string) *BinkPTester {
 	// Enable debug mode if DEBUG_BINKP env var is set
 	debug := os.Getenv("DEBUG_BINKP") != ""
-	
+
 	return &BinkPTester{
 		timeout:     timeout,
 		ourAddress:  ourAddress,
@@ -63,12 +63,12 @@ func NewBinkPTesterWithInfo(timeout time.Duration, ourAddress, systemName, sysop
 // Test performs a BinkP connectivity test
 func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedAddress string) TestResult {
 	startTime := time.Now()
-	
+
 	// Use default port if not specified
 	if port == 0 {
 		port = t.defaultPort
 	}
-	
+
 	// Parse hostname:port if port is in the hostname
 	// But skip this for IPv6 addresses (which contain colons)
 	if strings.Contains(host, ":") && !strings.Contains(host, "::") && strings.Count(host, ":") == 1 {
@@ -84,18 +84,18 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 			}
 		}
 	}
-	
+
 	address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-	
+
 	if t.debug {
 		logging.Debugf("BinkP: Testing %s (expected address: %s)", address, expectedAddress)
 	}
-	
+
 	// Create connection with timeout
 	dialer := net.Dialer{
 		Timeout: t.timeout,
 	}
-	
+
 	conn, err := dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return &BinkPTestResult{
@@ -108,12 +108,12 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 		}
 	}
 	defer conn.Close()
-	
+
 	// Create BinkP session with custom system info
 	session := binkp.NewSessionWithInfo(conn, t.ourAddress, t.systemName, t.sysop, t.location)
 	session.SetTimeout(t.timeout)
 	session.SetDebug(t.debug)
-	
+
 	// Perform handshake
 	err = session.Handshake()
 	if err != nil {
@@ -126,31 +126,31 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 			},
 		}
 	}
-	
+
 	// Get remote node information
 	nodeInfo := session.GetNodeInfo()
-	
+
 	// Validate address if expected
 	addressValid := false
 	if expectedAddress != "" {
 		addressValid = session.ValidateAddress(expectedAddress)
-		
+
 		if t.debug {
 			logging.Debugf("BinkP: Address validation: expected=%s, received=%v, valid=%v",
 				expectedAddress, nodeInfo.Addresses, addressValid)
 		}
 	}
-	
+
 	// Close session gracefully
 	session.Close()
-	
+
 	// Build capabilities list
 	capabilities := nodeInfo.Capabilities
 	if nodeInfo.Flags != "" {
 		// Add flags as capabilities for compatibility
 		capabilities = append(capabilities, strings.Fields(nodeInfo.Flags)...)
 	}
-	
+
 	return &BinkPTestResult{
 		BaseTestResult: BaseTestResult{
 			Success:    true,
@@ -158,14 +158,14 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 			ResponseMs: uint32(time.Since(startTime).Milliseconds()),
 			TestTime:   startTime,
 		},
-		SystemName:      nodeInfo.SystemName,
-		Sysop:           nodeInfo.Sysop,
-		Location:        nodeInfo.Location,
-		Version:         nodeInfo.Version,
-		Addresses:       nodeInfo.Addresses,
-		Capabilities:    capabilities,
-		AddressValid:    addressValid,
-		Port:            port,
+		SystemName:   nodeInfo.SystemName,
+		Sysop:        nodeInfo.Sysop,
+		Location:     nodeInfo.Location,
+		Version:      nodeInfo.Version,
+		Addresses:    nodeInfo.Addresses,
+		Capabilities: capabilities,
+		AddressValid: addressValid,
+		Port:         port,
 	}
 }
 
@@ -173,4 +173,3 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 func (t *BinkPTester) SetDebug(enabled bool) {
 	t.debug = enabled
 }
-

@@ -14,10 +14,10 @@ import (
 
 // Config represents the complete configuration for modem testing
 type Config struct {
-	PidFile         string                `yaml:"pid_file"`         // PID file path (default: ~/.modem-test/modem-test.pid)
-	Modem           ModemConfig           `yaml:"modem"`            // Single modem (backward compat)
-	Modems          []ModemInstanceConfig `yaml:"modems"`           // Multi-modem array
-	ModemDefaults   ModemConfig           `yaml:"modem_defaults"`   // Shared defaults for multi-modem
+	PidFile         string                `yaml:"pid_file"`       // PID file path (default: ~/.modem-test/modem-test.pid)
+	Modem           ModemConfig           `yaml:"modem"`          // Single modem (backward compat)
+	Modems          []ModemInstanceConfig `yaml:"modems"`         // Multi-modem array
+	ModemDefaults   ModemConfig           `yaml:"modem_defaults"` // Shared defaults for multi-modem
 	Test            TestConfig            `yaml:"test"`
 	EMSI            EMSIConfig            `yaml:"emsi"`
 	Logging         LoggingConfig         `yaml:"logging"`
@@ -92,15 +92,15 @@ type TestConfig struct {
 	RetryCount int `yaml:"-"` // Number of retries (set via -retry)
 
 	// Config file fields
-	Pause         Duration            `yaml:"pause"`          // Single pause for all inter-call delays (default: 60s)
-	CDRDelay      Duration            `yaml:"cdr_delay"`      // CDR lookup delay after call (default: pause value)
-	Phone         string              `yaml:"phone"`          // Single phone (for backward compatibility)
-	Phones        []string            `yaml:"phones"`         // Multiple phones (called in circular order)
+	Pause           Duration               `yaml:"pause"`            // Single pause for all inter-call delays (default: 60s)
+	CDRDelay        Duration               `yaml:"cdr_delay"`        // CDR lookup delay after call (default: pause value)
+	Phone           string                 `yaml:"phone"`            // Single phone (for backward compatibility)
+	Phones          []string               `yaml:"phones"`           // Multiple phones (called in circular order)
 	Operators       []OperatorConfig       `yaml:"operators"`        // Operator prefixes for routing comparison (optional)
 	PrefixOperators []PrefixOperatorConfig `yaml:"prefix_operators"` // Per-prefix operator overrides (optional)
 	OperatorCache   OperatorCacheConfig    `yaml:"operator_cache"`   // Operator failover cache settings
-	CSVFile       string              `yaml:"csv_file"`       // Path to CSV output file (optional)
-	Prefix        string              `yaml:"prefix"`         // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
+	CSVFile         string                 `yaml:"csv_file"`         // Path to CSV output file (optional)
+	Prefix          string                 `yaml:"prefix"`           // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
 }
 
 // OperatorConfig contains operator/carrier routing configuration
@@ -207,8 +207,8 @@ func DefaultConfig() *Config {
 		Test: TestConfig{
 			Pause: Duration(60 * time.Second),
 			OperatorCache: OperatorCacheConfig{
-				Enabled: true, // Enabled by default when multiple operators configured
-				Path:    "",   // Default: ~/.modem-test/operator_cache
+				Enabled: true,                           // Enabled by default when multiple operators configured
+				Path:    "",                             // Default: ~/.modem-test/operator_cache
 				TTL:     Duration(360 * 24 * time.Hour), // 360 days
 			},
 		},

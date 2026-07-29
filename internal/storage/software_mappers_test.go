@@ -3,6 +3,7 @@ package storage
 import (
 	"testing"
 )
+
 func TestMapToSoftwareTypeStats(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -85,7 +86,7 @@ func TestMapToVersionStats(t *testing.T) {
 		{
 			name: "Multiple versions",
 			input: map[string]int{
-				"binkd 1.0.4":   100,
+				"binkd 1.0.4":    100,
 				"binkd 1.1a-112": 50,
 				"Mystic 1.12A48": 25,
 			},
@@ -150,9 +151,9 @@ func TestMapToOSStats(t *testing.T) {
 		{
 			name: "Multiple operating systems",
 			input: map[string]int{
-				"Linux":           150,
-				"Windows 32-bit":  80,
-				"FreeBSD":         20,
+				"Linux":          150,
+				"Windows 32-bit": 80,
+				"FreeBSD":        20,
 			},
 			total: 250,
 			expected: []OSStats{
@@ -212,9 +213,9 @@ func TestMapToBinkdVersionStats(t *testing.T) {
 		{
 			name: "Multiple binkd versions",
 			input: map[string]int{
-				"1.0.4":     100,
-				"1.1a-112":  75,
-				"1.1a-114":  50,
+				"1.0.4":    100,
+				"1.1a-112": 75,
+				"1.1a-114": 50,
 			},
 			total: 225,
 			expected: []SoftwareVersionStats{

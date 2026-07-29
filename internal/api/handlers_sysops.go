@@ -11,10 +11,6 @@ import (
 // SysopsHandler handles requests for listing sysops.
 // GET /api/sysops?name=John&limit=50&offset=0
 func (s *Server) SysopsHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Parse query parameters
 	query := r.URL.Query()
 	nameFilter := query.Get("name")
@@ -45,10 +41,6 @@ func (s *Server) SysopsHandler(w http.ResponseWriter, r *http.Request) {
 // SysopNodesHandler handles requests for getting nodes by sysop.
 // GET /api/sysops/{name}/nodes?limit=100
 func (s *Server) SysopNodesHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Extract sysop name from path using Chi
 	sysopName := chi.URLParam(r, "name")
 	if sysopName == "" {

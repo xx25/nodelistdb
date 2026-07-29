@@ -14,7 +14,7 @@ func TestNewWorkerPool(t *testing.T) {
 		expectedWorkers int
 	}{
 		{"normal workers", 5, 5},
-		{"zero workers", 0, 1}, // Should default to 1
+		{"zero workers", 0, 1},      // Should default to 1
 		{"negative workers", -5, 1}, // Should default to 1
 	}
 

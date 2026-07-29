@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
-	
+
 	"github.com/nodelistdb/internal/database"
 )
 
@@ -70,17 +70,17 @@ func createTestFile(t *testing.B, content string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	if _, err := tmpFile.WriteString(content); err != nil {
 		tmpFile.Close()
 		os.Remove(tmpFile.Name())
 		t.Fatal(err)
 	}
 	tmpFile.Close()
-	
+
 	// Clean up file after benchmark
 	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
-	
+
 	return tmpFile.Name()
 }
 
@@ -88,12 +88,12 @@ func createTestFile(t *testing.B, content string) string {
 func BenchmarkParserSmallFile(b *testing.B) {
 	content := createTestNodelistData()
 	testFile := createTestFile(b, content)
-	
+
 	parser := New(false) // verbose=false for benchmarking
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		nodes, err := parser.ParseFile(testFile)
 		if err != nil {
@@ -109,12 +109,12 @@ func BenchmarkParserSmallFile(b *testing.B) {
 func BenchmarkParserMediumFile(b *testing.B) {
 	content := createLargeNodelistData(1000)
 	testFile := createTestFile(b, content)
-	
+
 	parser := New(false)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		nodes, err := parser.ParseFile(testFile)
 		if err != nil {
@@ -130,12 +130,12 @@ func BenchmarkParserMediumFile(b *testing.B) {
 func BenchmarkParserLargeFile(b *testing.B) {
 	content := createLargeNodelistData(10000)
 	testFile := createTestFile(b, content)
-	
+
 	parser := New(false)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		nodes, err := parser.ParseFile(testFile)
 		if err != nil {
@@ -151,13 +151,13 @@ func BenchmarkParserLargeFile(b *testing.B) {
 func BenchmarkMapReuse(b *testing.B) {
 	content := createTestNodelistData()
 	testFile := createTestFile(b, content)
-	
+
 	parser := New(false)
-	
+
 	b.Run("WithMapReuse", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		
+
 		for i := 0; i < b.N; i++ {
 			// The optimized parser with map reuse
 			nodes, err := parser.ParseFile(testFile)
@@ -174,17 +174,17 @@ func BenchmarkMapReuse(b *testing.B) {
 // BenchmarkSlicePreallocation benchmarks slice pre-allocation benefits
 func BenchmarkSlicePreallocation(b *testing.B) {
 	testSizes := []int{100, 1000, 5000}
-	
+
 	for _, size := range testSizes {
 		b.Run(fmt.Sprintf("Nodes_%d", size), func(b *testing.B) {
 			content := createLargeNodelistData(size)
 			testFile := createTestFile(b, content)
-			
+
 			parser := New(false)
-			
+
 			b.ResetTimer()
 			b.ReportAllocs()
-			
+
 			for i := 0; i < b.N; i++ {
 				nodes, err := parser.ParseFile(testFile)
 				if err != nil {
@@ -202,12 +202,12 @@ func BenchmarkSlicePreallocation(b *testing.B) {
 func BenchmarkMemoryFootprint(b *testing.B) {
 	content := createLargeNodelistData(5000)
 	testFile := createTestFile(b, content)
-	
+
 	parser := New(false)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	var nodes []database.Node
 	for i := 0; i < b.N; i++ {
 		var err error
@@ -216,7 +216,7 @@ func BenchmarkMemoryFootprint(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
-	
+
 	// Prevent compiler optimization
 	_ = nodes
 }
@@ -224,7 +224,7 @@ func BenchmarkMemoryFootprint(b *testing.B) {
 // BenchmarkFlagParsing specifically benchmarks flag parsing performance
 func BenchmarkFlagParsing(b *testing.B) {
 	parser := New(false)
-	
+
 	testCases := []struct {
 		name  string
 		flags string
@@ -235,12 +235,12 @@ func BenchmarkFlagParsing(b *testing.B) {
 		{"Complex", "CM,V34,V42B,INA:node.example.org,IBN:24554,ITN:23,IFT:21,IFC:60179"},
 		{"VeryComplex", "CM,V90,V42B,MNP,INA:node.example.org,IBN:24554,ITN:23,IFT:21,IFC:60179,IPX,NEC,ZYX,XA"},
 	}
-	
+
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			
+
 			for i := 0; i < b.N; i++ {
 				flags, _ := parser.parseFlagsWithConfig(tc.flags)
 				if len(flags) == 0 {
@@ -254,18 +254,18 @@ func BenchmarkFlagParsing(b *testing.B) {
 // BenchmarkDateExtraction benchmarks date parsing performance
 func BenchmarkDateExtraction(b *testing.B) {
 	parser := New(false)
-	
+
 	testHeaders := []string{
 		";A FidoNet Nodelist for Friday, January 15, 2024 -- Day number 15 : 12345",
 		";S FidoNet Nodelist for Saturday, March 02, 2024 -- Day 62",
 		";A Friday, December 25, 2024 -- Day number 360 : ABCD",
 	}
-	
+
 	for i, header := range testHeaders {
 		b.Run(fmt.Sprintf("Header_%d", i+1), func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			
+
 			for j := 0; j < b.N; j++ {
 				date, dayNum, err := parser.extractDateFromLine(header)
 				if err != nil {

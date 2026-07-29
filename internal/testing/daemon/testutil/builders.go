@@ -137,4 +137,3 @@ func (b *TestResultBuilder) WithHostname(hostname string) *TestResultBuilder {
 func (b *TestResultBuilder) Build() *models.TestResult {
 	return b.result
 }
-

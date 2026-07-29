@@ -44,10 +44,6 @@ func (s *Server) resolveNodeDomain(r *http.Request, zone, net, node int) (string
 // SearchNodesHandler handles node search requests.
 // GET /api/nodes?zone=1&net=234&node=56&date_from=2023-01-01&limit=100
 func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Parse query parameters and build filter
 	filter, hasConstraint, err := parseNodeFilter(r)
 	if err != nil {
@@ -94,10 +90,6 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodeHandler handles individual node lookups.
 // GET /api/nodes/{zone}/{net}/{node}
 func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Parse path parameters using Chi
 	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
 	if err != nil {
@@ -150,10 +142,6 @@ func (s *Server) GetNodeHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodeHistoryHandler returns the complete history of a node.
 // GET /api/nodes/{zone}/{net}/{node}/history
 func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Parse path parameters using Chi
 	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
 	if err != nil {
@@ -208,10 +196,6 @@ func (s *Server) GetNodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodeChangesHandler returns detected changes for a node.
 // GET /api/nodes/{zone}/{net}/{node}/changes
 func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Parse path parameters using Chi
 	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
 	if err != nil {
@@ -253,10 +237,6 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 // GetNodeTimelineHandler returns timeline data for visualization.
 // GET /api/nodes/{zone}/{net}/{node}/timeline
 func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	// Parse path parameters using Chi
 	zone, err := strconv.Atoi(chi.URLParam(r, "zone"))
 	if err != nil {
@@ -331,10 +311,6 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 // GetPSTNNodesHandler returns all nodes with valid phone numbers from the latest nodelist.
 // GET /api/nodes/pstn?zone=2&limit=5000
 func (s *Server) GetPSTNNodesHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	query := r.URL.Query()
 
 	// Parse optional zone filter
@@ -382,10 +358,6 @@ func (s *Server) GetPSTNNodesHandler(w http.ResponseWriter, r *http.Request) {
 // within a recent time window.
 // GET /api/nodes/pstn/recent-success?days=7
 func (s *Server) GetRecentModemSuccessPhonesHandler(w http.ResponseWriter, r *http.Request) {
-	if !CheckMethod(w, r, http.MethodGet) {
-		return
-	}
-
 	days := 7
 	if daysStr := r.URL.Query().Get("days"); daysStr != "" {
 		parsed, err := strconv.Atoi(daysStr)

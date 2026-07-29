@@ -7,38 +7,38 @@ import (
 // TestOperations handles test result database operations using sub-operations
 // This is the facade that coordinates all test-related operations
 type TestOperationsRefactored struct {
-	db                 database.DatabaseInterface
-	testQueryBuilder   *TestQueryBuilder
-	resultParser       ResultParserInterface
-	historyOps         *TestHistoryOperations
-	reachabilityOps    *ReachabilityOperations
-	protocolOps        *ProtocolQueryOperations
-	ipv6Ops            *IPv6QueryOperations
-	softwareOps        *SoftwareAnalyticsOperations
-	geoOps             *GeoAnalyticsOperations
-	akaMismatchOps     *AKAMismatchOperations
-	otherNetworksOps   *OtherNetworksOperations
-	modemOps           *ModemQueryOperations
+	db               database.DatabaseInterface
+	testQueryBuilder *TestQueryBuilder
+	resultParser     ResultParserInterface
+	historyOps       *TestHistoryOperations
+	reachabilityOps  *ReachabilityOperations
+	protocolOps      *ProtocolQueryOperations
+	ipv6Ops          *IPv6QueryOperations
+	softwareOps      *SoftwareAnalyticsOperations
+	geoOps           *GeoAnalyticsOperations
+	akaMismatchOps   *AKAMismatchOperations
+	otherNetworksOps *OtherNetworksOperations
+	modemOps         *ModemQueryOperations
 }
 
 // NewTestOperationsRefactored creates a new refactored TestOperations instance
 func NewTestOperationsRefactored(db database.DatabaseInterface, queryBuilder QueryBuilderInterface, resultParser ResultParserInterface) *TestOperationsRefactored {
 	// Create specialized query builder for tests
-	testQueryBuilder := NewTestQueryBuilder(db)
+	testQueryBuilder := NewTestQueryBuilder()
 
 	return &TestOperationsRefactored{
-		db:                 db,
-		testQueryBuilder:   testQueryBuilder,
-		resultParser:       resultParser,
-		historyOps:         NewTestHistoryOperations(db, testQueryBuilder, resultParser),
-		reachabilityOps:    NewReachabilityOperations(db, testQueryBuilder, resultParser),
-		protocolOps:        NewProtocolQueryOperations(db, testQueryBuilder, resultParser),
-		ipv6Ops:            NewIPv6QueryOperations(db, testQueryBuilder, resultParser),
-		softwareOps:        NewSoftwareAnalyticsOperations(db),
-		geoOps:             NewGeoAnalyticsOperations(db),
-		akaMismatchOps:     NewAKAMismatchOperations(db, testQueryBuilder, resultParser),
-		otherNetworksOps:   NewOtherNetworksOperations(db),
-		modemOps:           NewModemQueryOperations(db),
+		db:               db,
+		testQueryBuilder: testQueryBuilder,
+		resultParser:     resultParser,
+		historyOps:       NewTestHistoryOperations(db, testQueryBuilder, resultParser),
+		reachabilityOps:  NewReachabilityOperations(db, testQueryBuilder, resultParser),
+		protocolOps:      NewProtocolQueryOperations(db, testQueryBuilder, resultParser),
+		ipv6Ops:          NewIPv6QueryOperations(db, testQueryBuilder, resultParser),
+		softwareOps:      NewSoftwareAnalyticsOperations(db),
+		geoOps:           NewGeoAnalyticsOperations(db),
+		akaMismatchOps:   NewAKAMismatchOperations(db, testQueryBuilder, resultParser),
+		otherNetworksOps: NewOtherNetworksOperations(db),
+		modemOps:         NewModemQueryOperations(db),
 	}
 }
 
