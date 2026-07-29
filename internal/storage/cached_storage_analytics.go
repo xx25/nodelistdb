@@ -4,7 +4,7 @@ package storage
 
 // GetFlagFirstAppearance returns when a flag first appeared in the nodelist
 func (cs *CachedStorage) GetFlagFirstAppearance(flagName string, domain string) (*FlagFirstAppearance, error) {
-	return cachedFetch(cs, cs.analyticsKey("flag:first", flagName)+":"+domain, cs.config.HistoricalTTL, func() (*FlagFirstAppearance, error) {
+	return cachedFetchPtr(cs, cs.analyticsKey("flag:first", flagName)+":"+domain, cs.config.HistoricalTTL, func() (*FlagFirstAppearance, error) {
 		return cs.Storage.AnalyticsOps().GetFlagFirstAppearance(flagName, domain)
 	})
 }
@@ -18,7 +18,7 @@ func (cs *CachedStorage) GetFlagUsageByYear(flagName string, domain string) ([]F
 
 // GetNetworkHistory returns historical network statistics
 func (cs *CachedStorage) GetNetworkHistory(zone, net int, domain string) (*NetworkHistory, error) {
-	return cachedFetch(cs, cs.analyticsKey("network", zone, net)+":"+domain, cs.config.HistoricalTTL, func() (*NetworkHistory, error) {
+	return cachedFetchPtr(cs, cs.analyticsKey("network", zone, net)+":"+domain, cs.config.HistoricalTTL, func() (*NetworkHistory, error) {
 		return cs.Storage.AnalyticsOps().GetNetworkHistory(zone, net, domain)
 	})
 }

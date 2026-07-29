@@ -159,6 +159,48 @@ func cachedFetch[T any](cs *CachedStorage, key string, ttl time.Duration, fetch 
 	return result, nil
 }
 
+// cachedFetchPtr is cachedFetch for the readers that return a pointer and use
+// nil for "nothing here yet".
+//
+// Those two are not the same answer. A nil from GetNodeReachabilityStats means
+// the daemon has not tested this node inside the window, and from
+// GetFlagFirstAppearance that the flag is not in flag_statistics - both states
+// a later import or test cycle ends. Storing them turns a temporary absence
+// into a cached fact for the whole TTL, which for the historical readers is a
+// day. Every one of these readers guarded its cache.Set on a non-nil result
+// before this helper existed.
+func cachedFetchPtr[T any](cs *CachedStorage, key string, ttl time.Duration, fetch func() (*T, error)) (*T, error) {
+	if !cs.config.Enabled {
+		return fetch()
+	}
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var result *T
+		// A stored "null" would unmarshal without error; treat it as a miss so
+		// the invariant holds even if an older entry got in.
+		if err := json.Unmarshal(data, &result); err == nil && result != nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return result, nil
+		} else if err != nil {
+			logging.Warn("Failed to unmarshal cached data", slog.String("key", key), slog.Any("error", err))
+		}
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	result, err := fetch()
+	if err != nil {
+		return nil, err
+	}
+
+	if result != nil {
+		if data, err := json.Marshal(result); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, ttl)
+		}
+	}
+	return result, nil
+}
+
 // cachedFetchSlice is cachedFetch for the readers that decline to store an
 // empty answer.
 //

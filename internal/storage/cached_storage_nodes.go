@@ -9,8 +9,17 @@ import (
 
 // Node-related caching operations
 
-// GetNodes with caching
+// GetNodes with caching, except for result sets above max_search_results.
+//
+// That bypass is an operator-set ceiling on what may occupy the cache: the
+// search endpoints are unauthenticated and their own limit caps at 500, so
+// without it a handful of wide searches can fill the store with entries
+// nothing will ask for again. SearchPoints and SearchPointsWithLifetime carry
+// the same guard.
 func (cs *CachedStorage) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
+	if filter.Limit > cs.config.MaxSearchResults {
+		return cs.Storage.NodeOps().GetNodes(filter)
+	}
 	return cachedFetch(cs, cs.keyGen.SearchKey(filter), cs.config.SearchTTL, func() ([]database.Node, error) {
 		return cs.Storage.NodeOps().GetNodes(filter)
 	})

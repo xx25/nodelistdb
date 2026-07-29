@@ -75,21 +75,21 @@ func (cs *CachedStorage) GetFTPEnabledNodes(limit int, days int, includeZeroNode
 
 // GetBinkPSoftwareDistribution returns BinkP software distribution statistics (cached)
 func (cs *CachedStorage) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
-	return cachedFetch(cs, cs.analyticsKey("binkp:software", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
+	return cachedFetchPtr(cs, cs.analyticsKey("binkp:software", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
 		return cs.Storage.GetBinkPSoftwareDistribution(days, domain)
 	})
 }
 
 // GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics (cached)
 func (cs *CachedStorage) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
-	return cachedFetch(cs, cs.analyticsKey("ifcico:software", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
+	return cachedFetchPtr(cs, cs.analyticsKey("ifcico:software", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
 		return cs.Storage.GetIFCICOSoftwareDistribution(days, domain)
 	})
 }
 
 // GetBinkdDetailedStats returns detailed Binkd statistics (cached)
 func (cs *CachedStorage) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
-	return cachedFetch(cs, cs.analyticsKey("binkd:stats", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
+	return cachedFetchPtr(cs, cs.analyticsKey("binkd:stats", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
 		return cs.Storage.GetBinkdDetailedStats(days, domain)
 	})
 }
@@ -98,7 +98,7 @@ func (cs *CachedStorage) GetBinkdDetailedStats(days int, domain string) (*Softwa
 // This is accessed via GetIPv6WeeklyNews(domain) in handlers,
 // but we provide a direct cached wrapper for it
 func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
-	return cachedFetch(cs, cs.analyticsKey("ipv6:weeklynews", limit, includeZeroNodes, domain), cs.config.LongAnalyticsTTL, func() (*IPv6WeeklyNews, error) {
+	return cachedFetchPtr(cs, cs.analyticsKey("ipv6:weeklynews", limit, includeZeroNodes, domain), cs.config.LongAnalyticsTTL, func() (*IPv6WeeklyNews, error) {
 		return cs.Storage.GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
 	})
 }
@@ -126,7 +126,7 @@ func (cs *CachedStorage) GetIPv6NodeList(limit int, days int, includeZeroNodes b
 
 // GetGeoHostingDistribution returns geographic hosting distribution (cached)
 func (cs *CachedStorage) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
-	return cachedFetch(cs, cs.analyticsKey("geo:hosting", days, domain), cs.config.LongAnalyticsTTL, func() (*GeoHostingDistribution, error) {
+	return cachedFetchPtr(cs, cs.analyticsKey("geo:hosting", days, domain), cs.config.LongAnalyticsTTL, func() (*GeoHostingDistribution, error) {
 		return cs.Storage.GetGeoHostingDistribution(days, domain)
 	})
 }
@@ -248,7 +248,7 @@ func (cs *CachedStorage) GetRecentModemSuccessPhones(days int) ([]string, error)
 
 // GetDetailedModemTestResult returns detailed modem test data (cached)
 func (cs *CachedStorage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
-	return cachedFetch(cs, cs.analyticsKey("modem:detail", zone, net, node, testTime), cs.config.TestAnalyticsTTL, func() (*ModemTestDetail, error) {
+	return cachedFetchPtr(cs, cs.analyticsKey("modem:detail", zone, net, node, testTime), cs.config.TestAnalyticsTTL, func() (*ModemTestDetail, error) {
 		return cs.Storage.GetDetailedModemTestResult(zone, net, node, testTime)
 	})
 }
@@ -328,14 +328,14 @@ func (cs *CachedStorage) GetNodeTestHistory(zone, net, node int, days int, domai
 
 // GetNodeReachabilityStats returns reachability statistics for a specific node (cached)
 func (cs *CachedStorage) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
-	return cachedFetch(cs, cs.keyGen.NodeReachabilityStatsKey(zone, net, node, days)+":"+domain, cs.config.TestAnalyticsTTL, func() (*NodeReachabilityStats, error) {
+	return cachedFetchPtr(cs, cs.keyGen.NodeReachabilityStatsKey(zone, net, node, days)+":"+domain, cs.config.TestAnalyticsTTL, func() (*NodeReachabilityStats, error) {
 		return cs.Storage.GetNodeReachabilityStats(zone, net, node, days, domain)
 	})
 }
 
 // GetDetailedTestResult returns detailed test result for a specific test (cached)
 func (cs *CachedStorage) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
-	return cachedFetch(cs, cs.keyGen.DetailedTestResultKey(zone, net, node, testTime)+":"+domain, cs.config.TestAnalyticsTTL, func() (*NodeTestResult, error) {
+	return cachedFetchPtr(cs, cs.keyGen.DetailedTestResultKey(zone, net, node, testTime)+":"+domain, cs.config.TestAnalyticsTTL, func() (*NodeTestResult, error) {
 		return cs.Storage.GetDetailedTestResult(zone, net, node, testTime, domain)
 	})
 }

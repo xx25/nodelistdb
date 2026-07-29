@@ -4,7 +4,7 @@ package storage
 // scoped to the given FTN network ("" = all networks). The domain is part of
 // the cache key so each network keeps its own entry.
 func (cs *CachedStorage) GetAllWhoisResults(domain string) ([]DomainWhoisResult, error) {
-	return cachedFetchSlice(cs, cs.analyticsKey("whois:results:v4", domain), cs.config.LongAnalyticsTTL, func() ([]DomainWhoisResult, error) {
+	return cachedFetchSlice(cs, cs.analyticsKey("whois:results:v4", whoisDomainKey(domain)), cs.config.LongAnalyticsTTL, func() ([]DomainWhoisResult, error) {
 		return cs.Storage.GetAllWhoisResults(domain)
 	})
 }
@@ -14,4 +14,16 @@ func (cs *CachedStorage) GetNodesByDomain(domain string, days int) ([]NodeTestRe
 	return cachedFetchSlice(cs, cs.analyticsKey("whois:domain:v2", cs.keyGen.ShortHash(domain), days), cs.config.AnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetNodesByDomain(domain, days)
 	})
+}
+
+// whoisDomainKey renders the FTN network for the WHOIS results key. The
+// all-networks case is "*", not an empty segment: "*" is outside the valid
+// network-name charset ([a-z0-9_-]) so it cannot collide with a network
+// literally named "all", and keeping the spelling means entries written before
+// this key moved to analyticsKey are still found.
+func whoisDomainKey(domain string) string {
+	if domain == "" {
+		return "*"
+	}
+	return domain
 }
