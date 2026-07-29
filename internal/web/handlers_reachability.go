@@ -2,7 +2,6 @@ package web
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/logging"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 )
@@ -56,7 +56,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		trends, err = s.storage.GetReachabilityTrends(trendsPeriodFilter, domain)
 	}
 	if err != nil {
-		log.Printf("Error getting reachability trends: %v", err)
+		logging.Errorf("Error getting reachability trends: %v", err)
 		trends = []storage.ReachabilityTrend{}
 	}
 
@@ -77,7 +77,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	if statusFilter != "" || protocolFilter != "" || query.Get("nodes_period") != "" || query.Get("limit") != "" {
 		filteredNodes, err := s.getFilteredReachabilityNodes(statusFilter, protocolFilter, nodesPeriodFilter, limitFilter, domain)
 		if err != nil {
-			log.Printf("Error getting filtered nodes: %v", err)
+			logging.Errorf("Error getting filtered nodes: %v", err)
 			filteredNodes = []storage.NodeTestResult{}
 		}
 		data["FilteredNodes"] = filteredNodes
@@ -85,13 +85,13 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		// Default behavior - get recently tested nodes (both operational and failed) for the last day
 		operational, err := s.storage.SearchNodesByReachability(true, 10, nodesPeriodFilter, domain)
 		if err != nil {
-			log.Printf("Error getting operational nodes: %v", err)
+			logging.Errorf("Error getting operational nodes: %v", err)
 			operational = []storage.NodeTestResult{}
 		}
 
 		failed, err := s.storage.SearchNodesByReachability(false, 10, nodesPeriodFilter, domain)
 		if err != nil {
-			log.Printf("Error getting failed nodes: %v", err)
+			logging.Errorf("Error getting failed nodes: %v", err)
 			failed = []storage.NodeTestResult{}
 		}
 
@@ -99,9 +99,7 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 		data["FailedNodes"] = failed
 	}
 
-	if err := s.templates["reachability"].Execute(w, data); err != nil {
-		log.Printf("Error executing reachability template: %v", err)
-	}
+	s.render(w, "reachability", data)
 }
 
 // getFilteredReachabilityNodes retrieves nodes based on the applied filters
@@ -200,70 +198,24 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		// Parse address (format: zone:net/node)
-		parts := strings.Split(address, ":")
-		if len(parts) != 2 {
+		zone, net, node, err = parseNodeAddress(address)
+		if err != nil {
 			http.Error(w, "Invalid address format", http.StatusBadRequest)
-			return
-		}
-
-		zone, err = strconv.Atoi(parts[0])
-		if err != nil {
-			http.Error(w, "Invalid zone", http.StatusBadRequest)
-			return
-		}
-
-		netNode := strings.Split(parts[1], "/")
-		if len(netNode) != 2 {
-			http.Error(w, "Invalid address format", http.StatusBadRequest)
-			return
-		}
-
-		net, err = strconv.Atoi(netNode[0])
-		if err != nil {
-			http.Error(w, "Invalid net", http.StatusBadRequest)
-			return
-		}
-
-		node, err = strconv.Atoi(netNode[1])
-		if err != nil {
-			http.Error(w, "Invalid node", http.StatusBadRequest)
 			return
 		}
 	} else {
-		// Try to get from query params
-		zoneStr := r.URL.Query().Get("zone")
-		netStr := r.URL.Query().Get("net")
-		nodeStr := r.URL.Query().Get("node")
-
-		if zoneStr == "" || netStr == "" || nodeStr == "" {
-			// Show form
-			data := map[string]interface{}{
+		var present, ok bool
+		zone, net, node, present, ok = parseAddressQuery(w, r)
+		if !ok {
+			return
+		}
+		if !present {
+			// No address given at all: show the lookup form.
+			s.render(w, "reachability", map[string]interface{}{
 				"Title":      "Node Reachability History",
 				"Version":    version.GetVersionInfo(),
 				"ActivePage": "reachability",
-			}
-			if err := s.templates["reachability"].Execute(w, data); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-			return
-		}
-
-		zone, err = strconv.Atoi(zoneStr)
-		if err != nil {
-			http.Error(w, "Invalid zone", http.StatusBadRequest)
-			return
-		}
-
-		net, err = strconv.Atoi(netStr)
-		if err != nil {
-			http.Error(w, "Invalid net", http.StatusBadRequest)
-			return
-		}
-
-		node, err = strconv.Atoi(nodeStr)
-		if err != nil {
-			http.Error(w, "Invalid node", http.StatusBadRequest)
+			})
 			return
 		}
 	}
@@ -284,7 +236,7 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	domain := resolveEntityDomain(r, availableDomains)
 	history, err := s.storage.GetNodeTestHistory(zone, net, node, days, domain)
 	if err != nil {
-		log.Printf("Error getting node test history: %v", err)
+		logging.Errorf("Error getting node test history: %v", err)
 		history = []storage.NodeTestResult{}
 	}
 
@@ -355,7 +307,7 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 	// Get statistics
 	stats, err := s.storage.GetNodeReachabilityStats(zone, net, node, days, domain)
 	if err != nil {
-		log.Printf("Error getting node reachability stats: %v", err)
+		logging.Errorf("Error getting node reachability stats: %v", err)
 	}
 
 	// Get node info from main database (same resolved network)
@@ -383,137 +335,112 @@ func (s *Server) ReachabilityNodeHandler(w http.ResponseWriter, r *http.Request)
 		"HasPerHostnameData": hasPerHostnameData,
 	}
 
-	if err := s.templates["reachability"].Execute(w, data); err != nil {
-		log.Printf("Error executing reachability template: %v", err)
+	s.render(w, "reachability", data)
+}
+
+// parseAddressQuery reads ?zone=&net=&node= and answers 400 on a malformed
+// one. present is false when none of the three was given, which is not an
+// error - the reachability page shows its lookup form instead. It is reported
+// separately from the values because 0:0/0 is a real address here: the test
+// daemon files ad-hoc host:port probes under zone 0.
+func parseAddressQuery(w http.ResponseWriter, r *http.Request) (zone, net, node int, present, ok bool) {
+	query := r.URL.Query()
+	zoneStr, netStr, nodeStr := query.Get("zone"), query.Get("net"), query.Get("node")
+	if zoneStr == "" && netStr == "" && nodeStr == "" {
+		return 0, 0, 0, false, true
 	}
+
+	for _, part := range []struct {
+		name string
+		raw  string
+		dest *int
+	}{
+		{"zone", zoneStr, &zone},
+		{"net", netStr, &net},
+		{"node", nodeStr, &node},
+	} {
+		v, err := strconv.Atoi(part.raw)
+		if err != nil {
+			http.Error(w, "Invalid "+part.name, http.StatusBadRequest)
+			return 0, 0, 0, false, false
+		}
+		*part.dest = v
+	}
+	return zone, net, node, true, true
+}
+
+// testDetailPage parameterises the two test-result detail pages. They differ
+// in which store they read and which template renders it; everything else -
+// parameter parsing, the node-info lookup for context, the payload shape - was
+// duplicated between them.
+type testDetailPage struct {
+	title    string
+	template string
+	subject  string // for log lines and the not-found message
+	fetch    func(zone, net, node int, testTime, domain string) (result any, found bool, err error)
 }
 
 // TestResultDetailHandler shows detailed information about a specific test result
 func (s *Server) TestResultDetailHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse parameters from URL query
-	zoneStr := r.URL.Query().Get("zone")
-	netStr := r.URL.Query().Get("net")
-	nodeStr := r.URL.Query().Get("node")
-	testTime := r.URL.Query().Get("time")
-
-	if zoneStr == "" || netStr == "" || nodeStr == "" || testTime == "" {
-		http.Error(w, "Missing required parameters", http.StatusBadRequest)
-		return
-	}
-
-	zone, err := strconv.Atoi(zoneStr)
-	if err != nil {
-		http.Error(w, "Invalid zone", http.StatusBadRequest)
-		return
-	}
-
-	net, err := strconv.Atoi(netStr)
-	if err != nil {
-		http.Error(w, "Invalid net", http.StatusBadRequest)
-		return
-	}
-
-	node, err := strconv.Atoi(nodeStr)
-	if err != nil {
-		http.Error(w, "Invalid node", http.StatusBadRequest)
-		return
-	}
-
-	// Get detailed test result
-	domain := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
-	testResult, err := s.storage.GetDetailedTestResult(zone, net, node, testTime, domain)
-	if err != nil {
-		log.Printf("Error getting detailed test result: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if testResult == nil {
-		http.Error(w, "Test result not found", http.StatusNotFound)
-		return
-	}
-
-	// Get node info from main database for context
-	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))))
-	var nodeInfo *database.Node
-	if err == nil && len(nodeHistory) > 0 {
-		// Get the most recent entry
-		nodeInfo = &nodeHistory[len(nodeHistory)-1]
-	}
-
-	data := map[string]interface{}{
-		"Title":      "Test Result Details",
-		"Version":    version.GetVersionInfo(),
-		"ActivePage": "reachability",
-		"TestResult": testResult,
-		"NodeInfo":   nodeInfo,
-		"Address":    fmt.Sprintf("%d:%d/%d", zone, net, node),
-	}
-
-	if err := s.templates["test_detail"].Execute(w, data); err != nil {
-		log.Printf("Error executing test detail template: %v", err)
-	}
+	s.renderTestDetail(w, r, testDetailPage{
+		title:    "Test Result Details",
+		template: "test_detail",
+		subject:  "test result",
+		fetch: func(zone, net, node int, testTime, domain string) (any, bool, error) {
+			result, err := s.storage.GetDetailedTestResult(zone, net, node, testTime, domain)
+			return result, result != nil, err
+		},
+	})
 }
 
 // ModemTestDetailHandler shows detailed information about a specific modem test result
 func (s *Server) ModemTestDetailHandler(w http.ResponseWriter, r *http.Request) {
-	zoneStr := r.URL.Query().Get("zone")
-	netStr := r.URL.Query().Get("net")
-	nodeStr := r.URL.Query().Get("node")
-	testTime := r.URL.Query().Get("time")
+	s.renderTestDetail(w, r, testDetailPage{
+		title:    "Modem Test Details",
+		template: "modem_test_detail",
+		subject:  "modem test result",
+		fetch: func(zone, net, node int, testTime, domain string) (any, bool, error) {
+			result, err := s.storage.GetDetailedModemTestResult(zone, net, node, testTime)
+			return result, result != nil, err
+		},
+	})
+}
 
-	if zoneStr == "" || netStr == "" || nodeStr == "" || testTime == "" {
+func (s *Server) renderTestDetail(w http.ResponseWriter, r *http.Request, page testDetailPage) {
+	testTime := r.URL.Query().Get("time")
+	zone, net, node, present, ok := parseAddressQuery(w, r)
+	if !ok {
+		return
+	}
+	if testTime == "" || !present {
 		http.Error(w, "Missing required parameters", http.StatusBadRequest)
 		return
 	}
 
-	zone, err := strconv.Atoi(zoneStr)
+	domain := explicitDomain(r)
+	result, found, err := page.fetch(zone, net, node, testTime, domain)
 	if err != nil {
-		http.Error(w, "Invalid zone", http.StatusBadRequest)
-		return
-	}
-
-	net, err := strconv.Atoi(netStr)
-	if err != nil {
-		http.Error(w, "Invalid net", http.StatusBadRequest)
-		return
-	}
-
-	node, err := strconv.Atoi(nodeStr)
-	if err != nil {
-		http.Error(w, "Invalid node", http.StatusBadRequest)
-		return
-	}
-
-	result, err := s.storage.GetDetailedModemTestResult(zone, net, node, testTime)
-	if err != nil {
-		log.Printf("Error getting detailed modem test result: %v", err)
+		logging.Errorf("Error getting detailed %s: %v", page.subject, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-
-	if result == nil {
-		http.Error(w, "Modem test result not found", http.StatusNotFound)
+	if !found {
+		http.Error(w, strings.ToUpper(page.subject[:1])+page.subject[1:]+" not found", http.StatusNotFound)
 		return
 	}
 
-	// Get node info from main database for context
-	nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))))
+	// Node info from the nodelist, for context on the page.
 	var nodeInfo *database.Node
-	if err == nil && len(nodeHistory) > 0 {
+	if nodeHistory, err := s.storage.GetNodeHistory(zone, net, node, domain); err == nil && len(nodeHistory) > 0 {
 		nodeInfo = &nodeHistory[len(nodeHistory)-1]
 	}
 
-	data := map[string]interface{}{
-		"Title":      "Modem Test Details",
+	s.render(w, page.template, map[string]interface{}{
+		"Title":      page.title,
 		"Version":    version.GetVersionInfo(),
-		"ActivePage": "analytics",
+		"ActivePage": "reachability",
 		"TestResult": result,
 		"NodeInfo":   nodeInfo,
 		"Address":    fmt.Sprintf("%d:%d/%d", zone, net, node),
-	}
-
-	if err := s.templates["modem_test_detail"].Execute(w, data); err != nil {
-		log.Printf("Error executing modem test detail template: %v", err)
-	}
+	})
 }

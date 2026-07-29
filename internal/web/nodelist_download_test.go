@@ -41,7 +41,10 @@ func nodelistPageRequest(path, cookie string) *http.Request {
 // main content, fidonet moves to the other-networks section.
 func TestNodelistHandlerScopedByNetworkCookie(t *testing.T) {
 	setupNodelistArchive(t)
-	s := New(nil, TemplatesFS, StaticFS)
+	s, err := New(nil, TemplatesFS, StaticFS)
+	if err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 
 	cases := []struct {
 		name       string
@@ -104,7 +107,10 @@ func TestNodelistHandlerScopedByNetworkCookie(t *testing.T) {
 // so scripted use is unchanged).
 func TestLatestNodelistHandlerScopedByNetworkCookie(t *testing.T) {
 	setupNodelistArchive(t)
-	s := New(nil, TemplatesFS, StaticFS)
+	s, err := New(nil, TemplatesFS, StaticFS)
+	if err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 
 	cases := []struct {
 		cookie string
@@ -138,7 +144,10 @@ func TestNodelistDownloadHandlerRejectsTraversal(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("NODELIST_PATH", root)
-	s := New(nil, TemplatesFS, StaticFS)
+	s, err := New(nil, TemplatesFS, StaticFS)
+	if err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 
 	// The decoded path the mux would hand us after unescaping %2e%2e etc.
 	traversals := []string{
@@ -164,7 +173,10 @@ func TestNodelistDownloadHandlerRejectsTraversal(t *testing.T) {
 // serves the same file as the root fidonet path.
 func TestNodelistDownloadHandlerFidonetAlias(t *testing.T) {
 	setupNodelistArchive(t)
-	s := New(nil, TemplatesFS, StaticFS)
+	s, err := New(nil, TemplatesFS, StaticFS)
+	if err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 
 	for _, p := range []string{
 		"/download/nodelist/2026/nodelist.100",
@@ -186,7 +198,10 @@ func TestNodelistDownloadHandlerFidonetAlias(t *testing.T) {
 // TestYearArchiveHandlerNetworkPath verifies the network-scoped tar.gz route.
 func TestYearArchiveHandlerNetworkPath(t *testing.T) {
 	setupNodelistArchive(t)
-	s := New(nil, TemplatesFS, StaticFS)
+	s, err := New(nil, TemplatesFS, StaticFS)
+	if err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 
 	w := httptest.NewRecorder()
 	s.YearArchiveHandler(w, httptest.NewRequest("GET", "/download/year/fsxnet/2026.tar.gz", nil))

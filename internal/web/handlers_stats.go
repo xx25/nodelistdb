@@ -1,7 +1,7 @@
 package web
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"time"
 
@@ -10,225 +10,79 @@ import (
 	"github.com/nodelistdb/internal/version"
 )
 
-// StatsHandler handles statistics page
+// statsPageData is the whole payload stats.html reads. It is one named struct
+// rather than a literal per exit path because the template dereferences every
+// field unconditionally: an error path that builds its own literal and forgets
+// one aborts the render mid-document, which used to reach the client as a
+// truncated page behind a 200.
+type statsPageData struct {
+	Title          string
+	ActivePage     string
+	Version        string
+	Domain         string
+	Error          error
+	NoData         bool
+	Stats          *database.NetworkStats
+	AvailableDates []time.Time
+	SelectedDate   string
+	ActualDate     string
+	DateAdjusted   bool
+	NodeHistory    []storage.NodeCountByDate
+	PointStats     *storage.PointStats
+}
+
+// StatsHandler renders the network statistics page for one nodelist date.
 func (s *Server) StatsHandler(w http.ResponseWriter, r *http.Request) {
-	var selectedDate time.Time
-	var actualDate time.Time
-	var err error
-	var dateAdjusted bool
-	var availableDates []time.Time
-
 	domain := requestDomain(r)
-
-	// Get available dates for the dropdown
-	availableDates, err = s.storage.GetAvailableDates(domain)
-	if err != nil {
-		data := struct {
-			Title          string
-			ActivePage     string
-			Stats          *database.NetworkStats
-			Error          error
-			NoData         bool
-			AvailableDates []time.Time
-			SelectedDate   string
-			ActualDate     string
-			DateAdjusted   bool
-			Version        string
-			NodeHistory    []storage.NodeCountByDate
-			PointStats     *storage.PointStats
-		}{
-			Title:          "Network Statistics",
-			ActivePage:     "stats",
-			Stats:          nil,
-			Error:          fmt.Errorf("Failed to get available dates: %v", err),
-			NoData:         true,
-			AvailableDates: []time.Time{},
-			SelectedDate:   "",
-			ActualDate:     "",
-			DateAdjusted:   false,
-			Version:        version.GetVersionInfo(),
-			NodeHistory:    nil,
-			PointStats:     nil,
-		}
-
-		if err := s.templates["stats"].Execute(w, data); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Parse date parameter from query string
-	dateStr := r.URL.Query().Get("date")
-	if dateStr != "" {
-		selectedDate, err = time.Parse("2006-01-02", dateStr)
-		if err != nil {
-			// Invalid date format, fall back to latest
-			actualDate, err = s.storage.GetLatestStatsDate(domain)
-			if err != nil {
-				data := struct {
-					Title          string
-					ActivePage     string
-					Stats          *database.NetworkStats
-					Error          error
-					NoData         bool
-					AvailableDates []time.Time
-					SelectedDate   string
-					ActualDate     string
-					DateAdjusted   bool
-					Version        string
-					NodeHistory    []storage.NodeCountByDate
-					PointStats     *storage.PointStats
-				}{
-					Title:          "Network Statistics",
-					ActivePage:     "stats",
-					Stats:          nil,
-					Error:          fmt.Errorf("Invalid date format and failed to get latest date: %v", err),
-					NoData:         true,
-					AvailableDates: availableDates,
-					SelectedDate:   dateStr,
-					ActualDate:     "",
-					DateAdjusted:   false,
-					Version:        version.GetVersionInfo(),
-					NodeHistory:    nil,
-					PointStats:     nil,
-				}
-
-				if err := s.templates["stats"].Execute(w, data); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-				}
-				return
-			}
-			dateAdjusted = true
-		} else {
-			// Find the nearest available date
-			actualDate, err = s.storage.GetNearestAvailableDate(selectedDate, domain)
-			if err != nil {
-				data := struct {
-					Title          string
-					ActivePage     string
-					Stats          *database.NetworkStats
-					Error          error
-					NoData         bool
-					AvailableDates []time.Time
-					SelectedDate   string
-					ActualDate     string
-					DateAdjusted   bool
-					Version        string
-					NodeHistory    []storage.NodeCountByDate
-					PointStats     *storage.PointStats
-				}{
-					Title:          "Network Statistics",
-					ActivePage:     "stats",
-					Stats:          nil,
-					Error:          fmt.Errorf("Failed to find available date: %v", err),
-					NoData:         true,
-					AvailableDates: availableDates,
-					SelectedDate:   dateStr,
-					ActualDate:     "",
-					DateAdjusted:   false,
-					Version:        version.GetVersionInfo(),
-					NodeHistory:    nil,
-					PointStats:     nil,
-				}
-
-				if err := s.templates["stats"].Execute(w, data); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-				}
-				return
-			}
-			dateAdjusted = !actualDate.Equal(selectedDate)
-		}
-	} else {
-		// No date specified, use latest
-		actualDate, err = s.storage.GetLatestStatsDate(domain)
-		if err != nil {
-			data := struct {
-				Title          string
-				ActivePage     string
-				Stats          *database.NetworkStats
-				Error          error
-				NoData         bool
-				AvailableDates []time.Time
-				SelectedDate   string
-				ActualDate     string
-				DateAdjusted   bool
-				Version        string
-				NodeHistory    []storage.NodeCountByDate
-				PointStats     *storage.PointStats
-			}{
-				Title:          "Network Statistics",
-				ActivePage:     "stats",
-				Stats:          nil,
-				Error:          fmt.Errorf("Failed to find latest nodelist date: %v", err),
-				NoData:         true,
-				AvailableDates: availableDates,
-				SelectedDate:   "",
-				ActualDate:     "",
-				DateAdjusted:   false,
-				Version:        version.GetVersionInfo(),
-				NodeHistory:    nil,
-				PointStats:     nil,
-			}
-
-			if err := s.templates["stats"].Execute(w, data); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-			return
-		}
-	}
-
-	// Get stats for the actual date
-	stats, err := s.storage.GetStats(actualDate, domain)
-
-	// Get historical node count for chart
-	nodeHistory, _ := s.storage.GetNodeCountHistory(domain)
-
-	// Pointlist snapshot companion (zero TotalPoints hides the tile). For the
-	// current view (no explicit ?date=) anchor at the newest imported
-	// pointlist — the pointlist feed can lag far behind the daily nodelist
-	// and an as-of-today snapshot would go dark. Explicit historical dates
-	// stay strictly as-of.
-	var pointAsOf *time.Time
-	if dateStr != "" {
-		pointAsOf = &actualDate
-	}
-	pointStats, _ := s.storage.GetPointStats(domain, pointAsOf)
-
-	data := struct {
-		Title          string
-		ActivePage     string
-		Stats          *database.NetworkStats
-		Error          error
-		NoData         bool
-		AvailableDates []time.Time
-		SelectedDate   string
-		ActualDate     string
-		DateAdjusted   bool
-		Version        string
-		NodeHistory    []storage.NodeCountByDate
-		Domain         string
-		PointStats     *storage.PointStats
-	}{
+	data := statsPageData{
 		Title:          "Network Statistics",
 		ActivePage:     "stats",
-		Stats:          stats,
-		Error:          err,
-		NoData:         stats == nil || stats.TotalNodes == 0,
-		AvailableDates: availableDates,
-		SelectedDate:   dateStr,
-		ActualDate:     actualDate.Format("2006-01-02"),
-		DateAdjusted:   dateAdjusted,
 		Version:        version.GetVersionInfo(),
-		NodeHistory:    nodeHistory,
 		Domain:         domain,
-		PointStats:     pointStats,
+		NoData:         true,
+		AvailableDates: []time.Time{},
 	}
 
-	if data.NoData && err == nil {
-		data.Error = fmt.Errorf("No nodelist data available. Please import nodelist files first.")
+	availableDates, err := s.storage.GetAvailableDates(domain)
+	if err != nil {
+		data.Error = errors.New("Failed to get available dates: " + err.Error())
+		s.render(w, "stats", data)
+		return
+	}
+	data.AvailableDates = availableDates
+
+	// Same date resolution the browse pages use: no ?date= means the network's
+	// latest, an unparseable one falls back to it, and a valid one snaps to the
+	// nearest nodelist that exists.
+	actualDate, rawDate, adjusted, err := s.resolveBrowseDate(r, domain)
+	data.SelectedDate = rawDate
+	if err != nil {
+		data.Error = err
+		s.render(w, "stats", data)
+		return
+	}
+	data.ActualDate = actualDate.Format("2006-01-02")
+	data.DateAdjusted = adjusted
+
+	data.Stats, data.Error = s.storage.GetStats(actualDate, domain)
+	data.NoData = data.Stats == nil || data.Stats.TotalNodes == 0
+	if data.NoData && data.Error == nil {
+		data.Error = errors.New("No nodelist data available. Please import nodelist files first.")
 	}
 
-	if err := s.templates["stats"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// The trend chart and the pointlist companion are both best-effort:
+	// neither is worth failing the page over.
+	data.NodeHistory, _ = s.storage.GetNodeCountHistory(domain)
+
+	// A zero TotalPoints hides the pointlist tile. For the current view (no
+	// explicit ?date=) anchor at the newest imported pointlist - the pointlist
+	// feed can lag far behind the daily nodelist and an as-of-today snapshot
+	// would go dark. Explicit historical dates stay strictly as-of.
+	var pointAsOf *time.Time
+	if rawDate != "" {
+		pointAsOf = &actualDate
 	}
+	data.PointStats, _ = s.storage.GetPointStats(domain, pointAsOf)
+
+	s.render(w, "stats", data)
 }

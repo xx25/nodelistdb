@@ -63,73 +63,62 @@ func parseAnalyticsParams(r *http.Request) analyticsParams {
 	}
 }
 
-// protocolAnalyticsData holds template data for protocol analytics pages
-type protocolAnalyticsData struct {
+// analyticsPageData is the payload behind every config-driven node-listing
+// analytics page. One struct rather than two identical ones under different
+// names, and one field for the rows rather than ProtocolNodes on some pages
+// and IPv6Nodes on others.
+type analyticsPageData struct {
 	Title            string
 	ActivePage       string
 	Version          string
-	ProtocolNodes    []storage.NodeTestResult
+	Nodes            []storage.NodeTestResult
 	Days             int
 	Limit            int
 	IncludeZeroNodes bool
 	Error            error
-	Config           ProtocolPageConfig // Configuration for the page
-	ProcessedInfo    []template.HTML    // Processed InfoText with days substituted
+	Config           analyticsPageConfig // the page-specific config, read by the template
+	ProcessedInfo    []template.HTML     // InfoText with %d substituted
 }
 
 // protocolNodesFetcher is a function type for fetching protocol-specific nodes
 type protocolNodesFetcher func(limit, days int, includeZeroNodes bool, domain string) ([]storage.NodeTestResult, error)
 
-// renderProtocolAnalytics is a generic handler for protocol analytics pages
-// Updated to use ProtocolPageConfig for configuration-driven rendering
-func (s *Server) renderProtocolAnalytics(
+// renderAnalyticsNodes renders one config-driven analytics page: parse the
+// shared query parameters, fetch the rows, hand both to the template named by
+// the caller. The protocol pages and the IPv6 pages had a renderer each,
+// differing in six tokens.
+func (s *Server) renderAnalyticsNodes(
 	w http.ResponseWriter,
 	r *http.Request,
-	config ProtocolPageConfig,
+	config analyticsPageConfig,
+	templateName string,
 	fetcher protocolNodesFetcher,
 ) {
-	// Parse common parameters
+	base := config.base()
 	params := parseAnalyticsParams(r)
 
-	// Fetch protocol nodes
-	protocolNodes, err := fetcher(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
+	nodes, err := fetcher(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
 	var displayError error
-
 	if err != nil {
-		logging.Errorf("%s: Error fetching nodes: %v", config.PageTitle, err)
-		protocolNodes = []storage.NodeTestResult{}
+		logging.Errorf("%s: Error fetching nodes: %v", base.PageTitle, err)
+		nodes = []storage.NodeTestResult{}
 		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
 	} else if params.ValidationError != "" {
 		displayError = fmt.Errorf("%s", params.ValidationError)
 	}
 
-	// Build template data
-	data := protocolAnalyticsData{
-		Title:            config.PageTitle,
+	s.render(w, templateName, analyticsPageData{
+		Title:            base.PageTitle,
 		ActivePage:       "analytics",
 		Version:          version.GetVersionInfo(),
-		ProtocolNodes:    protocolNodes,
+		Nodes:            nodes,
 		Days:             params.Days,
 		Limit:            params.Limit,
 		IncludeZeroNodes: params.IncludeZeroNodes,
 		Error:            displayError,
 		Config:           config,
-		ProcessedInfo:    config.processInfoText(params.Days),
-	}
-
-	// Use unified template
-	tmpl, exists := s.templates["unified_analytics"]
-	if !exists {
-		logging.Errorf("%s: Template 'unified_analytics' not found", config.PageTitle)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("%s: Error executing template: %v", config.PageTitle, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+		ProcessedInfo:    base.processInfoText(params.Days),
+	})
 }
 
 // AnalyticsHandler shows the analytics page
@@ -150,9 +139,7 @@ func (s *Server) AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 		Version:    version.GetVersionInfo(),
 	}
 
-	if err := s.templates["analytics"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "analytics", data)
 }
 
 // AnalyticsFlagHandler handles flag analytics requests
@@ -203,9 +190,7 @@ func (s *Server) AnalyticsFlagHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := s.templates["analytics"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "analytics", data)
 }
 
 // AnalyticsNetworkHandler handles network analytics requests
@@ -255,220 +240,137 @@ func (s *Server) AnalyticsNetworkHandler(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	if err := s.templates["analytics"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// IPv6PageConfig holds page-specific configuration for IPv6 analytics pages
-type IPv6PageConfig struct {
-	PageTitle       string        // Page title (e.g., "IPv6 Enabled Nodes")
-	PageSubtitle    template.HTML // HTML subtitle text
-	StatsHeading    string        // Text for "Found X [StatsHeading] Nodes"
-	TableLayout     string        // "standard" or "dual-protocol"
-	ProtocolColumn  string        // "ipv6", "ipv4", or "both"
-	InfoText        []string      // Paragraphs for info box (can use %d for days)
-	EmptyStateTitle string        // Title for empty state
-	EmptyStateDesc  string        // Description for empty state
-}
-
-// processInfoText converts InfoText strings to template.HTML, substituting %d with days
-func (c *IPv6PageConfig) processInfoText(days int) []template.HTML {
-	result := make([]template.HTML, len(c.InfoText))
-	for i, text := range c.InfoText {
-		// Only substitute %d if the text contains it, otherwise use text as-is
-		// This prevents "EXTRA int" errors when InfoText strings don't have %d
-		var processed string
-		if containsFormatVerb(text) {
-			processed = fmt.Sprintf(text, days)
-		} else {
-			processed = text
-		}
-		result[i] = template.HTML(processed)
-	}
-	return result
-}
-
-// ipv6AnalyticsData holds template data for IPv6 analytics pages
-type ipv6AnalyticsData struct {
-	Title            string
-	ActivePage       string
-	Version          string
-	IPv6Nodes        []storage.NodeTestResult
-	Days             int
-	Limit            int
-	IncludeZeroNodes bool
-	Error            error
-	Config           IPv6PageConfig
-	ProcessedInfo    []template.HTML // Processed InfoText with days substituted
-}
-
-// renderIPv6Analytics is a generic handler for IPv6 analytics pages
-func (s *Server) renderIPv6Analytics(
-	w http.ResponseWriter,
-	r *http.Request,
-	config IPv6PageConfig,
-	templateName string,
-	fetcher protocolNodesFetcher,
-) {
-	// Parse common parameters
-	params := parseAnalyticsParams(r)
-
-	// Fetch IPv6 nodes
-	ipv6Nodes, err := fetcher(params.Limit, params.Days, params.IncludeZeroNodes, params.Domain)
-	var displayError error
-
-	if err != nil {
-		logging.Errorf("%s: Error fetching nodes: %v", config.PageTitle, err)
-		ipv6Nodes = []storage.NodeTestResult{}
-		displayError = fmt.Errorf("Failed to fetch analytics data. Please try again later")
-	} else if params.ValidationError != "" {
-		displayError = fmt.Errorf("%s", params.ValidationError)
-	}
-
-	// Build template data
-	data := ipv6AnalyticsData{
-		Title:            config.PageTitle,
-		ActivePage:       "analytics",
-		Version:          version.GetVersionInfo(),
-		IPv6Nodes:        ipv6Nodes,
-		Days:             params.Days,
-		Limit:            params.Limit,
-		IncludeZeroNodes: params.IncludeZeroNodes,
-		Error:            displayError,
-		Config:           config,
-		ProcessedInfo:    config.processInfoText(params.Days),
-	}
-
-	// Check template exists before rendering
-	tmpl, exists := s.templates[templateName]
-	if !exists {
-		logging.Errorf("%s: Template '%s' not found", config.PageTitle, templateName)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("%s: Error executing template: %v", config.PageTitle, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "analytics", data)
 }
 
 // IPv6AnalyticsHandler shows IPv6 enabled nodes analytics
 func (s *Server) IPv6AnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := IPv6PageConfig{
-		PageTitle:    "IPv6 Enabled Nodes",
-		PageSubtitle: `<p class="subtitle">Nodes that have been successfully tested with IPv6 connectivity</p>`,
-		StatsHeading: "IPv6 Enabled",
-		TableLayout:  "standard",
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that have IPv6 addresses resolved and have been successfully tested with at least one protocol over the last %d days. All listed nodes have working IPv6 connectivity.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "IPv6 Enabled Nodes",
+			PageSubtitle: `<p class="subtitle">Nodes that have been successfully tested with IPv6 connectivity</p>`,
+			StatsHeading: "IPv6 Enabled",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that have IPv6 addresses resolved and have been successfully tested with at least one protocol over the last %d days. All listed nodes have working IPv6 connectivity.`,
+			},
+			EmptyStateTitle: "No IPv6 enabled nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that either no nodes with IPv6 addresses were tested during this period, or none of them responded successfully to protocol tests.",
 		},
-		EmptyStateTitle: "No IPv6 enabled nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that either no nodes with IPv6 addresses were tested during this period, or none of them responded successfully to protocol tests.",
+		TableLayout: "standard",
 	}
-	s.renderIPv6Analytics(w, r, config, "ipv6_analytics_generic", s.storage.GetIPv6EnabledNodes)
+	s.renderAnalyticsNodes(w, r, config, "ipv6_analytics_generic", s.storage.GetIPv6EnabledNodes)
 }
 
 // IPv6NonWorkingAnalyticsHandler shows IPv6 nodes with non-working services
 func (s *Server) IPv6NonWorkingAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := IPv6PageConfig{
-		PageTitle:    "IPv6 Non-Working Nodes",
-		PageSubtitle: `<p class="subtitle">Nodes with IPv6 addresses but no working IPv6 services</p>`,
-		StatsHeading: "IPv6 Non-Working",
-		TableLayout:  "standard",
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that have IPv6 addresses configured but have not responded successfully to any IPv6 protocol tests over the last %d days. This may indicate connectivity issues, firewall problems, or incomplete IPv6 deployment.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "IPv6 Non-Working Nodes",
+			PageSubtitle: `<p class="subtitle">Nodes with IPv6 addresses but no working IPv6 services</p>`,
+			StatsHeading: "IPv6 Non-Working",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that have IPv6 addresses configured but have not responded successfully to any IPv6 protocol tests over the last %d days. This may indicate connectivity issues, firewall problems, or incomplete IPv6 deployment.`,
+			},
+			EmptyStateTitle: "No IPv6 non-working nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that all nodes with IPv6 addresses have at least one working IPv6 service, or no IPv6 nodes were tested during this period.",
 		},
-		EmptyStateTitle: "No IPv6 non-working nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that all nodes with IPv6 addresses have at least one working IPv6 service, or no IPv6 nodes were tested during this period.",
+		TableLayout: "standard",
 	}
-	s.renderIPv6Analytics(w, r, config, "ipv6_analytics_generic", s.storage.GetIPv6NonWorkingNodes)
+	s.renderAnalyticsNodes(w, r, config, "ipv6_analytics_generic", s.storage.GetIPv6NonWorkingNodes)
 }
 
 // IPv6AdvertisedIPv4OnlyAnalyticsHandler shows nodes that advertise IPv6 but are only accessible via IPv4
 func (s *Server) IPv6AdvertisedIPv4OnlyAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := IPv6PageConfig{
-		PageTitle:    "IPv6 Advertised, IPv4 Only",
-		PageSubtitle: `<p class="subtitle">Nodes advertising IPv6 capability but only accessible via IPv4</p>`,
-		StatsHeading: "IPv6 Advertised, IPv4 Only",
-		TableLayout:  "dual-protocol",
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that advertise IPv6 capability (either in the nodelist or via DNS resolution) but are currently only accessible via IPv4 over the last %d days. These nodes have working IPv4 services (BinkP, IFCICO, or Telnet) but all IPv6 services are non-functional. This may indicate IPv6 misconfiguration, firewall issues, or incomplete IPv6 deployment.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "IPv6 Advertised, IPv4 Only",
+			PageSubtitle: `<p class="subtitle">Nodes advertising IPv6 capability but only accessible via IPv4</p>`,
+			StatsHeading: "IPv6 Advertised, IPv4 Only",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that advertise IPv6 capability (either in the nodelist or via DNS resolution) but are currently only accessible via IPv4 over the last %d days. These nodes have working IPv4 services (BinkP, IFCICO, or Telnet) but all IPv6 services are non-functional. This may indicate IPv6 misconfiguration, firewall issues, or incomplete IPv6 deployment.`,
+			},
+			EmptyStateTitle: "No IPv6-advertised IPv4-only nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that all nodes with IPv6 addresses have at least one working IPv6 service, or no nodes meet the criteria of having working IPv4 but failing IPv6 during this period.",
 		},
-		EmptyStateTitle: "No IPv6-advertised IPv4-only nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that all nodes with IPv6 addresses have at least one working IPv6 service, or no nodes meet the criteria of having working IPv4 but failing IPv6 during this period.",
+		TableLayout: "dual-protocol",
 	}
-	s.renderIPv6Analytics(w, r, config, "ipv6_analytics_generic", s.storage.GetIPv6AdvertisedIPv4OnlyNodes)
+	s.renderAnalyticsNodes(w, r, config, "ipv6_analytics_generic", s.storage.GetIPv6AdvertisedIPv4OnlyNodes)
 }
 
 // IPv6OnlyNodesHandler shows nodes that have working IPv6 services but NO working IPv4 services
 func (s *Server) IPv6OnlyNodesHandler(w http.ResponseWriter, r *http.Request) {
 	config := IPv6PageConfig{
-		PageTitle:    "IPv6 Only Nodes (Non-Working IPv4)",
-		PageSubtitle: `<p class="subtitle">Nodes with working IPv6 services but NO working IPv4 services (IPv4 may be configured but not working)</p>`,
-		StatsHeading: "IPv6 Only",
-		TableLayout:  "standard",
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that have working IPv6 connectivity but NO working IPv4 services over the last %d days. These nodes may have IPv4 addresses configured, but the IPv4 protocols failed or were not tested.`,
-			`For nodes that ONLY advertise IPv6 addresses (no IPv4 at all), see "Pure IPv6 Only Nodes".`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "IPv6 Only Nodes (Non-Working IPv4)",
+			PageSubtitle: `<p class="subtitle">Nodes with working IPv6 services but NO working IPv4 services (IPv4 may be configured but not working)</p>`,
+			StatsHeading: "IPv6 Only",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that have working IPv6 connectivity but NO working IPv4 services over the last %d days. These nodes may have IPv4 addresses configured, but the IPv4 protocols failed or were not tested.`,
+				`For nodes that ONLY advertise IPv6 addresses (no IPv4 at all), see "Pure IPv6 Only Nodes".`,
+			},
+			EmptyStateTitle: "No IPv6-only nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that all nodes with working IPv6 also have working IPv4 services, or no IPv6 nodes were tested during this period.",
 		},
-		EmptyStateTitle: "No IPv6-only nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that all nodes with working IPv6 also have working IPv4 services, or no IPv6 nodes were tested during this period.",
+		TableLayout: "standard",
 	}
-	s.renderIPv6Analytics(w, r, config, "ipv6_analytics_generic", s.storage.GetIPv6OnlyNodes)
+	s.renderAnalyticsNodes(w, r, config, "ipv6_analytics_generic", s.storage.GetIPv6OnlyNodes)
 }
 
 // PureIPv6OnlyNodesHandler shows nodes that ONLY advertise IPv6 addresses (no IPv4 addresses at all)
 func (s *Server) PureIPv6OnlyNodesHandler(w http.ResponseWriter, r *http.Request) {
 	config := IPv6PageConfig{
-		PageTitle:    "Pure IPv6 Only Nodes",
-		PageSubtitle: `<p class="subtitle">Nodes that ONLY advertise IPv6 addresses (no IPv4 addresses configured)</p>`,
-		StatsHeading: "Pure IPv6 Only",
-		TableLayout:  "standard",
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that ONLY advertise IPv6 addresses (no IPv4 addresses configured at all) over the last %d days. These are true pure IPv6-only nodes.`,
-			`This is different from "IPv6 Only Nodes (Non-Working IPv4)" which shows nodes that have IPv4 addresses configured but the IPv4 services don't work.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "Pure IPv6 Only Nodes",
+			PageSubtitle: `<p class="subtitle">Nodes that ONLY advertise IPv6 addresses (no IPv4 addresses configured)</p>`,
+			StatsHeading: "Pure IPv6 Only",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that ONLY advertise IPv6 addresses (no IPv4 addresses configured at all) over the last %d days. These are true pure IPv6-only nodes.`,
+				`This is different from "IPv6 Only Nodes (Non-Working IPv4)" which shows nodes that have IPv4 addresses configured but the IPv4 services don't work.`,
+			},
+			EmptyStateTitle: "No pure IPv6-only nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that all IPv6 nodes also have IPv4 addresses configured, or no such nodes were tested during this period.",
 		},
-		EmptyStateTitle: "No pure IPv6-only nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that all IPv6 nodes also have IPv4 addresses configured, or no such nodes were tested during this period.",
+		TableLayout: "standard",
 	}
-	s.renderIPv6Analytics(w, r, config, "ipv6_analytics_generic", s.storage.GetPureIPv6OnlyNodes)
+	s.renderAnalyticsNodes(w, r, config, "ipv6_analytics_generic", s.storage.GetPureIPv6OnlyNodes)
 }
 
 // BinkPAnalyticsHandler shows BinkP enabled nodes analytics
 func (s *Server) BinkPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{
-		PageTitle:    "BinkP Enabled Nodes",
-		PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with BinkP protocol</p>`),
-		StatsHeading: "BinkP Enabled",
+		basePageConfig: basePageConfig{
+			PageTitle:    "BinkP Enabled Nodes",
+			PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with BinkP protocol</p>`),
+			StatsHeading: "BinkP Enabled",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that have been successfully tested with BinkP protocol over the last %d days. BinkP is a modern, efficient protocol for FidoNet mail exchange over TCP/IP.`,
+			},
+			EmptyStateTitle: "No BinkP enabled nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that either no nodes with BinkP support were tested during this period, or none of them responded successfully to protocol tests.",
+		},
 		ShowVersion:  true,
 		VersionField: "BinkPVersion",
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that have been successfully tested with BinkP protocol over the last %d days. BinkP is a modern, efficient protocol for FidoNet mail exchange over TCP/IP.`,
-		},
-		EmptyStateTitle: "No BinkP enabled nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that either no nodes with BinkP support were tested during this period, or none of them responded successfully to protocol tests.",
 	}
-	s.renderProtocolAnalytics(w, r, config, s.storage.GetBinkPEnabledNodes)
+	s.renderAnalyticsNodes(w, r, config, "unified_analytics", s.storage.GetBinkPEnabledNodes)
 }
 
 // IfcicoAnalyticsHandler shows IFCICO enabled nodes analytics
 func (s *Server) IfcicoAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{
-		PageTitle:    "IFCICO Enabled Nodes",
-		PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with IFCICO protocol</p>`),
-		StatsHeading: "IFCICO Enabled",
+		basePageConfig: basePageConfig{
+			PageTitle:    "IFCICO Enabled Nodes",
+			PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with IFCICO protocol</p>`),
+			StatsHeading: "IFCICO Enabled",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that have been successfully tested with IFCICO protocol over the last %d days. IFCICO is a traditional FidoNet mailer protocol.`,
+			},
+			EmptyStateTitle: "No IFCICO enabled nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that either no nodes with IFCICO support were tested during this period, or none of them responded successfully to protocol tests.",
+		},
 		ShowVersion:  true,
 		VersionField: "IfcicoMailerInfo",
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that have been successfully tested with IFCICO protocol over the last %d days. IFCICO is a traditional FidoNet mailer protocol.`,
-		},
-		EmptyStateTitle: "No IFCICO enabled nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that either no nodes with IFCICO support were tested during this period, or none of them responded successfully to protocol tests.",
 	}
-	s.renderProtocolAnalytics(w, r, config, s.storage.GetIfcicoEnabledNodes)
+	s.renderAnalyticsNodes(w, r, config, "unified_analytics", s.storage.GetIfcicoEnabledNodes)
 }
 
 // softwareAnalyticsData holds template data for software analytics pages
@@ -496,17 +398,7 @@ func (s *Server) renderSoftwareAnalytics(w http.ResponseWriter, r *http.Request,
 		Config:     config,
 	}
 
-	tmpl, exists := s.templates["software_analytics"]
-	if !exists {
-		logging.Errorf("%s: Template 'software_analytics' not found", config.PageTitle)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("%s: Error executing template: %v", config.PageTitle, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "software_analytics", data)
 }
 
 // BinkPSoftwareHandler shows BinkP software distribution analytics
@@ -549,36 +441,40 @@ func (s *Server) IfcicoSoftwareHandler(w http.ResponseWriter, r *http.Request) {
 // TelnetAnalyticsHandler shows Telnet enabled nodes analytics
 func (s *Server) TelnetAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{
-		PageTitle:    "Telnet Enabled Nodes",
-		PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with Telnet protocol</p>`),
-		StatsHeading: "Telnet Enabled",
-		ShowVersion:  false,
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that have been successfully tested with Telnet protocol over the last %d days. Telnet is commonly used for BBS access in the FidoNet community.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "Telnet Enabled Nodes",
+			PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with Telnet protocol</p>`),
+			StatsHeading: "Telnet Enabled",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that have been successfully tested with Telnet protocol over the last %d days. Telnet is commonly used for BBS access in the FidoNet community.`,
+			},
+			EmptyStateTitle: "No Telnet enabled nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that either no nodes with Telnet support were tested during this period, or none of them responded successfully to protocol tests.",
 		},
-		EmptyStateTitle: "No Telnet enabled nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that either no nodes with Telnet support were tested during this period, or none of them responded successfully to protocol tests.",
+		ShowVersion: false,
 	}
-	s.renderProtocolAnalytics(w, r, config, s.storage.GetTelnetEnabledNodes)
+	s.renderAnalyticsNodes(w, r, config, "unified_analytics", s.storage.GetTelnetEnabledNodes)
 }
 
 // VModemAnalyticsHandler shows nodes confirmed to run a genuine VMODEM (VMP)
 // responder on their announced IVM port.
 func (s *Server) VModemAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{
-		PageTitle:    "VMODEM (IVM) Nodes",
-		PageSubtitle: template.HTML(`<p class="subtitle">Nodes confirmed to run a genuine VMODEM responder on their announced IVM port</p>`),
-		StatsHeading: "Confirmed VMODEM",
-		ShowVersion:  false,
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes whose announced IVM port was confirmed over the last %d days to run Ray Gwinn's Virtual Modem Protocol (VMP) — the protocol the IVM flag actually stands for. VMODEM provides virtual modem emulation so legacy mailer software can place FidoNet calls over TCP/IP.`,
-			`<strong>Why the list is short:</strong> most IVM-flagged ports do not run VMODEM. Probing them commonly finds an EMSI mailer over telnet or raw TCP, binkd, or a plain telnet login prompt instead. Those ports are reachable, but they are not VMODEM, so they are excluded here — see each node's test history for what was actually found.`,
-			`<strong>Confirmed is not the same as called:</strong> a node qualifies once it answers as a VMODEM. Placing a real VMP call rings the remote sysop's mailer and needs a reverse data channel back to us, so it is not done on every cycle. A node's test history shows whether a call was ever put through.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "VMODEM (IVM) Nodes",
+			PageSubtitle: template.HTML(`<p class="subtitle">Nodes confirmed to run a genuine VMODEM responder on their announced IVM port</p>`),
+			StatsHeading: "Confirmed VMODEM",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes whose announced IVM port was confirmed over the last %d days to run Ray Gwinn's Virtual Modem Protocol (VMP) — the protocol the IVM flag actually stands for. VMODEM provides virtual modem emulation so legacy mailer software can place FidoNet calls over TCP/IP.`,
+				`<strong>Why the list is short:</strong> most IVM-flagged ports do not run VMODEM. Probing them commonly finds an EMSI mailer over telnet or raw TCP, binkd, or a plain telnet login prompt instead. Those ports are reachable, but they are not VMODEM, so they are excluded here — see each node's test history for what was actually found.`,
+				`<strong>Confirmed is not the same as called:</strong> a node qualifies once it answers as a VMODEM. Placing a real VMP call rings the remote sysop's mailer and needs a reverse data channel back to us, so it is not done on every cycle. A node's test history shows whether a call was ever put through.`,
+			},
+			EmptyStateTitle: "No confirmed VMODEM nodes found for the selected period.",
+			EmptyStateDesc:  "This means no node's announced IVM port was confirmed to run VMODEM (VMP) during this period. Ports that answered with something else — an EMSI mailer, binkd, a telnet login — are deliberately not counted here.",
 		},
-		EmptyStateTitle: "No confirmed VMODEM nodes found for the selected period.",
-		EmptyStateDesc:  "This means no node's announced IVM port was confirmed to run VMODEM (VMP) during this period. Ports that answered with something else — an EMSI mailer, binkd, a telnet login — are deliberately not counted here.",
+		ShowVersion: false,
 	}
-	s.renderProtocolAnalytics(w, r, config, s.storage.GetVModemEnabledNodes)
+	s.renderAnalyticsNodes(w, r, config, "unified_analytics", s.storage.GetVModemEnabledNodes)
 }
 
 // vmodemUnavailableAnalyticsData holds template data for the VModem
@@ -607,14 +503,16 @@ type vmodemUnavailableAnalyticsData struct {
 // nodes we have not looked at".
 func (s *Server) VModemUnavailableAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := VModemUnavailablePageConfig{
-		PageTitle:    "VMODEM Unavailable",
-		PageSubtitle: template.HTML(`<p class="subtitle">Nodes whose announced IVM port was not confirmed to run genuine VMODEM, and why</p>`),
-		StatsHeading: "Not Confirmed VMODEM",
-		InfoText: []string{
-			`<strong>Note:</strong> This report complements <a href="/analytics/vmodem">Confirmed VMODEM</a>. It lists nodes whose announced IVM port was probed over the last %d days but did not answer as a genuine VMP responder — either down/unreachable, or running something else (an EMSI mailer, binkd, ssh, a telnet login prompt, ...).`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "VMODEM Unavailable",
+			PageSubtitle: template.HTML(`<p class="subtitle">Nodes whose announced IVM port was not confirmed to run genuine VMODEM, and why</p>`),
+			StatsHeading: "Not Confirmed VMODEM",
+			InfoText: []string{
+				`<strong>Note:</strong> This report complements <a href="/analytics/vmodem">Confirmed VMODEM</a>. It lists nodes whose announced IVM port was probed over the last %d days but did not answer as a genuine VMP responder — either down/unreachable, or running something else (an EMSI mailer, binkd, ssh, a telnet login prompt, ...).`,
+			},
+			EmptyStateTitle: "No unconfirmed VMODEM nodes found for the selected period.",
+			EmptyStateDesc:  "Every IVM-flagged node probed during this period answered as a genuine VMODEM responder.",
 		},
-		EmptyStateTitle: "No unconfirmed VMODEM nodes found for the selected period.",
-		EmptyStateDesc:  "Every IVM-flagged node probed during this period answered as a genuine VMODEM responder.",
 	}
 
 	params := parseAnalyticsParams(r)
@@ -642,33 +540,26 @@ func (s *Server) VModemUnavailableAnalyticsHandler(w http.ResponseWriter, r *htt
 		ProcessedInfo:    config.processInfoText(params.Days),
 	}
 
-	tmpl, exists := s.templates["vmodem_unavailable_analytics"]
-	if !exists {
-		logging.Errorf("VModem Unavailable Analytics: Template 'vmodem_unavailable_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("VModem Unavailable Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "vmodem_unavailable_analytics", data)
 }
 
 // FTPAnalyticsHandler shows FTP enabled nodes analytics
 func (s *Server) FTPAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := ProtocolPageConfig{
-		PageTitle:     "FTP Enabled Nodes",
-		PageSubtitle:  template.HTML(`<p class="subtitle">Nodes that have been successfully tested with FTP protocol</p>`),
-		StatsHeading:  "FTP Enabled",
+		basePageConfig: basePageConfig{
+			PageTitle:    "FTP Enabled Nodes",
+			PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with FTP protocol</p>`),
+			StatsHeading: "FTP Enabled",
+			InfoText: []string{
+				`<strong>Note:</strong> This report shows nodes that have been successfully tested with FTP protocol over the last %d days. FTP is used for file distribution and downloads in the FidoNet network.`,
+			},
+			EmptyStateTitle: "No FTP enabled nodes found for the selected period.",
+			EmptyStateDesc:  "This could mean that either no nodes with FTP support were tested during this period, or none of them responded successfully to protocol tests.",
+		},
 		ShowVersion:   false,
 		ShowAnonLogin: true,
-		InfoText: []string{
-			`<strong>Note:</strong> This report shows nodes that have been successfully tested with FTP protocol over the last %d days. FTP is used for file distribution and downloads in the FidoNet network.`,
-		},
-		EmptyStateTitle: "No FTP enabled nodes found for the selected period.",
-		EmptyStateDesc:  "This could mean that either no nodes with FTP support were tested during this period, or none of them responded successfully to protocol tests.",
 	}
-	s.renderProtocolAnalytics(w, r, config, s.storage.GetFTPEnabledNodes)
+	s.renderAnalyticsNodes(w, r, config, "unified_analytics", s.storage.GetFTPEnabledNodes)
 }
 
 // akaMismatchAnalyticsData holds template data for AKA mismatch analytics pages
@@ -690,16 +581,18 @@ type akaMismatchAnalyticsData struct {
 // AKAMismatchAnalyticsHandler shows nodes with AKA address mismatches
 func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := AKAMismatchPageConfig{
-		PageTitle:    "Nodes with AKA Mismatch",
-		PageSubtitle: template.HTML(`<p class="subtitle">Nodes where the announced AKA address doesn't match the expected nodelist address</p>`),
-		StatsHeading: "AKA Mismatch",
-		InfoText: []string{
-			`<strong>What is an AKA mismatch?</strong> During BinkP or IFCICO handshakes, nodes announce their addresses (AKAs). An AKA mismatch occurs when the expected nodelist address (zone:net/node) is not found in the list of addresses the node announces.`,
-			`<strong>Common causes:</strong> Misconfigured mailer software, outdated address lists, node address changes, or AKA consolidation where a node responds for multiple addresses.`,
-			`<strong>Note:</strong> This report shows nodes that were operational (responded successfully) but announced different addresses than expected over the last %d days.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "Nodes with AKA Mismatch",
+			PageSubtitle: template.HTML(`<p class="subtitle">Nodes where the announced AKA address doesn't match the expected nodelist address</p>`),
+			StatsHeading: "AKA Mismatch",
+			InfoText: []string{
+				`<strong>What is an AKA mismatch?</strong> During BinkP or IFCICO handshakes, nodes announce their addresses (AKAs). An AKA mismatch occurs when the expected nodelist address (zone:net/node) is not found in the list of addresses the node announces.`,
+				`<strong>Common causes:</strong> Misconfigured mailer software, outdated address lists, node address changes, or AKA consolidation where a node responds for multiple addresses.`,
+				`<strong>Note:</strong> This report shows nodes that were operational (responded successfully) but announced different addresses than expected over the last %d days.`,
+			},
+			EmptyStateTitle: "No AKA mismatches found for the selected period.",
+			EmptyStateDesc:  "This means all operational nodes announced their expected addresses correctly, or no nodes met the criteria during this period.",
 		},
-		EmptyStateTitle: "No AKA mismatches found for the selected period.",
-		EmptyStateDesc:  "This means all operational nodes announced their expected addresses correctly, or no nodes met the criteria during this period.",
 	}
 
 	// Parse common parameters
@@ -750,17 +643,7 @@ func (s *Server) AKAMismatchAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Use AKA mismatch analytics template
-	tmpl, exists := s.templates["aka_mismatch_analytics"]
-	if !exists {
-		logging.Errorf("AKA Mismatch Analytics: Template 'aka_mismatch_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("AKA Mismatch Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "aka_mismatch_analytics", data)
 }
 
 // otherNetworksAnalyticsData holds template data for the other networks analytics page
@@ -780,16 +663,18 @@ type otherNetworksAnalyticsData struct {
 // OtherNetworksAnalyticsHandler shows networks found in AKA addresses
 func (s *Server) OtherNetworksAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	config := OtherNetworksPageConfig{
-		PageTitle:    "Other Networks",
-		PageSubtitle: template.HTML(`<p class="subtitle">FidoNet nodes that also participate in other FTN-style networks</p>`),
-		StatsHeading: "Networks",
-		InfoText: []string{
-			`<strong>What are other networks?</strong> Many FidoNet sysops also run nodes on other FTN-style networks like FSXNet, TQWNet, WhisperNet, and others. During BinkP or IFCICO handshakes, nodes announce all their addresses (AKAs), including addresses on these other networks.`,
-			`<strong>Format:</strong> Other network addresses are announced as <code>zone:net/node@network</code>, for example <code>21:1/100@fsxnet</code> or <code>1337:2/106@tqwnet</code>.`,
-			`<strong>Note:</strong> This report shows networks detected from operational nodes over the last %d days. Click on a network name to see all FidoNet nodes that participate in that network.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    "Other Networks",
+			PageSubtitle: template.HTML(`<p class="subtitle">FidoNet nodes that also participate in other FTN-style networks</p>`),
+			StatsHeading: "Networks",
+			InfoText: []string{
+				`<strong>What are other networks?</strong> Many FidoNet sysops also run nodes on other FTN-style networks like FSXNet, TQWNet, WhisperNet, and others. During BinkP or IFCICO handshakes, nodes announce all their addresses (AKAs), including addresses on these other networks.`,
+				`<strong>Format:</strong> Other network addresses are announced as <code>zone:net/node@network</code>, for example <code>21:1/100@fsxnet</code> or <code>1337:2/106@tqwnet</code>.`,
+				`<strong>Note:</strong> This report shows networks detected from operational nodes over the last %d days. Click on a network name to see all FidoNet nodes that participate in that network.`,
+			},
+			EmptyStateTitle: "No other networks found for the selected period.",
+			EmptyStateDesc:  "This means no operational nodes announced addresses in other networks, or no nodes met the criteria during this period.",
 		},
-		EmptyStateTitle: "No other networks found for the selected period.",
-		EmptyStateDesc:  "This means no operational nodes announced addresses in other networks, or no nodes met the criteria during this period.",
 	}
 
 	// Parse common parameters
@@ -822,17 +707,7 @@ func (s *Server) OtherNetworksAnalyticsHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	// Use other networks analytics template
-	tmpl, exists := s.templates["other_networks_analytics"]
-	if !exists {
-		logging.Errorf("Other Networks Analytics: Template 'other_networks_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Other Networks Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "other_networks_analytics", data)
 }
 
 // otherNetworkNodesData holds template data for the network nodes detail page
@@ -859,15 +734,17 @@ func (s *Server) OtherNetworkNodesHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	config := OtherNetworksPageConfig{
-		PageTitle:    fmt.Sprintf("Nodes in %s", networkName),
-		PageSubtitle: template.HTML(fmt.Sprintf(`<p class="subtitle">FidoNet nodes that also participate in the <strong>%s</strong> network</p>`, template.HTMLEscapeString(networkName))),
-		StatsHeading: "Nodes",
-		InfoText: []string{
-			fmt.Sprintf(`These FidoNet nodes announced AKA addresses in the <strong>%s</strong> network during BinkP or IFCICO handshakes over the last %%d days.`, template.HTMLEscapeString(networkName)),
-			`The "Network Address" column shows the address(es) announced for this specific network.`,
+		basePageConfig: basePageConfig{
+			PageTitle:    fmt.Sprintf("Nodes in %s", networkName),
+			PageSubtitle: template.HTML(fmt.Sprintf(`<p class="subtitle">FidoNet nodes that also participate in the <strong>%s</strong> network</p>`, template.HTMLEscapeString(networkName))),
+			StatsHeading: "Nodes",
+			InfoText: []string{
+				fmt.Sprintf(`These FidoNet nodes announced AKA addresses in the <strong>%s</strong> network during BinkP or IFCICO handshakes over the last %%d days.`, template.HTMLEscapeString(networkName)),
+				`The "Network Address" column shows the address(es) announced for this specific network.`,
+			},
+			EmptyStateTitle: fmt.Sprintf("No nodes found in %s for the selected period.", networkName),
+			EmptyStateDesc:  "This means no operational nodes announced addresses in this network during this period.",
 		},
-		EmptyStateTitle: fmt.Sprintf("No nodes found in %s for the selected period.", networkName),
-		EmptyStateDesc:  "This means no operational nodes announced addresses in this network during this period.",
 	}
 
 	// Parse common parameters
@@ -901,17 +778,7 @@ func (s *Server) OtherNetworkNodesHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	// Use other network nodes template
-	tmpl, exists := s.templates["other_network_nodes"]
-	if !exists {
-		logging.Errorf("Other Network Nodes: Template 'other_network_nodes' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Other Network Nodes: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "other_network_nodes", data)
 }
 
 // PSTNSummaryStats holds summary statistics for PSTN nodes
@@ -992,17 +859,7 @@ func (s *Server) PSTNCMAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Use PSTN analytics template
-	tmpl, exists := s.templates["pstn_analytics"]
-	if !exists {
-		logging.Errorf("PSTN Analytics: Template 'pstn_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("PSTN Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "pstn_analytics", data)
 }
 
 // ModemAccessibleSpeedTier holds count for a single speed tier (for ordered display)
@@ -1172,17 +1029,7 @@ func (s *Server) ModemAccessibleAnalyticsHandler(w http.ResponseWriter, r *http.
 		Error:            displayError,
 	}
 
-	tmpl, exists := s.templates["pstn_accessible_analytics"]
-	if !exists {
-		logging.Errorf("Modem Accessible Analytics: Template 'pstn_accessible_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Modem Accessible Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "pstn_accessible_analytics", data)
 }
 
 // ModemNoAnswerDispositionCount holds count for a single Asterisk disposition (for ordered display)
@@ -1296,17 +1143,7 @@ func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Re
 		Error:            displayError,
 	}
 
-	tmpl, exists := s.templates["pstn_no_answer_analytics"]
-	if !exists {
-		logging.Errorf("Modem No Answer Analytics: Template 'pstn_no_answer_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Modem No Answer Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "pstn_no_answer_analytics", data)
 }
 
 // FileRequestFlagCount holds count for a single flag (for ordered display)
@@ -1433,17 +1270,7 @@ func (s *Server) FileRequestAnalyticsHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Use file request analytics template
-	tmpl, exists := s.templates["filerequest_analytics"]
-	if !exists {
-		logging.Errorf("File Request Analytics: Template 'filerequest_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("File Request Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "filerequest_analytics", data)
 }
 
 // IPv6WeeklyNewsHandler shows weekly IPv6 connectivity changes
@@ -1508,19 +1335,7 @@ func (s *Server) IPv6WeeklyNewsHandler(w http.ResponseWriter, r *http.Request) {
 		data.OldNodesGainedIPv6 = news.OldNodesGainedIPv6
 	}
 
-	// Check template exists before rendering
-	tmpl, exists := s.templates["ipv6_weekly_news"]
-	if !exists {
-		logging.Errorf("IPv6 Weekly News: Template 'ipv6_weekly_news' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("IPv6 Weekly News: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "ipv6_weekly_news", data)
 }
 
 // GeoHostingAnalyticsHandler shows geographic hosting distribution
@@ -1561,19 +1376,7 @@ func (s *Server) GeoHostingAnalyticsHandler(w http.ResponseWriter, r *http.Reque
 		data.Updated = dist.LastUpdated.Format("2006-01-02 15:04:05")
 	}
 
-	// Check template exists before rendering
-	tmpl, exists := s.templates["geo_analytics"]
-	if !exists {
-		logging.Errorf("Geo Hosting Analytics: Template 'geo_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Geo Hosting Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "geo_analytics", data)
 }
 
 // geoWindowDays are the only windows the geo pages offer. Both drill-downs take
@@ -1596,6 +1399,34 @@ func geoDays(r *http.Request) int {
 		return d
 	}
 	return 365
+}
+
+// renderGeoPage renders the shared node-listing page behind the geo and domain
+// drill-downs. The three handlers differ only in how they find their nodes and
+// what they put in the config; the payload was written out three times.
+func (s *Server) renderGeoPage(w http.ResponseWriter, config GeoPageConfig, nodes []storage.NodeTestResult, err error) {
+	s.render(w, "geo_unified", geoPageData{
+		Title:         config.PageTitle,
+		ActivePage:    "analytics",
+		Version:       version.GetVersionInfo(),
+		Days:          config.Days,
+		GeoNodes:      nodes,
+		Error:         err,
+		Config:        config,
+		ProcessedInfo: config.processInfoText(config.Days),
+	})
+}
+
+// geoPageData is what geo_unified.html reads.
+type geoPageData struct {
+	Title         string
+	ActivePage    string
+	Version       string
+	Days          int
+	GeoNodes      []storage.NodeTestResult
+	Error         error
+	Config        GeoPageConfig
+	ProcessedInfo []template.HTML
 }
 
 // GeoCountryNodesHandler shows nodes for a specific country
@@ -1631,52 +1462,21 @@ func (s *Server) GeoCountryNodesHandler(w http.ResponseWriter, r *http.Request) 
 
 	// Build page config
 	config := GeoPageConfig{
-		PageTitle:       fmt.Sprintf("Nodes in %s", countryName),
-		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes in %s (last %d days)</p>`, template.HTMLEscapeString(countryName), days)),
-		StatsHeading:    "Nodes",
-		ViewType:        "country",
-		CountryCode:     countryCode,
-		CountryName:     countryName,
-		Days:            days,
-		InfoText:        []string{},
-		EmptyStateTitle: "No nodes found.",
-		EmptyStateDesc:  "No operational nodes found for the selected country and time period.",
+		basePageConfig: basePageConfig{
+			PageTitle:       fmt.Sprintf("Nodes in %s", countryName),
+			PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes in %s (last %d days)</p>`, template.HTMLEscapeString(countryName), days)),
+			StatsHeading:    "Nodes",
+			InfoText:        []string{},
+			EmptyStateTitle: "No nodes found.",
+			EmptyStateDesc:  "No operational nodes found for the selected country and time period.",
+		},
+		ViewType:    "country",
+		CountryCode: countryCode,
+		CountryName: countryName,
+		Days:        days,
 	}
 
-	// Build template data
-	data := struct {
-		Title         string
-		ActivePage    string
-		Version       string
-		Days          int
-		GeoNodes      []storage.NodeTestResult
-		Error         error
-		Config        GeoPageConfig
-		ProcessedInfo []template.HTML
-	}{
-		Title:         config.PageTitle,
-		ActivePage:    "analytics",
-		Version:       version.GetVersionInfo(),
-		Days:          days,
-		GeoNodes:      nodes,
-		Error:         displayError,
-		Config:        config,
-		ProcessedInfo: config.processInfoText(),
-	}
-
-	// Check template exists before rendering
-	tmpl, exists := s.templates["geo_unified"]
-	if !exists {
-		logging.Errorf("Geo Country Nodes: Template 'geo_unified' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Geo Country Nodes: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.renderGeoPage(w, config, nodes, displayError)
 }
 
 // GeoProviderNodesHandler shows nodes for a specific provider
@@ -1706,51 +1506,20 @@ func (s *Server) GeoProviderNodesHandler(w http.ResponseWriter, r *http.Request)
 
 	// Build page config
 	config := GeoPageConfig{
-		PageTitle:       provider,
-		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes hosted by %s (last %d days)</p>`, template.HTMLEscapeString(provider), days)),
-		StatsHeading:    "Nodes",
-		ViewType:        "provider",
-		ProviderName:    provider,
-		Days:            days,
-		InfoText:        []string{},
-		EmptyStateTitle: "No nodes found.",
-		EmptyStateDesc:  "No operational nodes found for the selected provider and time period.",
+		basePageConfig: basePageConfig{
+			PageTitle:       provider,
+			PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">Operational FTN nodes hosted by %s (last %d days)</p>`, template.HTMLEscapeString(provider), days)),
+			StatsHeading:    "Nodes",
+			InfoText:        []string{},
+			EmptyStateTitle: "No nodes found.",
+			EmptyStateDesc:  "No operational nodes found for the selected provider and time period.",
+		},
+		ViewType:     "provider",
+		ProviderName: provider,
+		Days:         days,
 	}
 
-	// Build template data
-	data := struct {
-		Title         string
-		ActivePage    string
-		Version       string
-		Days          int
-		GeoNodes      []storage.NodeTestResult
-		Error         error
-		Config        GeoPageConfig
-		ProcessedInfo []template.HTML
-	}{
-		Title:         config.PageTitle,
-		ActivePage:    "analytics",
-		Version:       version.GetVersionInfo(),
-		Days:          days,
-		GeoNodes:      nodes,
-		Error:         displayError,
-		Config:        config,
-		ProcessedInfo: config.processInfoText(),
-	}
-
-	// Check template exists before rendering
-	tmpl, exists := s.templates["geo_unified"]
-	if !exists {
-		logging.Errorf("Geo Provider Nodes: Template 'geo_unified' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Geo Provider Nodes: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.renderGeoPage(w, config, nodes, displayError)
 }
 
 // OnThisDayHandler displays nodes that were first added on this day in previous years
@@ -1831,19 +1600,7 @@ func (s *Server) OnThisDayHandler(w http.ResponseWriter, r *http.Request) {
 		Error:       displayError,
 	}
 
-	// Check template exists before rendering
-	tmpl, exists := s.templates["on_this_day"]
-	if !exists {
-		logging.Errorf("On This Day: Template 'on_this_day' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("On This Day: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "on_this_day", data)
 }
 
 // PioneersHandler displays the first nodes (pioneers) in a FidoNet region
@@ -1894,19 +1651,7 @@ func (s *Server) PioneersHandler(w http.ResponseWriter, r *http.Request) {
 		Error:      displayError,
 	}
 
-	// Check template exists before rendering
-	tmpl, exists := s.templates["pioneers"]
-	if !exists {
-		logging.Errorf("Pioneers: Template 'pioneers' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Pioneers: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "pioneers", data)
 }
 
 // IPv6NodeListHandler shows the IPv6 node list report in Michiel van der Vlist's format.
@@ -1957,17 +1702,7 @@ func (s *Server) IPv6NodeListHandler(w http.ResponseWriter, r *http.Request) {
 		Error:            displayError,
 	}
 
-	tmpl, exists := s.templates["ipv6_node_list"]
-	if !exists {
-		logging.Errorf("IPv6 Node List: Template 'ipv6_node_list' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("IPv6 Node List: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "ipv6_node_list", data)
 }
 
 // DomainExpirationHandler shows WHOIS-based domain expiration analytics
@@ -2031,17 +1766,7 @@ func (s *Server) DomainExpirationHandler(w http.ResponseWriter, r *http.Request)
 		Error:             displayError,
 	}
 
-	tmpl, exists := s.templates["domain_expiration"]
-	if !exists {
-		logging.Errorf("Domain Expiration: Template 'domain_expiration' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Domain Expiration: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "domain_expiration", data)
 }
 
 // DomainNodesHandler shows nodes using a specific domain
@@ -2073,53 +1798,22 @@ func (s *Server) DomainNodesHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Build page config (reuse GeoPageConfig with "domain" ViewType)
 	config := GeoPageConfig{
-		PageTitle:       fmt.Sprintf("Nodes using %s", domainName),
-		PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">FTN nodes with hostnames under <strong>%s</strong></p>`, template.HTMLEscapeString(domainName))),
-		StatsHeading:    "Nodes",
-		ViewType:        "domain",
-		ProviderName:    domainName, // Reuse ProviderName field for the domain name
-		BackURL:         backURL,
-		BackLabel:       backLabel,
-		Days:            30,
-		InfoText:        []string{},
-		EmptyStateTitle: fmt.Sprintf("No nodes found using %s.", domainName),
-		EmptyStateDesc:  "No nodes with hostnames under this domain were found in the last 30 days of test data.",
+		basePageConfig: basePageConfig{
+			PageTitle:       fmt.Sprintf("Nodes using %s", domainName),
+			PageSubtitle:    template.HTML(fmt.Sprintf(`<p class="subtitle">FTN nodes with hostnames under <strong>%s</strong></p>`, template.HTMLEscapeString(domainName))),
+			StatsHeading:    "Nodes",
+			InfoText:        []string{},
+			EmptyStateTitle: fmt.Sprintf("No nodes found using %s.", domainName),
+			EmptyStateDesc:  "No nodes with hostnames under this domain were found in the last 30 days of test data.",
+		},
+		ViewType:     "domain",
+		ProviderName: domainName, // Reuse ProviderName field for the domain name
+		BackURL:      backURL,
+		BackLabel:    backLabel,
+		Days:         30,
 	}
 
-	// Build template data
-	data := struct {
-		Title         string
-		ActivePage    string
-		Version       string
-		Days          int
-		GeoNodes      []storage.NodeTestResult
-		Error         error
-		Config        GeoPageConfig
-		ProcessedInfo []template.HTML
-	}{
-		Title:         config.PageTitle,
-		ActivePage:    "analytics",
-		Version:       version.GetVersionInfo(),
-		Days:          30,
-		GeoNodes:      nodes,
-		Error:         displayError,
-		Config:        config,
-		ProcessedInfo: config.processInfoText(),
-	}
-
-	// Check template exists before rendering
-	tmpl, exists := s.templates["geo_unified"]
-	if !exists {
-		logging.Errorf("Domain Nodes: Template 'geo_unified' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Render template
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Domain Nodes: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.renderGeoPage(w, config, nodes, displayError)
 }
 
 // renderIPv6NodeListText writes the IPv6 node list in Michiel van der Vlist's plain text format.
@@ -2340,17 +2034,7 @@ func (s *Server) RegistrarsHandler(w http.ResponseWriter, r *http.Request) {
 		Error:             displayError,
 	}
 
-	tmpl, exists := s.templates["registrars"]
-	if !exists {
-		logging.Errorf("Registrars: Template 'registrars' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Registrars: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "registrars", data)
 }
 
 // parseLimit parses the "limit" query parameter with defaults and bounds.

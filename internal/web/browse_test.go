@@ -12,8 +12,10 @@ import (
 // TestBrowseTemplateRenders verifies that the hierarchy browser template loads
 // and renders cleanly at every drill-down level.
 func TestBrowseTemplateRenders(t *testing.T) {
-	// New() runs loadTemplates(), which log.Fatalf's on a broken template.
-	s := New(nil, TemplatesFS, StaticFS)
+	s, err := New(nil, TemplatesFS, StaticFS)
+	if err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 
 	tmpl := s.templates["browse"]
 	if tmpl == nil {

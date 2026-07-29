@@ -71,18 +71,6 @@ func resolveEntityDomain(r *http.Request, availableDomains []string) string {
 	return availableDomains[0]
 }
 
-// domainQuerySuffix returns "" for the default network and "?domain=<name>"
-// (or "&domain=<name>" when appending) otherwise.
-func domainQuerySuffix(domain string, first bool) string {
-	if domain == "" || domain == database.DefaultDomain {
-		return ""
-	}
-	if first {
-		return "?domain=" + domain
-	}
-	return "&domain=" + domain
-}
-
 // ftnAddressRe matches the FidoNet address format zone:net/node[.point]
 var ftnAddressRe = regexp.MustCompile(`^(\d+):(\d+)/(\d+)(?:\.(\d+))?$`)
 

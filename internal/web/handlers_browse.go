@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -55,16 +56,22 @@ func (s *Server) resolveBrowseDate(r *http.Request, domain string) (actual time.
 	raw = r.URL.Query().Get("date")
 	if raw == "" {
 		actual, err = s.storage.GetLatestStatsDate(domain)
-		return actual, raw, false, err
+		if err != nil {
+			return actual, raw, false, fmt.Errorf("failed to find latest nodelist date: %w", err)
+		}
+		return actual, raw, false, nil
 	}
 	parsed, perr := time.Parse("2006-01-02", raw)
 	if perr != nil {
 		actual, err = s.storage.GetLatestStatsDate(domain)
-		return actual, raw, true, err
+		if err != nil {
+			return actual, raw, true, fmt.Errorf("invalid date format and failed to get latest date: %w", err)
+		}
+		return actual, raw, true, nil
 	}
 	actual, err = s.storage.GetNearestAvailableDate(parsed, domain)
 	if err != nil {
-		return actual, raw, false, err
+		return actual, raw, false, fmt.Errorf("failed to find available date: %w", err)
 	}
 	return actual, raw, !actual.Equal(parsed), nil
 }
@@ -115,9 +122,7 @@ func pathSegments(path, prefix string) []string {
 
 // renderBrowse executes the browse template, mapping render failures to a 500.
 func (s *Server) renderBrowse(w http.ResponseWriter, data *browseData) {
-	if err := s.templates["browse"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "browse", data)
 }
 
 // BrowseZonesHandler renders the top level of the hierarchy browser: every zone

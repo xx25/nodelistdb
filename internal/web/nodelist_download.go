@@ -150,9 +150,7 @@ func (s *Server) NodelistHandler(w http.ResponseWriter, r *http.Request) {
 		data.Latest = &years[0].Files[0]
 	}
 
-	if err := s.templates["nodelist_download"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "nodelist_download", data)
 }
 
 // NodelistYearHandler shows all nodelist files for a specific year.
@@ -220,9 +218,7 @@ func (s *Server) NodelistYearHandler(w http.ResponseWriter, r *http.Request) {
 		Version:    version.GetVersionInfo(),
 	}
 
-	if err := s.templates["nodelist_year"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "nodelist_year", data)
 }
 
 // NodelistDownloadHandler handles direct nodelist file downloads

@@ -165,7 +165,9 @@ func TestGroupPointHistoryEmpty(t *testing.T) {
 
 func TestPointHistoryPageRendersPeriods(t *testing.T) {
 	s := &Server{templates: make(map[string]*template.Template), templatesFS: TemplatesFS}
-	s.loadTemplates()
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 	tmpl, ok := s.templates["point_history"]
 	if !ok {
 		t.Fatal("point_history template not loaded")

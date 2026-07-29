@@ -18,7 +18,9 @@ func renderNodeHistory(t *testing.T, internetConfig string) string {
 	t.Helper()
 
 	s := &Server{templates: make(map[string]*template.Template), templatesFS: TemplatesFS}
-	s.loadTemplates()
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 	tmpl, ok := s.templates["node_history"]
 	if !ok {
 		t.Fatal("node_history template not loaded")

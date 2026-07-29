@@ -30,9 +30,9 @@ func TestProtocolPageCopyMatchesItsGate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Each protocol page handler ends by delegating to renderProtocolAnalytics
+	// Each protocol page handler ends by delegating to renderAnalyticsNodes
 	// with the storage method naming its protocol.
-	handler := regexp.MustCompile(`(?s)config := ProtocolPageConfig\{(.*?)renderProtocolAnalytics\(w, r, config, s\.storage\.Get(\w+?)EnabledNodes\)`)
+	handler := regexp.MustCompile(`(?s)config := ProtocolPageConfig\{(.*?)renderAnalyticsNodes\(w, r, config, "unified_analytics", s\.storage\.Get(\w+?)EnabledNodes\)`)
 
 	// Protocols whose page copy asserts an announcement, per
 	// storage.announcementGatedProtocols. Keep the two in step.

@@ -312,7 +312,10 @@ func main() {
 		})
 	}
 
-	webServer := web.New(finalStorage, web.TemplatesFS, web.StaticFS)
+	webServer, err := web.New(finalStorage, web.TemplatesFS, web.StaticFS)
+	if err != nil {
+		logging.Fatalf("Failed to load web templates: %v", err)
+	}
 
 	// Initialize links loader for hot-reloadable links (if configured)
 	if cfg.LinksFile != "" {

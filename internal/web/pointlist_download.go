@@ -198,9 +198,7 @@ func (s *Server) PointlistIndexHandler(w http.ResponseWriter, r *http.Request) {
 		Version:    version.GetVersionInfo(),
 	}
 
-	if err := s.templates["pointlist_download"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "pointlist_download", data)
 }
 
 // PointlistYearHandler lists one series' files for one year.
@@ -243,9 +241,7 @@ func (s *Server) PointlistYearHandler(w http.ResponseWriter, r *http.Request) {
 		Version:    version.GetVersionInfo(),
 	}
 
-	if err := s.templates["pointlist_year"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "pointlist_year", data)
 }
 
 // PointlistDownloadHandler serves one archived pointlist file, decompressing

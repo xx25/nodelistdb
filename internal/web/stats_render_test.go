@@ -63,7 +63,9 @@ func newTestServer(t *testing.T, ops storage.Operations) *Server {
 		templates:   make(map[string]*template.Template),
 		templatesFS: TemplatesFS,
 	}
-	s.loadTemplates()
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 	return s
 }
 
@@ -92,18 +94,18 @@ func TestStatsHandlerErrorPathsRenderFully(t *testing.T) {
 			name:    "unparseable date and latest fails",
 			query:   "?date=not-a-date",
 			ops:     &stubStorage{availableDates: dates, latestDateErr: boom},
-			wantMsg: "Invalid date format and failed to get latest date",
+			wantMsg: "invalid date format and failed to get latest date",
 		},
 		{
 			name:    "nearest date lookup fails",
 			query:   "?date=2026-07-20",
 			ops:     &stubStorage{availableDates: dates, nearestDateErr: boom},
-			wantMsg: "Failed to find available date",
+			wantMsg: "failed to find available date",
 		},
 		{
 			name:    "latest date lookup fails",
 			ops:     &stubStorage{availableDates: dates, latestDateErr: boom},
-			wantMsg: "Failed to find latest nodelist date",
+			wantMsg: "failed to find latest nodelist date",
 		},
 	}
 

@@ -222,7 +222,5 @@ func (s *Server) PointHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		ActivePage:       "",
 	}
 
-	if err := s.templates["point_history"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "point_history", data)
 }

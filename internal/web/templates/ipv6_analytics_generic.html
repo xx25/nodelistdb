@@ -15,9 +15,9 @@
 {{template "analytics_filters" .}}
 {{template "error_display" .}}
 
-{{if .IPv6Nodes}}
+{{if .Nodes}}
 <div class="stats-box">
-    <h3>Found {{len .IPv6Nodes}} {{.Config.StatsHeading}} Nodes</h3>
+    <h3>Found {{len .Nodes}} {{.Config.StatsHeading}} Nodes</h3>
 </div>
 
 <div class="table-responsive">
@@ -38,7 +38,7 @@
             </tr>
         </thead>
         <tbody>
-            {{range .IPv6Nodes}}
+            {{range .Nodes}}
             <tr>
                 {{template "node_address_cell" .}}
                 {{template "hostname_cell" .}}

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
+	"io/fs"
 	"path"
 	"reflect"
 	"sort"
@@ -25,10 +25,23 @@ type InternetDefault struct {
 	Values []string
 }
 
-// loadTemplates loads HTML templates from files
-func (s *Server) loadTemplates() {
-	templates := []string{"search", "stats", "node_history", "point_history", "api_help", "nodelist_download", "nodelist_year", "pointlist_download", "pointlist_year", "analytics", "reachability", "test_detail", "modem_test_detail", "ipv6_analytics_generic", "ipv6_weekly_news", "ipv6_node_list", "unified_analytics", "software_analytics", "geo_analytics", "geo_unified", "pioneers", "on_this_day", "links", "pstn_analytics", "pstn_accessible_analytics", "pstn_no_answer_analytics", "filerequest_analytics", "email_analytics", "aka_mismatch_analytics", "vmodem_unavailable_analytics", "other_networks_analytics", "other_network_nodes", "domain_expiration", "registrars", "browse"}
+// chromeFiles are the templates every page is built on: the page skeleton and
+// the two chrome blocks, plus every partial. They are parsed once and cloned
+// per page - the previous loader re-read and re-parsed all sixteen for each of
+// the thirty-five pages.
+var chromeFiles = []string{
+	"templates/base.html",
+	"templates/nav.html",
+	"templates/footer.html",
+	"templates/partials/*.html",
+}
 
+// loadTemplates parses every page template in templates/ against the shared
+// chrome. The page list is the directory listing rather than a slice kept in
+// step with it by hand, and a partial that fails to parse is fatal like
+// everything else - it used to be a log line, after which the pages using that
+// partial rendered without it.
+func (s *Server) loadTemplates() error {
 	// Create function map for template functions
 	funcMap := template.FuncMap{
 		"flagBadges": func(flagDescriptions map[string]flags.FlagInfo, flagList []string) template.HTML {
@@ -454,99 +467,46 @@ func (s *Server) loadTemplates() {
 		},
 	}
 
-	for _, tmplName := range templates {
-		tmpl, err := s.loadTemplateFromFile(tmplName, funcMap)
-		if err != nil {
-			log.Fatalf("Failed to load template %s: %v", tmplName, err)
-		}
-		s.templates[tmplName] = tmpl
-	}
-}
-
-// loadTemplateFromFile loads a template from embedded filesystem
-func (s *Server) loadTemplateFromFile(name string, funcMap template.FuncMap) (*template.Template, error) {
-	// embed.FS keys always use forward slashes; filepath.Join would use the
-	// OS separator and break on Windows.
-	templateFile := path.Join("templates", name+".html")
-
-	// Read template from embedded filesystem
-	content, err := s.templatesFS.ReadFile(templateFile)
+	chrome, err := template.New("page").Funcs(funcMap).ParseFS(s.templatesFS, chromeFiles...)
 	if err != nil {
-		return nil, fmt.Errorf("template file %s not found in embedded filesystem: %v", templateFile, err)
+		return fmt.Errorf("parsing shared template chrome: %w", err)
 	}
 
-	// Create template with function map
-	tmpl := template.New(name + ".html")
-	if funcMap != nil {
-		tmpl = tmpl.Funcs(funcMap)
-	}
-
-	// Load base template if exists
-	baseContent, err := s.templatesFS.ReadFile("templates/base.html")
-	if err == nil {
-		tmpl, err = tmpl.Parse(string(baseContent))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse base template: %v", err)
-		}
-	}
-
-	// For main templates (not nav or footer), also load the nav and footer templates
-	if name != "nav" && name != "footer" {
-		navContent, err := s.templatesFS.ReadFile("templates/nav.html")
-		if err == nil {
-			// Parse nav template first
-			tmpl, err = tmpl.Parse(string(navContent))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse nav template: %v", err)
-			}
-		}
-
-		footerContent, err := s.templatesFS.ReadFile("templates/footer.html")
-		if err == nil {
-			// Parse footer template
-			tmpl, err = tmpl.Parse(string(footerContent))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse footer template: %v", err)
-			}
-		}
-	}
-
-	// Load partial templates from partials/ directory
-	partialFiles := []string{
-		"analytics_filters.html",
-		"error_display.html",
-		"node_address_cell.html",
-		"hostname_cell.html",
-		"hostname_cell_simple.html",
-		"hostname_text.html",
-		"location_cell.html",
-		"timestamp_cell.html",
-		"action_buttons_cell.html",
-		"ipv6_protocols_cell.html",
-		"ipv4_protocols_cell.html",
-		"ipv6_failed_protocols_cell.html",
-		"vmodem_badge.html",
-	}
-
-	for _, partialFile := range partialFiles {
-		partialPath := path.Join("templates", "partials", partialFile)
-		partialContent, err := s.templatesFS.ReadFile(partialPath)
-		if err == nil {
-			tmpl, err = tmpl.Parse(string(partialContent))
-			if err != nil {
-				log.Printf("Warning: failed to parse partial %s: %v", partialFile, err)
-				// Continue loading other partials
-			}
-		}
-	}
-
-	// Parse the main template content
-	tmpl, err = tmpl.Parse(string(content))
+	pages, err := fs.Glob(s.templatesFS, "templates/*.html")
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse template %s: %v", templateFile, err)
+		return fmt.Errorf("listing templates: %w", err)
 	}
 
-	return tmpl, nil
+	for _, page := range pages {
+		name := strings.TrimSuffix(path.Base(page), ".html")
+		if name == "base" || name == "nav" || name == "footer" {
+			continue
+		}
+
+		content, err := s.templatesFS.ReadFile(page)
+		if err != nil {
+			return fmt.Errorf("reading template %s: %w", page, err)
+		}
+
+		// Clone the chrome and parse the page ONTO the clone, so the page's
+		// body - every page file starts with {{template "base" .}} outside any
+		// define - becomes the clone's own body. Parsing it as an associated
+		// template instead leaves the clone empty and renders a blank page.
+		clone, err := chrome.Clone()
+		if err != nil {
+			return fmt.Errorf("cloning template chrome for %s: %w", name, err)
+		}
+		tmpl, err := clone.Parse(string(content))
+		if err != nil {
+			return fmt.Errorf("parsing template %s: %w", page, err)
+		}
+		s.templates[name] = tmpl
+	}
+
+	if len(s.templates) == 0 {
+		return fmt.Errorf("no page templates found in the embedded filesystem")
+	}
+	return nil
 }
 
 // Helper functions for flag change rendering

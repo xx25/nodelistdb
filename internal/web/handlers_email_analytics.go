@@ -219,15 +219,5 @@ func (s *Server) EmailAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 		Error:            displayError,
 	}
 
-	tmpl, exists := s.templates["email_analytics"]
-	if !exists {
-		logging.Errorf("Email Analytics: Template 'email_analytics' not found")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		logging.Errorf("Email Analytics: Error executing template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.render(w, "email_analytics", data)
 }

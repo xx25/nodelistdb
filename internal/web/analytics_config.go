@@ -6,31 +6,39 @@ import (
 	"strings"
 )
 
-// ProtocolPageConfig holds page-specific configuration for protocol analytics pages.
-// Used for BinkP, IFCICO, Telnet, VModem, FTP analytics pages.
-// This enables configuration-driven rendering with a single unified template.
-type ProtocolPageConfig struct {
+// basePageConfig is the page copy every config-driven analytics page carries.
+// Five configs used to declare these six fields verbatim and carry an
+// identical processInfoText alongside them.
+type basePageConfig struct {
 	PageTitle       string        // e.g., "BinkP Enabled Nodes"
 	PageSubtitle    template.HTML // HTML subtitle displayed below page title
 	StatsHeading    string        // e.g., "BinkP Enabled" (used in "Found X {StatsHeading} Nodes")
-	ShowVersion     bool          // Show version column (true for BinkP, IFCICO)
-	VersionField    string        // Field name: "BinkPVersion", "IfcicoVersion"
-	ShowAnonLogin   bool          // Show anonymous login column (FTP only)
 	InfoText        []string      // Info paragraphs (can use %d for days substitution)
 	EmptyStateTitle string        // Title when no results found
 	EmptyStateDesc  string        // Description when no results found
 }
 
-// processInfoText converts InfoText strings to template.HTML, substituting %d with days.
-// This allows info text to dynamically include the current time range.
-func (c *ProtocolPageConfig) processInfoText(days int) []template.HTML {
+// base returns the shared fields, and by being promoted onto every config that
+// embeds it, it is also what makes those configs interchangeable at the one
+// renderer they share.
+func (c basePageConfig) base() basePageConfig { return c }
+
+// analyticsPageConfig is satisfied by any config embedding basePageConfig.
+type analyticsPageConfig interface {
+	base() basePageConfig
+}
+
+// processInfoText converts InfoText strings to template.HTML, substituting %d
+// with days. This allows info text to dynamically include the current time
+// range.
+func (c basePageConfig) processInfoText(days int) []template.HTML {
 	result := make([]template.HTML, len(c.InfoText))
 	for i, text := range c.InfoText {
-		var processed string
+		// Only substitute when the text actually carries a verb, or Sprintf
+		// appends "%!(EXTRA int=...)" to every paragraph that does not.
+		processed := text
 		if containsFormatVerb(text) {
 			processed = fmt.Sprintf(text, days)
-		} else {
-			processed = text
 		}
 		result[i] = template.HTML(processed)
 	}
@@ -43,88 +51,57 @@ func containsFormatVerb(s string) bool {
 		strings.Contains(s, "%v") || strings.Contains(s, "%f")
 }
 
-// AKAMismatchPageConfig holds page-specific configuration for AKA mismatch analytics pages.
-// Used for showing nodes where announced AKA doesn't match expected nodelist address.
+// ProtocolPageConfig configures the protocol analytics pages (BinkP, IFCICO,
+// Telnet, VModem, FTP), which share unified_analytics.html.
+type ProtocolPageConfig struct {
+	basePageConfig
+	ShowVersion   bool   // Show version column (true for BinkP, IFCICO)
+	VersionField  string // Field name: "BinkPVersion", "IfcicoVersion"
+	ShowAnonLogin bool   // Show anonymous login column (FTP only)
+}
+
+// IPv6PageConfig configures the five IPv6 reports, which share
+// ipv6_analytics_generic.html.
+type IPv6PageConfig struct {
+	basePageConfig
+	TableLayout string // "standard" or "dual-protocol"
+}
+
+// AKAMismatchPageConfig configures the page showing nodes whose announced AKA
+// does not match their nodelist address.
 type AKAMismatchPageConfig struct {
-	PageTitle       string        // e.g., "Nodes with AKA Mismatch"
-	PageSubtitle    template.HTML // HTML subtitle displayed below page title
-	StatsHeading    string        // e.g., "AKA Mismatch" (used in "Found X {StatsHeading} Nodes")
-	InfoText        []string      // Info paragraphs (can use %d for days substitution)
-	EmptyStateTitle string        // Title when no results found
-	EmptyStateDesc  string        // Description when no results found
+	basePageConfig
 }
 
-// processInfoText converts InfoText strings to template.HTML, substituting %d with days.
-func (c *AKAMismatchPageConfig) processInfoText(days int) []template.HTML {
-	result := make([]template.HTML, len(c.InfoText))
-	for i, text := range c.InfoText {
-		var processed string
-		if containsFormatVerb(text) {
-			processed = fmt.Sprintf(text, days)
-		} else {
-			processed = text
-		}
-		result[i] = template.HTML(processed)
-	}
-	return result
-}
-
-// VModemUnavailablePageConfig holds page-specific configuration for the
-// VModem-unavailable analytics page (nodes not confirmed as genuine VMODEM,
-// and nodes flagged IVM but never tested in the window).
+// VModemUnavailablePageConfig configures the page showing nodes that announce
+// IVM but are not confirmed as genuine VMODEM.
 type VModemUnavailablePageConfig struct {
-	PageTitle       string        // e.g., "VMODEM Unavailable"
-	PageSubtitle    template.HTML // HTML subtitle displayed below page title
-	StatsHeading    string        // used for the "not confirmed" section's "Found X {StatsHeading} Nodes"
-	InfoText        []string      // Info paragraphs (can use %d for days substitution)
-	EmptyStateTitle string        // Title when no results found
-	EmptyStateDesc  string        // Description when no results found
+	basePageConfig
 }
 
-// processInfoText converts InfoText strings to template.HTML, substituting %d with days.
-func (c *VModemUnavailablePageConfig) processInfoText(days int) []template.HTML {
-	result := make([]template.HTML, len(c.InfoText))
-	for i, text := range c.InfoText {
-		var processed string
-		if containsFormatVerb(text) {
-			processed = fmt.Sprintf(text, days)
-		} else {
-			processed = text
-		}
-		result[i] = template.HTML(processed)
-	}
-	return result
-}
-
-// OtherNetworksPageConfig holds page-specific configuration for other networks analytics pages.
-// Used for showing nodes that announce AKAs in non-FidoNet networks (e.g., tqwnet, fsxnet).
+// OtherNetworksPageConfig configures the pages showing nodes that announce
+// AKAs in non-FidoNet networks (tqwnet, fsxnet, ...).
 type OtherNetworksPageConfig struct {
-	PageTitle       string        // e.g., "Other Networks"
-	PageSubtitle    template.HTML // HTML subtitle displayed below page title
-	StatsHeading    string        // e.g., "Networks" (used in "Found X {StatsHeading}")
-	InfoText        []string      // Info paragraphs (can use %d for days substitution)
-	EmptyStateTitle string        // Title when no results found
-	EmptyStateDesc  string        // Description when no results found
+	basePageConfig
 }
 
-// processInfoText converts InfoText strings to template.HTML, substituting %d with days.
-func (c *OtherNetworksPageConfig) processInfoText(days int) []template.HTML {
-	result := make([]template.HTML, len(c.InfoText))
-	for i, text := range c.InfoText {
-		var processed string
-		if containsFormatVerb(text) {
-			processed = fmt.Sprintf(text, days)
-		} else {
-			processed = text
-		}
-		result[i] = template.HTML(processed)
-	}
-	return result
+// GeoPageConfig configures the country, provider and domain node listings,
+// which share geo_unified.html.
+type GeoPageConfig struct {
+	basePageConfig
+	ViewType     string // "country", "provider" or "domain"
+	CountryCode  string // ISO country code (for country view)
+	CountryName  string // Full country name (for country view)
+	ProviderName string // ISP/provider name (for provider and domain views)
+	BackURL      string // Back-link target (domain view)
+	BackLabel    string // Back-link text (domain view)
+	Days         int    // Time range in days
 }
 
-// SoftwarePageConfig holds page-specific configuration for software analytics pages.
-// Used for BinkP and IFCICO software distribution pages.
-// This enables configuration-driven rendering with a single unified template.
+// SoftwarePageConfig holds page-specific configuration for software analytics
+// pages (BinkP and IFCICO software distribution). It shares no fields with the
+// node-listing configs above: the page is charts and API endpoints, not a
+// table of nodes.
 type SoftwarePageConfig struct {
 	PageTitle            string  // e.g., "BinkP Software Distribution"
 	PageSubtitle         string  // Plain text subtitle
@@ -142,38 +119,4 @@ type SoftwarePageConfig struct {
 	DetailChartType      string  // "pie" or "bar" (for single layout)
 	DetailSoftwareFilter string  // Software name to filter version_breakdown (single layout)
 	DetailShowThreshold  float64 // Show detail section if software percentage > this (single layout)
-}
-
-// GeoPageConfig holds page-specific configuration for geo-hosting analytics pages.
-// Used for country and provider node listing pages.
-// This enables configuration-driven rendering with a single unified template.
-type GeoPageConfig struct {
-	PageTitle       string        // e.g., "Nodes in United States"
-	PageSubtitle    template.HTML // HTML subtitle displayed below page title
-	StatsHeading    string        // e.g., "Nodes" (used in "Found X {StatsHeading}")
-	ViewType        string        // "country" or "provider"
-	CountryCode     string        // ISO country code (for country view)
-	CountryName     string        // Full country name (for country view)
-	ProviderName    string        // ISP/provider name (for provider view)
-	BackURL         string        // Back-link target (domain view)
-	BackLabel       string        // Back-link text (domain view)
-	Days            int           // Time range in days
-	InfoText        []string      // Info paragraphs
-	EmptyStateTitle string        // Title when no results found
-	EmptyStateDesc  string        // Description when no results found
-}
-
-// processInfoText converts InfoText strings to template.HTML, substituting %d with days.
-func (c *GeoPageConfig) processInfoText() []template.HTML {
-	result := make([]template.HTML, len(c.InfoText))
-	for i, text := range c.InfoText {
-		var processed string
-		if containsFormatVerb(text) {
-			processed = fmt.Sprintf(text, c.Days)
-		} else {
-			processed = text
-		}
-		result[i] = template.HTML(processed)
-	}
-	return result
 }

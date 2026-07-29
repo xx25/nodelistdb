@@ -15,8 +15,10 @@ import (
 // neither, so the cell must name the host that actually answered instead of
 // rendering a bare N/A.
 func TestHostnameCellFallsBackWhenHostnameEmpty(t *testing.T) {
-	// New() runs loadTemplates(), which log.Fatalf's on a broken template.
-	s := New(nil, TemplatesFS, StaticFS)
+	s, err := New(nil, TemplatesFS, StaticFS)
+	if err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 
 	tmpl := s.templates["aka_mismatch_analytics"]
 	if tmpl == nil {
@@ -115,7 +117,10 @@ func TestHostnameCellFallsBackWhenHostnameEmpty(t *testing.T) {
 // (BuildDetailedTestResultQuery prefers it) and so used to print nothing at all
 // for a multi-hostname node.
 func TestReachabilityPagesNameTheTestedHost(t *testing.T) {
-	s := New(nil, TemplatesFS, StaticFS)
+	s, err := New(nil, TemplatesFS, StaticFS)
+	if err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 
 	aggregated := storage.NodeTestResult{
 		TestTime: time.Date(2026, 7, 24, 21, 46, 2, 0, time.UTC),

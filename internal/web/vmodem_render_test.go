@@ -14,7 +14,9 @@ import (
 func renderTestDetail(t *testing.T, tr *storage.NodeTestResult) string {
 	t.Helper()
 	s := &Server{templates: make(map[string]*template.Template), templatesFS: TemplatesFS}
-	s.loadTemplates()
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 	tmpl, ok := s.templates["test_detail"]
 	if !ok {
 		t.Fatal("test_detail template not loaded")

@@ -74,8 +74,11 @@ func analyzeNodeActivity(history []database.Node) NodeActivityInfo {
 	return info
 }
 
-// New creates a new web server
-func New(storage storage.Operations, templatesFS embed.FS, staticFS embed.FS) *Server {
+// New creates a new web server. A template that will not parse is a
+// deployment-stopping error, not something to discover on the first request:
+// the loader used to call log.Fatalf from inside this constructor, which made
+// every render test carry a comment about it.
+func New(storage storage.Operations, templatesFS embed.FS, staticFS embed.FS) (*Server, error) {
 	server := &Server{
 		storage:     storage,
 		templates:   make(map[string]*template.Template),
@@ -83,8 +86,10 @@ func New(storage storage.Operations, templatesFS embed.FS, staticFS embed.FS) *S
 		staticFS:    staticFS,
 	}
 
-	server.loadTemplates()
-	return server
+	if err := server.loadTemplates(); err != nil {
+		return nil, err
+	}
+	return server, nil
 }
 
 // SetLinksLoader sets the links loader for hot-reloadable links
@@ -133,9 +138,7 @@ func (s *Server) APIHelpHandler(w http.ResponseWriter, r *http.Request) {
 		Version:    version.GetVersionInfo(),
 	}
 
-	if err := s.templates["api_help"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "api_help", data)
 }
 
 // LinksHandler shows external FidoNet links
@@ -160,7 +163,5 @@ func (s *Server) LinksHandler(w http.ResponseWriter, r *http.Request) {
 		Categories: categories,
 	}
 
-	if err := s.templates["links"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "links", data)
 }

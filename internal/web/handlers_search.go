@@ -99,9 +99,7 @@ func (s *Server) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		data.Title = "NodelistDB"
 	}
 
-	if err := s.templates["search"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "search", data)
 }
 
 // performNodeSearchWithLifetime handles the actual node search logic and returns NodeSummary with lifetime info
@@ -216,7 +214,5 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		ActivePage:       "",
 	}
 
-	if err := s.templates["node_history"].Execute(w, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.render(w, "node_history", data)
 }

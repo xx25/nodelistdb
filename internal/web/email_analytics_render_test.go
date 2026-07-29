@@ -18,7 +18,9 @@ func renderEmailAnalytics(t *testing.T, page emailAnalyticsPage) string {
 	t.Helper()
 
 	s := &Server{templates: make(map[string]*template.Template), templatesFS: TemplatesFS}
-	s.loadTemplates()
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 	tmpl, ok := s.templates["email_analytics"]
 	if !ok {
 		t.Fatal("email_analytics template not loaded")

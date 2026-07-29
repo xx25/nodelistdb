@@ -15,9 +15,9 @@
 {{template "analytics_filters" .}}
 {{template "error_display" .}}
 
-{{if .ProtocolNodes}}
+{{if .Nodes}}
 <div class="stats-box">
-    <h3>Found {{len .ProtocolNodes}} {{.Config.StatsHeading}} Nodes</h3>
+    <h3>Found {{len .Nodes}} {{.Config.StatsHeading}} Nodes</h3>
 </div>
 
 <div class="table-responsive">
@@ -43,7 +43,7 @@
             </tr>
         </thead>
         <tbody>
-            {{range .ProtocolNodes}}
+            {{range .Nodes}}
             <tr>
                 {{template "node_address_cell" .}}
                 {{template "hostname_cell_simple" .}}

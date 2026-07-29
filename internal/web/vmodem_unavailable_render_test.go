@@ -12,19 +12,23 @@ import (
 
 func TestVModemUnavailableRender(t *testing.T) {
 	s := &Server{templates: make(map[string]*template.Template), templatesFS: TemplatesFS}
-	s.loadTemplates()
+	if err := s.loadTemplates(); err != nil {
+		t.Fatalf("loading templates: %v", err)
+	}
 	tmpl, ok := s.templates["vmodem_unavailable_analytics"]
 	if !ok {
 		t.Fatal("vmodem_unavailable_analytics template not loaded")
 	}
 
 	config := VModemUnavailablePageConfig{
-		PageTitle:       "VMODEM Unavailable",
-		PageSubtitle:    template.HTML(`<p class="subtitle">test</p>`),
-		StatsHeading:    "Not Confirmed VMODEM",
-		InfoText:        []string{"Over the last %d days"},
-		EmptyStateTitle: "empty title",
-		EmptyStateDesc:  "empty desc",
+		basePageConfig: basePageConfig{
+			PageTitle:       "VMODEM Unavailable",
+			PageSubtitle:    template.HTML(`<p class="subtitle">test</p>`),
+			StatsHeading:    "Not Confirmed VMODEM",
+			InfoText:        []string{"Over the last %d days"},
+			EmptyStateTitle: "empty title",
+			EmptyStateDesc:  "empty desc",
+		},
 	}
 
 	data := vmodemUnavailableAnalyticsData{
