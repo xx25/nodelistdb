@@ -237,7 +237,7 @@ func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int, domain s
 			WHERE binkp_tested = true
 				AND binkp_success = true
 				AND test_date >= today() - ?
-				/*DOMAIN_FILTER*/
+				{{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
 			HAVING binkp_version LIKE 'binkd/%'
 		) AS latest_tests
@@ -246,7 +246,7 @@ func (sao *SoftwareAnalyticsOperations) GetBinkdDetailedStats(days int, domain s
 	`
 	// Marker replacement instead of fmt.Sprintf: the query contains a literal
 	// '%' character (LIKE pattern) that Sprintf would mangle.
-	query = strings.ReplaceAll(query, "/*DOMAIN_FILTER*/", domainFilterSQL(domain, ""))
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 
 	rows, err := conn.Query(query, days)
 	if err != nil {

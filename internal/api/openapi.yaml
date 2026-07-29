@@ -1078,10 +1078,23 @@ paths:
   /api/nodelist/latest:
     get:
       summary: Get Latest Nodelist
-      description: Get information about the latest available nodelist
+      description: |
+        Get information about the newest nodelist of one FTN network.
+
+        The archive stores nodelists gzipped, and a compressed file is
+        described rather than served: the response carries its metadata and a
+        download_url. An uncompressed file is returned as text/plain instead.
       operationId: getLatestNodelist
       tags:
         - Nodelists
+      parameters:
+        - name: domain
+          in: query
+          description: FTN network (defaults to fidonet)
+          schema:
+            type: string
+            default: fidonet
+            example: fsxnet
       responses:
         '200':
           description: Latest nodelist information
@@ -1089,6 +1102,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NodelistInfo'
+            text/plain:
+              schema:
+                type: string
+                description: The nodelist itself, when the archive holds it uncompressed
+        '400':
+          description: The domain is not a valid FTN network name
+        '404':
+          description: That network has no nodelist files
 
   /api/openapi.yaml:
     get:
@@ -1648,19 +1669,27 @@ components:
       type: object
       description: Information about a nodelist file
       properties:
-        name:
+        network:
+          type: string
+          description: The FTN network this nodelist belongs to
+          example: "fidonet"
+        filename:
           type: string
           example: "nodelist.211"
         date:
           type: string
-          format: date-time
-          example: "2024-07-29T00:00:00Z"
+          format: date
+          example: "2024-07-29"
         day_number:
           type: integer
           example: 211
         year:
           type: string
           example: "2024"
+        compressed:
+          type: boolean
+          description: Always true here; an uncompressed nodelist is served as text/plain
+          example: true
         download_url:
           type: string
           example: "/download/nodelist/2024/nodelist.211"

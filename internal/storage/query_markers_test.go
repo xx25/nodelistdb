@@ -35,6 +35,12 @@ func TestEveryQueryMarkerIsExpanded(t *testing.T) {
 		"{{CYCLE_LT}}":  "applyCycleWindows",
 		"{{CYCLE_LFT}}": "applyCycleWindows",
 		"{{CYCLE_LIT}}": "applyCycleWindows",
+		// The three column-projection markers share one expander, and the two
+		// suffixed spellings contain the bare one, so a function carrying any of
+		// them is required to call it.
+		"{{TEST_RESULT_COLUMNS}}":             "applyTestResultColumns",
+		"{{TEST_RESULT_COLUMNS_R}}":           "applyTestResultColumns",
+		"{{TEST_RESULT_COLUMNS_RR_NODENAME}}": "applyTestResultColumns",
 	}
 	byCountedHelper := map[string]string{
 		"{{NODELIST_GATE}}": "applyNodelistGate(",
@@ -94,6 +100,33 @@ func TestEveryQueryMarkerIsExpanded(t *testing.T) {
 						src, fn.Name.Name, marker)
 				}
 			}
+		}
+	}
+}
+
+// The domain filter used to be spliced under three spellings: {{DOMAIN_FILTER}},
+// a single-braced {DOMAIN_FILTER} in test_other_networks.go, and a
+// /*DOMAIN_FILTER*/ comment in two others. Only the double-braced form is
+// matched by TestEveryQueryMarkerIsExpanded above, so the other two were
+// unguarded - an unexpanded one would have reached ClickHouse verbatim with
+// nothing to catch it. There is now one spelling, and this keeps it that way.
+func TestDomainFilterHasOneSpelling(t *testing.T) {
+	sources, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stray := regexp.MustCompile(`(?:/\*DOMAIN_FILTER[_A-Z]*\*/)|(?:[^{]\{DOMAIN_FILTER[_A-Z]*\})`)
+	for _, src := range sources {
+		if strings.HasSuffix(src, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range stray.FindAllString(string(body), -1) {
+			t.Errorf("%s: %q is not the {{DOMAIN_FILTER}} spelling the marker guard checks", src, strings.TrimSpace(m))
 		}
 	}
 }

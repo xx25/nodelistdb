@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nodelistdb/internal/nodelistfs"
 	"github.com/nodelistdb/internal/version"
 )
 
@@ -29,7 +30,7 @@ var pointlistFileRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 type PointlistSourceDir struct {
 	Network string
 	Source  string
-	Years   []NodelistYear
+	Years   []nodelistfs.NodelistYear
 	Count   int
 }
 
@@ -38,12 +39,12 @@ func getPointlistPath() string {
 	if path := os.Getenv("POINTLIST_PATH"); path != "" {
 		return path
 	}
-	return filepath.Join(getNodelistPath(), "pointlists")
+	return filepath.Join(nodelistfs.Root(), "pointlists")
 }
 
 // scanPointlistYearDir lists the pointlist files of one year directory. Any
 // file whose (pre-.gz) extension is a 3-digit day number counts.
-func scanPointlistYearDir(yearPath, yearName string) []NodelistFile {
+func scanPointlistYearDir(yearPath, yearName string) []nodelistfs.NodelistFile {
 	entries, err := os.ReadDir(yearPath)
 	if err != nil {
 		return nil
@@ -53,7 +54,7 @@ func scanPointlistYearDir(yearPath, yearName string) []NodelistFile {
 		return nil
 	}
 
-	var files []NodelistFile
+	var files []nodelistfs.NodelistFile
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -76,7 +77,7 @@ func scanPointlistYearDir(yearPath, yearName string) []NodelistFile {
 		if err != nil {
 			continue
 		}
-		files = append(files, NodelistFile{
+		files = append(files, nodelistfs.NodelistFile{
 			Name:         name,
 			Year:         yearName,
 			DayNumber:    dayNum,
@@ -92,14 +93,14 @@ func scanPointlistYearDir(yearPath, yearName string) []NodelistFile {
 }
 
 // scanPointlistSourceDir organizes one series' year directories, newest first.
-func scanPointlistSourceDir(network, source string) []NodelistYear {
+func scanPointlistSourceDir(network, source string) []nodelistfs.NodelistYear {
 	basePath := filepath.Join(getPointlistPath(), network, source)
 	yearDirs, err := os.ReadDir(basePath)
 	if err != nil {
 		return nil
 	}
 
-	var years []NodelistYear
+	var years []nodelistfs.NodelistYear
 	for _, yearDir := range yearDirs {
 		if !yearDir.IsDir() {
 			continue
@@ -115,7 +116,7 @@ func scanPointlistSourceDir(network, source string) []NodelistYear {
 		if len(files) == 0 {
 			continue
 		}
-		years = append(years, NodelistYear{
+		years = append(years, nodelistfs.NodelistYear{
 			Year:       yearName,
 			Files:      files,
 			NewestFile: files[0],
@@ -138,7 +139,7 @@ func listPointlistSources() []PointlistSourceDir {
 
 	var sources []PointlistSourceDir
 	for _, networkDir := range networkDirs {
-		if !networkDir.IsDir() || !networkNameRe.MatchString(networkDir.Name()) {
+		if !networkDir.IsDir() || !nodelistfs.ValidNetworkName(networkDir.Name()) {
 			continue
 		}
 		network := networkDir.Name()
@@ -147,7 +148,7 @@ func listPointlistSources() []PointlistSourceDir {
 			continue
 		}
 		for _, sourceDir := range sourceDirs {
-			if !sourceDir.IsDir() || !networkNameRe.MatchString(sourceDir.Name()) {
+			if !sourceDir.IsDir() || !nodelistfs.ValidNetworkName(sourceDir.Name()) {
 				continue
 			}
 			source := sourceDir.Name()
@@ -211,7 +212,7 @@ func (s *Server) PointlistYearHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	network, source, year := strings.ToLower(segments[0]), strings.ToLower(segments[1]), segments[2]
-	if !networkNameRe.MatchString(network) || !networkNameRe.MatchString(source) || len(year) != 4 {
+	if !nodelistfs.ValidNetworkName(network) || !nodelistfs.ValidNetworkName(source) || len(year) != 4 {
 		http.NotFound(w, r)
 		return
 	}
@@ -231,7 +232,7 @@ func (s *Server) PointlistYearHandler(w http.ResponseWriter, r *http.Request) {
 		ActivePage string
 		Network    string
 		Source     string
-		Year       NodelistYear
+		Year       nodelistfs.NodelistYear
 		Version    string
 	}{
 		Title:      fmt.Sprintf("Pointlists — %s %s %s", network, source, year),
@@ -257,7 +258,7 @@ func (s *Server) PointlistDownloadHandler(w http.ResponseWriter, r *http.Request
 	}
 	network, source, year, filename := strings.ToLower(segments[0]), strings.ToLower(segments[1]), segments[2], segments[3]
 
-	if !networkNameRe.MatchString(network) || !networkNameRe.MatchString(source) {
+	if !nodelistfs.ValidNetworkName(network) || !nodelistfs.ValidNetworkName(source) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}

@@ -95,7 +95,7 @@ func (am *AKAMismatchOperations) GetAKAMismatchNodes(limit int, days int, includ
 func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain string, days int) string {
 	domainFilter := domainFilterSQL(domain, "")
 	domainFilterR := domainFilterSQL(domain, "r.")
-	return applyNodelistGate(applyCycleWindows(fmt.Sprintf(`
+	return applyTestResultColumns(applyNodelistGate(applyCycleWindows(fmt.Sprintf(`
 		WITH
 		-- First, find the latest test time for each node (regardless of mismatch status)
 		-- Only consider non-aggregated results since aggregated rows don't set address_validated
@@ -132,33 +132,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 				%s
 		)
 		SELECT
-			r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-			r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-			r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-			r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
-			r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-			r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
-			r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-			r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-			r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-			r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-			r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-			r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-			r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-			r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
-			r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
-			r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
-			r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
-			r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
-			r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
-			r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
-			r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
-			r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
-			r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
-			r.is_operational, r.has_connectivity_issues, r.address_validated,
-			r.tested_hostname, r.hostname_index, r.is_aggregated,
-			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-			r.ftp_anon_success, r.domain, r.derived_from_address
+			{{TEST_RESULT_COLUMNS_R}}
 		FROM node_test_results r
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time AND r.hostname_index = br.hostname_index AND br.rn = 1
 		WHERE r.is_aggregated = false
@@ -167,7 +141,7 @@ func (am *AKAMismatchOperations) buildAKAMismatchQuery(nodeFilter string, domain
 			%s
 		ORDER BY r.test_time DESC
 		LIMIT ?`, nodeFilter, domainFilter, domainFilterR, domainFilterR), days),
-		"", domainFilter, nodeFilter)
+		"", domainFilter, nodeFilter))
 }
 
 // AKAIPVersionMismatchNode holds a node where IPv4 and IPv6 AKA validation results differ

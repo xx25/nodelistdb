@@ -181,7 +181,7 @@ func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int,
 				) as raw_line,
 				ROW_NUMBER() OVER (PARTITION BY sysop_name ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC) as rn
 			FROM nodes
-			WHERE zone = ? AND region = ? /*DOMAIN_FILTER*/
+			WHERE zone = ? AND region = ? {{DOMAIN_FILTER}}
 		) AS first_appearances
 		WHERE rn = 1
 		ORDER BY nodelist_date ASC, zone ASC, net ASC, node ASC
@@ -189,7 +189,7 @@ func (so *SearchOperations) GetPioneersByRegion(zone int, region int, limit int,
 	`
 	// Marker replacement instead of fmt.Sprintf: the query contains literal
 	// '%' characters (formatDateTime pattern) that Sprintf would mangle.
-	query = strings.ReplaceAll(query, "/*DOMAIN_FILTER*/", domainFilterSQL(domain, ""))
+	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 
 	rows, err := so.db.Conn().Query(query, zone, region, limit)
 	if err != nil {

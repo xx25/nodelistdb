@@ -13,78 +13,26 @@ func NewTestQueryBuilder() *TestQueryBuilder {
 
 // BuildTestHistoryQuery builds a query to retrieve test history for a specific node (ClickHouse)
 func (tqb *TestQueryBuilder) BuildTestHistoryQuery() string {
-	return `
+	return applyTestResultColumns(`
 		SELECT
-			test_time, zone, net, node, address, hostname,
-			resolved_ipv4, resolved_ipv6, dns_error,
-			country, country_code, city, region, latitude, longitude, isp, org, asn,
-			binkp_tested, binkp_success, binkp_response_ms, binkp_system_name,
-			binkp_sysop, binkp_location, binkp_version, binkp_addresses, binkp_capabilities, binkp_error,
-			ifcico_tested, ifcico_success, ifcico_response_ms, ifcico_mailer_info,
-			ifcico_system_name, ifcico_addresses, ifcico_response_type, ifcico_error,
-			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
-			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
-			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
-			vmodem_sysop, vmodem_location, vmodem_addresses,
-			vmodem_detail, vmodem_call_outcome, vmodem_banner,
-			binkp_ipv4_tested, binkp_ipv4_success, binkp_ipv4_response_ms, binkp_ipv4_address, binkp_ipv4_error,
-			binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_response_ms, binkp_ipv6_address, binkp_ipv6_error,
-			ifcico_ipv4_tested, ifcico_ipv4_success, ifcico_ipv4_response_ms, ifcico_ipv4_address, ifcico_ipv4_error,
-			ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_response_ms, ifcico_ipv6_address, ifcico_ipv6_error,
-			telnet_ipv4_tested, telnet_ipv4_success, telnet_ipv4_response_ms, telnet_ipv4_address, telnet_ipv4_error,
-			telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_response_ms, telnet_ipv6_address, telnet_ipv6_error,
-			ftp_ipv4_tested, ftp_ipv4_success, ftp_ipv4_response_ms, ftp_ipv4_address, ftp_ipv4_error,
-			ftp_ipv6_tested, ftp_ipv6_success, ftp_ipv6_response_ms, ftp_ipv6_address, ftp_ipv6_error,
-			vmodem_ipv4_tested, vmodem_ipv4_success, vmodem_ipv4_response_ms, vmodem_ipv4_address, vmodem_ipv4_error,
-			vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
-			is_operational, has_connectivity_issues, address_validated,
-			tested_hostname, hostname_index, is_aggregated,
-			total_hostnames, hostnames_tested, hostnames_operational,
-			ftp_anon_success, domain, derived_from_address
+			{{TEST_RESULT_COLUMNS}}
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
 		AND test_time >= now() - INTERVAL ? DAY
 		AND (? = '' OR domain = ?)
-		ORDER BY test_time ASC, hostname_index`
+		ORDER BY test_time ASC, hostname_index`)
 }
 
 // BuildDetailedTestResultQuery builds a query for a specific test result (ClickHouse)
 func (tqb *TestQueryBuilder) BuildDetailedTestResultQuery() string {
-	return `
+	return applyTestResultColumns(`
 		SELECT
-			test_time, zone, net, node, address, hostname,
-			resolved_ipv4, resolved_ipv6, dns_error,
-			country, country_code, city, region, latitude, longitude, isp, org, asn,
-			binkp_tested, binkp_success, binkp_response_ms, binkp_system_name,
-			binkp_sysop, binkp_location, binkp_version, binkp_addresses, binkp_capabilities, binkp_error,
-			ifcico_tested, ifcico_success, ifcico_response_ms, ifcico_mailer_info,
-			ifcico_system_name, ifcico_addresses, ifcico_response_type, ifcico_error,
-			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
-			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
-			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
-			vmodem_sysop, vmodem_location, vmodem_addresses,
-			vmodem_detail, vmodem_call_outcome, vmodem_banner,
-			binkp_ipv4_tested, binkp_ipv4_success, binkp_ipv4_response_ms, binkp_ipv4_address, binkp_ipv4_error,
-			binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_response_ms, binkp_ipv6_address, binkp_ipv6_error,
-			ifcico_ipv4_tested, ifcico_ipv4_success, ifcico_ipv4_response_ms, ifcico_ipv4_address, ifcico_ipv4_error,
-			ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_response_ms, ifcico_ipv6_address, ifcico_ipv6_error,
-			telnet_ipv4_tested, telnet_ipv4_success, telnet_ipv4_response_ms, telnet_ipv4_address, telnet_ipv4_error,
-			telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_response_ms, telnet_ipv6_address, telnet_ipv6_error,
-			ftp_ipv4_tested, ftp_ipv4_success, ftp_ipv4_response_ms, ftp_ipv4_address, ftp_ipv4_error,
-			ftp_ipv6_tested, ftp_ipv6_success, ftp_ipv6_response_ms, ftp_ipv6_address, ftp_ipv6_error,
-			vmodem_ipv4_tested, vmodem_ipv4_success, vmodem_ipv4_response_ms, vmodem_ipv4_address, vmodem_ipv4_error,
-			vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
-			is_operational, has_connectivity_issues, address_validated,
-			tested_hostname, hostname_index, is_aggregated,
-			total_hostnames, hostnames_tested, hostnames_operational,
-			ftp_anon_success, domain, derived_from_address
+			{{TEST_RESULT_COLUMNS}}
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ? AND test_time = parseDateTimeBestEffort(?)
 		AND (? = '' OR domain = ?)
 		ORDER BY is_aggregated DESC, hostname_index ASC
-		LIMIT 1`
+		LIMIT 1`)
 }
 
 // BuildReachabilityStatsQuery builds a query for node reachability statistics (ClickHouse)
@@ -351,7 +299,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 		gate = announcedProtocolNodesSQL(protocolAnnouncementFlags[protocol], domainFilter, nodeFilter)
 	}
 
-	return applyCycleWindows(fmt.Sprintf(`
+	return applyTestResultColumns(applyCycleWindows(fmt.Sprintf(`
 		WITH announced_nodes AS (%s
 		),
 		latest_tests AS (
@@ -382,38 +330,12 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 			WHERE %s
 		)
 		SELECT
-			r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-			r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-			r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-			r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
-			r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-			r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
-			r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-			r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-			r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-			r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-			r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-			r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-			r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-			r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
-			r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
-			r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
-			r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
-			r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
-			r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
-			r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
-			r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
-			r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
-			r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
-			r.is_operational, r.has_connectivity_issues, r.address_validated,
-			r.tested_hostname, r.hostname_index, r.is_aggregated,
-			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-			r.ftp_anon_success, r.domain, r.derived_from_address
+			{{TEST_RESULT_COLUMNS_R}}
 		FROM node_test_results r
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time
 			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
 		ORDER BY r.test_time DESC
-		LIMIT ?`, gate, rowPredicate, nodeFilter, domainFilter, joinPredicate), days)
+		LIMIT ?`, gate, rowPredicate, nodeFilter, domainFilter, joinPredicate), days))
 }
 
 // BuildVModemUnconfirmedQuery builds a query for nodes whose VModem probe in
@@ -443,7 +365,7 @@ func (tqb *TestQueryBuilder) BuildProtocolEnabledQuery(protocol, nodeFilter, dom
 // rows only through latest_tests, which has already dropped the whole node.
 // domainFilter is a ready-made SQL clause (see domainFilterSQL); "" means all FTN networks.
 func (tqb *TestQueryBuilder) BuildVModemUnconfirmedQuery(nodeFilter, domainFilter string, days int) string {
-	return applyCycleWindows(fmt.Sprintf(`
+	return applyTestResultColumns(applyCycleWindows(fmt.Sprintf(`
 		WITH announced_nodes AS (%s
 		),
 		latest_tests AS (
@@ -474,72 +396,20 @@ func (tqb *TestQueryBuilder) BuildVModemUnconfirmedQuery(nodeFilter, domainFilte
 			WHERE r.vmodem_tested = true
 		)
 		SELECT
-			r.test_time, r.zone, r.net, r.node, r.address, r.hostname,
-			r.resolved_ipv4, r.resolved_ipv6, r.dns_error,
-			r.country, r.country_code, r.city, r.region, r.latitude, r.longitude, r.isp, r.org, r.asn,
-			r.binkp_tested, r.binkp_success, r.binkp_response_ms, r.binkp_system_name,
-			r.binkp_sysop, r.binkp_location, r.binkp_version, r.binkp_addresses, r.binkp_capabilities, r.binkp_error,
-			r.ifcico_tested, r.ifcico_success, r.ifcico_response_ms, r.ifcico_mailer_info,
-			r.ifcico_system_name, r.ifcico_addresses, r.ifcico_response_type, r.ifcico_error,
-			r.telnet_tested, r.telnet_success, r.telnet_response_ms, r.telnet_error,
-			r.ftp_tested, r.ftp_success, r.ftp_response_ms, r.ftp_error,
-			r.vmodem_tested, r.vmodem_success, r.vmodem_response_ms, r.vmodem_error,
-			r.vmodem_variant, r.vmodem_conformant, r.vmodem_software, r.vmodem_system_name,
-			r.vmodem_sysop, r.vmodem_location, r.vmodem_addresses,
-			r.vmodem_detail, r.vmodem_call_outcome, r.vmodem_banner,
-			r.binkp_ipv4_tested, r.binkp_ipv4_success, r.binkp_ipv4_response_ms, r.binkp_ipv4_address, r.binkp_ipv4_error,
-			r.binkp_ipv6_tested, r.binkp_ipv6_success, r.binkp_ipv6_response_ms, r.binkp_ipv6_address, r.binkp_ipv6_error,
-			r.ifcico_ipv4_tested, r.ifcico_ipv4_success, r.ifcico_ipv4_response_ms, r.ifcico_ipv4_address, r.ifcico_ipv4_error,
-			r.ifcico_ipv6_tested, r.ifcico_ipv6_success, r.ifcico_ipv6_response_ms, r.ifcico_ipv6_address, r.ifcico_ipv6_error,
-			r.telnet_ipv4_tested, r.telnet_ipv4_success, r.telnet_ipv4_response_ms, r.telnet_ipv4_address, r.telnet_ipv4_error,
-			r.telnet_ipv6_tested, r.telnet_ipv6_success, r.telnet_ipv6_response_ms, r.telnet_ipv6_address, r.telnet_ipv6_error,
-			r.ftp_ipv4_tested, r.ftp_ipv4_success, r.ftp_ipv4_response_ms, r.ftp_ipv4_address, r.ftp_ipv4_error,
-			r.ftp_ipv6_tested, r.ftp_ipv6_success, r.ftp_ipv6_response_ms, r.ftp_ipv6_address, r.ftp_ipv6_error,
-			r.vmodem_ipv4_tested, r.vmodem_ipv4_success, r.vmodem_ipv4_response_ms, r.vmodem_ipv4_address, r.vmodem_ipv4_error,
-			r.vmodem_ipv6_tested, r.vmodem_ipv6_success, r.vmodem_ipv6_response_ms, r.vmodem_ipv6_address, r.vmodem_ipv6_error,
-			r.is_operational, r.has_connectivity_issues, r.address_validated,
-			r.tested_hostname, r.hostname_index, r.is_aggregated,
-			r.total_hostnames, r.hostnames_tested, r.hostnames_operational,
-			r.ftp_anon_success, r.domain, r.derived_from_address
+			{{TEST_RESULT_COLUMNS_R}}
 		FROM node_test_results r
 		JOIN best_results br ON r.domain = br.domain AND r.zone = br.zone AND r.net = br.net AND r.node = br.node AND r.test_time = br.test_time
 			AND r.hostname_index = br.hostname_index AND r.is_aggregated = br.is_aggregated AND br.rn = 1
 		WHERE NOT (r.vmodem_variant = 'vmp' AND r.vmodem_conformant = true)
 		ORDER BY r.test_time DESC
-		LIMIT ?`, announcedProtocolNodesSQL("IVM", domainFilter, nodeFilter), nodeFilter, domainFilter), days)
+		LIMIT ?`, announcedProtocolNodesSQL("IVM", domainFilter, nodeFilter), nodeFilter, domainFilter), days))
 }
 
 // BuildSearchByReachabilityQuery builds a query to search nodes by reachability status (ClickHouse)
 func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
-	return `
+	return applyTestResultColumns(`
 		SELECT
-			test_time, zone, net, node, address, hostname,
-			resolved_ipv4, resolved_ipv6, dns_error,
-			country, country_code, city, region, latitude, longitude, isp, org, asn,
-			binkp_tested, binkp_success, binkp_response_ms, binkp_system_name,
-			binkp_sysop, binkp_location, binkp_version, binkp_addresses, binkp_capabilities, binkp_error,
-			ifcico_tested, ifcico_success, ifcico_response_ms, ifcico_mailer_info,
-			ifcico_system_name, ifcico_addresses, ifcico_response_type, ifcico_error,
-			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
-			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
-			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
-			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
-			vmodem_sysop, vmodem_location, vmodem_addresses,
-			vmodem_detail, vmodem_call_outcome, vmodem_banner,
-			binkp_ipv4_tested, binkp_ipv4_success, binkp_ipv4_response_ms, binkp_ipv4_address, binkp_ipv4_error,
-			binkp_ipv6_tested, binkp_ipv6_success, binkp_ipv6_response_ms, binkp_ipv6_address, binkp_ipv6_error,
-			ifcico_ipv4_tested, ifcico_ipv4_success, ifcico_ipv4_response_ms, ifcico_ipv4_address, ifcico_ipv4_error,
-			ifcico_ipv6_tested, ifcico_ipv6_success, ifcico_ipv6_response_ms, ifcico_ipv6_address, ifcico_ipv6_error,
-			telnet_ipv4_tested, telnet_ipv4_success, telnet_ipv4_response_ms, telnet_ipv4_address, telnet_ipv4_error,
-			telnet_ipv6_tested, telnet_ipv6_success, telnet_ipv6_response_ms, telnet_ipv6_address, telnet_ipv6_error,
-			ftp_ipv4_tested, ftp_ipv4_success, ftp_ipv4_response_ms, ftp_ipv4_address, ftp_ipv4_error,
-			ftp_ipv6_tested, ftp_ipv6_success, ftp_ipv6_response_ms, ftp_ipv6_address, ftp_ipv6_error,
-			vmodem_ipv4_tested, vmodem_ipv4_success, vmodem_ipv4_response_ms, vmodem_ipv4_address, vmodem_ipv4_error,
-			vmodem_ipv6_tested, vmodem_ipv6_success, vmodem_ipv6_response_ms, vmodem_ipv6_address, vmodem_ipv6_error,
-			is_operational, has_connectivity_issues, address_validated,
-			tested_hostname, hostname_index, is_aggregated,
-			total_hostnames, hostnames_tested, hostnames_operational,
-			ftp_anon_success, domain, derived_from_address
+			{{TEST_RESULT_COLUMNS}}
 		FROM (
 			SELECT *, row_number() OVER (PARTITION BY domain, zone, net, node ORDER BY test_time DESC) as rn
 			FROM node_test_results
@@ -548,5 +418,5 @@ func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
 		)
 		WHERE rn = 1 AND is_operational = ?
 		ORDER BY test_time DESC
-		LIMIT ?`
+		LIMIT ?`)
 }
