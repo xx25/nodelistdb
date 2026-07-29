@@ -1,6 +1,12 @@
 package storage
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/nodelistdb/internal/cache"
@@ -29,6 +35,19 @@ type CacheStorageConfig struct {
 	SearchTTL        time.Duration
 	MaxSearchResults int
 	WarmupOnStart    bool
+
+	// The analytics reports are cached on four horizons, chosen by what can
+	// change their answer rather than by how stale a reader will tolerate.
+	//
+	// TestAnalyticsTTL covers everything computed from node_test_results,
+	// which the test daemon appends to continuously. AnalyticsTTL and
+	// LongAnalyticsTTL cover progressively heavier aggregates over the same
+	// data. HistoricalTTL covers answers only a new nodelist import can move -
+	// a flag's first appearance, a network's history, a per-year trend.
+	TestAnalyticsTTL time.Duration
+	AnalyticsTTL     time.Duration
+	LongAnalyticsTTL time.Duration
+	HistoricalTTL    time.Duration
 }
 
 // NewCachedStorage creates a new CachedStorage instance
@@ -40,6 +59,22 @@ func NewCachedStorage(storage *Storage, cacheImpl cache.Cache, config *CacheStor
 			StatsTTL:         1 * time.Hour,
 			SearchTTL:        5 * time.Minute,
 			MaxSearchResults: 500,
+		}
+	}
+	// A caller that built the config by hand - tests, and any consumer added
+	// before these fields existed - leaves the analytics horizons at zero,
+	// which both cache backends read as "never expires".
+	for _, ttl := range []struct {
+		field *time.Duration
+		def   time.Duration
+	}{
+		{&config.TestAnalyticsTTL, 15 * time.Minute},
+		{&config.AnalyticsTTL, 30 * time.Minute},
+		{&config.LongAnalyticsTTL, 1 * time.Hour},
+		{&config.HistoricalTTL, 24 * time.Hour},
+	} {
+		if *ttl.field == 0 {
+			*ttl.field = ttl.def
 		}
 	}
 
@@ -89,4 +124,90 @@ func (cs *CachedStorage) Close() error {
 		return cs.cache.Close()
 	}
 	return nil
+}
+
+// cachedFetch is the cache-aside path every read wrapper on CachedStorage
+// follows: look the key up, count the hit or the miss, call fetch on a miss,
+// store what came back. A cached entry that will not unmarshal is treated as a
+// miss - the shape of a stored value changes with the code that wrote it, and
+// a key whose shape moved without its version segment moving would otherwise
+// keep failing for its whole TTL.
+func cachedFetch[T any](cs *CachedStorage, key string, ttl time.Duration, fetch func() (T, error)) (T, error) {
+	if !cs.config.Enabled {
+		return fetch()
+	}
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var result T
+		if err := json.Unmarshal(data, &result); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return result, nil
+		}
+		logging.Warn("Failed to unmarshal cached data", slog.String("key", key), slog.Any("error", err))
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	result, err := fetch()
+	if err != nil {
+		return result, err
+	}
+
+	if data, err := json.Marshal(result); err == nil {
+		_ = cs.cache.Set(context.Background(), key, data, ttl)
+	}
+	return result, nil
+}
+
+// cachedFetchSlice is cachedFetch for the readers that decline to store an
+// empty answer.
+//
+// The asymmetry is deliberate and predates this helper. An analytics report
+// comes back empty for two very different reasons - nobody matches the
+// criteria, or the window/gate excluded everything - and caching the second
+// for an hour hides a freshly imported nodelist behind an answer computed
+// before it arrived. The single-value readers below (a node, a stats row, a
+// date) have no such ambiguity and cache whatever they get, including nothing.
+func cachedFetchSlice[T any](cs *CachedStorage, key string, ttl time.Duration, fetch func() ([]T, error)) ([]T, error) {
+	if !cs.config.Enabled {
+		return fetch()
+	}
+
+	if data, err := cs.cache.Get(context.Background(), key); err == nil {
+		var results []T
+		if err := json.Unmarshal(data, &results); err == nil {
+			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
+			return results, nil
+		}
+		logging.Warn("Failed to unmarshal cached data", slog.String("key", key), slog.Any("error", err))
+	}
+
+	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
+
+	results, err := fetch()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) > 0 {
+		if data, err := json.Marshal(results); err == nil {
+			_ = cs.cache.Set(context.Background(), key, data, ttl)
+		}
+	}
+	return results, nil
+}
+
+// analyticsKey builds a cache key in the analytics namespace, which
+// InvalidateAnalytics sweeps by prefix. Every part is appended in order, so
+// two calls that differ in any argument cannot collide.
+func (cs *CachedStorage) analyticsKey(name string, parts ...any) string {
+	var b strings.Builder
+	b.WriteString(cs.keyGen.Prefix)
+	b.WriteString(":analytics:")
+	b.WriteString(name)
+	for _, p := range parts {
+		b.WriteString(":")
+		fmt.Fprintf(&b, "%v", p)
+	}
+	return b.String()
 }

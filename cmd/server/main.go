@@ -209,6 +209,10 @@ func main() {
 			SearchTTL:        cfg.Cache.SearchTTL,
 			MaxSearchResults: cfg.Cache.MaxSearchResults,
 			WarmupOnStart:    cfg.Cache.WarmupOnStart,
+			TestAnalyticsTTL: cfg.Cache.TestAnalyticsTTL,
+			AnalyticsTTL:     cfg.Cache.AnalyticsTTL,
+			LongAnalyticsTTL: cfg.Cache.LongAnalyticsTTL,
+			HistoricalTTL:    cfg.Cache.HistoricalTTL,
 		}
 		cachedStorage := storage.NewCachedStorage(storageLayer, cacheImpl, cacheStorageConfig)
 		finalStorage = cachedStorage

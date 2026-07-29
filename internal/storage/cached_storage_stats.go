@@ -1,9 +1,6 @@
 package storage
 
 import (
-	"context"
-	"encoding/json"
-	"sync/atomic"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -13,167 +10,39 @@ import (
 
 // GetStats with caching
 func (cs *CachedStorage) GetStats(date time.Time, domain string) (*database.NetworkStats, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.StatsKey(date)+":"+domain, cs.config.StatsTTL, func() (*database.NetworkStats, error) {
 		return cs.Storage.StatsOps().GetStats(date, domain)
-	}
-
-	key := cs.keyGen.StatsKey(date) + ":" + domain
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var stats database.NetworkStats
-		if err := json.Unmarshal(data, &stats); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &stats, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	stats, err := cs.Storage.StatsOps().GetStats(date, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result
-	if data, err := json.Marshal(stats); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.StatsTTL)
-	}
-
-	return stats, nil
+	})
 }
 
 // GetLatestStatsDate with caching
 func (cs *CachedStorage) GetLatestStatsDate(domain string) (time.Time, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.LatestStatsDateKey()+":"+domain, cs.config.StatsTTL, func() (time.Time, error) {
 		return cs.Storage.StatsOps().GetLatestStatsDate(domain)
-	}
-
-	key := cs.keyGen.LatestStatsDateKey() + ":" + domain
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var date time.Time
-		if err := json.Unmarshal(data, &date); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return date, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	date, err := cs.Storage.StatsOps().GetLatestStatsDate(domain)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	// Cache result
-	if data, err := json.Marshal(date); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.StatsTTL)
-	}
-
-	return date, nil
+	})
 }
 
 // GetAvailableDates with caching
 func (cs *CachedStorage) GetAvailableDates(domain string) ([]time.Time, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.AvailableDatesKey()+":"+domain, cs.config.StatsTTL, func() ([]time.Time, error) {
 		return cs.Storage.StatsOps().GetAvailableDates(domain)
-	}
-
-	key := cs.keyGen.AvailableDatesKey() + ":" + domain
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var dates []time.Time
-		if err := json.Unmarshal(data, &dates); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return dates, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	dates, err := cs.Storage.StatsOps().GetAvailableDates(domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result
-	if data, err := json.Marshal(dates); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.StatsTTL)
-	}
-
-	return dates, nil
+	})
 }
 
 // GetNearestAvailableDate with caching
 func (cs *CachedStorage) GetNearestAvailableDate(targetDate time.Time, domain string) (time.Time, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.NearestDateKey(targetDate)+":"+domain, cs.config.StatsTTL, func() (time.Time, error) {
 		return cs.Storage.StatsOps().GetNearestAvailableDate(targetDate, domain)
-	}
-
-	key := cs.keyGen.NearestDateKey(targetDate) + ":" + domain
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var date time.Time
-		if err := json.Unmarshal(data, &date); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return date, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	date, err := cs.Storage.StatsOps().GetNearestAvailableDate(targetDate, domain)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	// Cache result
-	if data, err := json.Marshal(date); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.StatsTTL)
-	}
-
-	return date, nil
+	})
 }
 
-// GetNodeCountHistory returns total node count per nodelist date (cached)
+// GetNodeCountHistory returns total node count per nodelist date (cached).
+// The zero time stands in for "no single date" in the stats key namespace.
 func (cs *CachedStorage) GetNodeCountHistory(domain string) ([]NodeCountByDate, error) {
-	if !cs.config.Enabled {
+	key := cs.keyGen.StatsKey(time.Time{}) + ":history:" + domain
+	return cachedFetchSlice(cs, key, cs.config.StatsTTL, func() ([]NodeCountByDate, error) {
 		return cs.Storage.GetNodeCountHistory(domain)
-	}
-
-	key := cs.keyGen.StatsKey(time.Time{}) // use zero time as "history" key
-	cacheKey := key + ":history:" + domain
-
-	if data, err := cs.cache.Get(context.Background(), cacheKey); err == nil {
-		var results []NodeCountByDate
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetNodeCountHistory(domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), cacheKey, data, cs.config.StatsTTL)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // Pass-through methods (not cached)

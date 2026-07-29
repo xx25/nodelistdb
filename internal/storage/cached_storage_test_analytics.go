@@ -12,658 +12,153 @@ import (
 
 // GetIPv6EnabledNodes returns nodes that have been successfully tested with IPv6 (cached)
 func (cs *CachedStorage) GetIPv6EnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.IPv6EnabledNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetIPv6EnabledNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL (test results change frequently)
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetIPv6NonWorkingNodes returns nodes with IPv6 but non-working services (cached)
 func (cs *CachedStorage) GetIPv6NonWorkingNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:nonworking", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.IPv6NonWorkingNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetIPv6NonWorkingNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetIPv6AdvertisedIPv4OnlyNodes returns nodes advertising IPv6 but only accessible via IPv4 (cached)
 func (cs *CachedStorage) GetIPv6AdvertisedIPv4OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:ipv4only", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.IPv6AdvertisedIPv4OnlyNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetIPv6AdvertisedIPv4OnlyNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetBinkPEnabledNodes returns nodes with working BinkP protocol (cached)
 func (cs *CachedStorage) GetBinkPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("binkp:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.BinkPEnabledNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetBinkPEnabledNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetIfcicoEnabledNodes returns nodes with working IFCICO protocol (cached)
 func (cs *CachedStorage) GetIfcicoEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("ifcico:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.IfcicoEnabledNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetIfcicoEnabledNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetTelnetEnabledNodes returns nodes with working Telnet protocol (cached)
 func (cs *CachedStorage) GetTelnetEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("telnet:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.TelnetEnabledNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetTelnetEnabledNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetVModemEnabledNodes returns nodes with working VModem protocol (cached)
 func (cs *CachedStorage) GetVModemEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("vmodem:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.VModemEnabledNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetVModemEnabledNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetVModemUnconfirmedNodes returns nodes whose VModem probe did not confirm a genuine VMP responder (cached)
 func (cs *CachedStorage) GetVModemUnconfirmedNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("vmodem:unconfirmed", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.VModemUnconfirmedNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetVModemUnconfirmedNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetFTPEnabledNodes returns nodes with working FTP protocol (cached)
 func (cs *CachedStorage) GetFTPEnabledNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("ftp:enabled", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.FTPEnabledNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetFTPEnabledNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetBinkPSoftwareDistribution returns BinkP software distribution statistics (cached)
 func (cs *CachedStorage) GetBinkPSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.analyticsKey("binkp:software", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
 		return cs.Storage.GetBinkPSoftwareDistribution(days, domain)
-	}
-
-	key := cs.keyGen.BinkPSoftwareDistributionKey(days, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var distribution SoftwareDistribution
-		if err := json.Unmarshal(data, &distribution); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &distribution, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	distribution, err := cs.Storage.GetBinkPSoftwareDistribution(days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 30 minute TTL (software distribution changes slowly)
-	if distribution != nil {
-		if data, err := json.Marshal(distribution); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 30*time.Minute)
-		}
-	}
-
-	return distribution, nil
+	})
 }
 
 // GetIFCICOSoftwareDistribution returns IFCICO software distribution statistics (cached)
 func (cs *CachedStorage) GetIFCICOSoftwareDistribution(days int, domain string) (*SoftwareDistribution, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.analyticsKey("ifcico:software", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
 		return cs.Storage.GetIFCICOSoftwareDistribution(days, domain)
-	}
-
-	key := cs.keyGen.IFCICOSoftwareDistributionKey(days, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var distribution SoftwareDistribution
-		if err := json.Unmarshal(data, &distribution); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &distribution, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	distribution, err := cs.Storage.GetIFCICOSoftwareDistribution(days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 30 minute TTL
-	if distribution != nil {
-		if data, err := json.Marshal(distribution); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 30*time.Minute)
-		}
-	}
-
-	return distribution, nil
+	})
 }
 
 // GetBinkdDetailedStats returns detailed Binkd statistics (cached)
 func (cs *CachedStorage) GetBinkdDetailedStats(days int, domain string) (*SoftwareDistribution, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.analyticsKey("binkd:stats", days, domain), cs.config.AnalyticsTTL, func() (*SoftwareDistribution, error) {
 		return cs.Storage.GetBinkdDetailedStats(days, domain)
-	}
-
-	key := cs.keyGen.BinkdDetailedStatsKey(days, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var stats SoftwareDistribution
-		if err := json.Unmarshal(data, &stats); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &stats, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	stats, err := cs.Storage.GetBinkdDetailedStats(days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 30 minute TTL
-	if stats != nil {
-		if data, err := json.Marshal(stats); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 30*time.Minute)
-		}
-	}
-
-	return stats, nil
+	})
 }
 
 // GetIPv6WeeklyNews returns weekly IPv6 connectivity changes (cached)
 // This is accessed via TestOps().GetIPv6WeeklyNews(domain) in handlers,
 // but we provide a direct cached wrapper for it
 func (cs *CachedStorage) GetIPv6WeeklyNews(limit int, includeZeroNodes bool, domain string) (*IPv6WeeklyNews, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.analyticsKey("ipv6:weeklynews", limit, includeZeroNodes, domain), cs.config.LongAnalyticsTTL, func() (*IPv6WeeklyNews, error) {
 		return cs.Storage.TestOps().GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.IPv6WeeklyNewsKey(limit, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var news IPv6WeeklyNews
-		if err := json.Unmarshal(data, &news); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &news, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	news, err := cs.Storage.TestOps().GetIPv6WeeklyNews(limit, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 1 hour TTL (weekly news changes at most daily)
-	if news != nil {
-		if data, err := json.Marshal(news); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return news, nil
+	})
 }
 
 // GetIPv6OnlyNodes returns nodes with working IPv6 but no working IPv4 (cached)
 func (cs *CachedStorage) GetIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:only", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.IPv6OnlyNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetPureIPv6OnlyNodes returns nodes that only advertise IPv6 addresses (cached)
 func (cs *CachedStorage) GetPureIPv6OnlyNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:pureonly", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.PureIPv6OnlyNodesKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetPureIPv6OnlyNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetIPv6NodeList returns verified working IPv6 nodes for the node list report (cached)
 func (cs *CachedStorage) GetIPv6NodeList(limit int, days int, includeZeroNodes bool, domain string) ([]IPv6NodeListEntry, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("ipv6:nodelist", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]IPv6NodeListEntry, error) {
 		return cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.IPv6NodeListKey(limit, days, includeZeroNodes, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []IPv6NodeListEntry
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetIPv6NodeList(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 15 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetGeoHostingDistribution returns geographic hosting distribution (cached)
 func (cs *CachedStorage) GetGeoHostingDistribution(days int, domain string) (*GeoHostingDistribution, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.analyticsKey("geo:hosting", days, domain), cs.config.LongAnalyticsTTL, func() (*GeoHostingDistribution, error) {
 		return cs.Storage.GetGeoHostingDistribution(days, domain)
-	}
-
-	key := cs.keyGen.GeoHostingDistributionKey(days, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var dist GeoHostingDistribution
-		if err := json.Unmarshal(data, &dist); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &dist, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	dist, err := cs.Storage.GetGeoHostingDistribution(days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 1 hour TTL (geo data changes slowly)
-	if dist != nil {
-		if data, err := json.Marshal(dist); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return dist, nil
+	})
 }
 
 // GetNodesByCountry returns nodes for a specific country (cached)
 func (cs *CachedStorage) GetNodesByCountry(countryCode string, days int, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedGeoDrilldown(cs, cs.analyticsKey("geo:country:v2", countryCode, days, domain), func() ([]NodeTestResult, error) {
 		return cs.Storage.GetNodesByCountry(countryCode, days, domain)
-	}
-
-	key := cs.keyGen.NodesByCountryKey(countryCode, days, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetNodesByCountry(countryCode, days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	cs.cacheGeoDrilldown(key, results)
-	return results, nil
-}
-
-// cacheGeoDrilldown stores a geo drill-down result, including an empty one.
-//
-// The country and provider drill-downs are the only analytics entries whose
-// cache key contains a caller-supplied string, so they are the only ones where
-// a crawler can walk keys that resolve to nothing. Skipping the Set on an empty
-// result - what every other method here does - means those keys never cache and
-// re-run their query on every request. An empty result is cached for a shorter
-// time than a populated one: it is the case an attacker can manufacture, and a
-// short TTL bounds how long junk keys occupy the (unbounded, in-memory) map.
-func (cs *CachedStorage) cacheGeoDrilldown(key string, results []NodeTestResult) {
-	ttl := 30 * time.Minute
-	if len(results) == 0 {
-		ttl = 5 * time.Minute
-	}
-	if data, err := json.Marshal(results); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, ttl)
-	}
+	})
 }
 
 // GetNodesByProvider returns nodes for a specific provider (cached)
 func (cs *CachedStorage) GetNodesByProvider(provider string, days int, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedGeoDrilldown(cs, cs.analyticsKey("geo:provider:v2", cs.keyGen.ShortHash(provider), days, domain), func() ([]NodeTestResult, error) {
 		return cs.Storage.GetNodesByProvider(provider, days, domain)
+	})
+}
+
+// cachedGeoDrilldown is cachedFetchSlice for the two geo drill-downs, which
+// cache an empty result rather than skipping it - but for less time.
+//
+// Their cache keys are the only analytics keys containing a caller-supplied
+// string, so they are the only ones where a crawler can walk keys that resolve
+// to nothing. Declining to store an empty result, which is what every other
+// analytics reader does, would mean those keys never cache and re-run their
+// query on every request. The shorter TTL for an empty answer bounds how long
+// manufactured keys occupy the (unbounded, in-memory) cache.
+func cachedGeoDrilldown(cs *CachedStorage, key string, fetch func() ([]NodeTestResult, error)) ([]NodeTestResult, error) {
+	if !cs.config.Enabled {
+		return fetch()
 	}
 
-	key := cs.keyGen.NodesByProviderKey(provider, days, domain)
-
-	// Try cache
 	if data, err := cs.cache.Get(context.Background(), key); err == nil {
 		var results []NodeTestResult
 		if err := json.Unmarshal(data, &results); err == nil {
@@ -674,280 +169,76 @@ func (cs *CachedStorage) GetNodesByProvider(provider string, days int, domain st
 
 	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
 
-	// Fall back to database
-	results, err := cs.Storage.GetNodesByProvider(provider, days, domain)
+	results, err := fetch()
 	if err != nil {
 		return nil, err
 	}
 
-	cs.cacheGeoDrilldown(key, results)
+	ttl := cs.config.AnalyticsTTL
+	if len(results) == 0 {
+		ttl = geoDrilldownEmptyTTL
+	}
+	if data, err := json.Marshal(results); err == nil {
+		_ = cs.cache.Set(context.Background(), key, data, ttl)
+	}
 	return results, nil
 }
 
+// geoDrilldownEmptyTTL is how long an empty geo drill-down is remembered.
+const geoDrilldownEmptyTTL = 5 * time.Minute
+
 // GetOnThisDayNodes returns nodes first added on this day in previous years (cached)
 func (cs *CachedStorage) GetOnThisDayNodes(month, day, limit int, activeOnly bool, domain string) ([]OnThisDayNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("onthisday", month, day, limit, activeOnly, domain), cs.config.LongAnalyticsTTL, func() ([]OnThisDayNode, error) {
 		return cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly, domain)
-	}
-
-	key := cs.keyGen.OnThisDayNodesKey(month, day, limit, activeOnly, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []OnThisDayNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetOnThisDayNodes(month, day, limit, activeOnly, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 1 hour TTL (historical data doesn't change often)
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetPioneersByRegion returns first sysops in a FidoNet region (cached)
 func (cs *CachedStorage) GetPioneersByRegion(zone, region, limit int, domain string) ([]PioneerNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("pioneers", zone, region, limit, domain), cs.config.LongAnalyticsTTL, func() ([]PioneerNode, error) {
 		return cs.Storage.GetPioneersByRegion(zone, region, limit, domain)
-	}
-
-	key := cs.keyGen.PioneersByRegionKey(zone, region, limit, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []PioneerNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetPioneersByRegion(zone, region, limit, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 1 hour TTL (historical data doesn't change often)
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetOtherNetworksSummary returns a summary of non-FidoNet networks found in AKAs (cached)
 func (cs *CachedStorage) GetOtherNetworksSummary(days int, domain string) ([]OtherNetworkSummary, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, fmt.Sprintf("%s:analytics:other_networks_summary:%d:%s", cs.keyGen.Prefix, days, domain), cs.config.LongAnalyticsTTL, func() ([]OtherNetworkSummary, error) {
 		return cs.Storage.GetOtherNetworksSummary(days, domain)
-	}
-
-	key := fmt.Sprintf("%s:analytics:other_networks_summary:%d:%s", cs.keyGen.Prefix, days, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []OtherNetworkSummary
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetOtherNetworksSummary(days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 1 hour TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetNodesInNetwork returns nodes that announce AKAs in a specific network (cached)
 func (cs *CachedStorage) GetIPv6IncorrectIPv4CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, fmt.Sprintf("%s:analytics:ipv6_incorrect_ipv4_correct:%d:%d:%v:%s", cs.keyGen.Prefix, limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]AKAIPVersionMismatchNode, error) {
 		return cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := fmt.Sprintf("%s:analytics:ipv6_incorrect_ipv4_correct:%d:%d:%v:%s", cs.keyGen.Prefix, limit, days, includeZeroNodes, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []AKAIPVersionMismatchNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetIPv6IncorrectIPv4CorrectNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 func (cs *CachedStorage) GetIPv4IncorrectIPv6CorrectNodes(limit int, days int, includeZeroNodes bool, domain string) ([]AKAIPVersionMismatchNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, fmt.Sprintf("%s:analytics:ipv4_incorrect_ipv6_correct:%d:%d:%v:%s", cs.keyGen.Prefix, limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]AKAIPVersionMismatchNode, error) {
 		return cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := fmt.Sprintf("%s:analytics:ipv4_incorrect_ipv6_correct:%d:%d:%v:%s", cs.keyGen.Prefix, limit, days, includeZeroNodes, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []AKAIPVersionMismatchNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetIPv4IncorrectIPv6CorrectNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 func (cs *CachedStorage) GetNodesInNetwork(networkName string, limit int, days int, domain string) ([]OtherNetworkNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, fmt.Sprintf("%s:analytics:nodes_in_network:%s:%d:%d:%s", cs.keyGen.Prefix, networkName, limit, days, domain), cs.config.LongAnalyticsTTL, func() ([]OtherNetworkNode, error) {
 		return cs.Storage.GetNodesInNetwork(networkName, limit, days, domain)
-	}
-
-	key := fmt.Sprintf("%s:analytics:nodes_in_network:%s:%d:%d:%s", cs.keyGen.Prefix, networkName, limit, days, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []OtherNetworkNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetNodesInNetwork(networkName, limit, days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 1 hour TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetModemAccessibleNodes returns nodes successfully reached via modem tests (cached)
 func (cs *CachedStorage) GetModemAccessibleNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("modem:accessible", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]ModemAccessibleNode, error) {
 		return cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.ModemAccessibleNodesKey(limit, days, includeZeroNodes, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []ModemAccessibleNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetModemAccessibleNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetModemNoAnswerNodes returns nodes tested via modem that never answered (cached)
 func (cs *CachedStorage) GetModemNoAnswerNodes(limit int, days int, includeZeroNodes bool, domain string) ([]ModemNoAnswerNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("modem:noanswer", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]ModemNoAnswerNode, error) {
 		return cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.ModemNoAnswerNodesKey(limit, days, includeZeroNodes, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []ModemNoAnswerNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetModemNoAnswerNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetRecentModemSuccessPhones returns phone numbers successfully tested via modem (pass-through, no cache)
@@ -957,419 +248,94 @@ func (cs *CachedStorage) GetRecentModemSuccessPhones(days int) ([]string, error)
 
 // GetDetailedModemTestResult returns detailed modem test data (cached)
 func (cs *CachedStorage) GetDetailedModemTestResult(zone, net, node int, testTime string) (*ModemTestDetail, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.analyticsKey("modem:detail", zone, net, node, testTime), cs.config.TestAnalyticsTTL, func() (*ModemTestDetail, error) {
 		return cs.Storage.GetDetailedModemTestResult(zone, net, node, testTime)
-	}
-
-	key := cs.keyGen.ModemTestDetailKey(zone, net, node, testTime)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var result ModemTestDetail
-		if err := json.Unmarshal(data, &result); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &result, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	result, err := cs.Storage.GetDetailedModemTestResult(zone, net, node, testTime)
-	if err != nil {
-		return nil, err
-	}
-
-	if result != nil {
-		if data, err := json.Marshal(result); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return result, nil
+	})
 }
 
 // GetPSTNCMNodes returns PSTN CM nodes (cached)
 func (cs *CachedStorage) GetPSTNCMNodes(limit int) ([]PSTNNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("pstn:cm", limit), cs.config.LongAnalyticsTTL, func() ([]PSTNNode, error) {
 		return cs.Storage.GetPSTNCMNodes(limit)
-	}
-
-	key := cs.keyGen.PSTNCMNodesKey(limit)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []PSTNNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetPSTNCMNodes(limit)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetPSTNNodes returns PSTN nodes (cached)
 func (cs *CachedStorage) GetPSTNNodes(limit int, zone int, domain string) ([]PSTNNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("pstn:nodes", limit, zone, domain), cs.config.LongAnalyticsTTL, func() ([]PSTNNode, error) {
 		return cs.Storage.GetPSTNNodes(limit, zone, domain)
-	}
-
-	key := cs.keyGen.PSTNNodesKey(limit, zone, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []PSTNNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetPSTNNodes(limit, zone, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetFileRequestNodes returns file request capable nodes (cached)
 func (cs *CachedStorage) GetFileRequestNodes(limit int, domain string) ([]FileRequestNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("filerequest", limit, domain), cs.config.LongAnalyticsTTL, func() ([]FileRequestNode, error) {
 		return cs.Storage.GetFileRequestNodes(limit, domain)
-	}
-
-	key := cs.keyGen.FileRequestNodesKey(limit, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []FileRequestNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetFileRequestNodes(limit, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetEmailCapableNodes returns nodes advertising email transport (cached)
 func (cs *CachedStorage) GetEmailCapableNodes(limit int, useFieldFallback bool, domain string) ([]EmailCapableNode, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("email:nodes", limit, useFieldFallback, domain), cs.config.LongAnalyticsTTL, func() ([]EmailCapableNode, error) {
 		return cs.Storage.GetEmailCapableNodes(limit, useFieldFallback, domain)
-	}
-
-	key := cs.keyGen.EmailCapableNodesKey(limit, useFieldFallback, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []EmailCapableNode
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetEmailCapableNodes(limit, useFieldFallback, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetEmailFlagTrend returns per-year email flag counts (cached).
 // The trend only changes when a new nodelist lands, so it is held longer.
 func (cs *CachedStorage) GetEmailFlagTrend(domain string) ([]EmailFlagTrendPoint, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("email:trend", domain), cs.config.HistoricalTTL, func() ([]EmailFlagTrendPoint, error) {
 		return cs.Storage.GetEmailFlagTrend(domain)
-	}
-
-	key := cs.keyGen.EmailFlagTrendKey(domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []EmailFlagTrendPoint
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetEmailFlagTrend(domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 24*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetAKAMismatchNodes returns AKA mismatch nodes (cached)
 func (cs *CachedStorage) GetAKAMismatchNodes(limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("aka:mismatch", limit, days, includeZeroNodes, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
-	}
-
-	key := cs.keyGen.AKAMismatchNodesKey(limit, days, includeZeroNodes, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetAKAMismatchNodes(limit, days, includeZeroNodes, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // ===== Reachability Operations (cached) =====
 
 // GetReachabilityTrends returns reachability trend data (cached)
 func (cs *CachedStorage) GetReachabilityTrends(days int, domain string) ([]ReachabilityTrend, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.keyGen.ReachabilityTrendsKey(days, domain), cs.config.TestAnalyticsTTL, func() ([]ReachabilityTrend, error) {
 		return cs.Storage.GetReachabilityTrends(days, domain)
-	}
-
-	key := cs.keyGen.ReachabilityTrendsKey(days, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []ReachabilityTrend
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetReachabilityTrends(days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetReachabilityTrendsAllTime returns all-time reachability trend data (cached)
 func (cs *CachedStorage) GetReachabilityTrendsAllTime(domain string) ([]ReachabilityTrend, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.keyGen.ReachabilityTrendsKey(0, domain), cs.config.TestAnalyticsTTL, func() ([]ReachabilityTrend, error) {
 		return cs.Storage.GetReachabilityTrendsAllTime(domain)
-	}
-
-	key := cs.keyGen.ReachabilityTrendsKey(0, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []ReachabilityTrend
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetReachabilityTrendsAllTime(domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // SearchNodesByReachability returns nodes filtered by reachability status (cached)
 func (cs *CachedStorage) SearchNodesByReachability(operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.keyGen.SearchNodesByReachabilityKey(operational, limit, days, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.SearchNodesByReachability(operational, limit, days, domain)
-	}
-
-	key := cs.keyGen.SearchNodesByReachabilityKey(operational, limit, days, domain)
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.SearchNodesByReachability(operational, limit, days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetNodeTestHistory returns test history for a specific node (cached)
 func (cs *CachedStorage) GetNodeTestHistory(zone, net, node int, days int, domain string) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.keyGen.NodeTestHistoryKey(zone, net, node, days)+":"+domain, cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetNodeTestHistory(zone, net, node, days, domain)
-	}
-
-	key := cs.keyGen.NodeTestHistoryKey(zone, net, node, days) + ":" + domain
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	results, err := cs.Storage.GetNodeTestHistory(zone, net, node, days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetNodeReachabilityStats returns reachability statistics for a specific node (cached)
 func (cs *CachedStorage) GetNodeReachabilityStats(zone, net, node int, days int, domain string) (*NodeReachabilityStats, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.NodeReachabilityStatsKey(zone, net, node, days)+":"+domain, cs.config.TestAnalyticsTTL, func() (*NodeReachabilityStats, error) {
 		return cs.Storage.GetNodeReachabilityStats(zone, net, node, days, domain)
-	}
-
-	key := cs.keyGen.NodeReachabilityStatsKey(zone, net, node, days) + ":" + domain
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var result NodeReachabilityStats
-		if err := json.Unmarshal(data, &result); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &result, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	result, err := cs.Storage.GetNodeReachabilityStats(zone, net, node, days, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if result != nil {
-		if data, err := json.Marshal(result); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return result, nil
+	})
 }
 
 // GetDetailedTestResult returns detailed test result for a specific test (cached)
 func (cs *CachedStorage) GetDetailedTestResult(zone, net, node int, testTime string, domain string) (*NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.DetailedTestResultKey(zone, net, node, testTime)+":"+domain, cs.config.TestAnalyticsTTL, func() (*NodeTestResult, error) {
 		return cs.Storage.GetDetailedTestResult(zone, net, node, testTime, domain)
-	}
-
-	key := cs.keyGen.DetailedTestResultKey(zone, net, node, testTime) + ":" + domain
-
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var result NodeTestResult
-		if err := json.Unmarshal(data, &result); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return &result, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	result, err := cs.Storage.GetDetailedTestResult(zone, net, node, testTime, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	if result != nil {
-		if data, err := json.Marshal(result); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 15*time.Minute)
-		}
-	}
-
-	return result, nil
+	})
 }

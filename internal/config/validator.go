@@ -157,6 +157,10 @@ func (c *CacheConfig) Validate() error {
 		{"node_ttl", c.NodeTTL},
 		{"stats_ttl", c.StatsTTL},
 		{"search_ttl", c.SearchTTL},
+		{"test_analytics_ttl", c.TestAnalyticsTTL},
+		{"analytics_ttl", c.AnalyticsTTL},
+		{"long_analytics_ttl", c.LongAnalyticsTTL},
+		{"historical_ttl", c.HistoricalTTL},
 	} {
 		if ttl.value < 0 {
 			errs.Add(fmt.Errorf("cache.%s must not be negative, got %s", ttl.name, ttl.value))

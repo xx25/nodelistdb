@@ -197,8 +197,6 @@ func TestInvalidationPrefixesMatchTheirKeys(t *testing.T) {
 		{kg.SysopsPrefix(), kg.UniqueSysopsKey("smith", 10, 0)},
 		{kg.DatesPrefix(), kg.AvailableDatesKey()},
 		{kg.DatesPrefix(), kg.NearestDateKey(now)},
-		{kg.AnalyticsPrefix(), kg.FlagFirstAppearanceKey("CM")},
-		{kg.AnalyticsPrefix(), kg.NetworkHistoryKey(2, 5001)},
 		{kg.AllPrefix(), kg.NodeKey(2, 5001, 100)},
 		{kg.AllPrefix(), kg.NodeHistoryKey(2, 5001, 100)},
 	}
@@ -207,5 +205,13 @@ func TestInvalidationPrefixesMatchTheirKeys(t *testing.T) {
 		if !strings.HasPrefix(c.key, c.prefix) {
 			t.Errorf("key %q is not covered by prefix %q", c.key, c.prefix)
 		}
+	}
+
+	// The analytics namespace is built by CachedStorage.analyticsKey rather
+	// than by a method here, so its prefix is pinned in
+	// internal/storage (TestAnalyticsKeysAreSweepable). What this file still
+	// owns is the prefix string itself.
+	if want := "ndb:analytics:"; kg.AnalyticsPrefix() != want {
+		t.Errorf("AnalyticsPrefix() = %q, want %q", kg.AnalyticsPrefix(), want)
 	}
 }

@@ -79,6 +79,15 @@ cache:
   node_ttl: 15m                # Node data TTL
   stats_ttl: 1h                # Statistics TTL
   search_ttl: 5m               # Search results TTL
+
+  # The analytics reports are cached by what can change their answer, not by
+  # how stale a reader will tolerate, so these four deliberately do NOT fall
+  # back to default_ttl.
+  test_analytics_ttl: 15m      # Reports computed from node_test_results
+  analytics_ttl: 30m           # Software distributions, geo drill-downs
+  long_analytics_ttl: 1h       # Heavier aggregates over the same data
+  historical_ttl: 24h          # Answers only a new nodelist import can move
+
   max_search_results: 500      # Maximum cached search results
   warmup_on_start: false       # Pre-load cache on startup
   clear_all_on_import: false   # Clear cache when importing data

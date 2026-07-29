@@ -85,15 +85,23 @@ type LoggingConfig struct {
 // CacheConfig holds cache configuration
 // Supported types: "badger" (disk-based) and "memory" (in-process).
 type CacheConfig struct {
-	Enabled          bool          `yaml:"enabled"`
-	Type             string        `yaml:"type"` // "badger" or "memory" (default: "badger")
-	Path             string        `yaml:"path"`
-	MaxMemoryMB      int           `yaml:"max_memory_mb"`
-	ValueLogMaxMB    int           `yaml:"value_log_max_mb"`
-	DefaultTTL       time.Duration `yaml:"default_ttl"`
-	NodeTTL          time.Duration `yaml:"node_ttl"`
-	StatsTTL         time.Duration `yaml:"stats_ttl"`
-	SearchTTL        time.Duration `yaml:"search_ttl"`
+	Enabled       bool          `yaml:"enabled"`
+	Type          string        `yaml:"type"` // "badger" or "memory" (default: "badger")
+	Path          string        `yaml:"path"`
+	MaxMemoryMB   int           `yaml:"max_memory_mb"`
+	ValueLogMaxMB int           `yaml:"value_log_max_mb"`
+	DefaultTTL    time.Duration `yaml:"default_ttl"`
+	NodeTTL       time.Duration `yaml:"node_ttl"`
+	StatsTTL      time.Duration `yaml:"stats_ttl"`
+	SearchTTL     time.Duration `yaml:"search_ttl"`
+	// The analytics reports are cached on four horizons, by what can change
+	// their answer. test_analytics_ttl covers everything computed from
+	// node_test_results, which the test daemon appends to continuously;
+	// historical_ttl covers answers only a new nodelist import can move.
+	TestAnalyticsTTL time.Duration `yaml:"test_analytics_ttl"`
+	AnalyticsTTL     time.Duration `yaml:"analytics_ttl"`
+	LongAnalyticsTTL time.Duration `yaml:"long_analytics_ttl"`
+	HistoricalTTL    time.Duration `yaml:"historical_ttl"`
 	MaxSearchResults int           `yaml:"max_search_results"`
 	WarmupOnStart    bool          `yaml:"warmup_on_start"`
 	CompactOnClose   bool          `yaml:"compact_on_close"`
@@ -152,6 +160,10 @@ func DefaultCacheConfig() *CacheConfig {
 		NodeTTL:          15 * time.Minute,
 		StatsTTL:         1 * time.Hour,
 		SearchTTL:        5 * time.Minute,
+		TestAnalyticsTTL: 15 * time.Minute,
+		AnalyticsTTL:     30 * time.Minute,
+		LongAnalyticsTTL: 1 * time.Hour,
+		HistoricalTTL:    24 * time.Hour,
 		MaxSearchResults: 500,
 		WarmupOnStart:    false,
 		CompactOnClose:   true,
@@ -289,6 +301,24 @@ func (c *Config) validate() error {
 	}
 	if c.Cache.DefaultTTL == 0 {
 		c.Cache.DefaultTTL = cacheDefaults.DefaultTTL
+	}
+	// The four analytics horizons deliberately do NOT fall back to
+	// default_ttl. They are not a freshness preference; each one says what can
+	// change that family of answers, and the widest is a day. Letting a
+	// default_ttl of a few minutes flatten them would recompute a year of
+	// nodelist history on a schedule set for search results.
+	for _, ttl := range []struct {
+		field *time.Duration
+		def   time.Duration
+	}{
+		{&c.Cache.TestAnalyticsTTL, cacheDefaults.TestAnalyticsTTL},
+		{&c.Cache.AnalyticsTTL, cacheDefaults.AnalyticsTTL},
+		{&c.Cache.LongAnalyticsTTL, cacheDefaults.LongAnalyticsTTL},
+		{&c.Cache.HistoricalTTL, cacheDefaults.HistoricalTTL},
+	} {
+		if *ttl.field == 0 {
+			*ttl.field = ttl.def
+		}
 	}
 
 	// Validate FTP configuration

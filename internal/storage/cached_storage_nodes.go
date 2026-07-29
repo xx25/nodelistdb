@@ -1,190 +1,46 @@
 package storage
 
 import (
-	"context"
-	"encoding/json"
-	"log/slog"
-	"sync/atomic"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
-	"github.com/nodelistdb/internal/logging"
 )
 
 // Node-related caching operations
 
 // GetNodes with caching
 func (cs *CachedStorage) GetNodes(filter database.NodeFilter) ([]database.Node, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.SearchKey(filter), cs.config.SearchTTL, func() ([]database.Node, error) {
 		return cs.Storage.NodeOps().GetNodes(filter)
-	}
-
-	// Skip cache for large result sets
-	if filter.Limit > cs.config.MaxSearchResults {
-		return cs.Storage.NodeOps().GetNodes(filter)
-	}
-
-	// Generate cache key
-	key := cs.keyGen.SearchKey(filter)
-
-	// Try cache first
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var nodes []database.Node
-		if err := json.Unmarshal(data, &nodes); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return nodes, nil
-		}
-		// JSON unmarshal failed but cache entry exists - shouldn't happen
-		logging.Warn("Failed to unmarshal cached data", slog.String("key", key), slog.Any("error", err))
-	}
-
-	// Cache miss - need to fetch from database
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	nodes, err := cs.Storage.NodeOps().GetNodes(filter)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache the result
-	if data, err := json.Marshal(nodes); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.SearchTTL)
-	}
-
-	return nodes, nil
+	})
 }
 
 // GetNodeHistory with caching
 func (cs *CachedStorage) GetNodeHistory(zone, net, node int, domain string) ([]database.Node, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.NodeHistoryKey(zone, net, node)+":"+domain, cs.config.NodeTTL, func() ([]database.Node, error) {
 		return cs.Storage.NodeOps().GetNodeHistory(zone, net, node, domain)
-	}
-
-	key := cs.keyGen.NodeHistoryKey(zone, net, node) + ":" + domain
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var history []database.Node
-		if err := json.Unmarshal(data, &history); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return history, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	history, err := cs.Storage.NodeOps().GetNodeHistory(zone, net, node, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result
-	if data, err := json.Marshal(history); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.NodeTTL)
-	}
-
-	return history, nil
+	})
 }
 
 // GetNodeChanges with caching
 func (cs *CachedStorage) GetNodeChanges(zone, net, node int, domain string) ([]database.NodeChange, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.NodeChangesKey(zone, net, node, domain), cs.config.NodeTTL, func() ([]database.NodeChange, error) {
 		return cs.Storage.SearchOps().GetNodeChanges(zone, net, node, domain)
-	}
-
-	key := cs.keyGen.NodeChangesKey(zone, net, node, domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var changes []database.NodeChange
-		if err := json.Unmarshal(data, &changes); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return changes, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	changes, err := cs.Storage.SearchOps().GetNodeChanges(zone, net, node, domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result
-	if data, err := json.Marshal(changes); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.NodeTTL)
-	}
-
-	return changes, nil
+	})
 }
 
 // GetUniqueSysops with caching
 func (cs *CachedStorage) GetUniqueSysops(nameFilter string, limit, offset int) ([]SysopInfo, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.UniqueSysopsKey(nameFilter, limit, offset), cs.config.SearchTTL, func() ([]SysopInfo, error) {
 		return cs.Storage.SearchOps().GetUniqueSysops(nameFilter, limit, offset)
-	}
-
-	key := cs.keyGen.UniqueSysopsKey(nameFilter, limit, offset)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var sysops []SysopInfo
-		if err := json.Unmarshal(data, &sysops); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return sysops, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	sysops, err := cs.Storage.SearchOps().GetUniqueSysops(nameFilter, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result
-	if data, err := json.Marshal(sysops); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.SearchTTL)
-	}
-
-	return sysops, nil
+	})
 }
 
 // GetNodesBySysop with caching
 func (cs *CachedStorage) GetNodesBySysop(sysopName string, limit int) ([]database.Node, error) {
-	if !cs.config.Enabled {
+	return cachedFetch(cs, cs.keyGen.NodesBySysopKey(sysopName, limit), cs.config.SearchTTL, func() ([]database.Node, error) {
 		return cs.Storage.SearchOps().GetNodesBySysop(sysopName, limit)
-	}
-
-	key := cs.keyGen.NodesBySysopKey(sysopName, limit)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var nodes []database.Node
-		if err := json.Unmarshal(data, &nodes); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return nodes, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	nodes, err := cs.Storage.SearchOps().GetNodesBySysop(sysopName, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result
-	if data, err := json.Marshal(nodes); err == nil {
-		_ = cs.cache.Set(context.Background(), key, data, cs.config.SearchTTL)
-	}
-
-	return nodes, nil
+	})
 }
 
 // Pass-through methods (not cached)

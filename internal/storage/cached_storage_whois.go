@@ -1,80 +1,17 @@
 package storage
 
-import (
-	"context"
-	"encoding/json"
-	"sync/atomic"
-	"time"
-)
-
 // GetAllWhoisResults returns all WHOIS results with node counts (cached),
 // scoped to the given FTN network ("" = all networks). The domain is part of
 // the cache key so each network keeps its own entry.
 func (cs *CachedStorage) GetAllWhoisResults(domain string) ([]DomainWhoisResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("whois:results:v4", domain), cs.config.LongAnalyticsTTL, func() ([]DomainWhoisResult, error) {
 		return cs.Storage.GetAllWhoisResults(domain)
-	}
-
-	key := cs.keyGen.WhoisResultsKey(domain)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []DomainWhoisResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetAllWhoisResults(domain)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 1 hour TTL (WHOIS data changes infrequently)
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 1*time.Hour)
-		}
-	}
-
-	return results, nil
+	})
 }
 
 // GetNodesByDomain returns nodes for a specific domain (cached)
 func (cs *CachedStorage) GetNodesByDomain(domain string, days int) ([]NodeTestResult, error) {
-	if !cs.config.Enabled {
+	return cachedFetchSlice(cs, cs.analyticsKey("whois:domain:v2", cs.keyGen.ShortHash(domain), days), cs.config.AnalyticsTTL, func() ([]NodeTestResult, error) {
 		return cs.Storage.GetNodesByDomain(domain, days)
-	}
-
-	key := cs.keyGen.NodesByDomainKey(domain, days)
-
-	// Try cache
-	if data, err := cs.cache.Get(context.Background(), key); err == nil {
-		var results []NodeTestResult
-		if err := json.Unmarshal(data, &results); err == nil {
-			atomic.AddUint64(&cs.cache.GetMetrics().Hits, 1)
-			return results, nil
-		}
-	}
-
-	atomic.AddUint64(&cs.cache.GetMetrics().Misses, 1)
-
-	// Fall back to database
-	results, err := cs.Storage.GetNodesByDomain(domain, days)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache result with 30 minute TTL
-	if len(results) > 0 {
-		if data, err := json.Marshal(results); err == nil {
-			_ = cs.cache.Set(context.Background(), key, data, 30*time.Minute)
-		}
-	}
-
-	return results, nil
+	})
 }
