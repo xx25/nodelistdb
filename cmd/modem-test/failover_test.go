@@ -1,35 +1,51 @@
-// Package main provides integration-style tests for the operator failover logic.
-// These tests use a mock test runner to simulate modem behavior without hardware.
+// Package main tests the operator failover logic. The tests drive the real
+// runFailoverSequence with a fake call runner and an in-memory cache, so the
+// production code path is exercised without hardware.
 package main
 
 import (
 	"context"
+	"io"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nodelistdb/internal/testing/timeavail"
 )
 
-// mockTestRunner simulates the test execution for failover testing.
-// It returns predefined results in sequence.
-type mockTestRunner struct {
+// discardLogger returns a TestLogger that swallows all output.
+func discardLogger() *TestLogger {
+	log := NewTestLogger(LoggingConfig{})
+	log.SetOutput(io.Discard)
+	return log
+}
+
+// mockCall records a single call placed through the mock runner.
+type mockCall struct {
+	TestNum       int
+	DialPhone     string
+	OriginalPhone string
+}
+
+// mockCallRunner satisfies the callRunner signature and returns predefined
+// results in sequence.
+type mockCallRunner struct {
 	mu            sync.Mutex
-	results       []testResult   // Results to return in order
-	callIndex     int            // Current position in results
-	callLog       []mockTestCall // Log of all calls made
-	defaultResult testResult     // Result to return if results exhausted
+	results       []testResult // Results to return in order
+	callIndex     int          // Current position in results
+	callLog       []mockCall   // Log of all calls made
+	defaultResult testResult   // Result to return if results exhausted
+
+	// simulateRetries invokes the per-call retry callback this many times
+	// before returning, letting tests observe operator attribution.
+	simulateRetries int
+	// onCall, if set, runs at the start of each call (e.g. to cancel a context).
+	onCall func(callNum int)
 }
 
-// mockTestCall records a single call to runTest.
-type mockTestCall struct {
-	DialPhone      string
-	OriginalPhone  string
-	OperatorName   string
-	OperatorPrefix string
-}
-
-// newMockTestRunner creates a mock runner with predefined results.
-func newMockTestRunner(results ...testResult) *mockTestRunner {
-	return &mockTestRunner{
+// newMockCallRunner creates a mock runner with predefined results.
+func newMockCallRunner(results ...testResult) *mockCallRunner {
+	return &mockCallRunner{
 		results: results,
 		defaultResult: testResult{
 			success: false,
@@ -38,34 +54,45 @@ func newMockTestRunner(results ...testResult) *mockTestRunner {
 	}
 }
 
-// runTest simulates a test call and returns the next result.
-func (m *mockTestRunner) runTest(dialPhone, originalPhone, opName, opPrefix string) testResult {
+// run is the callRunner implementation.
+func (m *mockCallRunner) run(_ context.Context, testNum int, dialPhone, originalPhone string, onRetryAttempt RetryAttemptCallback, _ *timeavail.NodeAvailability) testResult {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.callLog = append(m.callLog, mockTestCall{
-		DialPhone:      dialPhone,
-		OriginalPhone:  originalPhone,
-		OperatorName:   opName,
-		OperatorPrefix: opPrefix,
+	callNum := len(m.callLog) + 1
+	m.callLog = append(m.callLog, mockCall{
+		TestNum:       testNum,
+		DialPhone:     dialPhone,
+		OriginalPhone: originalPhone,
 	})
-
+	result := m.defaultResult
 	if m.callIndex < len(m.results) {
-		result := m.results[m.callIndex]
+		result = m.results[m.callIndex]
 		m.callIndex++
-		return result
 	}
-	return m.defaultResult
+	retries := m.simulateRetries
+	onCall := m.onCall
+	m.mu.Unlock()
+
+	if onCall != nil {
+		onCall(callNum)
+	}
+	// The real runTest reports each retry with empty operator fields; the
+	// failover wrapper is expected to fill them in.
+	for i := 1; i <= retries; i++ {
+		if onRetryAttempt != nil {
+			onRetryAttempt(i, time.Second, "BUSY (modem)", "", "")
+		}
+	}
+	return result
 }
 
 // getCalls returns all recorded test calls.
-func (m *mockTestRunner) getCalls() []mockTestCall {
+func (m *mockCallRunner) getCalls() []mockCall {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]mockTestCall{}, m.callLog...)
+	return append([]mockCall{}, m.callLog...)
 }
 
-// mockOperatorCache provides an in-memory cache for testing.
+// mockOperatorCache provides an in-memory operatorCacheStore for testing.
 type mockOperatorCache struct {
 	mu          sync.Mutex
 	entries     map[string]*CachedOperator
@@ -91,7 +118,7 @@ func (m *mockOperatorCache) Get(phone string) (*CachedOperator, bool) {
 	return cached, ok
 }
 
-func (m *mockOperatorCache) Set(phone string, op OperatorConfig) {
+func (m *mockOperatorCache) Set(phone string, op OperatorConfig) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.setCalls = append(m.setCalls, mockCacheSetCall{Phone: phone, Operator: op})
@@ -100,13 +127,15 @@ func (m *mockOperatorCache) Set(phone string, op OperatorConfig) {
 		OperatorPrefix: op.Prefix,
 		LastSuccess:    time.Now(),
 	}
+	return nil
 }
 
-func (m *mockOperatorCache) Delete(phone string) {
+func (m *mockOperatorCache) Delete(phone string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.deleteCalls = append(m.deleteCalls, phone)
 	delete(m.entries, phone)
+	return nil
 }
 
 func (m *mockOperatorCache) preload(phone string, opName, opPrefix string) {
@@ -119,83 +148,9 @@ func (m *mockOperatorCache) preload(phone string, opName, opPrefix string) {
 	}
 }
 
-// runTestWithFailoverMock implements the failover logic using mocks.
-// This mirrors runTestWithFailover but allows testing without hardware.
-func runTestWithFailoverMock(
-	ctx context.Context,
-	phone string,
-	operators []OperatorConfig,
-	cache *mockOperatorCache,
-	runner *mockTestRunner,
-) FailoverResult {
-	if len(operators) == 0 {
-		result := runner.runTest(phone, phone, "", "")
-		return FailoverResult{
-			Success:    result.success,
-			LastResult: result,
-		}
-	}
-
-	// Check cache for known working operator
-	orderedOperators := operators
-	if cache != nil {
-		cached, found := cache.Get(phone)
-		if found {
-			_, _, exists := FindOperatorByName(operators, cached.OperatorName)
-			if exists {
-				orderedOperators = ReorderOperatorsWithCached(operators, cached)
-			}
-		}
-	}
-
-	var lastResult testResult
-	var lastOperator *OperatorConfig
-
-	for i, op := range orderedOperators {
-		currentOp := op
-		lastOperator = &currentOp
-
-		select {
-		case <-ctx.Done():
-			return FailoverResult{
-				Success:        false,
-				LastOperator:   lastOperator,
-				LastResult:     testResult{success: false, message: "cancelled"},
-				TriedOperators: i,
-			}
-		default:
-		}
-
-		dialPhone := op.Prefix + phone
-		lastResult = runner.runTest(dialPhone, phone, op.Name, op.Prefix)
-
-		if lastResult.success {
-			if cache != nil {
-				cache.Set(phone, op)
-			}
-			return FailoverResult{
-				Success:         true,
-				SuccessOperator: lastOperator,
-				LastOperator:    lastOperator,
-				LastResult:      lastResult,
-				TriedOperators:  i + 1,
-			}
-		}
-
-	}
-
-	// All operators failed - clear cache
-	if cache != nil {
-		cache.Delete(phone)
-	}
-
-	return FailoverResult{
-		Success:          false,
-		LastOperator:     lastOperator,
-		LastResult:       lastResult,
-		TriedOperators:   len(orderedOperators),
-		AllOperatorsFail: true,
-	}
+// runFailover invokes the real failover sequence with test doubles.
+func runFailover(ctx context.Context, phone string, operators []OperatorConfig, cache operatorCacheStore, runner *mockCallRunner) FailoverResult {
+	return runFailoverSequence(ctx, phoneJob{phone: phone, testNum: 1}, operators, cache, discardLogger(), runner.run, nil, nil)
 }
 
 // Test fixtures
@@ -224,19 +179,22 @@ func userBusyResult() testResult {
 	}
 }
 
+// neverCallable returns a NodeAvailability whose only window is empty,
+// so IsCallableNow is false at any wall-clock time.
+func neverCallable() *timeavail.NodeAvailability {
+	instant := time.Date(2026, 1, 1, 3, 0, 0, 0, time.UTC)
+	return &timeavail.NodeAvailability{
+		Windows: []timeavail.TimeWindow{{StartUTC: instant, EndUTC: instant}},
+	}
+}
+
 // Tests
 
-func TestRunTestWithFailover_EmptyOperators(t *testing.T) {
-	runner := newMockTestRunner(successResult("direct call"))
+func TestRunFailoverSequence_EmptyOperators(t *testing.T) {
+	runner := newMockCallRunner(successResult("direct call"))
 	cache := newMockOperatorCache()
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		[]OperatorConfig{}, // No operators
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", []OperatorConfig{}, cache, runner)
 
 	if !result.Success {
 		t.Error("expected success for direct call")
@@ -249,19 +207,16 @@ func TestRunTestWithFailover_EmptyOperators(t *testing.T) {
 	if calls[0].DialPhone != "79001234567" {
 		t.Errorf("expected direct dial, got %q", calls[0].DialPhone)
 	}
+	if calls[0].OriginalPhone != "79001234567" {
+		t.Errorf("expected original phone passthrough, got %q", calls[0].OriginalPhone)
+	}
 }
 
-func TestRunTestWithFailover_FirstOperatorSucceeds(t *testing.T) {
-	runner := newMockTestRunner(successResult("first op success"))
+func TestRunFailoverSequence_FirstOperatorSucceeds(t *testing.T) {
+	runner := newMockCallRunner(successResult("first op success"))
 	cache := newMockOperatorCache()
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
 
 	if !result.Success {
 		t.Error("expected success")
@@ -276,27 +231,21 @@ func TestRunTestWithFailover_FirstOperatorSucceeds(t *testing.T) {
 	// Verify cache was updated
 	cached, found := cache.Get("79001234567")
 	if !found {
-		t.Error("expected cache entry")
+		t.Fatal("expected cache entry")
 	}
 	if cached.OperatorName != "Primary" {
 		t.Errorf("expected cached operator Primary, got %q", cached.OperatorName)
 	}
 }
 
-func TestRunTestWithFailover_FailoverToSecond(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_FailoverToSecond(t *testing.T) {
+	runner := newMockCallRunner(
 		failResult("first failed"),
 		successResult("second success"),
 	)
 	cache := newMockOperatorCache()
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
 
 	if !result.Success {
 		t.Error("expected success after failover")
@@ -308,7 +257,8 @@ func TestRunTestWithFailover_FailoverToSecond(t *testing.T) {
 		t.Errorf("expected Secondary operator, got %v", result.SuccessOperator)
 	}
 
-	// Verify correct dial prefixes were used
+	// Verify correct dial prefixes were used, and that the bare number is
+	// always passed for CDR matching.
 	calls := runner.getCalls()
 	if len(calls) != 2 {
 		t.Fatalf("expected 2 calls, got %d", len(calls))
@@ -319,23 +269,22 @@ func TestRunTestWithFailover_FailoverToSecond(t *testing.T) {
 	if calls[1].DialPhone != "2#79001234567" {
 		t.Errorf("second call dial = %q, want 2#79001234567", calls[1].DialPhone)
 	}
+	for i, c := range calls {
+		if c.OriginalPhone != "79001234567" {
+			t.Errorf("call %d original phone = %q, want bare number", i, c.OriginalPhone)
+		}
+	}
 }
 
-func TestRunTestWithFailover_FailoverToThird(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_FailoverToThird(t *testing.T) {
+	runner := newMockCallRunner(
 		failResult("first failed"),
 		failResult("second failed"),
 		successResult("third success"),
 	)
 	cache := newMockOperatorCache()
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
 
 	if !result.Success {
 		t.Error("expected success after two failovers")
@@ -354,8 +303,8 @@ func TestRunTestWithFailover_FailoverToThird(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_AllOperatorsFail(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_AllOperatorsFail(t *testing.T) {
+	runner := newMockCallRunner(
 		failResult("first failed"),
 		failResult("second failed"),
 		failResult("third failed"),
@@ -364,13 +313,7 @@ func TestRunTestWithFailover_AllOperatorsFail(t *testing.T) {
 	// Pre-populate cache to verify it gets cleared
 	cache.preload("79001234567", "Primary", "1#")
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
 
 	if result.Success {
 		t.Error("expected failure")
@@ -386,8 +329,7 @@ func TestRunTestWithFailover_AllOperatorsFail(t *testing.T) {
 	}
 
 	// Cache should be cleared
-	_, found := cache.Get("79001234567")
-	if found {
+	if _, found := cache.Get("79001234567"); found {
 		t.Error("cache should be cleared after all operators fail")
 	}
 	if len(cache.deleteCalls) != 1 {
@@ -395,21 +337,15 @@ func TestRunTestWithFailover_AllOperatorsFail(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_UserBusyContinuesFailover(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_UserBusyContinuesFailover(t *testing.T) {
+	runner := newMockCallRunner(
 		userBusyResult(),                // First operator returns user busy
 		userBusyResult(),                // Second operator also busy
 		failResult("third also failed"), // Third operator fails
 	)
 	cache := newMockOperatorCache()
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
 
 	if result.Success {
 		t.Error("expected failure")
@@ -428,21 +364,15 @@ func TestRunTestWithFailover_UserBusyContinuesFailover(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_UsesCachedOperator(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_UsesCachedOperator(t *testing.T) {
+	runner := newMockCallRunner(
 		successResult("cached op success"),
 	)
 	cache := newMockOperatorCache()
 	// Pre-cache Secondary operator
 	cache.preload("79001234567", "Secondary", "2#")
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
 
 	if !result.Success {
 		t.Error("expected success")
@@ -456,13 +386,13 @@ func TestRunTestWithFailover_UsesCachedOperator(t *testing.T) {
 	if calls[0].DialPhone != "2#79001234567" {
 		t.Errorf("expected cached operator (2#), got %q", calls[0].DialPhone)
 	}
-	if calls[0].OperatorName != "Secondary" {
-		t.Errorf("expected Secondary operator, got %q", calls[0].OperatorName)
+	if result.SuccessOperator == nil || result.SuccessOperator.Name != "Secondary" {
+		t.Errorf("expected Secondary operator, got %v", result.SuccessOperator)
 	}
 }
 
-func TestRunTestWithFailover_CachedOperatorFailsFallsBack(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_CachedOperatorFailsFallsBack(t *testing.T) {
+	runner := newMockCallRunner(
 		failResult("cached op failed"),
 		successResult("primary success"),
 	)
@@ -470,13 +400,7 @@ func TestRunTestWithFailover_CachedOperatorFailsFallsBack(t *testing.T) {
 	// Pre-cache Tertiary operator (will be tried first, then fail)
 	cache.preload("79001234567", "Tertiary", "3#")
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
 
 	if !result.Success {
 		t.Error("expected success after fallback")
@@ -505,21 +429,15 @@ func TestRunTestWithFailover_CachedOperatorFailsFallsBack(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_StaleCacheIgnored(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_StaleCacheIgnored(t *testing.T) {
+	runner := newMockCallRunner(
 		successResult("first op success"),
 	)
 	cache := newMockOperatorCache()
 	// Pre-cache a non-existent operator
 	cache.preload("79001234567", "DeletedOperator", "99#")
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators, // Doesn't contain "DeletedOperator"
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
 
 	if !result.Success {
 		t.Error("expected success")
@@ -535,51 +453,60 @@ func TestRunTestWithFailover_StaleCacheIgnored(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_ContextCancellation(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := newMockCallRunner(
 		failResult("first failed"),
 	)
+	// Cancel during the first call: the sequence must stop before dialing
+	// the second operator.
+	runner.onCall = func(callNum int) {
+		if callNum == 1 {
+			cancel()
+		}
+	}
 	cache := newMockOperatorCache()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	// Cancel before second operator would be tried
-	runner.results = []testResult{
-		failResult("first failed"),
-	}
-
-	// Start failover in goroutine
-	resultCh := make(chan FailoverResult, 1)
-	go func() {
-		resultCh <- runTestWithFailoverMock(ctx, "79001234567", testOperators, cache, runner)
-	}()
-
-	// Wait for first call, then cancel
-	time.Sleep(10 * time.Millisecond)
-	cancel()
-
-	result := <-resultCh
+	result := runFailover(ctx, "79001234567", testOperators, cache, runner)
 
 	if result.Success {
 		t.Error("expected failure after cancellation")
 	}
-	// Note: Due to timing, we might get either 1 or 2 operators tried
-	// The important thing is it stops eventually
+	if result.TriedOperators != 1 {
+		t.Errorf("expected 1 operator tried before cancellation, got %d", result.TriedOperators)
+	}
+	if len(runner.getCalls()) != 1 {
+		t.Errorf("expected no further calls after cancellation, got %d", len(runner.getCalls()))
+	}
 }
 
-func TestRunTestWithFailover_NilCache(t *testing.T) {
-	runner := newMockTestRunner(
+func TestRunFailoverSequence_CancelledBeforeStart(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	runner := newMockCallRunner()
+	cache := newMockOperatorCache()
+
+	result := runFailover(ctx, "79001234567", testOperators, cache, runner)
+
+	if result.Success {
+		t.Error("expected failure for pre-cancelled context")
+	}
+	if result.TriedOperators != 0 {
+		t.Errorf("expected 0 operators tried, got %d", result.TriedOperators)
+	}
+	if len(runner.getCalls()) != 0 {
+		t.Errorf("expected no calls, got %d", len(runner.getCalls()))
+	}
+}
+
+func TestRunFailoverSequence_NilCache(t *testing.T) {
+	runner := newMockCallRunner(
 		failResult("first failed"),
 		successResult("second success"),
 	)
 
 	// Pass nil cache - should work without panicking
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		nil, // No cache
-		runner,
-	)
+	result := runFailover(context.Background(), "79001234567", testOperators, nil, runner)
 
 	if !result.Success {
 		t.Error("expected success")
@@ -589,20 +516,14 @@ func TestRunTestWithFailover_NilCache(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_SingleOperator(t *testing.T) {
+func TestRunFailoverSequence_SingleOperator(t *testing.T) {
 	singleOp := []OperatorConfig{{Name: "Only", Prefix: "X#"}}
 
 	t.Run("success", func(t *testing.T) {
-		runner := newMockTestRunner(successResult("only op success"))
+		runner := newMockCallRunner(successResult("only op success"))
 		cache := newMockOperatorCache()
 
-		result := runTestWithFailoverMock(
-			context.Background(),
-			"79001234567",
-			singleOp,
-			cache,
-			runner,
-		)
+		result := runFailover(context.Background(), "79001234567", singleOp, cache, runner)
 
 		if !result.Success {
 			t.Error("expected success")
@@ -613,16 +534,10 @@ func TestRunTestWithFailover_SingleOperator(t *testing.T) {
 	})
 
 	t.Run("failure", func(t *testing.T) {
-		runner := newMockTestRunner(failResult("only op failed"))
+		runner := newMockCallRunner(failResult("only op failed"))
 		cache := newMockOperatorCache()
 
-		result := runTestWithFailoverMock(
-			context.Background(),
-			"79001234567",
-			singleOp,
-			cache,
-			runner,
-		)
+		result := runFailover(context.Background(), "79001234567", singleOp, cache, runner)
 
 		if result.Success {
 			t.Error("expected failure")
@@ -633,7 +548,7 @@ func TestRunTestWithFailover_SingleOperator(t *testing.T) {
 	})
 }
 
-func TestRunTestWithFailover_OperatorSequencePreserved(t *testing.T) {
+func TestRunFailoverSequence_OperatorSequencePreserved(t *testing.T) {
 	// Test that operators are tried in exact config order
 	ops := []OperatorConfig{
 		{Name: "A", Prefix: "A#"},
@@ -642,7 +557,7 @@ func TestRunTestWithFailover_OperatorSequencePreserved(t *testing.T) {
 		{Name: "D", Prefix: "D#"},
 	}
 
-	runner := newMockTestRunner(
+	runner := newMockCallRunner(
 		failResult("A failed"),
 		failResult("B failed"),
 		failResult("C failed"),
@@ -650,13 +565,7 @@ func TestRunTestWithFailover_OperatorSequencePreserved(t *testing.T) {
 	)
 	cache := newMockOperatorCache()
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"12345",
-		ops,
-		cache,
-		runner,
-	)
+	result := runFailover(context.Background(), "12345", ops, cache, runner)
 
 	if !result.Success {
 		t.Error("expected success")
@@ -674,38 +583,145 @@ func TestRunTestWithFailover_OperatorSequencePreserved(t *testing.T) {
 	}
 }
 
-func TestRunTestWithFailover_UserBusyOnSecondOperatorContinues(t *testing.T) {
-	runner := newMockTestRunner(
-		failResult("first failed - routing"),
-		userBusyResult(),                // Second operator gets user busy
-		failResult("third also failed"), // Third operator also fails
+func TestRunFailoverSequence_WindowClosedBeforeStart(t *testing.T) {
+	runner := newMockCallRunner()
+	cache := newMockOperatorCache()
+
+	job := phoneJob{phone: "79001234567", testNum: 1, nodeAddress: "2:5001/100", nodeAvailability: neverCallable()}
+	result := runFailoverSequence(context.Background(), job, testOperators, cache, discardLogger(), runner.run, nil, nil)
+
+	if !result.WindowClosed {
+		t.Error("expected WindowClosed for a node outside its call window")
+	}
+	if result.Success {
+		t.Error("expected no success")
+	}
+	if len(runner.getCalls()) != 0 {
+		t.Errorf("expected no calls placed, got %d", len(runner.getCalls()))
+	}
+}
+
+func TestRunFailoverSequence_WindowClosedResultStopsSequence(t *testing.T) {
+	// The runner reports the window closed mid-call; remaining operators
+	// must not be dialed and the deferral must propagate.
+	runner := newMockCallRunner(testResult{windowClosed: true, message: "deferred"})
+	cache := newMockOperatorCache()
+
+	result := runFailover(context.Background(), "79001234567", testOperators, cache, runner)
+
+	if !result.WindowClosed {
+		t.Error("expected WindowClosed to propagate from the call result")
+	}
+	if result.TriedOperators != 1 {
+		t.Errorf("expected 1 operator tried, got %d", result.TriedOperators)
+	}
+	if len(runner.getCalls()) != 1 {
+		t.Errorf("expected 1 call, got %d", len(runner.getCalls()))
+	}
+	// A deferred node is not a failure: the cache entry must survive.
+	if len(cache.deleteCalls) != 0 {
+		t.Errorf("expected no cache deletes on deferral, got %d", len(cache.deleteCalls))
+	}
+}
+
+func TestRunFailoverSequence_IntermediateResultsEmitted(t *testing.T) {
+	runner := newMockCallRunner(
+		failResult("first failed"),
+		failResult("second failed"),
+		successResult("third success"),
 	)
 	cache := newMockOperatorCache()
 
-	result := runTestWithFailoverMock(
-		context.Background(),
-		"79001234567",
-		testOperators,
-		cache,
-		runner,
+	type emitted struct {
+		opName   string
+		opPrefix string
+	}
+	var intermediates []emitted
+	onOperatorResult := func(result testResult, operatorName, operatorPrefix string) {
+		if result.success {
+			t.Errorf("intermediate emission for a successful result (%q)", operatorName)
+		}
+		intermediates = append(intermediates, emitted{operatorName, operatorPrefix})
+	}
+
+	job := phoneJob{phone: "79001234567", testNum: 1}
+	result := runFailoverSequence(context.Background(), job, testOperators, cache, discardLogger(), runner.run, nil, onOperatorResult)
+
+	if !result.Success {
+		t.Fatal("expected success")
+	}
+	// Failed intermediate operators are emitted; the final (successful)
+	// operator is reported via the returned FailoverResult instead.
+	if len(intermediates) != 2 {
+		t.Fatalf("expected 2 intermediate results, got %d", len(intermediates))
+	}
+	if intermediates[0] != (emitted{"Primary", "1#"}) {
+		t.Errorf("first intermediate = %+v, want Primary/1#", intermediates[0])
+	}
+	if intermediates[1] != (emitted{"Secondary", "2#"}) {
+		t.Errorf("second intermediate = %+v, want Secondary/2#", intermediates[1])
+	}
+}
+
+func TestRunFailoverSequence_LastFailureNotEmittedAsIntermediate(t *testing.T) {
+	runner := newMockCallRunner(
+		failResult("first failed"),
+		failResult("second failed"),
+		failResult("third failed"),
 	)
+	cache := newMockOperatorCache()
+
+	var count int
+	onOperatorResult := func(testResult, string, string) { count++ }
+
+	job := phoneJob{phone: "79001234567", testNum: 1}
+	result := runFailoverSequence(context.Background(), job, testOperators, cache, discardLogger(), runner.run, nil, onOperatorResult)
 
 	if result.Success {
-		t.Error("expected failure")
+		t.Fatal("expected failure")
 	}
-	if !result.AllOperatorsFail {
-		t.Error("expected AllOperatorsFail when all operators tried")
+	// The last operator's failure is the final result, not an intermediate.
+	if count != 2 {
+		t.Errorf("expected 2 intermediate emissions for 3 failures, got %d", count)
 	}
-	if result.TriedOperators != 3 {
-		t.Errorf("expected all 3 operators tried, got %d", result.TriedOperators)
+}
+
+func TestRunFailoverSequence_RetryCallbackCarriesOperator(t *testing.T) {
+	runner := newMockCallRunner(
+		failResult("first failed"),
+		successResult("second success"),
+	)
+	runner.simulateRetries = 1
+	cache := newMockOperatorCache()
+
+	type retry struct {
+		reason   string
+		opName   string
+		opPrefix string
 	}
-	if result.LastOperator.Name != "Tertiary" {
-		t.Errorf("expected last operator Tertiary, got %q", result.LastOperator.Name)
+	var retries []retry
+	onRetryAttempt := func(attempt int, dialTime time.Duration, reason, operatorName, operatorPrefix string) {
+		retries = append(retries, retry{reason, operatorName, operatorPrefix})
 	}
 
-	// Should have tried all operators
-	calls := runner.getCalls()
-	if len(calls) != 3 {
-		t.Errorf("expected 3 calls, got %d", len(calls))
+	job := phoneJob{phone: "79001234567", testNum: 1}
+	result := runFailoverSequence(context.Background(), job, testOperators, cache, discardLogger(), runner.run, onRetryAttempt, nil)
+
+	if !result.Success {
+		t.Fatal("expected success")
+	}
+	if len(retries) != 2 {
+		t.Fatalf("expected 2 retry callbacks (one per operator), got %d", len(retries))
+	}
+	// runTest reports retries with empty operator fields; the failover wrapper
+	// must stamp the current operator's identity onto each one.
+	if retries[0].opName != "Primary" || retries[0].opPrefix != "1#" {
+		t.Errorf("first retry attribution = %s/%s, want Primary/1#", retries[0].opName, retries[0].opPrefix)
+	}
+	if retries[0].reason != "[Primary] BUSY (modem)" {
+		t.Errorf("first retry reason = %q, want operator-prefixed reason", retries[0].reason)
+	}
+	if retries[1].opName != "Secondary" || retries[1].opPrefix != "2#" {
+		t.Errorf("second retry attribution = %s/%s, want Secondary/2#", retries[1].opName, retries[1].opPrefix)
 	}
 }
