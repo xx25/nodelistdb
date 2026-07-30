@@ -130,14 +130,14 @@ run-daemon-once: build-daemon ## Run testing daemon single cycle
 
 run-modem-test: build-modem-test ## Run modem test tool (requires PHONE)
 	@if [ -z "$(PHONE)" ]; then \
-		echo "Usage: make run-modem-test PHONE=917 [COUNT=10] [CONFIG=...]"; \
-		echo "       make run-modem-test PHONE=917,918,919 COUNT=9"; \
-		echo "       make run-modem-test PHONE=901-910 COUNT=20"; \
+		echo "Usage: make run-modem-test PHONE=917 [CONFIG=...]"; \
+		echo "       make run-modem-test PHONE=917,918,919"; \
+		echo "       make run-modem-test PHONE=901-910"; \
 		echo ""; \
-		echo "Or run directly: ./bin/modem-test -phone 917 -batch"; \
+		echo "Or run directly: ./bin/modem-test -phone 917"; \
 		exit 1; \
 	fi
-	./bin/modem-test -phone "$(PHONE)" -batch $(if $(COUNT),-count $(COUNT)) $(if $(CONFIG),-config $(CONFIG)) $(if $(DEBUG),-debug)
+	./bin/modem-test -phone "$(PHONE)" $(if $(CONFIG),-config $(CONFIG)) $(if $(DEBUG),-debug)
 
 # Cross-compilation for deployment
 build-linux: build-linux-amd64 build-linux-arm64 ## Build for Linux (both x64 and ARM64)
