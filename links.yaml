@@ -22,7 +22,7 @@ categories:
     description: Official FidoNet documentation and standards
     links:
       - title: FidoNet Technical Standards
-        url: https://www.fidonet.org/ftsc/
+        url: http://ftsc.org/
         description: FidoNet Technical Standards Committee documents
 
       - title: FidoNet Policy
