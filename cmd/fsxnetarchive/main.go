@@ -126,7 +126,7 @@ func main() {
 	repo := flag.String("repo", "", "Path to a clone of the nodelist git repository")
 	out := flag.String("out", "", "Nodelist archive root; files are written to <out>/<network>/<year>/")
 	network := flag.String("network", "fsxnet", "FTN network the repository publishes")
-	reportPath := flag.String("report", "", "Write the skip/collision report here (default <out>/<network>/build-report.txt)")
+	reportPath := flag.String("report", "", "Write the skip/collision report here (default ./<network>-archive-report.txt)")
 	noHistory := flag.Bool("no-history", false, "Read only the working tree, not git history")
 	dryRun := flag.Bool("dry-run", false, "Resolve and report without writing any file")
 	flag.Parse()
@@ -179,11 +179,10 @@ func (b *builder) openReport(reportPath string) error {
 			b.report = os.Stderr
 			return nil
 		}
-		dir := filepath.Join(b.out, b.network)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-		reportPath = filepath.Join(dir, "build-report.txt")
+		// Deliberately not inside -out: that tree gets published verbatim over
+		// HTTP and FTP, and a build report is not a nodelist. Writing it there
+		// puts it in the archive's own directory listing.
+		reportPath = b.network + "-archive-report.txt"
 	}
 	f, err := os.Create(reportPath)
 	if err != nil {
