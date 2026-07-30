@@ -9,16 +9,26 @@ import (
 	"testing"
 )
 
-// setupNodelistArchive builds a two-network archive - fidonet at the root,
-// fsxnet one level down - and points NODELIST_PATH at it. The two networks
-// carry different day numbers so a response cannot be attributed to the wrong
-// one by accident.
-func setupNodelistArchive(t *testing.T) {
+// setupNodelistArchive builds a two-network archive and points NODELIST_PATH at
+// it. The two networks carry different day numbers so a response cannot be
+// attributed to the wrong one by accident.
+//
+// legacyFidonet places FidoNet's years at the archive root instead of under
+// fidonet/, which is where they lived before FidoNet became an ordinary network
+// on disk. Both layouts have to answer, since a deployed binary meets the old
+// one until the files are moved.
+func setupNodelistArchive(t *testing.T, legacyFidonet bool) {
 	t.Helper()
 	root := t.TempDir()
+
+	fidonetRoot := filepath.Join(root, "fidonet")
+	if legacyFidonet {
+		fidonetRoot = root
+	}
+
 	for dir, name := range map[string]string{
-		filepath.Join(root, "2025"):           "nodelist.300.gz",
-		filepath.Join(root, "2026"):           "nodelist.100.gz",
+		filepath.Join(fidonetRoot, "2025"):    "nodelist.300.gz",
+		filepath.Join(fidonetRoot, "2026"):    "nodelist.100.gz",
 		filepath.Join(root, "fsxnet", "2026"): "fsxnet.098.gz",
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -49,42 +59,52 @@ func latestNodelist(t *testing.T, query string) (int, map[string]interface{}) {
 // <root>/<year>/ for files named nodelist.*, so every network got FidoNet's
 // answer.
 func TestLatestNodelistIsPerNetwork(t *testing.T) {
-	setupNodelistArchive(t)
-
-	for _, tc := range []struct {
-		name     string
-		query    string
-		wantFile string
-		wantNet  string
-		wantURL  string
+	for _, layout := range []struct {
+		name   string
+		legacy bool
 	}{
-		{"default is fidonet", "", "nodelist.100", "fidonet", "/download/nodelist/2026/nodelist.100"},
-		{"explicit fidonet", "?domain=fidonet", "nodelist.100", "fidonet", "/download/nodelist/2026/nodelist.100"},
-		{"fsxnet", "?domain=fsxnet", "fsxnet.098", "fsxnet", "/download/nodelist/fsxnet/2026/fsxnet.098"},
+		{"canonical fidonet layout", false},
+		{"legacy root layout", true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			code, body := latestNodelist(t, tc.query)
-			if code != http.StatusOK {
-				t.Fatalf("status = %d, want 200: %v", code, body)
-			}
-			if got := body["filename"]; got != tc.wantFile {
-				t.Errorf("filename = %v, want %v", got, tc.wantFile)
-			}
-			if got := body["network"]; got != tc.wantNet {
-				t.Errorf("network = %v, want %v", got, tc.wantNet)
-			}
-			if got := body["download_url"]; got != tc.wantURL {
-				t.Errorf("download_url = %v, want %v", got, tc.wantURL)
-			}
-			if got := body["year"]; got != "2026" {
-				t.Errorf("year = %v, want 2026", got)
+		t.Run(layout.name, func(t *testing.T) {
+			setupNodelistArchive(t, layout.legacy)
+
+			for _, tc := range []struct {
+				name     string
+				query    string
+				wantFile string
+				wantNet  string
+				wantURL  string
+			}{
+				{"default is fidonet", "", "nodelist.100", "fidonet", "/download/nodelist/fidonet/2026/nodelist.100"},
+				{"explicit fidonet", "?domain=fidonet", "nodelist.100", "fidonet", "/download/nodelist/fidonet/2026/nodelist.100"},
+				{"fsxnet", "?domain=fsxnet", "fsxnet.098", "fsxnet", "/download/nodelist/fsxnet/2026/fsxnet.098"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					code, body := latestNodelist(t, tc.query)
+					if code != http.StatusOK {
+						t.Fatalf("status = %d, want 200: %v", code, body)
+					}
+					if got := body["filename"]; got != tc.wantFile {
+						t.Errorf("filename = %v, want %v", got, tc.wantFile)
+					}
+					if got := body["network"]; got != tc.wantNet {
+						t.Errorf("network = %v, want %v", got, tc.wantNet)
+					}
+					if got := body["download_url"]; got != tc.wantURL {
+						t.Errorf("download_url = %v, want %v", got, tc.wantURL)
+					}
+					if got := body["year"]; got != "2026" {
+						t.Errorf("year = %v, want 2026", got)
+					}
+				})
 			}
 		})
 	}
 }
 
 func TestLatestNodelistUnknownNetwork(t *testing.T) {
-	setupNodelistArchive(t)
+	setupNodelistArchive(t, false)
 
 	if code, _ := latestNodelist(t, "?domain=nosuchnet"); code != http.StatusNotFound {
 		t.Errorf("unknown network: status = %d, want 404", code)

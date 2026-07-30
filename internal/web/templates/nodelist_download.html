@@ -5,7 +5,7 @@
 {{define "page_title"}}{{.Title}}{{end}}
 
 {{define "page_subtitle"}}
-<p class="subtitle">Direct downloads, recent files, and year archives for the {{if .Network}}{{.Network}}{{else}}FidoNet{{end}} nodelist collection.</p>
+<p class="subtitle">Direct downloads, recent files, and year archives for the {{networkName .Network}} nodelist collection.</p>
 {{end}}
 
 {{define "content"}}
@@ -15,7 +15,7 @@
 </div>
 {{else if not .Years}}
 <div class="alert alert-warning">
-    No archived nodelist files were found for {{if .Network}}{{.Network}}{{else}}FidoNet{{end}}.
+    No archived nodelist files were found for {{networkName .Network}}.
 </div>
 {{end}}
 {{if .Years}}
@@ -60,14 +60,14 @@
                     <strong>Latest URL</strong>
                     <p class="muted">Stable endpoint for the newest nodelist.</p>
                 </div>
-                <code>{{.BaseURL}}/download/latest{{if .Network}}?domain={{.Network}}{{end}}</code>
+                <code>{{.BaseURL}}/download/latest?domain={{.Network}}</code>
             </li>
             <li>
                 <div>
                     <strong>Direct file pattern</strong>
                     <p class="muted">Download a specific file by year and name.</p>
                 </div>
-                <code>{{.BaseURL}}/download/nodelist/{{if .Network}}{{.Network}}/{{end}}{year}/{filename}</code>
+                <code>{{.BaseURL}}/download/nodelist/{{.Network}}/{year}/{filename}</code>
             </li>
             <li>
                 <div>
@@ -79,7 +79,7 @@
         </ul>
 
         <pre class="command-block"><code>wget -nc -i {{.BaseURL}}/download/urls.txt
-curl -O {{.BaseURL}}/download/latest{{if .Network}}?domain={{.Network}}{{end}}</code></pre>
+curl -O {{.BaseURL}}/download/latest?domain={{.Network}}</code></pre>
     </aside>
 </section>
 

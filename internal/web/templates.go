@@ -14,6 +14,7 @@ import (
 	"github.com/nodelistdb/internal/database"
 	"github.com/nodelistdb/internal/emailflags"
 	"github.com/nodelistdb/internal/flags"
+	"github.com/nodelistdb/internal/nodelistfs"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/testing/timeavail"
 )
@@ -44,6 +45,7 @@ var chromeFiles = []string{
 func (s *Server) loadTemplates() error {
 	// Create function map for template functions
 	funcMap := template.FuncMap{
+		"networkName": nodelistfs.DisplayName,
 		"flagBadges": func(flagDescriptions map[string]flags.FlagInfo, flagList []string) template.HTML {
 			var b strings.Builder
 			for _, flag := range flagList {

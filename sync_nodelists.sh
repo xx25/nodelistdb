@@ -89,6 +89,15 @@ fi
 : "${LOCAL_POINTLIST_DIR:=${LOCAL_NODELIST_DIR}/pointlists}"
 : "${REMOTE_POINTLIST_DIR:=${REMOTE_NODELIST_DIR}/pointlists}"
 
+# FidoNet's own archive root. Its year directories used to sit directly in the
+# nodelist root, which made FidoNet the one network with no name in the path —
+# the archive listed forty year directories next to a lone fsxnet/. It now sits
+# one level down like every other network, matching EXTRA_NETWORKS above and the
+# pointlist tree. The server still serves the old network-less paths, so files
+# already published under them keep resolving.
+: "${LOCAL_FIDONET_DIR:=${LOCAL_NODELIST_DIR}/fidonet}"
+: "${REMOTE_FIDONET_DIR:=${REMOTE_NODELIST_DIR}/fidonet}"
+
 # Shared with scripts/import_pointlists.sh — both must name the same file for
 # the mutual exclusion to mean anything.
 : "${POINTLIST_LOCK_FILE:=/tmp/nodelistdb-import-pointlists.lock}"
@@ -423,7 +432,7 @@ compress_and_store() {
     fi
     
     local year=$(echo "$file_date" | cut -d'-' -f1)
-    local year_dir="${LOCAL_NODELIST_DIR}/${year}"
+    local year_dir="${LOCAL_FIDONET_DIR}/${year}"
     
     # Create year directory if it doesn't exist
     mkdir -p "$year_dir"
@@ -468,7 +477,7 @@ sync_to_remote() {
     
     local filename=$(basename "$file_path")
     local year_dir=$(basename $(dirname "$file_path"))
-    local remote_dir="${REMOTE_NODELIST_DIR}/${year_dir}"
+    local remote_dir="${REMOTE_FIDONET_DIR}/${year_dir}"
     
     log "Syncing $filename to $REMOTE_SYNC_HOST:$remote_dir..."
     
@@ -954,7 +963,7 @@ sync_nodelists() {
         # Sync compressed file to remote server
         local file_date_sync=$(filename_to_date "$(basename "$processed_file")")
         local year_sync=$(echo "$file_date_sync" | cut -d"-" -f1)
-        local compressed_file_sync="${LOCAL_NODELIST_DIR}/${year_sync}/$(basename "${processed_file,,}").gz"
+        local compressed_file_sync="${LOCAL_FIDONET_DIR}/${year_sync}/$(basename "${processed_file,,}").gz"
         sync_to_remote "$compressed_file_sync"
         
         # Clean up temporary file

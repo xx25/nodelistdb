@@ -21,7 +21,7 @@ func (s *Server) LatestNodelistAPIHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	latest, err := nodelistfs.FindLatest(nodelistfs.NormalizeNetwork(network))
+	latest, err := nodelistfs.FindLatest(network)
 	if err != nil {
 		WriteJSONError(w, "No nodelist files found", http.StatusNotFound)
 		return

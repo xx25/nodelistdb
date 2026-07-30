@@ -85,14 +85,16 @@ func New(cfg *Config) (*Server, error) {
 	// Create mount filesystem from configured mounts
 	mounts := make([]Mount, 0, len(cfg.Mounts))
 	for _, mountCfg := range cfg.Mounts {
-		// Create a read-only, chrooted filesystem for each mount
+		// Create a read-only, chrooted filesystem for each mount, wrapped so
+		// the pre-migration FidoNet paths (/<year>/... with no network segment)
+		// still resolve. See legacyYearFs.
 		baseFs := afero.NewOsFs()
 		basePath := afero.NewBasePathFs(baseFs, mountCfg.RealPath)
 		readOnlyFs := afero.NewReadOnlyFs(basePath)
 
 		mounts = append(mounts, Mount{
 			VirtualPath: mountCfg.VirtualPath,
-			Fs:          readOnlyFs,
+			Fs:          legacyYearFs{readOnlyFs},
 		})
 	}
 
