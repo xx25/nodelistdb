@@ -108,6 +108,27 @@ func (s *CDRService) IsEnabled() bool {
 	return s.enabled
 }
 
+// lookupAudioCodesCDR performs a bounded (5s) CDR lookup, logging a warning on
+// failure or a miss. Returns nil when the service is disabled, the lookup
+// failed, or no CDR matched.
+func lookupAudioCodesCDR(ctx context.Context, svc *CDRService, log *TestLogger, phone string, callTime time.Time) *CDRData {
+	if svc == nil || !svc.IsEnabled() {
+		return nil
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	cdr, err := svc.LookupByPhone(lookupCtx, phone, callTime)
+	if err != nil {
+		log.Warn("AudioCodes CDR lookup failed for %s: %v", phone, err)
+		return nil
+	}
+	if cdr == nil {
+		log.Warn("AudioCodes CDR not found for %s", phone)
+		return nil
+	}
+	return cdr
+}
+
 // LookupByPhone queries CDR by destination phone number and time window
 func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime time.Time) (*CDRData, error) {
 	if !s.enabled || s.db == nil {

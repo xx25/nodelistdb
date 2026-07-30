@@ -18,7 +18,6 @@ type NodelistDBWriter struct {
 	client    *http.Client
 	baseURL   string
 	apiKey    string
-	enabled   bool
 	batchSize int
 
 	batch      []nodelistDBResultRequest
@@ -118,10 +117,11 @@ type submitResultsResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// NewNodelistDBWriter creates a new NodelistDB results writer
+// NewNodelistDBWriter creates a new NodelistDB results writer.
+// Returns (nil, nil) when result submission is disabled by configuration.
 func NewNodelistDBWriter(cfg NodelistDBConfig) (*NodelistDBWriter, error) {
 	if !cfg.Submit || cfg.URL == "" {
-		return &NodelistDBWriter{enabled: false}, nil
+		return nil, nil
 	}
 
 	if cfg.APIKey == "" {
@@ -139,7 +139,6 @@ func NewNodelistDBWriter(cfg NodelistDBConfig) (*NodelistDBWriter, error) {
 		},
 		baseURL:   strings.TrimSuffix(cfg.URL, "/"),
 		apiKey:    cfg.APIKey,
-		enabled:   true,
 		batchSize: batchSize,
 		batch:     make([]nodelistDBResultRequest, 0, batchSize),
 	}
@@ -154,9 +153,9 @@ func NewNodelistDBWriter(cfg NodelistDBConfig) (*NodelistDBWriter, error) {
 	return w, nil
 }
 
-// IsEnabled returns true if the writer is active
-func (w *NodelistDBWriter) IsEnabled() bool {
-	return w.enabled
+// Name returns the sink name for log messages.
+func (w *NodelistDBWriter) Name() string {
+	return "NodelistDB"
 }
 
 // healthCheck verifies connectivity to the NodelistDB server
@@ -181,10 +180,6 @@ func (w *NodelistDBWriter) healthCheck(ctx context.Context) error {
 
 // WriteRecord adds a test record to the batch and flushes if batch is full
 func (w *NodelistDBWriter) WriteRecord(rec *TestRecord) error {
-	if !w.enabled {
-		return nil
-	}
-
 	// Convert TestRecord to API request
 	apiReq := w.convertRecord(rec)
 
@@ -329,10 +324,6 @@ func validateModemAddress(remoteAddresses, expectedAddress string) bool {
 
 // Flush sends all buffered results to the server
 func (w *NodelistDBWriter) Flush() error {
-	if !w.enabled {
-		return nil
-	}
-
 	w.batchMutex.Lock()
 	if len(w.batch) == 0 {
 		w.batchMutex.Unlock()

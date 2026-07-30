@@ -14,7 +14,7 @@ import (
 )
 
 // runBatchModeMulti orchestrates batch testing with multiple modems.
-func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, operatorCache *OperatorCache, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodelistDBWriter *NodelistDBWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
+func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, operatorCache *OperatorCache, sinks resultSinks, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	pause := cfg.GetPause()
@@ -86,15 +86,14 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 	}
 
 	// Initialize CSV writer if configured
-	var csvWriter *CSVWriter
 	if cfg.Test.CSVFile != "" {
-		var err error
-		csvWriter, err = NewCSVWriter(cfg.Test.CSVFile)
+		csvWriter, err := NewCSVWriter(cfg.Test.CSVFile)
 		if err != nil {
 			log.Error("Failed to open CSV file: %v", err)
 		} else {
 			defer csvWriter.Close()
 			log.Info("Writing results to: %s", cfg.Test.CSVFile)
+			sinks = append(sinks, csvWriter)
 		}
 	}
 
@@ -209,7 +208,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 			asteriskCDR := result.Result.asteriskCDR
 
 			// Write CSV and databases
-			if csvWriter != nil || (pgWriter != nil && pgWriter.IsEnabled()) || (mysqlWriter != nil && mysqlWriter.IsEnabled()) || (sqliteWriter != nil && sqliteWriter.IsEnabled()) || (nodelistDBWriter != nil && nodelistDBWriter.IsEnabled()) {
+			if len(sinks) > 0 {
 				rec := RecordFromTestResult(
 					result.TestNum,
 					result.Phone,
@@ -231,36 +230,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 					asteriskCDR,
 				)
 				rec.ModemName = result.WorkerName
-
-				if csvWriter != nil {
-					if err := csvWriter.WriteRecord(rec); err != nil {
-						log.Error("Failed to write CSV record: %v", err)
-					}
-				}
-
-				if pgWriter != nil && pgWriter.IsEnabled() {
-					if err := pgWriter.WriteRecord(rec); err != nil {
-						log.Error("Failed to write PostgreSQL record: %v", err)
-					}
-				}
-
-				if mysqlWriter != nil && mysqlWriter.IsEnabled() {
-					if err := mysqlWriter.WriteRecord(rec); err != nil {
-						log.Error("Failed to write MySQL record: %v", err)
-					}
-				}
-
-				if sqliteWriter != nil && sqliteWriter.IsEnabled() {
-					if err := sqliteWriter.WriteRecord(rec); err != nil {
-						log.Error("Failed to write SQLite record: %v", err)
-					}
-				}
-
-				if nodelistDBWriter != nil && nodelistDBWriter.IsEnabled() {
-					if err := nodelistDBWriter.WriteRecord(rec); err != nil {
-						log.Error("Failed to write NodelistDB record: %v", err)
-					}
-				}
+				sinks.writeAll(rec, log)
 			}
 
 			statsMu.Unlock()

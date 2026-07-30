@@ -203,6 +203,11 @@ func checkCSVHeader(path string) error {
 	return nil
 }
 
+// Name returns the sink name for log messages.
+func (w *CSVWriter) Name() string {
+	return "CSV"
+}
+
 // WriteRecord writes a test record to the CSV file
 func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 	success := "0"

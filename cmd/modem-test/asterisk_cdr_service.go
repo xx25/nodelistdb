@@ -202,6 +202,28 @@ func (s *AsteriskCDRService) IsEnabled() bool {
 	return s.enabled
 }
 
+// lookupAsteriskCDR performs a bounded (5s) CDR lookup, logging a warning on
+// failure or a miss. Returns nil when the service is disabled, the lookup
+// failed, or no CDR matched. note is appended verbatim to the warnings
+// (e.g. " (not retrying)").
+func lookupAsteriskCDR(ctx context.Context, svc *AsteriskCDRService, log *TestLogger, phone string, callTime time.Time, note string) *AsteriskCDRData {
+	if svc == nil || !svc.IsEnabled() {
+		return nil
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	cdr, err := svc.LookupByPhone(lookupCtx, phone, callTime)
+	if err != nil {
+		log.Warn("Asterisk CDR lookup failed for %s: %v%s", phone, err, note)
+		return nil
+	}
+	if cdr == nil {
+		log.Warn("Asterisk CDR not found for %s%s", phone, note)
+		return nil
+	}
+	return cdr
+}
+
 // LookupByPhone queries Asterisk CDR by destination phone number and time window
 func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, callTime time.Time) (*AsteriskCDRData, error) {
 	if !s.enabled || s.db == nil {
@@ -270,7 +292,7 @@ func (s *AsteriskCDRService) LookupByPhone(ctx context.Context, phone string, ca
 		return nil, nil // No matching CDR found
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Asterisk CDR query failed: %w", err)
+		return nil, fmt.Errorf("asterisk CDR query failed: %w", err)
 	}
 
 	// Map nullable values to AsteriskCDRData

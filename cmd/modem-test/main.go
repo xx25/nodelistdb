@@ -220,44 +220,37 @@ func main() {
 		defer asteriskCDRService.Close()
 	}
 
-	// Initialize PostgreSQL results writer (optional)
-	pgWriter, err := NewPostgresResultsWriter(cfg.PostgresResults)
-	if err != nil {
+	// Initialize database/API results writers (all optional). A writer that
+	// is disabled by config or failed to initialize is simply absent from the
+	// sinks slice; the CSV writer joins it in the batch runners.
+	var sinks resultSinks
+	if w, err := NewPostgresResultsWriter(cfg.PostgresResults); err != nil {
 		log.Warn("PostgreSQL results writer unavailable: %v", err)
-		pgWriter = &PostgresResultsWriter{} // Use disabled writer
-	} else if pgWriter.IsEnabled() {
-		log.Info("PostgreSQL results writer enabled: table=%s", cfg.PostgresResults.TableName)
-		defer pgWriter.Close()
+	} else if w != nil {
+		log.Info("PostgreSQL results writer enabled: table=%s", w.TableName())
+		defer w.Close()
+		sinks = append(sinks, w)
 	}
-
-	// Initialize MySQL results writer (optional)
-	mysqlWriter, err := NewMySQLResultsWriter(cfg.MySQLResults)
-	if err != nil {
+	if w, err := NewMySQLResultsWriter(cfg.MySQLResults); err != nil {
 		log.Warn("MySQL results writer unavailable: %v", err)
-		mysqlWriter = &MySQLResultsWriter{} // Use disabled writer
-	} else if mysqlWriter.IsEnabled() {
-		log.Info("MySQL results writer enabled: table=%s", cfg.MySQLResults.TableName)
-		defer mysqlWriter.Close()
+	} else if w != nil {
+		log.Info("MySQL results writer enabled: table=%s", w.TableName())
+		defer w.Close()
+		sinks = append(sinks, w)
 	}
-
-	// Initialize SQLite results writer (optional)
-	sqliteWriter, err := NewSQLiteResultsWriter(cfg.SQLiteResults)
-	if err != nil {
+	if w, err := NewSQLiteResultsWriter(cfg.SQLiteResults); err != nil {
 		log.Warn("SQLite results writer unavailable: %v", err)
-		sqliteWriter = &SQLiteResultsWriter{} // Use disabled writer
-	} else if sqliteWriter.IsEnabled() {
-		log.Info("SQLite results writer enabled: %s table=%s", cfg.SQLiteResults.Path, cfg.SQLiteResults.TableName)
-		defer sqliteWriter.Close()
+	} else if w != nil {
+		log.Info("SQLite results writer enabled: %s table=%s", cfg.SQLiteResults.Path, w.TableName())
+		defer w.Close()
+		sinks = append(sinks, w)
 	}
-
-	// Initialize NodelistDB results writer (optional)
-	nodelistDBWriter, err := NewNodelistDBWriter(cfg.NodelistDB)
-	if err != nil {
+	if w, err := NewNodelistDBWriter(cfg.NodelistDB); err != nil {
 		log.Warn("NodelistDB results writer unavailable: %v", err)
-		nodelistDBWriter = &NodelistDBWriter{} // Use disabled writer
-	} else if nodelistDBWriter.IsEnabled() {
+	} else if w != nil {
 		log.Info("NodelistDB results writer enabled: %s", cfg.NodelistDB.URL)
-		defer nodelistDBWriter.Close()
+		defer w.Close()
+		sinks = append(sinks, w)
 	}
 
 	// Variables for node testing modes
@@ -449,7 +442,7 @@ func main() {
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, operatorCache, pgWriter, mysqlWriter, sqliteWriter, nodelistDBWriter, nodeLookup, filteredNodes)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, operatorCache, sinks, nodeLookup, filteredNodes)
 		return
 	}
 
@@ -519,7 +512,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, pgWriter, mysqlWriter, sqliteWriter, nodelistDBWriter, nodeLookup, filteredNodes)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, sinks, nodeLookup, filteredNodes)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -611,58 +604,35 @@ func runInteractiveMode(m *modem.Modem, log *TestLogger) {
 	}
 }
 
-// persistenceWriters groups all result persistence writers for passing to persistResult.
+// persistenceWriters groups the CDR services and result sinks for persistResult.
 type persistenceWriters struct {
 	cdrService         *CDRService
 	asteriskCDRService *AsteriskCDRService
-	csvWriter          *CSVWriter
-	pgWriter           *PostgresResultsWriter
-	mysqlWriter        *MySQLResultsWriter
-	sqliteWriter       *SQLiteResultsWriter
-	nodelistDBWriter   *NodelistDBWriter
+	sinks              resultSinks
 	log                *TestLogger
 }
 
 // persistResult performs CDR lookups and writes the result to CSV/databases.
 func persistResult(pw *persistenceWriters, testNum int, phone, nodeAddress, nodeSystemName, nodeLocation, nodeSysop string, result *testResult) {
 	// Lookup CDR data for VoIP quality metrics (AudioCodes)
-	if pw.cdrService != nil && pw.cdrService.IsEnabled() {
-		cdrCtx, cdrCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		cdrData, err := pw.cdrService.LookupByPhone(cdrCtx, phone, time.Now())
-		cdrCancel()
-		if err != nil {
-			pw.log.Warn("AudioCodes CDR lookup failed for %s: %v", phone, err)
-		} else if cdrData != nil {
-			result.cdrData = cdrData
-			pw.log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s term=%s",
-				float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
-				cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec, cdrData.TermReason)
-		} else {
-			pw.log.Warn("AudioCodes CDR not found for phone %s", phone)
-		}
+	if cdrData := lookupAudioCodesCDR(context.Background(), pw.cdrService, pw.log, phone, time.Now()); cdrData != nil {
+		result.cdrData = cdrData
+		pw.log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s term=%s",
+			float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
+			cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec, cdrData.TermReason)
 	}
 
 	// Lookup Asterisk CDR for call routing info
-	if pw.asteriskCDRService != nil && pw.asteriskCDRService.IsEnabled() {
-		astCtx, astCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		asteriskCDR, err := pw.asteriskCDRService.LookupByPhone(astCtx, phone, time.Now())
-		astCancel()
-		if err != nil {
-			pw.log.Warn("Asterisk CDR lookup failed for %s: %v", phone, err)
-		} else if asteriskCDR != nil {
-			result.asteriskCDR = asteriskCDR
-			pw.log.Info("Asterisk: disposition=%s peer=%s duration=%ds cause=%s src=%s early_media=%t",
-				asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration,
-				asteriskCDR.HangupCauseString(), asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
-		} else {
-			pw.log.Warn("Asterisk CDR not found for phone %s", phone)
-		}
+	if asteriskCDR := lookupAsteriskCDR(context.Background(), pw.asteriskCDRService, pw.log, phone, time.Now(), ""); asteriskCDR != nil {
+		result.asteriskCDR = asteriskCDR
+		pw.log.Info("Asterisk: disposition=%s peer=%s duration=%ds cause=%s src=%s early_media=%t",
+			asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration,
+			asteriskCDR.HangupCauseString(), asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
 	}
 
 	// Write to CSV and databases if enabled
-	var rec *TestRecord
-	if pw.csvWriter != nil || (pw.pgWriter != nil && pw.pgWriter.IsEnabled()) || (pw.mysqlWriter != nil && pw.mysqlWriter.IsEnabled()) || (pw.sqliteWriter != nil && pw.sqliteWriter.IsEnabled()) || (pw.nodelistDBWriter != nil && pw.nodelistDBWriter.IsEnabled()) {
-		rec = RecordFromTestResult(
+	if len(pw.sinks) > 0 {
+		rec := RecordFromTestResult(
 			testNum,
 			phone,
 			"", // No operator name in single-modem mode
@@ -682,35 +652,11 @@ func persistResult(pw *persistenceWriters, testNum int, phone, nodeAddress, node
 			result.cdrData,
 			result.asteriskCDR,
 		)
-	}
-	if pw.csvWriter != nil && rec != nil {
-		if err := pw.csvWriter.WriteRecord(rec); err != nil {
-			pw.log.Error("Failed to write CSV record: %v", err)
-		}
-	}
-	if pw.pgWriter != nil && pw.pgWriter.IsEnabled() && rec != nil {
-		if err := pw.pgWriter.WriteRecord(rec); err != nil {
-			pw.log.Error("Failed to write PostgreSQL record: %v", err)
-		}
-	}
-	if pw.mysqlWriter != nil && pw.mysqlWriter.IsEnabled() && rec != nil {
-		if err := pw.mysqlWriter.WriteRecord(rec); err != nil {
-			pw.log.Error("Failed to write MySQL record: %v", err)
-		}
-	}
-	if pw.sqliteWriter != nil && pw.sqliteWriter.IsEnabled() && rec != nil {
-		if err := pw.sqliteWriter.WriteRecord(rec); err != nil {
-			pw.log.Error("Failed to write SQLite record: %v", err)
-		}
-	}
-	if pw.nodelistDBWriter != nil && pw.nodelistDBWriter.IsEnabled() && rec != nil {
-		if err := pw.nodelistDBWriter.WriteRecord(rec); err != nil {
-			pw.log.Error("Failed to write NodelistDB record: %v", err)
-		}
+		pw.sinks.writeAll(rec, pw.log)
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, pgWriter *PostgresResultsWriter, mysqlWriter *MySQLResultsWriter, sqliteWriter *SQLiteResultsWriter, nodelistDBWriter *NodelistDBWriter, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, sinks resultSinks, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	testCount := len(phones)
 	if len(filteredNodes) > 0 {
@@ -736,15 +682,14 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 	log.PrintHeader(configFile, cfg.Modem.Device, phones, testCount)
 
 	// Initialize CSV writer if configured
-	var csvWriter *CSVWriter
 	if cfg.Test.CSVFile != "" {
-		var err error
-		csvWriter, err = NewCSVWriter(cfg.Test.CSVFile)
+		csvWriter, err := NewCSVWriter(cfg.Test.CSVFile)
 		if err != nil {
 			log.Error("Failed to open CSV file: %v", err)
 		} else {
 			defer csvWriter.Close()
 			log.Info("Writing results to: %s", cfg.Test.CSVFile)
+			sinks = append(sinks, csvWriter)
 		}
 	}
 
@@ -752,11 +697,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 	pw := &persistenceWriters{
 		cdrService:         cdrService,
 		asteriskCDRService: asteriskCDRService,
-		csvWriter:          csvWriter,
-		pgWriter:           pgWriter,
-		mysqlWriter:        mysqlWriter,
-		sqliteWriter:       sqliteWriter,
-		nodelistDBWriter:   nodelistDBWriter,
+		sinks:              sinks,
 		log:                log,
 	}
 
@@ -1075,13 +1016,7 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 				// Don't fail, just skip CDR check
 			}
 
-			lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			asteriskCDR, lookupErr := asteriskCDRService.LookupByPhone(lookupCtx, originalPhone, callTime)
-			cancel()
-
-			if lookupErr != nil {
-				log.Warn("Asterisk CDR lookup failed for %s: %v (not retrying)", originalPhone, lookupErr)
-			} else if asteriskCDR != nil {
+			if asteriskCDR := lookupAsteriskCDR(ctx, asteriskCDRService, log, originalPhone, callTime, " (not retrying)"); asteriskCDR != nil {
 				if reason := asteriskCDR.RetryReason(); reason != "" {
 					shouldRetry = true
 					retryReason = reason
@@ -1091,8 +1026,6 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 				log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d cause=%s src=%s early_media=%t",
 					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec,
 					asteriskCDR.HangupCauseString(), asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
-			} else {
-				log.Warn("Asterisk CDR not found for %s (not retrying)", originalPhone)
 			}
 		}
 
@@ -1122,35 +1055,17 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 			}
 
 			// AudioCodes CDR lookup for additional diagnostics
-			if cdrService != nil && cdrService.IsEnabled() {
-				lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				cdrData, lookupErr := cdrService.LookupByPhone(lookupCtx, originalPhone, callTime)
-				cancel()
-				if lookupErr != nil {
-					log.Warn("AudioCodes CDR lookup failed for %s: %v", originalPhone, lookupErr)
-				} else if cdrData != nil {
-					log.Info("AudioCodes CDR: term=%s codec=%s MOS=%.1f jitter=%dms",
-						cdrData.TermReason, cdrData.Codec,
-						float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter)
-				} else {
-					log.Warn("AudioCodes CDR not found for %s", originalPhone)
-				}
+			if cdrData := lookupAudioCodesCDR(ctx, cdrService, log, originalPhone, callTime); cdrData != nil {
+				log.Info("AudioCodes CDR: term=%s codec=%s MOS=%.1f jitter=%dms",
+					cdrData.TermReason, cdrData.Codec,
+					float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter)
 			}
 
 			// Asterisk CDR lookup for call routing diagnostics
-			if asteriskCDRService != nil && asteriskCDRService.IsEnabled() {
-				lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				asteriskCDR, lookupErr := asteriskCDRService.LookupByPhone(lookupCtx, originalPhone, callTime)
-				cancel()
-				if lookupErr != nil {
-					log.Warn("Asterisk CDR lookup failed for %s: %v", originalPhone, lookupErr)
-				} else if asteriskCDR != nil {
-					log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d cause=%s src=%s early_media=%t",
-						asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec,
-						asteriskCDR.HangupCauseString(), asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
-				} else {
-					log.Warn("Asterisk CDR not found for %s", originalPhone)
-				}
+			if asteriskCDR := lookupAsteriskCDR(ctx, asteriskCDRService, log, originalPhone, callTime, ""); asteriskCDR != nil {
+				log.Info("Asterisk CDR: disposition=%s peer=%s duration=%ds billsec=%d cause=%s src=%s early_media=%t",
+					asteriskCDR.Disposition, asteriskCDR.Peer, asteriskCDR.Duration, asteriskCDR.BillSec,
+					asteriskCDR.HangupCauseString(), asteriskCDR.HangupSource, asteriskCDR.EarlyMedia)
 			}
 
 			continue
