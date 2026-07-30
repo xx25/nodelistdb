@@ -5,7 +5,7 @@ go 1.25.4
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.1
 	github.com/dgraph-io/badger/v4 v4.8.0
-	github.com/fclairamb/ftpserverlib v0.29.0
+	github.com/fclairamb/ftpserverlib v0.32.1
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
@@ -52,6 +52,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )

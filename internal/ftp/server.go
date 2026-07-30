@@ -44,7 +44,19 @@ func New(cfg *Config) (*Server, error) {
 		return nil, nil
 	}
 
-	// Prepare FTP settings
+	// Prepare FTP settings.
+	//
+	// DeflateCompressionLevel is deliberately left at 0, which disables MODE Z.
+	// Do not raise it: ftpserverlib compresses with compress/flate, so it emits
+	// a bare DEFLATE stream (RFC 1951) where every real client expects a zlib
+	// stream (RFC 1950). lftp negotiates MODE Z whenever FEAT advertises it and
+	// then fails every listing and transfer with
+	//     zlib inflate error: incorrect header check
+	// which is what ftpserverlib v0.29.0 did to this server: it forced the
+	// level to 5 when unset, so MODE Z was always on and always broken.
+	// v0.30.0 made it opt-in, and 0 now means "do not advertise MODE Z at all",
+	// so clients stay in stream mode. Verified on the wire: the bytes are valid
+	// raw deflate (inflates with wbits=-15) and invalid zlib (wbits=15).
 	settings := &ftpserver.Settings{
 		ListenAddr:              fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		PublicHost:              cfg.PublicHost,

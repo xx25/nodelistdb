@@ -22,8 +22,8 @@ github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da h1:aIftn67I1fkbMa5
 github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
-github.com/fclairamb/ftpserverlib v0.29.0 h1:L1aDauId6SKhcfeEjxV+yvJI9LL7T2wmbGTATp0UKb8=
-github.com/fclairamb/ftpserverlib v0.29.0/go.mod h1:voqpAdd4U6fOwnJx8FayVcfKpOCL5qM355I9UmIyLmE=
+github.com/fclairamb/ftpserverlib v0.32.1 h1:JoBxoiu2sifjVbIAfkCQn7Oi3mFbX/PHRO+4PGOROj4=
+github.com/fclairamb/ftpserverlib v0.32.1/go.mod h1:RJZgAyW8uSb/BtDwD2Wf2wUGUxLaQdmB6VXU7XGp8Oc=
 github.com/go-chi/chi/v5 v5.3.0 h1:halUjDxhshgXHMrao5bB8eNBXo/rnzwr8m5m36glehM=
 github.com/go-chi/chi/v5 v5.3.0/go.mod h1:R+tYY2hNuVUUjxoPtqUdgBqevM9s9njzkTLutVsOCto=
 github.com/go-faster/city v1.0.1 h1:4WAxSZ3V2Ws4QRDrscLEDcibJY8uf41H6AhXDrNDcGw=
@@ -108,10 +108,10 @@ github.com/tidwall/pretty v1.0.0/go.mod h1:XNkn88O1ChpSDQmQeStsy+sBenx6DDtFZJxhV
 github.com/xdg-go/pbkdf2 v1.0.0/go.mod h1:jrpuAogTd400dnrH08LKmI/xc1MbPOebTwRqcT5RDeI=
 github.com/xdg-go/scram v1.1.1/go.mod h1:RaEWvsqvNKKvBPvcKeFjrG2cJqOkHTiyTpzz23ni57g=
 github.com/xdg-go/stringprep v1.0.3/go.mod h1:W3f5j4i+9rC0kuIEJL0ky1VpHXQU3ocBgklLGvcBnW8=
-github.com/xx25/fidomail v0.0.0-20260716185449-bde34e72d954 h1:dyOqiH9NrjRNYafoNR7AyjseuF1yXxBmbA3nRnekLkI=
-github.com/xx25/fidomail v0.0.0-20260716185449-bde34e72d954/go.mod h1:zxVTFTq5lH0uC9KGZDJqrBmE/GUT/jZMNsF/I4Zi2f0=
 github.com/xx25/fidomail v0.0.0-20260725215536-85840f17ba13 h1:ru9HDlT8Lf52bz4DTIB6Zc5KOmcJ7CvT30Lncm9+xUg=
 github.com/xx25/fidomail v0.0.0-20260725215536-85840f17ba13/go.mod h1:5xGuK0LlUJUrUqdkU3+68TFkhlkNRwBeD315AVBbSN8=
+github.com/xx25/fidomail v0.0.0-20260729232252-81a4f8bfca5f h1:OXDv+c3rd4JloXNaJSUu4H1Jg8eaNkYmOBpdvjYpPc0=
+github.com/xx25/fidomail v0.0.0-20260729232252-81a4f8bfca5f/go.mod h1:5xGuK0LlUJUrUqdkU3+68TFkhlkNRwBeD315AVBbSN8=
 github.com/xx25/go-serial/v2 v2.0.0-20260621135723-af8dce8aa671 h1:NE4+DXBTrDCQB8QUbzx158GUBdvb00ANpvsAsq4SypE=
 github.com/xx25/go-serial/v2 v2.0.0-20260621135723-af8dce8aa671/go.mod h1:ylUeCauuRTvijve0+EEouPGgyaEB9jn2eb1mTik0M5U=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=
@@ -158,8 +158,8 @@ golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBc
 golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.12.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.44.0 h1:ildZl3J4uzeKP07r2F++Op7E9B29JRUy+a27EibtBTQ=
-golang.org/x/sys v0.44.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/sys v0.46.0 h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=
+golang.org/x/sys v0.46.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
 golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
