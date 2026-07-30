@@ -123,16 +123,24 @@ ftp:
   port: 2121                   # FTP port (2121 for non-root, 21 requires root)
 
   # Virtual path mounts (recommended - supports multiple directories)
-  # If not specified, falls back to nodelist_path mounted at /fidonet/nodelists
+  # If not specified, falls back to nodelist_path mounted at /nodelists
   mounts:
-    - virtual_path: /fidonet/nodelists  # Path in FTP filesystem
+    - virtual_path: /nodelists          # Path in FTP filesystem
       real_path: /home/dp/nodelists     # Real filesystem path
+    # Archived pointlists. Mounted at the root, not under the nodelist mount:
+    # the tree keeps its own network level (pointlist_download.go does not
+    # collapse the default domain), so /nodelists/pointlists/fidonet/... would
+    # stutter. Prod keeps the real path inside the nodelist root so the
+    # existing rsync mirror carries it; that also leaves the files visible at
+    # /nodelists/pointlists. Each mount is separately chrooted and read-only.
+    # - virtual_path: /pointlists
+    #   real_path: /home/dp/nodelists/pointlists
     # Add more mounts here for additional directories:
-    # - virtual_path: /fidonet/files
+    # - virtual_path: /files
     #   real_path: /home/dp/files
 
   # Legacy: Single directory mount (deprecated - use mounts instead)
-  # nodelist_path: /home/dp/nodelists  # Auto-mounted at /fidonet/nodelists if mounts is empty
+  # nodelist_path: /home/dp/nodelists  # Auto-mounted at /nodelists if mounts is empty
 
   # Connection limits
   max_connections: 10          # Maximum concurrent connections

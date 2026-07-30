@@ -12,7 +12,7 @@ import (
 
 // Mount represents a filesystem mount point
 type Mount struct {
-	VirtualPath string   // Virtual path (e.g., /fidonet/nodelists)
+	VirtualPath string   // Virtual path (e.g., /nodelists)
 	Fs          afero.Fs // Filesystem to serve at this path
 }
 

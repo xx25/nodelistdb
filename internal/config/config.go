@@ -149,7 +149,7 @@ type CacheConfig struct {
 
 // FTPMount represents a virtual path mount in the FTP server
 type FTPMount struct {
-	VirtualPath string `yaml:"virtual_path"` // Virtual path in FTP (e.g., /fidonet/nodelists)
+	VirtualPath string `yaml:"virtual_path"` // Virtual path in FTP (e.g., /nodelists)
 	RealPath    string `yaml:"real_path"`    // Real filesystem path
 }
 
@@ -387,11 +387,15 @@ func (c *Config) validate() error {
 
 	// Handle mounts configuration
 	// For backward compatibility: if mounts is empty but nodelist_path is set,
-	// create a default mount at /fidonet/nodelists
+	// create a default mount at /nodelists. This was /fidonet/nodelists until
+	// 2026-07-30; the /fidonet namespace was retired because it held exactly
+	// one mount and had become misleading once other FTN networks landed
+	// inside it (/fidonet/nodelists/fsxnet/). The FTP path now matches the
+	// HTTP one. Deployments pinning the old path must set mounts explicitly.
 	if len(c.FTP.Mounts) == 0 && c.FTP.NodelistPath != "" {
 		c.FTP.Mounts = []FTPMount{
 			{
-				VirtualPath: "/fidonet/nodelists",
+				VirtualPath: "/nodelists",
 				RealPath:    c.FTP.NodelistPath,
 			},
 		}
