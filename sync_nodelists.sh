@@ -62,18 +62,36 @@ EXTRA_NETWORKS=()
 # Idempotency comes from the parser's pointlist_files gate: already-imported
 # issues are skipped automatically, so every matching remote file can be fed
 # to the parser each run.
-# Example:
-#   EXTRA_POINTLISTS=("z2|http|http://ambrosia60.goip.de/bbsfiles/pointlist/|z2pnt\.z[0-9]{2}|cp437")
+# The regex matches the COMPRESSED name; the day in a .Z## suffix is the
+# day-of-year mod 100, so the true day comes from the extracted inner file.
+# Example (a local FidoNet mailer's file-echo area, reached over its FTP):
+#   EXTRA_POINTLISTS=("z2|ftp|/z2pnt|z2pnt\.z[0-9]{2}|cp437")
 EXTRA_POINTLISTS=()
 
 # Local storage for archived pointlist files:
 # <LOCAL_POINTLIST_DIR>/<network>/<source>/<year>/NAME.DDD.gz
-LOCAL_POINTLIST_DIR="/home/dp/nodelists/pointlists"
+#
+# Both default to a "pointlists" directory inside the corresponding nodelist
+# root, resolved after the config file is sourced so that overriding
+# LOCAL_NODELIST_DIR/REMOTE_NODELIST_DIR moves them too. Living inside the
+# nodelist root is deliberate, not incidental: whatever mirrors nodelists to a
+# download front end then carries the pointlists with them, with no second
+# transfer to configure and keep working.
+LOCAL_POINTLIST_DIR=""
+REMOTE_POINTLIST_DIR=""
 
 # Load configuration file if it exists
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
+
+# Derive the pointlist roots from the nodelist roots unless set explicitly.
+: "${LOCAL_POINTLIST_DIR:=${LOCAL_NODELIST_DIR}/pointlists}"
+: "${REMOTE_POINTLIST_DIR:=${REMOTE_NODELIST_DIR}/pointlists}"
+
+# Shared with scripts/import_pointlists.sh — both must name the same file for
+# the mutual exclusion to mean anything.
+: "${POINTLIST_LOCK_FILE:=/tmp/nodelistdb-import-pointlists.lock}"
 
 #################################################################################
 # UTILITY FUNCTIONS
@@ -455,7 +473,7 @@ sync_to_remote() {
     log "Syncing $filename to $REMOTE_SYNC_HOST:$remote_dir..."
     
     # Create remote year directory if needed and copy file
-    if ssh -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
+    if ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
         if scp -q "$file_path" "${REMOTE_SYNC_HOST}:${remote_dir}/"; then
             log "Successfully synced $filename to remote server"
             return 0
@@ -661,7 +679,10 @@ sync_extra_network() {
         # Optional remote mirror (same relative layout)
         if [[ -n "${REMOTE_SYNC_HOST:-}" ]]; then
             local remote_dir="${REMOTE_NODELIST_DIR}/${name}/${year}"
-            if ssh -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
+            # -n: without it ssh drains this loop's stdin (the herestring of
+            # remote filenames), so only the first file of a series is ever
+            # processed.
+            if ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
                 scp -q "$compressed_file" "${REMOTE_SYNC_HOST}:${remote_dir}/" \
                     || log "Warning: failed to mirror $compressed_file" error
             fi
@@ -751,10 +772,12 @@ sync_extra_pointlist() {
             rm -f "$pointlist_file"
             continue
         fi
+        # An already-imported issue still gets archived: the gate speaks for the
+        # points table, not for the download tree, and skipping here would leave
+        # data in the database whose file cannot be downloaded. A successful
+        # parser run means the file is a valid pointlist either way.
         if grep -q "Already imported" "${TEMP_DIR}/parser.log"; then
-            log "Pointlist $(basename "$pointlist_file") already imported - skipped"
-            rm -f "$pointlist_file"
-            continue
+            log "Pointlist $(basename "$pointlist_file") already imported - archiving only"
         fi
 
         # Archive at <root>/<network>/<source>/<year>/NAME.DDD.gz
@@ -763,6 +786,23 @@ sync_extra_pointlist() {
         local compressed_file="${year_dir}/$(basename "${pointlist_file,,}").gz"
         gzip -c "$pointlist_file" > "$compressed_file"
         log "Stored $compressed_file"
+
+        # Optional remote mirror, same relative layout as the local archive.
+        # The nodelist paths have always done this; without it a secondary
+        # download server keeps serving nodelists and never gains a single
+        # pointlist, however long the sync runs.
+        if [[ -n "${REMOTE_SYNC_HOST:-}" && -n "${REMOTE_POINTLIST_DIR:-}" ]]; then
+            local remote_dir="${REMOTE_POINTLIST_DIR}/${network}/${name}/${year}"
+            # -n: without it ssh drains this loop's stdin (the herestring of
+            # remote filenames), so only the first file of a series is ever
+            # processed.
+            if ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
+                scp -q "$compressed_file" "${REMOTE_SYNC_HOST}:${remote_dir}/" \
+                    || log "Warning: failed to mirror $compressed_file" error
+            else
+                log "Warning: cannot reach $REMOTE_SYNC_HOST to mirror $compressed_file" error
+            fi
+        fi
 
         rm -f "$pointlist_file"
         log "Completed $remote_file for pointlist series $name"
@@ -780,17 +820,33 @@ sync_extra_pointlists() {
     # Same lock file as scripts/import_pointlists.sh: the points table is a
     # plain MergeTree (no dedup), so the weekly sync and an hours-long bulk
     # import must never race on the same (domain, source, date) key.
-    exec 201>"/tmp/nodelistdb-import-pointlists.lock"
-    if ! flock -n 201; then
-        log "Pointlist sync skipped: a bulk pointlist import is running (lock held)" error
-        return 0
-    fi
+    #
+    # The fd is opened READ-ONLY, which looks wrong for a lock and is not:
+    # fs.protected_regular is 2 on the production host (a Debian/Ubuntu
+    # default), so opening a regular file for WRITING in a sticky
+    # world-writable directory such as /tmp is refused when another user owns
+    # it — root included. The bulk importer runs as an ordinary user and this
+    # script runs as root from cron, so the previous `exec 201>` died with
+    # EACCES; and because a failed redirect on `exec` terminates a
+    # non-interactive shell, that one line silently killed the whole sync
+    # before any pointlist was fetched. flock(2) needs no write access.
+    [[ -e "$POINTLIST_LOCK_FILE" ]] || : > "$POINTLIST_LOCK_FILE" 2>/dev/null || true
 
-    log "=== Syncing ${#EXTRA_POINTLISTS[@]} pointlist series ==="
-    local spec
-    for spec in "${EXTRA_POINTLISTS[@]}"; do
-        sync_extra_pointlist "$spec" || true
-    done
+    # Redirecting a subshell (rather than exec) keeps a failure local, so an
+    # unusable lock path degrades to a logged skip instead of a dead script.
+    (
+        if ! flock -n 201; then
+            log "Pointlist sync skipped: a bulk pointlist import is running (lock held)" error
+            exit 0
+        fi
+
+        log "=== Syncing ${#EXTRA_POINTLISTS[@]} pointlist series ==="
+        local spec
+        for spec in "${EXTRA_POINTLISTS[@]}"; do
+            sync_extra_pointlist "$spec" || true
+        done
+    ) 201<"$POINTLIST_LOCK_FILE" \
+        || log "Pointlist sync skipped: cannot lock $POINTLIST_LOCK_FILE" error
 }
 
 #################################################################################
@@ -966,6 +1022,16 @@ PARSER_PATH="./bin/parser"                    # Path to parser binary
 # Remote server sync configuration
 REMOTE_SYNC_HOST="root@nodelist.5001.ru"         # Remote server to sync nodelists to
 REMOTE_NODELIST_DIR="/opt/nodelists"             # Remote nodelist directory
+
+# Pointlist series to sync (FTS-5002 weeklies). Empty means none.
+# "name|source|url_or_dir|filename_regex|charset[|network]"
+# EXTRA_POINTLISTS=("z2|ftp|/z2pnt|z2pnt\.z[0-9]{2}|cp437")
+#
+# The archive roots default to <nodelist root>/pointlists on both ends, which
+# is what lets an existing nodelist mirror carry pointlists too. Override only
+# if they must live somewhere else:
+# LOCAL_POINTLIST_DIR="/opt/nodelists/pointlists"
+# REMOTE_POINTLIST_DIR="/opt/nodelists/pointlists"
 
 # Download Configuration
 MAX_RETRIES=3                                 # Number of retry attempts for failed downloads
