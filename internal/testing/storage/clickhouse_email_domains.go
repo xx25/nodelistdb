@@ -25,6 +25,17 @@ type StoredEmailDomainCheck struct {
 	CheckError string
 }
 
+// emailDomainCheckInsertSQL carries no VALUES placeholders on purpose: it is
+// prepared with PrepareBatch and streamed as a native binary block. The
+// Exec(ctx, "... VALUES (?, ...)", args...) form binds client-side, rendering
+// each time.Time as toDateTime('<unix>'), which the server's Values fast-path
+// parser rejects before recovering via the expression interpreter -- the row
+// lands and no query fails, but every write bumps
+// CANNOT_PARSE_INPUT_ASSERTION_FAILED in system.errors twice, once per
+// rendered timestamp. Keep this batch-shaped; see StoreWhoisResult.
+const emailDomainCheckInsertSQL = `INSERT INTO email_domain_checks
+	(domain, status, detail, ascii_domain, mx_preferences, mx_hosts, mx_resolved, check_time, last_attempt_time, check_error)`
+
 // StoreEmailDomainCheck records a verification result.
 //
 // A transient failure must never destroy a good verdict, so the caller passes
@@ -64,11 +75,12 @@ func (s *ClickHouseStorage) StoreEmailDomainCheck(ctx context.Context, result em
 		}
 	}
 
-	query := `INSERT INTO email_domain_checks
-		(domain, status, detail, ascii_domain, mx_preferences, mx_hosts, mx_resolved, check_time, last_attempt_time, check_error)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	batch, err := s.conn.PrepareBatch(ctx, emailDomainCheckInsertSQL)
+	if err != nil {
+		return fmt.Errorf("failed to prepare batch: %w", err)
+	}
 
-	return s.conn.Exec(ctx, query,
+	err = batch.Append(
 		result.Domain,
 		status,
 		detail,
@@ -80,6 +92,15 @@ func (s *ClickHouseStorage) StoreEmailDomainCheck(ctx context.Context, result em
 		now,
 		result.Error,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to append to batch: %w", err)
+	}
+
+	if err := batch.Send(); err != nil {
+		return fmt.Errorf("failed to send batch: %w", err)
+	}
+
+	return nil
 }
 
 // GetEmailDomainCheck returns the stored verdict for one domain, or nil when
