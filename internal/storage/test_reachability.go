@@ -79,8 +79,8 @@ func (r *ReachabilityOperations) GetNodeReachabilityStats(ctx context.Context, z
 }
 
 // GetReachabilityTrendsAllTime returns trends from the first test date to now.
-// Uses the same correct CROSS JOIN + lookback query as GetReachabilityTrends
-// but computes the day range dynamically from the earliest test result.
+// Uses the same carry-forward query as GetReachabilityTrends but computes the
+// day range dynamically from the earliest test result.
 func (r *ReachabilityOperations) GetReachabilityTrendsAllTime(ctx context.Context, domain string) ([]ReachabilityTrend, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -114,7 +114,7 @@ func (r *ReachabilityOperations) GetReachabilityTrends(ctx context.Context, days
 func (r *ReachabilityOperations) queryTrends(ctx context.Context, conn *sql.DB, days int, domain string) ([]ReachabilityTrend, error) {
 	query := r.queryBuilder.BuildReachabilityTrendsQuery()
 
-	rows, err := conn.QueryContext(ctx, query, days, domain, domain)
+	rows, err := conn.QueryContext(ctx, query, domain, domain, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query reachability trends: %w", err)
 	}

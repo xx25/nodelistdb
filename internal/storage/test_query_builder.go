@@ -211,43 +211,70 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 		GROUP BY domain, zone, net, node`, testSessionWindowSeconds)
 }
 
-// BuildReachabilityTrendsQuery builds a query for reachability trends over time (ClickHouse)
+// BuildReachabilityTrendsQuery builds a query for reachability trends over time (ClickHouse).
+//
+// Semantics: for every report date (yesterday back through ? days ago — today is
+// excluded to avoid incomplete data at day boundaries), each node carries the
+// status and response time of its last test up to the end of that date, until
+// explicitly retested. Bind order: domain, domain, days.
+//
+// The carry-forward is computed by collapsing each node to one row per tested
+// day, then arrayJoin-expanding that day's verdict over the report dates it
+// covers (its own day up to the eve of the node's next tested day). An earlier
+// shape CROSS JOINed the date series against node_test_results and re-aggregated
+// the full history once per report date — O(days x rows), 2.7s and growing with
+// both factors on the /reachability landing page; this one scans the table once
+// and emits at most nodes x days rows (0.11s on the same data, byte-identical
+// output).
+//
+// The argMax comparands carry the usual same-second tie-break (aggregated row
+// first, then lowest hostname_index): a whole test cycle often lands inside one
+// second, and bare argMax by test_time could hand a day's verdict to one
+// per-hostname row instead of the node's aggregate. Day attribution uses
+// toDate(test_time), not the materialized test_date column — the two are
+// stamped at different moments and disagree on a small number of rows, and the
+// carry-forward must stay consistent with the test_time ordering inside a day.
 func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 	return `
 		WITH
-		-- Generate date series for the report period (starting from yesterday)
-		-- Exclude today to avoid incomplete data at day boundaries
-		date_series AS (
-			SELECT toDate(now() - INTERVAL (number + 1) DAY) as report_date
-			FROM numbers(?)
-		),
-		-- For each date, find the last known status of each node up to that date
-		-- A node keeps its last known status until explicitly retested.
-		daily_status AS (
+		per_day AS (
 			SELECT
-				d.report_date,
-				r.domain, r.zone, r.net, r.node,
-				argMax(r.is_operational, r.test_time) as last_status,
-				max(r.test_time) as last_test_time,
+				domain, zone, net, node,
+				toDate(test_time) AS day,
+				argMax(is_operational, (test_time, is_aggregated, -hostname_index)) AS day_status,
 				argMax(least(
-					if(r.binkp_response_ms > 0, r.binkp_response_ms, 999999),
-					if(r.ifcico_response_ms > 0, r.ifcico_response_ms, 999999),
-					if(r.telnet_response_ms > 0, r.telnet_response_ms, 999999)
-				), r.test_time) as last_response_ms
-			FROM date_series d
-			CROSS JOIN node_test_results r
-			WHERE r.test_time <= d.report_date + INTERVAL 1 DAY
-			AND (? = '' OR r.domain = ?)
-			GROUP BY d.report_date, r.domain, r.zone, r.net, r.node
+					if(binkp_response_ms > 0, binkp_response_ms, 999999),
+					if(ifcico_response_ms > 0, ifcico_response_ms, 999999),
+					if(telnet_response_ms > 0, telnet_response_ms, 999999)
+				), (test_time, is_aggregated, -hostname_index)) AS day_response
+			FROM node_test_results
+			WHERE (? = '' OR domain = ?)
+			GROUP BY domain, zone, net, node, day
+		),
+		carried AS (
+			SELECT
+				domain, zone, net, node, day, day_status, day_response,
+				leadInFrame(day, 1, toDate(now())) OVER (
+					PARTITION BY domain, zone, net, node ORDER BY day ASC
+					ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+				) AS next_day
+			FROM per_day
 		)
 		SELECT
-			report_date as test_date,
-			count(DISTINCT (domain, zone, net, node)) as total_nodes,
-			countDistinctIf((domain, zone, net, node), last_status = 1) as operational_nodes,
-			countDistinctIf((domain, zone, net, node), last_status = 0) as failed_nodes,
-			avg(toUInt8(last_status)) * 100 as success_rate,
-			avgIf(last_response_ms, last_status = 1 AND last_response_ms < 999999) as avg_response_ms
-		FROM daily_status
+			report_date AS test_date,
+			count() AS total_nodes,
+			countIf(day_status = 1) AS operational_nodes,
+			countIf(day_status = 0) AS failed_nodes,
+			avg(toUInt8(day_status)) * 100 AS success_rate,
+			avgIf(day_response, day_status = 1 AND day_response < 999999) AS avg_response_ms
+		FROM (
+			SELECT
+				domain, zone, net, node, day_status, day_response,
+				greatest(day, toDate(now()) - ?) AS span_start,
+				least(next_day - 1, toDate(now()) - 1) AS span_end,
+				arrayJoin(arrayMap(x -> span_start + x, range(toUInt64(greatest(toInt64(span_end - span_start) + 1, 0))))) AS report_date
+			FROM carried
+		)
 		GROUP BY report_date
 		ORDER BY report_date ASC`
 }
