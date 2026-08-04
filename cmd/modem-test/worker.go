@@ -553,9 +553,9 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 			// AudioCodes CDR lookup for additional diagnostics
 			if cdrData := lookupAudioCodesCDR(ctx, w.cdrService, w.log, originalPhone, callTime); cdrData != nil {
 				lastCDRData = cdrData // Store for result
-				w.log.Info("AudioCodes CDR: term=%s codec=%s MOS=%.1f jitter=%dms",
+				w.log.Info("AudioCodes CDR: term=%s codec=%s MOS=%s jitter=%dms",
 					cdrData.TermReason, cdrData.Codec,
-					float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter)
+					cdrData.LocalMOSString(), cdrData.RTPJitter)
 			}
 
 			// Asterisk CDR lookup for call routing diagnostics
@@ -584,9 +584,23 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 		// Ensure CDR lookup for failed dials (may have been skipped if shouldRetry was set).
 		// Not lookupAsteriskCDR/lookupAudioCodesCDR: a failed dial legitimately
 		// has no CDR, so a miss here stays quiet instead of warning.
-		if lastAsteriskCDR == nil && w.asteriskCDRService != nil && w.asteriskCDRService.IsEnabled() {
+		//
+		// Both lookups race the writers, so wait once before whichever runs first.
+		// A failed dial does produce an AudioCodes CALL_END (carrying the
+		// termination reason), so the AudioCodes branch below needs the delay just
+		// as much — it used to query immediately whenever the Asterisk branch was
+		// skipped, and could beat the tailer's commit.
+		cdrWaited := false
+		waitForCDR := func() {
+			if cdrWaited {
+				return
+			}
+			cdrWaited = true
 			w.log.Info("Waiting %v for CDR to be written...", cdrLookupDelay)
 			time.Sleep(cdrLookupDelay)
+		}
+		if lastAsteriskCDR == nil && w.asteriskCDRService != nil && w.asteriskCDRService.IsEnabled() {
+			waitForCDR()
 			lookupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			asteriskCDR, lookupErr := w.asteriskCDRService.LookupByPhone(lookupCtx, originalPhone, lastCallTime)
 			cancel()
@@ -599,6 +613,7 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 			}
 		}
 		if lastCDRData == nil && w.cdrService != nil && w.cdrService.IsEnabled() {
+			waitForCDR()
 			lookupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			cdrData, lookupErr := w.cdrService.LookupByPhone(lookupCtx, originalPhone, lastCallTime)
 			cancel()
@@ -773,8 +788,8 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 		// AudioCodes CDR lookup for VoIP quality metrics
 		if cdrData := lookupAudioCodesCDR(context.Background(), w.cdrService, w.log, originalPhone, lastCallTime); cdrData != nil {
 			testRes.cdrData = cdrData
-			w.log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s term=%s",
-				float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
+			w.log.Info("CDR: MOS=%s jitter=%dms delay=%dms loss=%d codec=%s term=%s",
+				cdrData.LocalMOSString(), cdrData.RTPJitter,
 				cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec, cdrData.TermReason)
 		}
 

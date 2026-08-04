@@ -617,8 +617,8 @@ func persistResult(pw *persistenceWriters, testNum int, phone, nodeAddress, node
 	// Lookup CDR data for VoIP quality metrics (AudioCodes)
 	if cdrData := lookupAudioCodesCDR(context.Background(), pw.cdrService, pw.log, phone, time.Now()); cdrData != nil {
 		result.cdrData = cdrData
-		pw.log.Info("CDR: MOS=%.1f jitter=%dms delay=%dms loss=%d codec=%s term=%s",
-			float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter,
+		pw.log.Info("CDR: MOS=%s jitter=%dms delay=%dms loss=%d codec=%s term=%s",
+			cdrData.LocalMOSString(), cdrData.RTPJitter,
 			cdrData.RTPDelay, cdrData.PacketLoss, cdrData.Codec, cdrData.TermReason)
 	}
 
@@ -1056,9 +1056,9 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 
 			// AudioCodes CDR lookup for additional diagnostics
 			if cdrData := lookupAudioCodesCDR(ctx, cdrService, log, originalPhone, callTime); cdrData != nil {
-				log.Info("AudioCodes CDR: term=%s codec=%s MOS=%.1f jitter=%dms",
+				log.Info("AudioCodes CDR: term=%s codec=%s MOS=%s jitter=%dms",
 					cdrData.TermReason, cdrData.Codec,
-					float64(cdrData.LocalMOSCQ)/10.0, cdrData.RTPJitter)
+					cdrData.LocalMOSString(), cdrData.RTPJitter)
 			}
 
 			// Asterisk CDR lookup for call routing diagnostics

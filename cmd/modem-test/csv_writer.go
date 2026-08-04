@@ -361,9 +361,15 @@ func RecordFromTestResult(
 		rec.CDRRTPDelay = cdrData.RTPDelay
 		rec.CDRPacketLoss = cdrData.PacketLoss
 		rec.CDRRemotePacketLoss = cdrData.RemotePacketLoss
-		// Convert MOS from integer (e.g., 43) to float (4.3)
-		rec.CDRLocalMOS = float64(cdrData.LocalMOSCQ) / 10.0
-		rec.CDRRemoteMOS = float64(cdrData.RemoteMOSCQ) / 10.0
+		// Convert MOS from integer (e.g., 43) to float (4.3). Left at zero when
+		// the gateway reported no measurement, rather than writing the 127
+		// sentinel out as a 12.7 "score".
+		if cdrData.LocalMOSValid {
+			rec.CDRLocalMOS = float64(cdrData.LocalMOSCQ) / 10.0
+		}
+		if cdrData.RemoteMOSValid {
+			rec.CDRRemoteMOS = float64(cdrData.RemoteMOSCQ) / 10.0
+		}
 		rec.CDRLocalRFactor = cdrData.LocalRFactor
 		rec.CDRRemoteRFactor = cdrData.RemoteRFactor
 		rec.CDRTermReason = cdrData.TermReason

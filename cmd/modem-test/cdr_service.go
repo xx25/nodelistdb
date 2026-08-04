@@ -36,11 +36,26 @@ type CDRData struct {
 	LocalRFactor  int // R-factor (0-100)
 	RemoteRFactor int
 
+	// The MOS columns are non-NULL even when nothing was measured (the gateway
+	// writes the sentinel 127), so a zero value alone cannot be distinguished
+	// from a real score. These say whether the score above means anything.
+	LocalMOSValid  bool
+	RemoteMOSValid bool
+
 	// Termination info
 	TermReason         string
 	TermReasonCategory string
 	TermSide           string // LCL/RMT/UNKN
 	PSTNTermReason     int
+}
+
+// LocalMOSString renders the local MOS for logs, or "n/a" when the gateway did
+// not measure one.
+func (c *CDRData) LocalMOSString() string {
+	if !c.LocalMOSValid {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.1f", float64(c.LocalMOSCQ)/10.0)
 }
 
 // CDRService manages CDR database queries
@@ -50,7 +65,12 @@ type CDRService struct {
 	timeWindow time.Duration
 	enabled    bool
 	driver     string // "postgres" or "mysql"
+	deviceID   string // optional: restrict to one gateway (empty = any)
 }
+
+// mosUnavailable is the AudioCodes sentinel for "no MOS measured". It is not a
+// score: rendered as a score it reads 12.7, well outside the valid 0.0-5.0 range.
+const mosUnavailable = 127
 
 // NewCDRService creates a CDR service from config
 func NewCDRService(cfg CDRConfig) (*CDRService, error) {
@@ -100,6 +120,7 @@ func NewCDRService(cfg CDRConfig) (*CDRService, error) {
 		timeWindow: timeWindow,
 		enabled:    true,
 		driver:     driver,
+		deviceID:   cfg.DeviceID,
 	}, nil
 }
 
@@ -146,6 +167,11 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 	var query string
 	var row *sql.Row
 
+	// Only CALL_END carries duration and the RTP quality metrics; CALL_START and
+	// CALL_CONNECT leave release_time and every quality column NULL. They also sort
+	// BETTER under the ORDER BY below (their setup_time sits at callTime, whereas a
+	// CALL_END's release_time is a whole call-duration away), so without this filter
+	// LIMIT 1 reliably returns the one row with nothing in it.
 	if s.driver == "mysql" {
 		// AudioCodes stores setup_time/connect_time as DATETIME in UTC,
 		// so convert our local times to UTC before formatting
@@ -153,6 +179,14 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 		startStr := startTime.UTC().Format(timeFmt)
 		endStr := endTime.UTC().Format(timeFmt)
 		callTimeStr := callTime.UTC().Format(timeFmt)
+
+		deviceFilter := ""
+		args := []any{phonePattern, startStr, endStr, startStr, endStr, startStr, endStr}
+		if s.deviceID != "" {
+			deviceFilter = "\n\t\t\t  AND device_id = ?"
+			args = append(args, s.deviceID)
+		}
+		args = append(args, callTimeStr)
 
 		// MySQL query with ? placeholders and TIMESTAMPDIFF
 		query = fmt.Sprintf(`
@@ -163,14 +197,22 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 			       trm_reason, trm_reason_category, trm_sd, pstn_term_reason
 			FROM %s
 			WHERE dst_phone_num LIKE ?
+			  AND gw_report_type = 'CALL_END'
 			  AND (setup_time BETWEEN ? AND ?
 			       OR release_time BETWEEN ? AND ?
-			       OR connect_time BETWEEN ? AND ?)
+			       OR connect_time BETWEEN ? AND ?)%s
 			ORDER BY ABS(TIMESTAMPDIFF(SECOND, COALESCE(release_time, setup_time), ?)) ASC
 			LIMIT 1
-		`, s.tableName)
-		row = s.db.QueryRowContext(ctx, query, phonePattern, startStr, endStr, startStr, endStr, startStr, endStr, callTimeStr)
+		`, s.tableName, deviceFilter)
+		row = s.db.QueryRowContext(ctx, query, args...)
 	} else {
+		deviceFilter := ""
+		args := []any{phonePattern, startTime, endTime, callTime}
+		if s.deviceID != "" {
+			deviceFilter = "\n\t\t\t  AND device_id = $5"
+			args = append(args, s.deviceID)
+		}
+
 		// PostgreSQL query with $N placeholders and EXTRACT(EPOCH)
 		query = fmt.Sprintf(`
 			SELECT session_id, setup_time, connect_time, release_time, durat,
@@ -180,13 +222,14 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 			       trm_reason, trm_reason_category, trm_sd, pstn_term_reason
 			FROM %s
 			WHERE dst_phone_num LIKE $1
+			  AND gw_report_type = 'CALL_END'
 			  AND (setup_time BETWEEN $2 AND $3
 			       OR release_time BETWEEN $2 AND $3
-			       OR connect_time BETWEEN $2 AND $3)
+			       OR connect_time BETWEEN $2 AND $3)%s
 			ORDER BY ABS(EXTRACT(EPOCH FROM (COALESCE(release_time, setup_time) - $4))) ASC
 			LIMIT 1
-		`, s.tableName)
-		row = s.db.QueryRowContext(ctx, query, phonePattern, startTime, endTime, callTime)
+		`, s.tableName, deviceFilter)
+		row = s.db.QueryRowContext(ctx, query, args...)
 	}
 
 	var cdr CDRData
@@ -243,11 +286,14 @@ func (s *CDRService) LookupByPhone(ctx context.Context, phone string, callTime t
 		cdr.RemotePacketLoss = int(remotePackLoss.Int64)
 	}
 
-	if localMOS.Valid {
+	// 127 means "not measured", not a score. Treating it as one renders MOS=12.7.
+	if localMOS.Valid && localMOS.Int64 != mosUnavailable {
 		cdr.LocalMOSCQ = int(localMOS.Int64)
+		cdr.LocalMOSValid = true
 	}
-	if remoteMOS.Valid {
+	if remoteMOS.Valid && remoteMOS.Int64 != mosUnavailable {
 		cdr.RemoteMOSCQ = int(remoteMOS.Int64)
+		cdr.RemoteMOSValid = true
 	}
 	if localR.Valid {
 		cdr.LocalRFactor = int(localR.Int64)

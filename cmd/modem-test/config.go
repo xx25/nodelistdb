@@ -141,6 +141,11 @@ type CDRConfig struct {
 	DSN           string `yaml:"dsn"`             // Database connection string
 	TableName     string `yaml:"table_name"`      // CDR table name (default: "cdr")
 	TimeWindowSec int    `yaml:"time_window_sec"` // Time window for matching calls (default: 120)
+	// DeviceID restricts lookups to one gateway. Leave empty when the CDR
+	// database serves a single device; set it when several gateways share the
+	// table, or a temporally closer call through another gateway can be
+	// misattributed to this modem.
+	DeviceID string `yaml:"device_id"`
 }
 
 // AsteriskCDRConfig contains Asterisk CDR database settings for call routing info

@@ -110,6 +110,11 @@ logging:
 #   table_name: "modem_test_results"  # optional, defaults to "modem_test_results"
 
 # AudioCodes CDR configuration (optional) - VoIP quality metrics
+# Only CALL_END reports are consulted: they are the only ones carrying duration
+# and the RTP quality metrics. This requires an audiocodes-cdr build that stores
+# CALL_END at all (its unique key must include gw_report_type) - older ones kept
+# only CALL_CONNECT, whose quality columns are all NULL or the 127 "no
+# measurement" sentinel.
 # cdr:
 #   enabled: true
 #   driver: "mysql"      # "postgres" or "mysql" (default: "postgres")
@@ -117,6 +122,8 @@ logging:
 #   # dsn: "postgres://user:password@localhost:5432/voip_db"         # PostgreSQL DSN
 #   table_name: "cdr"           # optional, defaults to "cdr"
 #   time_window_sec: 120        # time window for matching calls (default: 120)
+#   device_id: ""               # optional: restrict to one gateway when the CDR
+#                               # database serves several (empty = any device)
 
 # Asterisk CDR configuration (optional) - call routing info
 # asterisk_cdr:
