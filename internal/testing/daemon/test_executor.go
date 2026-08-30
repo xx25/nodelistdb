@@ -146,7 +146,17 @@ func (te *TestExecutor) performTesting(ctx context.Context, node *models.Node, h
 
 		if dnsResult.Error != nil {
 			result.DNSError = dnsResult.Error.Error()
-			logging.Infof("DNS resolution failed for %s (%s): %s", nodeAddr, hostname, dnsResult.Error)
+			result.DNSErrorKind = classifyDNSError(dnsResult.Error)
+			logging.Infof("DNS resolution failed for %s (%s): %s [%s]", nodeAddr, hostname, dnsResult.Error, result.DNSErrorKind)
+
+			// A DNS failure used to end the test here, which left the database
+			// unable to distinguish "the name broke" from "the node is gone".
+			// Probe the address the node publishes, or last answered on, so the
+			// two are told apart. The node stays non-operational either way.
+			if probe := te.daemon.buildFallbackProbe(ctx, node, hostname); probe != nil {
+				te.daemon.runFallbackProbe(ctx, node, result, probe)
+			}
+
 			te.daemon.logConnectivitySummary(nodeAddr, node, result)
 			return result
 		}

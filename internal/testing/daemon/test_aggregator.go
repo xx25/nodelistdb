@@ -215,6 +215,24 @@ func (ta *TestAggregator) CreateAggregatedResult(node *models.Node, results []*m
 		} else if result.DNSError != "" {
 			// DNS resolution failed
 			failedHostnames = append(failedHostnames, hostname)
+
+			// Carry the fallback probe onto the summary row. Most reachability
+			// tooling reads only the aggregate, so without this a multi-hostname
+			// node whose names all failed DNS would show no fallback detail even
+			// though the per-hostname rows have it. A probe that reached the node
+			// wins over one that did not; the aggregate is a summary, and "some
+			// address still answered" is the fact worth surfacing.
+			if fb := result.DNSFallback; fb != nil {
+				if aggregated.DNSFallback == nil || (fb.Success && !aggregated.DNSFallback.Success) {
+					aggregated.DNSFallback = fb
+				}
+			}
+		}
+
+		// The kind is shared across hostnames often enough to be worth keeping,
+		// and an empty one must never overwrite a real classification.
+		if aggregated.DNSErrorKind == "" {
+			aggregated.DNSErrorKind = result.DNSErrorKind
 		}
 
 		// Protocol aggregation - merge per-IP-family results from every

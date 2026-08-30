@@ -27,6 +27,15 @@ type TestResult struct {
 	ResolvedIPv6   []string
 	DNSError       string
 
+	// DNSErrorKind classifies DNSError into a stable vocabulary
+	// (nxdomain, timeout, servfail, refused, no_answer, other) so analysis does
+	// not have to regex over the Go resolver's error strings. Empty on success.
+	DNSErrorKind string
+
+	// DNSFallback records what was reachable when the hostname would not
+	// resolve. Nil unless DNS failed and a fallback address was available.
+	DNSFallback *DNSFallbackProbe
+
 	// Geolocation
 	Country     string
 	CountryCode string
@@ -559,3 +568,60 @@ func (atr *AggregatedTestResult) GetSuccessRate() float64 {
 	}
 	return float64(len(atr.WorkingHostnames)) / float64(len(atr.HostnameResults)) * 100
 }
+
+// DNSFallbackProbe is the outcome of probing a node's last-known or published
+// address after its hostname failed to resolve.
+//
+// It exists to answer a question the daemon previously could not: when DNS
+// breaks, is the node still sitting there answering on the address it had
+// yesterday? A DNS failure used to end the test, so "DNS broke" and "DNS broke
+// and the node was gone too" were indistinguishable in the database.
+//
+// Success here deliberately does NOT make a node operational. To a mailer that
+// only knows the hostname, the node is unreachable; recording it as up would
+// change the meaning of every existing reachability query.
+type DNSFallbackProbe struct {
+	// Source is where the address came from: FallbackSourceNodelistLiteral for
+	// an IP the sysop published in INA, FallbackSourceLastKnown for the most
+	// recent address the hostname resolved to.
+	Source string
+
+	IPv4 []string
+	IPv6 []string
+
+	// AgeHours is how old the address was when probed. Staleness is the central
+	// risk of any address-in-the-nodelist scheme, so the age has to travel with
+	// every observation. Zero for a published literal, which is not observed.
+	AgeHours uint32
+
+	// Success is true if any protocol answered at the fallback address.
+	Success bool
+
+	// Protocols lists the protocols that answered ("binkp", "ifcico", ...).
+	Protocols []string
+
+	// AddressValidated is true if the host that answered announced the FTN
+	// address we expected. Without this check a recycled IP running someone
+	// else's mailer would read as a success - which is precisely the failure
+	// mode that makes a stale fallback address harmful rather than merely
+	// useless.
+	AddressValidated bool
+
+	Error string
+}
+
+// Fallback address sources.
+const (
+	FallbackSourceNodelistLiteral = "nodelist_literal"
+	FallbackSourceLastKnown       = "last_known"
+)
+
+// DNS error classifications.
+const (
+	DNSErrorNXDomain = "nxdomain"
+	DNSErrorTimeout  = "timeout"
+	DNSErrorServfail = "servfail"
+	DNSErrorRefused  = "refused"
+	DNSErrorNoAnswer = "no_answer"
+	DNSErrorOther    = "other"
+)

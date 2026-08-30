@@ -2,7 +2,10 @@ package storage
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nodelistdb/internal/testing/models"
@@ -93,7 +96,10 @@ func (s *ClickHouseStorage) flushBatchLocked(ctx context.Context) error {
 		binkp_ipv4_addresses, binkp_ipv6_addresses, ifcico_ipv4_addresses, ifcico_ipv6_addresses,
 		address_validated_ipv4, address_validated_ipv6,
 		ftp_anon_success,
-		domain, derived_from_address
+		domain, derived_from_address,
+		dns_error_kind, dns_fallback_attempted, dns_fallback_ipv4, dns_fallback_ipv6,
+		dns_fallback_source, dns_fallback_age_hours, dns_fallback_success,
+		dns_fallback_protocols, dns_fallback_address_validated, dns_fallback_error
 	)`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare batch: %w", err)
@@ -838,6 +844,29 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		testedHostname = r.Hostname
 	}
 
+	// DNS fallback probe. Arrays must be non-nil: the ClickHouse driver rejects
+	// a nil slice for Array(String), the same trap the email-domain-check writer
+	// hit.
+	fbAttempted := r.DNSFallback != nil
+	fbIPv4, fbIPv6, fbProtocols := []string{}, []string{}, []string{}
+	var fbSource, fbError string
+	var fbAgeHours uint32
+	var fbSuccess, fbValidated bool
+	if r.DNSFallback != nil {
+		fb := r.DNSFallback
+		if len(fb.IPv4) > 0 {
+			fbIPv4 = fb.IPv4
+		}
+		if len(fb.IPv6) > 0 {
+			fbIPv6 = fb.IPv6
+		}
+		if len(fb.Protocols) > 0 {
+			fbProtocols = fb.Protocols
+		}
+		fbSource, fbError = fb.Source, fb.Error
+		fbAgeHours, fbSuccess, fbValidated = fb.AgeHours, fb.Success, fb.AddressValidated
+	}
+
 	return []interface{}{
 		// First 52 fields (original)
 		r.TestTime, r.TestDate, r.Zone, r.Net, r.Node, r.Address,
@@ -878,5 +907,74 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		ftpAnonSuccess,
 		// Multi-network identity and AKA-derivation provenance
 		domain, r.DerivedFromAddress,
+		// DNS failure detail and fallback probe
+		r.DNSErrorKind, fbAttempted, fbIPv4, fbIPv6,
+		fbSource, fbAgeHours, fbSuccess, fbProtocols, fbValidated, fbError,
 	}
+}
+
+// GetLastKnownIPs returns the most recent addresses a hostname resolved to.
+//
+// Scoped to (zone, net, node, domain, hostname). The hostname matters because a
+// node with several names has a separate address history per name, and probing
+// name A's failure with name B's address would measure the wrong thing. The
+// domain matters because zone numbers are reused across FTN networks, so
+// 21:1/100@fsxnet and 21:1/100@fidonet are different nodes that would otherwise
+// share a history - the same reason models.Node.Key() carries the domain while
+// Address() deliberately does not.
+//
+// zone/net/node are passed rather than the formatted address so the query can
+// use the table's ORDER BY (test_date, zone, net, node); the test_date bound
+// derived from maxAge lets ClickHouse prune whole monthly partitions, which
+// matters because this runs synchronously in the test cycle for every node
+// whose DNS just failed.
+func (s *ClickHouseStorage) GetLastKnownIPs(ctx context.Context, zone, net, node int, domain, hostname string, maxAge time.Duration) (*LastKnownIPs, error) {
+	if hostname == "" {
+		return nil, nil
+	}
+	if maxAge <= 0 {
+		maxAge = 30 * 24 * time.Hour
+	}
+	if domain == "" {
+		domain = models.DefaultDomain
+	}
+
+	since := time.Now().Add(-maxAge)
+
+	query := `
+		SELECT resolved_ipv4, resolved_ipv6, test_time
+		FROM node_test_results
+		WHERE test_date >= ?
+		  AND zone = ? AND net = ? AND node = ?
+		  AND domain = ?
+		  AND hostname = ?
+		  AND dns_error = ''
+		  AND (length(resolved_ipv4) > 0 OR length(resolved_ipv6) > 0)
+		  AND test_time >= ?
+		ORDER BY test_time DESC
+		LIMIT 1
+	`
+
+	var (
+		ipv4     []string
+		ipv6     []string
+		observed time.Time
+	)
+	row := s.conn.QueryRow(ctx, query, since, zone, net, node, domain, hostname, since)
+	if err := row.Scan(&ipv4, &ipv6, &observed); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		// The driver reports an empty result set this way for QueryRow.
+		if strings.Contains(err.Error(), "no rows in result set") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query last known IPs for %d:%d/%d@%s (%s): %w", zone, net, node, domain, hostname, err)
+	}
+
+	if len(ipv4) == 0 && len(ipv6) == 0 {
+		return nil, nil
+	}
+
+	return &LastKnownIPs{IPv4: ipv4, IPv6: ipv6, ObservedAt: observed}, nil
 }

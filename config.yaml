@@ -279,6 +279,20 @@ services:
     timeout: 5s                # DNS query timeout
     cache_ttl: 24h             # DNS result cache duration
 
+    # After a hostname fails to resolve, probe the node at the IP it publishes
+    # in INA, or failing that at the address the hostname last resolved to.
+    # Without this a DNS failure ends the test, so "the name broke" and "the
+    # node is gone" are the same row. Results are recorded in the
+    # dns_fallback_* columns and never count towards is_operational.
+    # max_age is 7 days because a remembered address is still correct ~91% of
+    # the time after a week but only ~85% after a month, and the outages this
+    # catches are short; a longer window mostly buys repeated handshakes to
+    # whoever holds that address now.
+    fallback_probe:
+      enabled: true            # default when the key is absent
+      max_age: 168h            # ignore remembered addresses older than 7 days
+                               # (does not apply to IP literals from the nodelist)
+
   # IP Geolocation
   geolocation:
     provider: ip-api           # Provider: ip-api, ipinfo, ipgeolocation

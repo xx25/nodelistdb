@@ -186,6 +186,21 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     -- Test source identification (daemon, cli, manual)
     `test_source` LowCardinality(String) DEFAULT 'daemon',
 
+    -- DNS failure detail + fallback probe (migration 015).
+    -- These record what was reachable when the hostname would not resolve.
+    -- dns_fallback_* never feeds is_operational: a node only reachable by a
+    -- remembered IP is still unreachable to a DNS-only mailer.
+    `dns_error_kind` LowCardinality(String) DEFAULT '',
+    `dns_fallback_attempted` Bool DEFAULT false,
+    `dns_fallback_ipv4` Array(String) DEFAULT [],
+    `dns_fallback_ipv6` Array(String) DEFAULT [],
+    `dns_fallback_source` LowCardinality(String) DEFAULT '',
+    `dns_fallback_age_hours` UInt32 DEFAULT 0,
+    `dns_fallback_success` Bool DEFAULT false,
+    `dns_fallback_protocols` Array(String) DEFAULT [],
+    `dns_fallback_address_validated` Bool DEFAULT false,
+    `dns_fallback_error` String DEFAULT '',
+
     -- Modem (PSTN) test results
     `modem_tested` Bool DEFAULT false,
     `modem_success` Bool DEFAULT false,
