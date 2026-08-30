@@ -225,7 +225,7 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 
 		// Validate address if expected
 		if expectedAddress != "" {
-			result.AddressValid = session.ValidateAddress(expectedAddress)
+			result.AddressValid = announcedAddressMatches(remoteInfo.Addresses, expectedAddress)
 			if t.debug {
 				logging.Debugf("IFCICO: Address validation: expected=%s, received=%v, valid=%v",
 					expectedAddress, remoteInfo.Addresses, result.AddressValid)

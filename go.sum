@@ -112,6 +112,10 @@ github.com/xx25/fidomail v0.0.0-20260725215536-85840f17ba13 h1:ru9HDlT8Lf52bz4DT
 github.com/xx25/fidomail v0.0.0-20260725215536-85840f17ba13/go.mod h1:5xGuK0LlUJUrUqdkU3+68TFkhlkNRwBeD315AVBbSN8=
 github.com/xx25/fidomail v0.0.0-20260729232252-81a4f8bfca5f h1:OXDv+c3rd4JloXNaJSUu4H1Jg8eaNkYmOBpdvjYpPc0=
 github.com/xx25/fidomail v0.0.0-20260729232252-81a4f8bfca5f/go.mod h1:5xGuK0LlUJUrUqdkU3+68TFkhlkNRwBeD315AVBbSN8=
+github.com/xx25/fidomail v0.0.0-20260806230638-b8271587a076 h1:AwBO18BcqT9wCDF4+jo00Zhyqs3sOBOWzr4XBFvSOfY=
+github.com/xx25/fidomail v0.0.0-20260806230638-b8271587a076/go.mod h1:IDscSLGRUTAPACs56zs0I3Ze5Xy0eS4DSRZFughX79s=
+github.com/xx25/fidomail v0.1.3 h1:rZUtXZ88MWh1Mqa+p0+Va+GdIFIVnjixf/B433XNcZ0=
+github.com/xx25/fidomail v0.1.3/go.mod h1:QxL8cz5XjiipzsQoqIIgxv1wnnFksoeP/+YahJjONOc=
 github.com/xx25/go-serial/v2 v2.0.0-20260621135723-af8dce8aa671 h1:NE4+DXBTrDCQB8QUbzx158GUBdvb00ANpvsAsq4SypE=
 github.com/xx25/go-serial/v2 v2.0.0-20260621135723-af8dce8aa671/go.mod h1:ylUeCauuRTvijve0+EEouPGgyaEB9jn2eb1mTik0M5U=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=

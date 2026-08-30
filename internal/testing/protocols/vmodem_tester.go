@@ -495,7 +495,7 @@ func (t *VModemTester) emsiOver(c net.Conn, expectedAddress string, res *VModemT
 			res.SystemName = fmt.Sprintf("%s (%s)", res.SystemName, info.Location)
 		}
 		if expectedAddress != "" {
-			res.AddressValid = session.ValidateAddress(expectedAddress)
+			res.AddressValid = announcedAddressMatches(info.Addresses, expectedAddress)
 		}
 	}
 
