@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -8,7 +9,9 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/nodelistdb/internal/config"
 	"github.com/nodelistdb/internal/logging"
+	"github.com/nodelistdb/internal/ratelimit"
 )
 
 // loggingMiddleware logs every request, API and web alike.
@@ -66,4 +69,87 @@ func clientIP(r *http.Request) string {
 	}
 
 	return r.RemoteAddr
+}
+
+// buildRateLimiter turns the config section into middleware, or nil when the
+// limiter is switched off.
+//
+// The zero values in the config mean "keep the measured default" rather than
+// "no allowance", so an operator can raise one number without having to
+// restate the whole policy - and cannot accidentally set a limit of zero
+// requests per second by mentioning the section at all.
+func buildRateLimiter(cfg config.RateLimitConfig) (*ratelimit.Middleware, error) {
+	if !cfg.On() {
+		logging.Info("Rate limiting disabled by configuration")
+		return nil, nil
+	}
+
+	rl := ratelimit.DefaultConfig()
+	rl.TrustedProxies = cfg.TrustedProxies
+
+	idle, err := cfg.IdleDuration()
+	if err != nil {
+		return nil, err
+	}
+	rl.Idle = idle
+	if cfg.MaxKeys > 0 {
+		rl.MaxKeys = cfg.MaxKeys
+	}
+	if cfg.DefaultRPS > 0 {
+		rl.Default.Refill = cfg.DefaultRPS
+	}
+	if cfg.DefaultBurst > 0 {
+		rl.Default.Burst = cfg.DefaultBurst
+	}
+	for i := range rl.Classes {
+		switch rl.Classes[i].Name {
+		case "expensive":
+			if cfg.ExpensiveRPS > 0 {
+				rl.Classes[i].Rate.Refill = cfg.ExpensiveRPS
+			}
+			if cfg.ExpensiveBurst > 0 {
+				rl.Classes[i].Rate.Burst = cfg.ExpensiveBurst
+			}
+		case "download":
+			if cfg.DownloadRPS > 0 {
+				rl.Classes[i].Rate.Refill = cfg.DownloadRPS
+			}
+			if cfg.DownloadBurst > 0 {
+				rl.Classes[i].Rate.Burst = cfg.DownloadBurst
+			}
+		}
+	}
+
+	m, err := ratelimit.New(rl)
+	if err != nil {
+		return nil, err
+	}
+	logging.Info("Rate limiting enabled",
+		slog.Float64("expensive_rps", rl.Classes[0].Rate.Refill),
+		slog.Float64("expensive_burst", rl.Classes[0].Rate.Burst),
+		slog.Float64("default_rps", rl.Default.Refill),
+		slog.Int("max_keys", rl.MaxKeys),
+		slog.Any("trusted_proxies", trustedProxyNames(cfg.TrustedProxies)),
+	)
+	return m, nil
+}
+
+// trustedProxyNames renders the trusted set for the startup log, naming the
+// default explicitly so the log answers "whose headers does this believe"
+// without the reader having to know what an empty list means.
+func trustedProxyNames(cidrs []string) []string {
+	if len(cidrs) == 0 {
+		return []string{"loopback (default)"}
+	}
+	return cidrs
+}
+
+// rateLimitStatsHandler exposes the limiter's counters alongside the cache's.
+func rateLimitStatsHandler(m *ratelimit.Middleware) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(m.Stats()); err != nil {
+			logging.Warn("failed to encode rate limit stats", slog.Any("error", err))
+		}
+	}
 }

@@ -10,12 +10,13 @@ import (
 
 // Server represents the API server
 type Server struct {
-	storage           Storage
-	modemHandler      *ModemHandler
-	healthChecker     HealthChecker
-	cacheStatsHandler http.HandlerFunc
-	ftpStatsHandler   http.HandlerFunc
-	budgets           Budgets
+	storage               Storage
+	modemHandler          *ModemHandler
+	healthChecker         HealthChecker
+	cacheStatsHandler     http.HandlerFunc
+	ftpStatsHandler       http.HandlerFunc
+	rateLimitStatsHandler http.HandlerFunc
+	budgets               Budgets
 }
 
 // Budgets are the per-route-group query deadlines. The zero value is no
@@ -45,6 +46,11 @@ func (s *Server) SetHealthChecker(hc HealthChecker) {
 // SetCacheStatsHandler sets the handler for the /api/cache/stats endpoint
 func (s *Server) SetCacheStatsHandler(h http.HandlerFunc) {
 	s.cacheStatsHandler = h
+}
+
+// SetRateLimitStatsHandler sets the handler for the /api/ratelimit/stats endpoint
+func (s *Server) SetRateLimitStatsHandler(h http.HandlerFunc) {
+	s.rateLimitStatsHandler = h
 }
 
 // SetFTPStatsHandler sets the handler for the /api/ftp/stats endpoint

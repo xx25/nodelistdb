@@ -108,6 +108,10 @@ func (s *Server) SetupRouter() http.Handler {
 	}
 
 	// FTP stats endpoint (if configured)
+	if s.rateLimitStatsHandler != nil {
+		r.Get("/api/ratelimit/stats", s.rateLimitStatsHandler)
+	}
+
 	if s.ftpStatsHandler != nil {
 		r.Get("/api/ftp/stats", s.ftpStatsHandler)
 	}

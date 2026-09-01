@@ -36,6 +36,7 @@ func TestRoutesMatchTheSpec(t *testing.T) {
 	s := New(&fakeOps{})
 	s.SetCacheStatsHandler(func(http.ResponseWriter, *http.Request) {})
 	s.SetFTPStatsHandler(func(http.ResponseWriter, *http.Request) {})
+	s.SetRateLimitStatsHandler(func(http.ResponseWriter, *http.Request) {})
 	s.SetModemHandler(NewModemHandler(&config.ModemAPIConfig{MaxBodySizeMB: 1}, nil))
 	router := s.SetupRouter()
 

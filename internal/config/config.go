@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -57,6 +58,7 @@ type Config struct {
 	Networks          []NetworkConfig   `yaml:"networks,omitempty"` // FTN networks (defaults to fidonet if absent)
 	LinksFile         string            `yaml:"links_file"`         // Path to links.yaml for external FidoNet links
 	QueryBudget       QueryBudgetConfig `yaml:"query_budget,omitempty"`
+	RateLimit         RateLimitConfig   `yaml:"rate_limit,omitempty"`
 	ServerLogging     LoggingConfig     `yaml:"server_logging"`
 	ParserLogging     LoggingConfig     `yaml:"parser_logging"`
 	TestdaemonLogging LoggingConfig     `yaml:"testdaemon_logging"`
@@ -105,6 +107,49 @@ func (q QueryBudgetConfig) Durations() (def, analytics time.Duration, err error)
 		}
 	}
 	return def, analytics, nil
+}
+
+// RateLimitConfig throttles requests per client IP.
+//
+// On by default. The public front end is a 1 OCPU / 954 MB host serving an
+// archive with roughly 110,000 crawlable node pages at about 12 seconds each;
+// left open, a single crawler walking that surface keeps a core busy for days,
+// and several were. A limiter is the only one of the available defences that
+// does not depend on the caller's cooperation the way robots.txt does.
+//
+// TrustedProxies decides whose X-Forwarded-For is believed and is therefore
+// the security-relevant field: leave it empty when the reverse proxy is on
+// the same host (the default trusts loopback only), and set it to the proxy's
+// address when it is not. Naming a range wider than the actual proxies lets
+// anything inside that range choose its own limiter key.
+type RateLimitConfig struct {
+	Enabled        *bool    `yaml:"enabled,omitempty"`         // nil = on
+	TrustedProxies []string `yaml:"trusted_proxies,omitempty"` // empty = loopback
+	ExpensiveRPS   float64  `yaml:"expensive_rps,omitempty"`   // sustained, heavy pages
+	ExpensiveBurst float64  `yaml:"expensive_burst,omitempty"`
+	DefaultRPS     float64  `yaml:"default_rps,omitempty"`
+	DefaultBurst   float64  `yaml:"default_burst,omitempty"`
+	DownloadRPS    float64  `yaml:"download_rps,omitempty"`
+	DownloadBurst  float64  `yaml:"download_burst,omitempty"`
+	MaxKeys        int      `yaml:"max_keys,omitempty"`
+	Idle           string   `yaml:"idle,omitempty"` // forget a caller after this
+}
+
+// On reports whether the limiter runs. The field is a pointer so that a config
+// file written before this section existed still gets the protection, while an
+// explicit "enabled: false" still turns it off.
+func (r RateLimitConfig) On() bool { return r.Enabled == nil || *r.Enabled }
+
+// IdleDuration parses Idle, defaulting to 15 minutes.
+func (r RateLimitConfig) IdleDuration() (time.Duration, error) {
+	if r.Idle == "" {
+		return 15 * time.Minute, nil
+	}
+	d, err := time.ParseDuration(r.Idle)
+	if err != nil {
+		return 0, fmt.Errorf("invalid rate_limit.idle: %w", err)
+	}
+	return d, nil
 }
 
 // LoggingConfig holds logging configuration
@@ -447,6 +492,22 @@ func (c *Config) validate() error {
 	}
 	if _, _, err := c.QueryBudget.Durations(); err != nil {
 		return err
+	}
+
+	// Rate limiting: the durations and CIDRs are parsed at startup for the
+	// same reason as the query budgets - a typo must not quietly leave the
+	// front end unprotected.
+	if c.RateLimit.On() {
+		if _, err := c.RateLimit.IdleDuration(); err != nil {
+			return err
+		}
+		for _, cidr := range c.RateLimit.TrustedProxies {
+			if _, _, err := net.ParseCIDR(cidr); err != nil {
+				if net.ParseIP(strings.TrimSpace(cidr)) == nil {
+					return fmt.Errorf("invalid rate_limit.trusted_proxies entry %q: want a CIDR or IP", cidr)
+				}
+			}
+		}
 	}
 
 	// Validate logging configurations for all components

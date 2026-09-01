@@ -303,6 +303,24 @@ paths:
               schema:
                 type: object
 
+  /api/ratelimit/stats:
+    get:
+      summary: Rate Limiter Statistics
+      description: |
+        Allowed and rejected request counts and the number of client buckets
+        currently tracked. Registered only when rate limiting is enabled in the
+        server configuration.
+      operationId: getRateLimitStats
+      tags:
+        - Operations
+      responses:
+        '200':
+          description: Rate limiter counters
+          content:
+            application/json:
+              schema:
+                type: object
+
   /api/ftp/stats:
     get:
       summary: FTP Server Statistics

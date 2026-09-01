@@ -72,6 +72,55 @@ query_budget:
   analytics: 120s              # The heavy analytics reports (latest_nodes CTEs)
 
 # ============================================================================
+# RATE LIMITING (Server only)
+# ============================================================================
+# Per-client-IP throttling, ON by default.
+#
+# Why it is on: the archive exposes roughly 110,000 node pages that cost about
+# 12 seconds of CPU each to render, and the public front end is a 1 OCPU host.
+# SEO and AI crawlers walking that surface kept both vCPUs busy around the
+# clock; over one 18-hour window /node/ alone accounted for 39,504 seconds of
+# request time. robots.txt only helps with crawlers that read it.
+#
+# Set expectations honestly: replaying 18.5h of production log against the
+# default rule blocks 5.8% of expensive requests and 4.2% of the CPU they cost.
+# The load is spread across many clients each behaving moderately, so even a
+# punitive 1 request/minute only removes 12.3%. This bounds the worst single
+# client (the heaviest was peaking at 43 expensive requests a minute); getting
+# the total down needs the per-request cost down, which is a separate change.
+#
+# Requests are sorted into classes by path prefix, because the paths differ in
+# cost by three orders of magnitude:
+#   expensive - /node/, /reachability, /points/, /analytics/, /stats,
+#               /api/networks, /api/nodes/ ...  (measured >= 1s mean)
+#   download  - /download/, /nodelists, /pointlists  (cheap, and bulk mirroring
+#               is a legitimate use of this archive)
+#   exempt    - /static/, /robots.txt, /api/health, /api/modem/  (never limited)
+#   default   - everything else
+#
+# trusted_proxies is the security-relevant setting. A forwarding header is
+# believed ONLY when the connection came from one of these, so leave it empty
+# when the reverse proxy runs on the same host (empty = loopback only). Listing
+# a range wider than the real proxies lets anything inside it pick its own
+# limiter key and evade the limit entirely.
+#
+# IPv6 callers are limited per /64, not per address: a host with a routed
+# prefix can otherwise source every request from a fresh address.
+#
+# Live counters: GET /api/ratelimit/stats
+rate_limit:
+  enabled: true                # Set false to turn the limiter off entirely
+  # trusted_proxies: []        # CIDRs or IPs; empty = loopback only
+  expensive_rps: 0.1           # 6 heavy pages per minute, sustained
+  expensive_burst: 10          # ...with room for a reader clicking around
+  download_rps: 5
+  download_burst: 60
+  default_rps: 2
+  default_burst: 40
+  max_keys: 20000              # Bucket cap; oldest are evicted past this
+  idle: 15m                    # Forget a caller idle this long
+
+# ============================================================================
 # CACHE (Server only - optional)
 # ============================================================================
 # Note: Only BadgerCache is supported (persistent BadgerDB backend)

@@ -20,6 +20,7 @@ import (
 	"github.com/nodelistdb/internal/links"
 	"github.com/nodelistdb/internal/logging"
 	"github.com/nodelistdb/internal/querybudget"
+	"github.com/nodelistdb/internal/ratelimit"
 	"github.com/nodelistdb/internal/storage"
 	"github.com/nodelistdb/internal/version"
 	"github.com/nodelistdb/internal/web"
@@ -128,7 +129,15 @@ func run(opts options) error {
 		logging.Info("Links configuration enabled", slog.String("path", cfg.LinksFile))
 	}
 
-	return serve(buildHTTPServer(opts, apiServer, webServer, longestBudget(readBudget, analyticsBudget)), ftpServer)
+	limiter, err := buildRateLimiter(cfg.RateLimit)
+	if err != nil {
+		return fmt.Errorf("rate limiter: %w", err)
+	}
+	if limiter != nil {
+		apiServer.SetRateLimitStatsHandler(rateLimitStatsHandler(limiter))
+	}
+
+	return serve(buildHTTPServer(opts, apiServer, webServer, longestBudget(readBudget, analyticsBudget), limiter), ftpServer)
 }
 
 // longestBudget returns whichever budget runs longest. Sizing WriteTimeout off
@@ -285,7 +294,7 @@ func buildAPI(cfg *config.Config, db *database.ClickHouseDB, deps serverDeps, ft
 	return apiServer, nil
 }
 
-func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server, longest querybudget.Budget) *http.Server {
+func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server, longest querybudget.Budget, limiter *ratelimit.Middleware) *http.Server {
 	// The API is a Chi router mounted under /api/; the web pages are on a
 	// plain ServeMux. One logging middleware wraps both.
 	mux := http.NewServeMux()
@@ -301,9 +310,17 @@ func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server,
 		writeTimeout = b + writeSlack
 	}
 
+	// The limiter sits inside the logging middleware, so a rejected request
+	// still produces a log line with its 429 - without that, the only
+	// evidence of throttling would be traffic that silently disappears.
+	var handler http.Handler = mux
+	if limiter != nil {
+		handler = limiter.Wrap(handler)
+	}
+
 	return &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", opts.host, opts.port),
-		Handler:           loggingMiddleware(mux),
+		Handler:           loggingMiddleware(handler),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      writeTimeout,
