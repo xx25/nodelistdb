@@ -194,6 +194,12 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// Pointlist snapshot under this boss (empty for the vast majority of nodes)
 	points, _ := s.storage.GetPointsByBoss(r.Context(), resolvedDomain, zone, net, node, nil)
 
+	// Latest netmail PING, when the node has ever been pinged.
+	var latestPing *pingView
+	if pings, err := s.storage.GetNodePings(r.Context(), resolvedDomain, zone, net, node, 1); err == nil && len(pings) > 0 {
+		latestPing = newPingView(pings[0])
+	}
+
 	data := struct {
 		Title            string
 		Address          string
@@ -202,6 +208,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		History          []database.Node
 		Changes          []database.NodeChange
 		Points           []database.Point
+		LatestPing       *pingView
 		FirstDate        time.Time
 		LastDate         time.Time
 		CurrentlyActive  bool
@@ -216,6 +223,7 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		History:          history,
 		Changes:          changes,
 		Points:           points,
+		LatestPing:       latestPing,
 		FirstDate:        activityInfo.FirstDate,
 		LastDate:         activityInfo.LastDate,
 		CurrentlyActive:  activityInfo.CurrentlyActive,

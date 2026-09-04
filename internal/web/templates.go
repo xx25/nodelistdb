@@ -212,6 +212,17 @@ func (s *Server) loadTemplates() error {
 			}
 		},
 		"join": strings.Join,
+		"secondsShort": func(v interface{}) string {
+			switch n := v.(type) {
+			case uint32:
+				return fmtDurationShort(time.Duration(n) * time.Second)
+			case int:
+				return fmtDurationShort(time.Duration(n) * time.Second)
+			case int64:
+				return fmtDurationShort(time.Duration(n) * time.Second)
+			}
+			return ""
+		},
 		"replaceUnderscores": func(s string) string {
 			return strings.ReplaceAll(s, "_", " ")
 		},

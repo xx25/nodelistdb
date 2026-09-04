@@ -27,6 +27,7 @@ type Daemon struct {
 	rdapResolver  *services.RDAPResolver
 	whoisWorker   *WhoisWorker
 	emailSweeper  *EmailDomainSweeper
+	pingTracer    *PingTracer
 
 	// Persistent cache (optional) - now uses unified cache interface
 	persistentCache cache.Cache
@@ -223,6 +224,17 @@ func New(cfg *Config) (*Daemon, error) {
 		d.emailSweeper = NewEmailDomainSweeper(cfg.Services.EmailVerify, store)
 	}
 
+	// FTS-4010 netmail PING/TRACE through a fidomail node's control API.
+	// Off unless configured: it needs a mailer and a bearer token.
+	if cfg.Services.PingTrace.Enabled {
+		token, err := cfg.Services.PingTrace.ResolveToken()
+		if err != nil {
+			return nil, err
+		}
+		client := NewFidomailClient(cfg.Services.PingTrace.FidomailURL, token, 30*time.Second)
+		d.pingTracer = NewPingTracer(cfg.Services.PingTrace, store, client, cfg.Daemon.DryRun)
+	}
+
 	// Initialize EMSI configuration manager only if EMSI config is provided
 	// This preserves backward compatibility: when no testing.emsi section exists,
 	// the legacy protocols.ifcico.timeout continues to control handshake timing
@@ -361,6 +373,15 @@ func (d *Daemon) Run(ctx context.Context) error {
 		logging.Info("Email domain verification enabled")
 	}
 
+	// Start the PING/TRACE loop; under -once it runs a single pass after
+	// the test cycle instead, so a hand run sends what is due and returns.
+	if d.pingTracer != nil && !d.config.Daemon.RunOnce {
+		d.pingTracer.Start(ctx)
+		defer d.pingTracer.Stop()
+		logging.Infof("PING/TRACE enabled: %s via %s every %s",
+			d.config.Services.PingTrace.Mode, d.config.Services.PingTrace.FidomailURL, d.config.Services.PingTrace.Interval)
+	}
+
 	// Start worker pool (defers are LIFO, so this stops before whoisWorker)
 	d.workerPool.Start()
 	defer d.workerPool.Stop()
@@ -411,6 +432,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	// If run-once mode, exit after first cycle
 	if d.config.Daemon.RunOnce {
+		if d.pingTracer != nil {
+			if err := d.pingTracer.RunOnce(ctx); err != nil {
+				logging.Errorf("PING/TRACE pass failed: %v", err)
+			}
+		}
 		logging.Info("Run-once mode completed")
 		return nil
 	}

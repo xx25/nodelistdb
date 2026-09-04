@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/nodelistdb/internal/pingtrace"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -61,6 +62,9 @@ type AnalyticsReader interface {
 	GetIFCICOSoftwareDistribution(ctx context.Context, days int, domain string) (*storage.SoftwareDistribution, error)
 	GetBinkdDetailedStats(ctx context.Context, days int, domain string) (*storage.SoftwareDistribution, error)
 	GetGeoHostingDistribution(ctx context.Context, days int, domain string) (*storage.GeoHostingDistribution, error)
+	GetPingTraceSummary(ctx context.Context, domain string, days int) (*storage.PingTraceSummary, error)
+	GetNodePings(ctx context.Context, domain string, zone, net, node int, limit int) ([]pingtrace.Ping, error)
+	GetNodePingReplies(ctx context.Context, domain string, zone, net, node int, limit int) ([]storage.PingReplyRow, error)
 }
 
 // PSTNStore is the only writable surface the API has: the modem tester's

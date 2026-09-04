@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"github.com/nodelistdb/internal/pingtrace"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -108,6 +109,9 @@ type AnalyticsReader interface {
 	GetFileRequestNodes(ctx context.Context, limit int, domain string) ([]storage.FileRequestNode, error)
 	GetEmailCapableNodes(ctx context.Context, limit int, useFieldFallback bool, domain string) ([]storage.EmailCapableNode, error)
 	GetEmailFlagTrend(ctx context.Context, domain string) ([]storage.EmailFlagTrendPoint, error)
+	GetPingTraceSummary(ctx context.Context, domain string, days int) (*storage.PingTraceSummary, error)
+	GetNodePings(ctx context.Context, domain string, zone, net, node int, limit int) ([]pingtrace.Ping, error)
+	GetNodePingReplies(ctx context.Context, domain string, zone, net, node int, limit int) ([]storage.PingReplyRow, error)
 }
 
 // WhoisReader is registrar and expiry data for the hostnames nodes publish.

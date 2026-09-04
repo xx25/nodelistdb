@@ -49,6 +49,7 @@ func (s *Server) SetupRouter() http.Handler {
 		r.Get("/{zone}/{net}/{node}/changes", s.GetNodeChangesHandler)
 		r.Get("/{zone}/{net}/{node}/timeline", s.GetNodeTimelineHandler)
 		r.Get("/{zone}/{net}/{node}/points", s.GetNodePointsHandler)
+		r.Get("/{zone}/{net}/{node}/ping", s.GetNodePingHandler)
 	})
 
 	// Point (FTS-5002 pointlist) routes
@@ -92,6 +93,7 @@ func (s *Server) SetupRouter() http.Handler {
 	r.Route("/api/analytics", func(r chi.Router) {
 		r.Use(heavy)
 		r.Get("/geo-hosting", s.GetGeoHostingStats)
+		r.Get("/pingtrace", s.GetPingTraceStats)
 	})
 
 	// Documentation routes

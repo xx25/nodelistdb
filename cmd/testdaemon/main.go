@@ -32,6 +32,9 @@ func main() {
 		testLimit  = flag.String("test-limit", "", "Limit testing to specific node(s) during cycles (e.g., '2:5001/100')")
 		vmpCall    = flag.Bool("vmp-call", false, "Place real VMP calls on IVM ports: rings the remote sysop's mailer, and needs this host reachable inbound on the callback port")
 		vmpPort    = flag.Int("vmp-port", 0, "Callback port to advertise for -vmp-call (0 = config, or 14592, which is what a real VMODEM asks for first)")
+		pingNode   = flag.String("ping-node", "", "Send one FTS-4010 netmail PING to this node (zone:net/node[@domain]) via fidomail now and exit; needs services.pingtrace configured")
+		pingDirect = flag.Bool("ping-direct", false, "With -ping-node: send it with the Direct attribute (dialed straight from the nodelist) instead of routed")
+		pingPoll   = flag.Bool("ping-poll", false, "Run one PING/TRACE pass (read replies, refresh dispatch state, expire, send due pings) and exit")
 		logFile    = flag.String("log-file", "", "Write this run's log here instead of the configured file, and mirror it to the console. A hand-run cannot share the service's log: that file belongs to the service user, and losing the rotation race silently drops every line.")
 	)
 
@@ -93,6 +96,28 @@ func main() {
 			log.Fatalf("Test failed: %v", testErr)
 		}
 		log.Println("Test completed")
+		os.Exit(0)
+	}
+
+	if *pingNode != "" || *pingPoll {
+		ctx := context.Background()
+		var runErr error
+		if *pingNode != "" {
+			p, err := d.PingNodeNow(ctx, *pingNode, *pingDirect)
+			runErr = err
+			if err == nil {
+				log.Printf("PING to %s queued: msgid=%q fidomail_id=%d via %s (%s) status=%s %s",
+					p.Address, p.MSGID, p.FidomailMessageID, p.FirstHop, p.RouteSource, p.Status, p.Error)
+			}
+		} else {
+			runErr = d.PingTracePass(ctx)
+		}
+		if err := d.Close(); err != nil {
+			log.Printf("Warning: shutdown failed: %v", err)
+		}
+		if runErr != nil {
+			log.Fatalf("PING/TRACE failed: %v", runErr)
+		}
 		os.Exit(0)
 	}
 

@@ -35,6 +35,7 @@
                 <p><strong>Total Entries:</strong> {{len .History}}</p>
                 <p><strong>Changes:</strong> {{len .Changes}}</p>
                 {{if .Points}}<p><strong>Points:</strong> <a href="#points">{{len .Points}}</a></p>{{end}}
+                {{if .LatestPing}}<p><strong>Netmail PING:</strong> {{.LatestPing.StatusLabel}}{{if .LatestPing.RTT}} in {{.LatestPing.RTT}}{{if .LatestPing.OutCount}} via {{.LatestPing.OutCount}} hops{{end}}{{end}} ({{.LatestPing.Sent}}) &mdash; <a href="/analytics/pingtrace/node?address={{.Address}}&domain={{.Domain}}">path</a></p>{{end}}
             </div>
 
             {{if .Points}}

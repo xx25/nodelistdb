@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"github.com/nodelistdb/internal/pingtrace"
 	"time"
 
 	"github.com/nodelistdb/internal/emailflags"
@@ -40,6 +41,14 @@ type Storage interface {
 	GetEmailDomainsToCheck(ctx context.Context, staleAfter time.Duration) ([]string, error)
 	GetEmailDomainCheck(ctx context.Context, domain string) (*StoredEmailDomainCheck, error)
 	StoreEmailDomainCheck(ctx context.Context, result emailflags.DomainResult, previous *StoredEmailDomainCheck) error
+
+	// FTS-4010 netmail PING/TRACE (backs the /analytics/pingtrace report)
+	GetPingCandidates(ctx context.Context, domains []string) ([]pingtrace.Candidate, error)
+	GetLatestPingTimes(ctx context.Context) (map[string]time.Time, error)
+	GetRecentPings(ctx context.Context, since time.Time) ([]pingtrace.Ping, error)
+	StorePing(ctx context.Context, p pingtrace.Ping) error
+	StorePingReply(ctx context.Context, r pingtrace.Reply, hops []pingtrace.Hop) error
+	GetKnownReplyIDs(ctx context.Context, since time.Time) (map[uint64]bool, error)
 
 	// Lifecycle
 	Close() error

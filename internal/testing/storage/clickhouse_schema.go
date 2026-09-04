@@ -141,6 +141,80 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 	ORDER BY domain
 	TTL last_attempt_time + INTERVAL 180 DAY`)
 
+	// FTS-4010 netmail PING/TRACE measurements: one row per ping sent
+	// (replaced as it advances), plus every reply seen. ReplacingMergeTree
+	// versioned by updated_at; readers use FINAL.
+	schemas = append(schemas, `CREATE TABLE IF NOT EXISTS ping_tests
+	(
+	    domain LowCardinality(String),
+	    zone UInt16,
+	    net UInt16,
+	    node UInt16,
+	    address String,
+	    mode LowCardinality(String),
+	    sent_time DateTime,
+	    token String,
+	    msgid String,
+	    fidomail_message_id UInt64,
+	    first_hop String DEFAULT '',
+	    route_source String DEFAULT '',
+	    status LowCardinality(String),
+	    dispatched_time DateTime DEFAULT toDateTime(0),
+	    reply_time DateTime DEFAULT toDateTime(0),
+	    rtt_seconds UInt32 DEFAULT 0,
+	    reply_message_id UInt64 DEFAULT 0,
+	    reply_msgid String DEFAULT '',
+	    reply_from_name String DEFAULT '',
+	    reply_from_addr String DEFAULT '',
+	    robot_pid String DEFAULT '',
+	    robot_tearline String DEFAULT '',
+	    out_hops Array(String) DEFAULT [],
+	    out_hop_times Array(DateTime) DEFAULT [],
+	    out_hop_software Array(String) DEFAULT [],
+	    out_vias_raw Array(String) DEFAULT [],
+	    back_hops Array(String) DEFAULT [],
+	    back_hop_times Array(DateTime) DEFAULT [],
+	    back_hop_software Array(String) DEFAULT [],
+	    back_vias_raw Array(String) DEFAULT [],
+	    trace_count UInt32 DEFAULT 0,
+	    error String DEFAULT '',
+	    updated_at DateTime64(3) DEFAULT now64(3)
+	)
+	ENGINE = ReplacingMergeTree(updated_at)
+	ORDER BY (domain, zone, net, node, mode, sent_time)
+	TTL sent_time + INTERVAL 730 DAY`)
+
+	schemas = append(schemas, `CREATE TABLE IF NOT EXISTS ping_replies
+	(
+	    fidomail_message_id UInt64,
+	    kind LowCardinality(String),
+	    ping_domain LowCardinality(String),
+	    ping_zone UInt16 DEFAULT 0,
+	    ping_net UInt16 DEFAULT 0,
+	    ping_node UInt16 DEFAULT 0,
+	    ping_sent_time DateTime DEFAULT toDateTime(0),
+	    ping_msgid String DEFAULT '',
+	    msgid String DEFAULT '',
+	    reply_id String DEFAULT '',
+	    from_name String,
+	    from_addr String,
+	    to_name String,
+	    subject String,
+	    body String,
+	    date DateTime,
+	    received_at DateTime,
+	    pid String DEFAULT '',
+	    tearline String DEFAULT '',
+	    vias Array(String) DEFAULT [],
+	    hops Array(String) DEFAULT [],
+	    hop_times Array(DateTime) DEFAULT [],
+	    hop_software Array(String) DEFAULT [],
+	    updated_at DateTime64(3) DEFAULT now64(3)
+	)
+	ENGINE = ReplacingMergeTree(updated_at)
+	ORDER BY fidomail_message_id
+	TTL received_at + INTERVAL 730 DAY`)
+
 	for _, schema := range schemas {
 		if err := s.conn.Exec(ctx, schema); err != nil {
 			// Ignore "already exists" errors for views

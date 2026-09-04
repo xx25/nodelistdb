@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"github.com/nodelistdb/internal/pingtrace"
 	"sync"
 	"time"
 
@@ -39,6 +40,7 @@ type Storage struct {
 	softwareOperations      *SoftwareAnalyticsOperations
 	geoOperations           *GeoAnalyticsOperations
 	otherNetworksOperations *OtherNetworksOperations
+	pingTraceOperations     *PingTraceOperations
 
 	mu sync.RWMutex
 }
@@ -107,6 +109,7 @@ func New(db database.DatabaseInterface) (*Storage, error) {
 	storage.ipv6Operations = NewIPv6QueryOperations(db, testQueryBuilder, resultParser)
 	storage.akaMismatchOperations = NewAKAMismatchOperations(db, testQueryBuilder, resultParser)
 	storage.modemOperations = NewModemQueryOperations(db)
+	storage.pingTraceOperations = NewPingTraceOperations(db)
 	storage.softwareOperations = NewSoftwareAnalyticsOperations(db)
 	storage.geoOperations = NewGeoAnalyticsOperations(db)
 	storage.otherNetworksOperations = NewOtherNetworksOperations(db)
@@ -446,6 +449,18 @@ func (s *Storage) GetEmailCapableNodes(ctx context.Context, limit int, useFieldF
 
 func (s *Storage) GetEmailFlagTrend(ctx context.Context, domain string) ([]EmailFlagTrendPoint, error) {
 	return s.analyticsOperations.GetEmailFlagTrend(ctx, domain)
+}
+
+func (s *Storage) GetPingTraceSummary(ctx context.Context, domain string, days int) (*PingTraceSummary, error) {
+	return s.pingTraceOperations.GetPingTraceSummary(ctx, domain, days)
+}
+
+func (s *Storage) GetNodePings(ctx context.Context, domain string, zone, net, node int, limit int) ([]pingtrace.Ping, error) {
+	return s.pingTraceOperations.GetNodePings(ctx, domain, zone, net, node, limit)
+}
+
+func (s *Storage) GetNodePingReplies(ctx context.Context, domain string, zone, net, node int, limit int) ([]PingReplyRow, error) {
+	return s.pingTraceOperations.GetNodePingReplies(ctx, domain, zone, net, node, limit)
 }
 
 func (s *Storage) GetModemAccessibleNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]ModemAccessibleNode, error) {

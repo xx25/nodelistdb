@@ -79,6 +79,8 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	handle("/analytics/pstn-no-answer", varyByCookie(s.ModemNoAnswerAnalyticsHandler))
 	handle("/analytics/file-request", varyByCookie(s.FileRequestAnalyticsHandler))
 	handle("/analytics/email", varyByCookie(s.EmailAnalyticsHandler))
+	handle("/analytics/pingtrace", varyByCookie(s.PingTraceAnalyticsHandler))
+	handle("/analytics/pingtrace/node", varyByCookie(s.PingTraceNodeHandler))
 	handle("/analytics/software/binkp", varyByCookie(s.BinkPSoftwareHandler))
 	handle("/analytics/software/ifcico", varyByCookie(s.IfcicoSoftwareHandler))
 	handle("/analytics/geo-hosting", varyByCookie(s.GeoHostingAnalyticsHandler))

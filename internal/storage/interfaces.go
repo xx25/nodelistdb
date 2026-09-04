@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"github.com/nodelistdb/internal/pingtrace"
 	"time"
 
 	"github.com/nodelistdb/internal/database"
@@ -126,6 +127,11 @@ type Operations interface {
 
 	// Lifecycle
 	Close() error
+
+	// FTS-4010 netmail PING/TRACE (ping_tests / ping_replies)
+	GetPingTraceSummary(ctx context.Context, domain string, days int) (*PingTraceSummary, error)
+	GetNodePings(ctx context.Context, domain string, zone, net, node int, limit int) ([]pingtrace.Ping, error)
+	GetNodePingReplies(ctx context.Context, domain string, zone, net, node int, limit int) ([]PingReplyRow, error)
 }
 
 // QueryBuilderInterface defines the contract for query building

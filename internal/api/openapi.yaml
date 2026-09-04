@@ -1293,6 +1293,90 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/nodes/{zone}/{net}/{node}/ping:
+    get:
+      summary: Get Node Netmail PING History
+      description: |
+        Every FTS-4010 netmail PING sent to the node by the testdaemon, with the
+        outbound path the robot quoted back (hop by hop, from the ^AVia chain),
+        the answer's own return path, round-trip time and robot software, plus
+        the replies behind them (pongs, transit TRACE notices, bounces).
+      operationId: getNodePing
+      tags:
+        - Nodes
+      parameters:
+        - name: zone
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: net
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: node
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: domain
+          in: query
+          description: FTN network (resolved from the address when omitted)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum pings to return (newest first)
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+      responses:
+        '200':
+          description: Ping history and replies
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid address
+        '500':
+          description: Internal server error
+
+  /api/analytics/pingtrace:
+    get:
+      summary: Get Netmail PING/TRACE Report
+      description: |
+        Which nodes flying the PING flag answered the latest netmail PING, how long
+        the round trip took, the median hop count, which TRACE nodes were confirmed
+        (sent a transit notice), silent (crossed but never notified) or unobserved
+        (never on a measured path), and the PING robot software seen.
+      operationId: getPingTraceStats
+      tags:
+        - Geographic Analytics
+      parameters:
+        - name: domain
+          in: query
+          description: FTN network to report on (empty = all)
+          schema:
+            type: string
+        - name: days
+          in: query
+          description: Window in days
+          schema:
+            type: integer
+            default: 90
+      responses:
+        '200':
+          description: PING/TRACE summary
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+
   /api/analytics/geo-hosting:
     get:
       summary: Get Geographic Hosting Distribution

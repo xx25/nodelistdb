@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/xx25/fidomail/pkg/emsi"
@@ -124,6 +125,76 @@ type ServicesConfig struct {
 	Geolocation GeolocationConfig `yaml:"geolocation"`
 	DNS         DNSConfig         `yaml:"dns"`
 	EmailVerify EmailVerifyConfig `yaml:"email_verify"`
+	PingTrace   PingTraceConfig   `yaml:"pingtrace"`
+}
+
+// PingTraceConfig drives the FTS-4010 netmail PING/TRACE measurement: a
+// netmail addressed to user "PING" is sent to every node flying the PING
+// flag through a fidomail node's loopback control API, and the robots'
+// answers are read back from that node's inbox. The reply quotes the
+// FTS-4009 Via chain, which is the path the message took -- that path,
+// not just the fact of an answer, is the measurement.
+//
+// It runs beside the connectivity tests, not inside a test cycle: a
+// netmail answer takes hours to days to come back, so sending and reading
+// are two separate passes over persistent state (the ping_tests table).
+type PingTraceConfig struct {
+	// Enabled turns the tracer on. Default false: it needs a fidomail node
+	// with its control API on and a bearer token.
+	Enabled bool `yaml:"enabled"`
+	// FidomailURL is the loopback control API root, e.g. http://127.0.0.1:8083.
+	FidomailURL string `yaml:"fidomail_url"`
+	// APIToken is fidomail's web.api_token; APITokenFile reads it from a
+	// file instead (whichever is set; the file wins when both are).
+	APIToken     string `yaml:"api_token"`
+	APITokenFile string `yaml:"api_token_file"`
+	// FromName is the sender name on every ping and the recipient name
+	// the poller reads the inbox for. It must not contain "PING": robots
+	// never answer mail from "PING" and a careless substring match must
+	// not be triggered. Default "NodelistDB".
+	FromName string `yaml:"from_name"`
+	// FromAddr pins the sending AKA (empty = fidomail's choice for the
+	// destination network).
+	FromAddr string `yaml:"from_addr"`
+	// Networks lists the FTN domains to ping. Default [fidonet]; the
+	// fidomail node must hold an AKA in each.
+	Networks []string `yaml:"networks"`
+	// Interval is how often each node is pinged. Default 336h (14 days).
+	Interval time.Duration `yaml:"interval"`
+	// ReplyTimeout is how long a ping waits for its answer before it is
+	// recorded as a timeout. Default 168h (7 days). A later answer is
+	// still matched and flips the verdict.
+	ReplyTimeout time.Duration `yaml:"reply_timeout"`
+	// PollInterval is how often the inbox is read and due pings sent.
+	// Default 10m.
+	PollInterval time.Duration `yaml:"poll_interval"`
+	// MaxPerPoll caps how many pings one pass sends, so the initial sweep
+	// of ~100 nodes trickles out over a few hours instead of bursting
+	// through the uplink. Default 5.
+	MaxPerPoll int `yaml:"max_per_poll"`
+	// Mode selects what is sent per node: "routed" (normal routing, the
+	// path is the measurement), "direct" (FSC-0053 DIR: dialed straight
+	// from the nodelist, isolates the robot), or "both". Default routed.
+	Mode string `yaml:"mode"`
+	// ResultsURL is quoted in the ping body so a sysop who reads it knows
+	// where the measurement is published.
+	ResultsURL string `yaml:"results_url"`
+	// Nodes, when non-empty, restricts scheduled pings to these addresses
+	// ("2:280/5555" or "2:280/5555@fidonet"). For a staged rollout: the
+	// poller still reads every reply, only the due list is narrowed.
+	Nodes []string `yaml:"nodes"`
+}
+
+// ResolveToken returns the bearer token, reading APITokenFile when set.
+func (c PingTraceConfig) ResolveToken() (string, error) {
+	if c.APITokenFile != "" {
+		data, err := os.ReadFile(c.APITokenFile)
+		if err != nil {
+			return "", fmt.Errorf("pingtrace: read api_token_file: %w", err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+	return strings.TrimSpace(c.APIToken), nil
 }
 
 // EmailVerifyConfig controls DNS verification of the mail domains published in
@@ -285,6 +356,37 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Services.DNS.FallbackProbe.MaxAge == 0 {
 		cfg.Services.DNS.FallbackProbe.MaxAge = 7 * 24 * time.Hour
+	}
+
+	// PING/TRACE defaults. Durations here are already time.Duration (YAML
+	// "336h"), unlike the older bare-seconds fields above.
+	pt := &cfg.Services.PingTrace
+	if pt.FidomailURL == "" {
+		pt.FidomailURL = "http://127.0.0.1:8083"
+	}
+	if pt.FromName == "" {
+		pt.FromName = "NodelistDB"
+	}
+	if len(pt.Networks) == 0 {
+		pt.Networks = []string{"fidonet"}
+	}
+	if pt.Interval <= 0 {
+		pt.Interval = 14 * 24 * time.Hour
+	}
+	if pt.ReplyTimeout <= 0 {
+		pt.ReplyTimeout = 7 * 24 * time.Hour
+	}
+	if pt.PollInterval <= 0 {
+		pt.PollInterval = 10 * time.Minute
+	}
+	if pt.MaxPerPoll <= 0 {
+		pt.MaxPerPoll = 5
+	}
+	if pt.Mode == "" {
+		pt.Mode = "routed"
+	}
+	if pt.ResultsURL == "" {
+		pt.ResultsURL = "https://nodelist.fidonet.cc/analytics/pingtrace"
 	}
 
 	// Set defaults for testdaemon_cache
@@ -507,6 +609,20 @@ func (c *Config) Validate() error {
 	if c.Protocols.VModem.Enabled &&
 		firstNonEmpty(c.Protocols.VModem.OurAddress, c.Protocols.Ifcico.OurAddress) == "" {
 		return fmt.Errorf("protocols.vmodem.our_address is required when vmodem is enabled (or set protocols.ifcico.our_address, which vmodem falls back to)")
+	}
+
+	if pt := c.Services.PingTrace; pt.Enabled {
+		switch pt.Mode {
+		case "routed", "direct", "both":
+		default:
+			return fmt.Errorf("services.pingtrace.mode must be routed, direct or both (got %q)", pt.Mode)
+		}
+		if strings.Contains(strings.ToUpper(pt.FromName), "PING") {
+			return fmt.Errorf("services.pingtrace.from_name must not contain \"PING\": FTS-4010 robots never answer mail from that name")
+		}
+		if pt.APIToken == "" && pt.APITokenFile == "" {
+			return fmt.Errorf("services.pingtrace.api_token or api_token_file is required when pingtrace is enabled")
+		}
 	}
 
 	return nil

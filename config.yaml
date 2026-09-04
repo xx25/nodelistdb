@@ -368,6 +368,31 @@ services:
     timeout: 5s                # Per-lookup DNS timeout
     concurrency: 4             # Simultaneous domain checks
 
+  # FTS-4010 netmail PING/TRACE. A netmail to user "PING" is sent to every
+  # node flying the PING flag through a fidomail node's loopback control
+  # API (POST /api/v1/netmail), and the robots' answers are read back from
+  # that node's inbox (GET /api/v1/netmail/inbox). The answer quotes the
+  # FTS-4009 Via chain -- the path the message took -- which is stored hop
+  # by hop; TRACE is evaluated from the transit notices those paths earn.
+  #
+  # Requires schema/migrations/016_ping_tests.sql, and fidomail with
+  # web.api_listen + web.api_token set (docs/CONTROL-API.md there).
+  pingtrace:
+    enabled: false
+    fidomail_url: http://127.0.0.1:8083
+    api_token: ""              # fidomail's web.api_token, or:
+    api_token_file: ""         #   a file holding it (wins when both are set)
+    from_name: NodelistDB      # sender + inbox recipient name; must not contain "PING"
+    from_addr: ""              # sending AKA (empty = fidomail's choice)
+    networks: [fidonet]        # the fidomail node needs an AKA in each
+    interval: 336h             # ping each node every 14 days
+    reply_timeout: 168h        # record a timeout after 7 days (a late answer still counts)
+    poll_interval: 10m         # inbox read + due-ping send cadence
+    max_per_poll: 5            # trickle the initial sweep out over a few hours
+    mode: routed               # routed | direct | both (direct = FSC-0053 DIR, robot only)
+    results_url: https://nodelist.fidonet.cc/analytics/pingtrace
+    nodes: []                  # non-empty = staged rollout: only these addresses are pinged
+
 # Testdaemon Cache (Persistent cache for testdaemon)
 # ------------------
 testdaemon_cache:

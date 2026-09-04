@@ -1,0 +1,104 @@
+{{template "base" .}}
+
+{{define "title"}}Netmail PING {{.Address}}{{end}}
+
+{{define "page_title"}}Netmail PING &mdash; {{.Address}}{{end}}
+
+{{define "page_subtitle"}}<p class="subtitle">Every FTS-4010 PING sent to <a href="/node/{{.Address}}?domain={{.Domain}}">{{.Address}}</a>{{if .Domain}} ({{.Domain}}){{end}}, with the path each one walked &mdash; <a href="/analytics/pingtrace">back to the report</a></p>{{end}}
+
+{{define "extra_css"}}
+<style>
+    .path { font-family: monospace; font-size: 0.9em; }
+    .path .hop { display: inline-block; padding: 1px 6px; border-radius: 3px; background: #f0f2f5; margin: 1px 0; }
+    .path .hop.origin { background: #e3f2fd; }
+    .path .hop.target { background: #e8f5e9; font-weight: bold; }
+    .path .arrow { color: #999; margin: 0 3px; }
+    .path .delta { color: #666; font-size: 0.85em; }
+    .badge-secondary { background: #999; color: #fff; }
+    .badge-info { background: #2a78d6; color: #fff; }
+    .hop-table td, .hop-table th { padding: 2px 8px; font-size: 0.9em; }
+    .raw { font-family: monospace; font-size: 0.8em; color: #666; }
+    pre.body { font-size: 0.8em; max-height: 20em; overflow: auto; background: #f8f8f8; padding: 0.5rem; }
+    .ping-card { margin-bottom: 1.5rem; }
+    .nowrap { white-space: nowrap; }
+</style>
+{{end}}
+
+{{define "content"}}
+{{template "error_display" .}}
+
+{{if not .Pings}}
+<div class="stats-box"><p>No ping has been sent to {{.Address}} yet.</p></div>
+{{end}}
+
+{{range .Pings}}
+<div class="stats-box ping-card">
+    <h4>
+        <span class="badge {{.StatusClass}}">{{.StatusLabel}}</span>
+        {{.P.Mode}} ping sent {{.Sent}}
+        {{if .RTT}}&mdash; answered in <strong>{{.RTT}}</strong>{{end}}
+    </h4>
+    <table class="data-table hop-table" style="width: auto;">
+        <tbody>
+            <tr><th>MSGID</th><td class="raw">{{.P.MSGID}}</td></tr>
+            <tr><th>First hop</th><td>{{.P.FirstHop}} <small class="text-muted">({{.P.RouteSource}})</small></td></tr>
+            {{if .Dispatched}}<tr><th>Handed over</th><td>{{.Dispatched}}</td></tr>{{end}}
+            {{if .Reply}}<tr><th>Answer stored</th><td>{{.Reply}} from {{.P.ReplyFromName}}, {{.P.ReplyFromAddr}}{{if .P.RobotPID}} &mdash; <code>{{.P.RobotPID}}</code>{{end}}</td></tr>{{end}}
+            {{if .P.TraceCount}}<tr><th>Transit notices</th><td>{{.P.TraceCount}}</td></tr>{{end}}
+            {{if .P.Error}}<tr><th>Note</th><td>{{.P.Error}}</td></tr>{{end}}
+        </tbody>
+    </table>
+
+    {{if .Out}}
+    <h5 style="margin-bottom: 0.25rem;">Outbound path (as quoted by the robot)</h5>
+    {{template "ping_path_table" .Out}}
+    {{end}}
+    {{if .Back}}
+    <h5 style="margin-bottom: 0.25rem;">Return path (the answer's own Via chain)</h5>
+    {{template "ping_path_table" .Back}}
+    {{end}}
+</div>
+{{end}}
+
+{{if .Replies}}
+<h3>Replies</h3>
+{{range .Replies}}
+<details class="stats-box" style="margin-bottom: 0.75rem;">
+    <summary>
+        <span class="badge {{.KindClass}}">{{.R.Kind}}</span>
+        {{.Received}} &mdash; from {{.R.FromName}}, {{.R.FromAddr}}: <em>{{.R.Subject}}</em>
+        {{if .R.PingMSGID}}<small class="text-muted">(answers {{.R.PingMSGID}})</small>{{end}}
+    </summary>
+    {{if .Hops}}
+    <h5 style="margin: 0.5rem 0 0.25rem;">Path quoted in this reply</h5>
+    {{template "ping_path_table" .Hops}}
+    {{end}}
+    {{if .R.Vias}}
+    <h5 style="margin: 0.5rem 0 0.25rem;">This reply's own Via lines</h5>
+    <div class="raw">{{range .R.Vias}}{{.}}<br>{{end}}</div>
+    {{end}}
+    {{if .R.PID}}<p class="raw">PID: {{.R.PID}}{{if .R.Tearline}} &nbsp; {{.R.Tearline}}{{end}}</p>{{end}}
+    <pre class="body">{{.Body}}</pre>
+</details>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "ping_path_table"}}
+<div class="path" style="margin-bottom: 0.5rem;">{{range $i, $h := .}}{{if $i}}<span class="arrow">&rarr;</span>{{end}}{{if $h.Delta}}<span class="delta">{{$h.Delta}}</span> {{end}}<span class="hop{{if $h.IsOrigin}} origin{{end}}{{if $h.IsTarget}} target{{end}}">{{if $h.Address}}{{$h.Address}}{{else}}?{{end}}</span>{{end}}</div>
+<table class="data-table hop-table" style="width: auto; margin-bottom: 1rem;">
+    <thead><tr><th>#</th><th>Node</th><th>Time</th><th>Since previous</th><th>Software</th><th>Via line</th></tr></thead>
+    <tbody>
+    {{range $i, $h := .}}
+    <tr>
+        <td>{{add $i 1}}</td>
+        <td class="nowrap">{{if $h.Address}}<a href="/node/{{$h.Address}}">{{$h.Address}}</a>{{else}}<span class="text-muted">?</span>{{end}}</td>
+        <td class="nowrap">{{$h.Time}}</td>
+        <td class="nowrap">{{$h.Delta}}</td>
+        <td>{{$h.Software}}</td>
+        <td class="raw">{{$h.Raw}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+</table>
+{{end}}

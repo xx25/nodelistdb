@@ -49,6 +49,7 @@ func renderNodeHistory(t *testing.T, internetConfig string) string {
 		History          []database.Node
 		Changes          []database.NodeChange
 		Points           []database.Point
+		LatestPing       *pingView
 		FirstDate        time.Time
 		LastDate         time.Time
 		CurrentlyActive  bool
