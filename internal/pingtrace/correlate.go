@@ -101,7 +101,6 @@ type Reply struct {
 var (
 	ndrRe   = regexp.MustCompile(`(?i)\bNDR\b|undeliverable|non-?delivery|could not be delivered|delivery (failure|failed)`)
 	traceRe = regexp.MustCompile(`(?i)\btrace\b|in[ -]transit|pass(ed|ing) through|transit`)
-	pongRe  = regexp.MustCompile(`(?i)\bpong\b|arrived|reached|final destination|received your`)
 )
 
 // Match finds the ping a reply answers, or nil.
@@ -153,9 +152,12 @@ func Match(r Reply, open []Ping) *Ping {
 }
 
 // Classify decides what a matched reply is. p is the ping Match returned
-// (nil for an unmatched reply). outPath is the path quoted in the reply,
-// used to tell a transit node's notice from a robot answering from an AKA.
-func Classify(r Reply, p *Ping, outPath []Hop) string {
+// (nil for an unmatched reply). outPath is the path quoted in the reply.
+// sameSystem says whether two addresses are one system -- the same sysop
+// on the nodelist -- which is what tells the destination answering from
+// another AKA apart from a robot on the way; nil means "cannot tell",
+// which counts as "not the same".
+func Classify(r Reply, p *Ping, outPath []Hop, sameSystem func(from, target string) bool) string {
 	text := r.FromName + "\n" + r.Subject
 	if ndrRe.MatchString(text) {
 		return KindNDR
@@ -170,28 +172,31 @@ func Classify(r Reply, p *Ping, outPath []Hop) string {
 	if traceRe.MatchString(text) {
 		return KindTrace
 	}
-	if pongRe.MatchString(text) {
+	// Under DIR the message was dialed straight at the node and nothing
+	// can answer it in transit: an unexpected sender is the destination
+	// answering from an AKA, whatever the path says.
+	if p.Mode == ModeDirect {
 		return KindPong
 	}
-	// No wording to go on. A sender that appears in the quoted outbound
-	// path is a transit node; anything else is most likely the destination
-	// answering from another AKA. Position in the path decides nothing:
-	// robots differ on whether they quote the chain as of arrival or after
-	// adding their own stamp, so the destination cannot be identified as
-	// "the last hop" -- it is p.Address, and a sender equal to it already
-	// returned above.
-	//
-	// Except under DIR, where the message was dialed straight at the node
-	// and no transit is possible at all: there an unexpected sender is the
-	// destination answering from an AKA, whatever the path says.
-	if p.Mode != ModeDirect {
-		for _, h := range outPath {
-			if Node3D(h.Address) == from {
-				return KindTrace
-			}
-		}
+	if sameSystem != nil && sameSystem(from, p.Address) {
+		return KindPong
 	}
-	return KindPong
+	// Any other sender is a system the mail passed through, whatever its
+	// wording says. Wording used to decide here, until 2:5080/102's
+	// pong.pl -- which answers every netmail to PING that it routes,
+	// "PONG: PING" in the subject -- was credited as the answer to a ping
+	// for 3:770/1 three minutes after it left, with New Zealand never
+	// heard from. A transit robot's answer is evidence that the ping
+	// crossed that node and says nothing about the destination, so it is
+	// a transit notice. The price: a robot answering from an AKA the
+	// nodelist does not tie to the target reads as transit and its ping
+	// times out. That error sits next to its evidence on the node page; a
+	// three-minute round trip to zone 3 does not.
+	//
+	// Position in the path decides nothing: robots differ on whether they
+	// quote the chain as of arrival or after adding their own stamp, and
+	// pong.pl quoted a chain it was not in at all.
+	return KindTrace
 }
 
 // OriginAddress is the address that authored a MSGID ("2:5001/100@fidonet

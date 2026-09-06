@@ -19,10 +19,15 @@ type fakePingStore struct {
 	pings      map[string]pingtrace.Ping // key: address@domain|mode|sent
 	replies    map[uint64]pingtrace.Reply
 	replyHops  map[uint64][]pingtrace.Hop
+	akas       map[string]bool // "a|b": the two addresses are one system
 }
 
 func newFakePingStore() *fakePingStore {
-	return &fakePingStore{pings: map[string]pingtrace.Ping{}, replies: map[uint64]pingtrace.Reply{}, replyHops: map[uint64][]pingtrace.Hop{}}
+	return &fakePingStore{pings: map[string]pingtrace.Ping{}, replies: map[uint64]pingtrace.Reply{}, replyHops: map[uint64][]pingtrace.Hop{}, akas: map[string]bool{}}
+}
+
+func (f *fakePingStore) SameSystem(_ context.Context, _ string, a, b string) (bool, error) {
+	return a == b || f.akas[a+"|"+b] || f.akas[b+"|"+a], nil
 }
 
 func pingKey(p pingtrace.Ping) string {
@@ -234,8 +239,17 @@ func TestPollRepliesFoldsPongTraceAndNDR(t *testing.T) {
 		SentTime: sent, Token: "a1b2c3d4", MSGID: "2:5001/100 68b8a1c2", FidomailMessageID: 7, Status: pingtrace.StatusSent}
 	other := pingtrace.Ping{Domain: "fidonet", Zone: 1, Net: 1, Node: 19, Address: "1:1/19", Mode: "routed",
 		SentTime: sent, Token: "e5f6a7b8", MSGID: "2:5001/100 68b8a1c3", FidomailMessageID: 8, Status: pingtrace.StatusSent}
+	// far is answered by a robot on the way, aka by the target under
+	// another address the nodelist ties to the same sysop.
+	far := pingtrace.Ping{Domain: "fidonet", Zone: 3, Net: 770, Node: 1, Address: "3:770/1", Mode: "routed",
+		SentTime: sent, Token: "1b929db8", MSGID: "2:5001/100@fidonet 6a9d5c75", FidomailMessageID: 9, Status: pingtrace.StatusSent}
+	aka := pingtrace.Ping{Domain: "fidonet", Zone: 2, Net: 221, Node: 1, Address: "2:221/1", Mode: "routed",
+		SentTime: sent, Token: "c9d8e7f6", MSGID: "2:5001/100@fidonet 6a9d5c77", FidomailMessageID: 10, Status: pingtrace.StatusSent}
 	store.StorePing(context.Background(), target)
 	store.StorePing(context.Background(), other)
+	store.StorePing(context.Background(), far)
+	store.StorePing(context.Background(), aka)
+	store.akas["2:221/6|2:221/1"] = true
 
 	pongBody := "Your PING message arrived at its destination 2:280/5555.\r\n\r\nIt travelled via:\r\n" +
 		"@Via 2:5001/100@fidonet @20260904.100000.UTC FidoMail 0.1\r\n" +
@@ -252,6 +266,15 @@ func TestPollRepliesFoldsPongTraceAndNDR(t *testing.T) {
 			Body: "could not be delivered", ReceivedAt: sent.Add(2 * time.Hour)},
 		{ID: 104, ToName: "NodelistDB", FromName: "Someone", FromAddr: "2:9999/1", Subject: "hi", Body: "unrelated", ReceivedAt: now},
 		{ID: 105, ToName: "Sysop", FromName: "Someone", FromAddr: "2:9999/1", Subject: "not ours", Body: "", ReceivedAt: now},
+		// 2:5080/102's pong.pl, verbatim: answers a ping merely passing
+		// through, quoting a chain it is not in itself.
+		{ID: 106, ToName: "NodelistDB", FromName: "Ping-Pong Robot", FromAddr: "2:5080/102", Subject: "PONG: PING",
+			Body: "This is an answer to PING request sent at 06 Sep 26  12:28:36 by NodelistDB:\n\n==== begin of request body ====\n\n" +
+				"@INTL 3:770/1 2:5001/100\n@MSGID: 2:5001/100@fidonet 6a9d5c75\nTarget:  3:770/1 (Southern Hub)\nRef:     1b929db8\n" +
+				"@Via 2:5020/715 @20260906.122838.UTC RNtrack 2.3.0/Lnx/Perl\n\n===== end of request body =====\n",
+			Vias: []string{"2:5080/102 @20260906.122841.UTC hpt/lnx 1.4.0-sta 27-11-08"}, ReceivedAt: sent.Add(3 * time.Minute)},
+		{ID: 107, ToName: "NodelistDB", FromName: "Ping Robot", FromAddr: "2:221/6", Subject: "Pong: PING c9d8e7f6",
+			Body: "arrived", ReceivedAt: sent.Add(4 * time.Hour)},
 	}}
 	tr := testTracer(store, mailer, now)
 
@@ -285,7 +308,19 @@ func TestPollRepliesFoldsPongTraceAndNDR(t *testing.T) {
 		t.Errorf("NDR must mark the ping: %+v", o)
 	}
 
-	if len(store.replies) != 4 {
+	f := store.ping(t, "3:770/1", "routed")
+	if f.Status != pingtrace.StatusSent || f.TraceCount != 1 || f.ReplyMessageID != 0 {
+		t.Errorf("a transit robot's pong must count as a notice and leave the ping open: %+v", f)
+	}
+	if store.replies[106].Kind != pingtrace.KindTrace || store.replies[106].PingMSGID != far.MSGID {
+		t.Errorf("transit pong not recorded as trace: %+v", store.replies[106])
+	}
+	a := store.ping(t, "2:221/1", "routed")
+	if a.Status != pingtrace.StatusPong || a.ReplyFromAddr != "2:221/6" {
+		t.Errorf("an answer from the target's other AKA is the pong: %+v", a)
+	}
+
+	if len(store.replies) != 6 {
 		t.Fatalf("every reply to our name is kept, got %d", len(store.replies))
 	}
 	if store.replies[104].Kind != pingtrace.KindUnmatched {
@@ -294,8 +329,8 @@ func TestPollRepliesFoldsPongTraceAndNDR(t *testing.T) {
 	if store.replies[101].Kind != pingtrace.KindTrace || store.replies[101].PingMSGID != target.MSGID {
 		t.Errorf("trace reply not linked: %+v", store.replies[101])
 	}
-	if tr.watermark != 104 {
-		t.Errorf("watermark = %d, want 104", tr.watermark)
+	if tr.watermark != 107 {
+		t.Errorf("watermark = %d, want 107", tr.watermark)
 	}
 
 	// A second pass re-reads nothing and changes nothing.

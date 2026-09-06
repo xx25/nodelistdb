@@ -50,6 +50,9 @@ func TestMatchByTokenThenMSGIDThenSender(t *testing.T) {
 func TestClassify(t *testing.T) {
 	p := &Ping{Address: "2:280/5555"}
 	path := []Hop{{Address: "2:5001/100"}, {Address: "2:5020/715"}, {Address: "2:5020/0"}}
+	// The nodelist ties 2:280/1 to the target as another AKA of the same
+	// sysop; nothing else is.
+	aka := func(from, target string) bool { return from == "2:280/1" && target == "2:280/5555" }
 	cases := []struct {
 		name string
 		r    Reply
@@ -61,11 +64,15 @@ func TestClassify(t *testing.T) {
 		{"from target is pong", Reply{FromName: "Ping Robot", FromAddr: "2:280/5555", Subject: "whatever"}, p, KindPong},
 		{"trace wording", Reply{FromName: "Trace Robot", FromAddr: "2:5020/715", Subject: "Trace: your message to PING"}, p, KindTrace},
 		{"pong wording from an AKA", Reply{FromName: "Robot", FromAddr: "2:280/1", Subject: "Your message arrived"}, p, KindPong},
+		{"AKA without wording is pong", Reply{FromName: "Robot", FromAddr: "2:280/1", Subject: "PING"}, p, KindPong},
 		{"intermediate without wording is trace", Reply{FromName: "Robot", FromAddr: "2:5020/715", Subject: "PING"}, p, KindTrace},
 		// A transit robot stamps its own Via last before sending its
 		// notice, so being the newest hop must not read as "destination".
 		{"last hop without wording is still trace", Reply{FromName: "Robot", FromAddr: "2:5020/0", Subject: "PING"}, p, KindTrace},
-		{"unknown sender without wording is pong", Reply{FromName: "Robot", FromAddr: "2:280/2", Subject: "PING"}, p, KindPong},
+		// The real case: 2:5080/102's pong.pl answers mail merely passing
+		// through, "PONG: PING", and was not even in the chain it quoted.
+		{"pong wording from a stranger is trace", Reply{FromName: "Ping-Pong Robot", FromAddr: "2:5080/102", Subject: "PONG: PING"}, p, KindTrace},
+		{"unknown sender without wording is trace", Reply{FromName: "Robot", FromAddr: "2:280/2", Subject: "PING"}, p, KindTrace},
 		// A DIR ping is dialed at the node, so nothing can answer it in
 		// transit: a sender on the path is the node under another AKA.
 		{"under DIR a path member is still a pong", Reply{FromName: "Robot", FromAddr: "2:5020/715", Subject: "PING"},
@@ -73,9 +80,14 @@ func TestClassify(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := Classify(tc.r, tc.p, path); got != tc.want {
+			if got := Classify(tc.r, tc.p, path, aka); got != tc.want {
 				t.Errorf("got %s want %s", got, tc.want)
 			}
 		})
+	}
+	// Without a nodelist to consult, an unexpected sender is never
+	// trusted as the destination.
+	if got := Classify(Reply{FromName: "Robot", FromAddr: "2:280/1", Subject: "Your message arrived"}, p, path, nil); got != KindTrace {
+		t.Errorf("nil oracle: got %s want trace", got)
 	}
 }

@@ -131,6 +131,55 @@ func (s *ClickHouseStorage) GetPingCandidates(ctx context.Context, domains []str
 	return out, rows.Err()
 }
 
+// SameSystem reports whether two nodes on domain's latest nodelist are
+// run by the same sysop -- the nodelist's notion of one system with
+// several AKAs. The reply classifier asks it when a ping is answered from
+// an address other than the one it was sent to. An address that is not on
+// the nodelist, or a sysop name that is empty, never matches.
+func (s *ClickHouseStorage) SameSystem(ctx context.Context, domain, a, b string) (bool, error) {
+	var az, an, ad, bz, bn, bd int32
+	if _, err := fmt.Sscanf(pingtrace.Node3D(a), "%d:%d/%d", &az, &an, &ad); err != nil {
+		return false, nil
+	}
+	if _, err := fmt.Sscanf(pingtrace.Node3D(b), "%d:%d/%d", &bz, &bn, &bd); err != nil {
+		return false, nil
+	}
+	if az == bz && an == bn && ad == bd {
+		return true, nil
+	}
+	query := `
+		SELECT zone, net, node, sysop_name
+		FROM nodes
+		WHERE domain = ?
+		  AND nodelist_date = (SELECT MAX(nodelist_date) FROM nodes WHERE domain = ?)
+		  AND conflict_sequence = 0
+		  AND ((zone = ? AND net = ? AND node = ?) OR (zone = ? AND net = ? AND node = ?))`
+	rows, err := s.conn.Query(ctx, query, domain, domain, az, an, ad, bz, bn, bd)
+	if err != nil {
+		return false, fmt.Errorf("query sysops of %s and %s: %w", a, b, err)
+	}
+	defer rows.Close()
+	sysops := map[[3]int32]string{}
+	for rows.Next() {
+		var (
+			zone, net, node int32
+			sysop           string
+		)
+		if err := rows.Scan(&zone, &net, &node, &sysop); err != nil {
+			return false, fmt.Errorf("scan sysop: %w", err)
+		}
+		sysops[[3]int32{zone, net, node}] = normalizeSysop(sysop)
+	}
+	sa, sb := sysops[[3]int32{az, an, ad}], sysops[[3]int32{bz, bn, bd}]
+	return sa != "" && sa == sb, rows.Err()
+}
+
+// normalizeSysop folds the nodelist spelling of a sysop name ("Ward_Dossche")
+// into a comparable form.
+func normalizeSysop(name string) string {
+	return strings.ToLower(strings.TrimSpace(strings.ReplaceAll(name, "_", " ")))
+}
+
 // GetLatestPingTimes returns, per "address@domain|mode", the most recent
 // sent_time of any ping, whatever its outcome. It is what decides whether a
 // node is due.

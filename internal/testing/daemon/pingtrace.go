@@ -22,6 +22,9 @@ type pingStore interface {
 	StorePing(ctx context.Context, p pingtrace.Ping) error
 	StorePingReply(ctx context.Context, r pingtrace.Reply, hops []pingtrace.Hop) error
 	GetKnownReplyIDs(ctx context.Context, since time.Time) (map[uint64]bool, error)
+	// SameSystem says whether two addresses on domain's latest nodelist
+	// belong to one sysop, i.e. are AKAs of one system.
+	SameSystem(ctx context.Context, domain, a, b string) (bool, error)
 }
 
 // pingMailer is the slice of the fidomail control API the tracer needs.
@@ -200,7 +203,17 @@ func (t *PingTracer) absorbReply(ctx context.Context, item InboxItem, recent []p
 	}
 	quoted := pingtrace.ExtractPath(item.Body)
 	p := pingtrace.Match(reply, recent)
-	reply.Kind = pingtrace.Classify(reply, p, quoted)
+	// Only consulted for a matched ping answered from another address,
+	// so p is set whenever this runs.
+	sameSystem := func(from, target string) bool {
+		ok, err := t.store.SameSystem(ctx, p.Domain, from, target)
+		if err != nil {
+			logging.Errorf("PING/TRACE: cannot tell whether %s and %s are one system, treating reply %d as transit: %v", from, target, item.ID, err)
+			return false
+		}
+		return ok
+	}
+	reply.Kind = pingtrace.Classify(reply, p, quoted, sameSystem)
 	if p != nil {
 		reply.PingDomain, reply.PingZone, reply.PingNet, reply.PingNode = p.Domain, p.Zone, p.Net, p.Node
 		reply.PingSentTime, reply.PingMSGID = p.SentTime, p.MSGID
