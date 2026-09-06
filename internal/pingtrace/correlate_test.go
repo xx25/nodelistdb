@@ -72,6 +72,9 @@ func TestClassify(t *testing.T) {
 		// The real case: 2:5080/102's pong.pl answers mail merely passing
 		// through, "PONG: PING", and was not even in the chain it quoted.
 		{"pong wording from a stranger is trace", Reply{FromName: "Ping-Pong Robot", FromAddr: "2:5080/102", Subject: "PONG: PING"}, p, KindTrace},
+		// 3:712/848's hub report for a ping passing through it, verbatim.
+		{"traceroute report is trace wording", Reply{FromName: "mailer-daemon", FromAddr: "3:712/848", Subject: "ping/traceroute report"},
+			&Ping{Address: "2:280/5555", Mode: ModeDirect}, KindTrace},
 		{"unknown sender without wording is trace", Reply{FromName: "Robot", FromAddr: "2:280/2", Subject: "PING"}, p, KindTrace},
 		// A DIR ping is dialed at the node, so nothing can answer it in
 		// transit: a sender on the path is the node under another AKA.

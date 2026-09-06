@@ -236,7 +236,12 @@ func (t *PingTracer) absorbReply(ctx context.Context, item InboxItem, recent []p
 	changed := false
 	switch reply.Kind {
 	case pingtrace.KindPong:
-		if p.Status != pingtrace.StatusPong {
+		// The target's own answer replaces one already recorded from
+		// another of its addresses: the AKA's pong was the best evidence
+		// until the node itself spoke.
+		from := pingtrace.Node3D(item.FromAddr)
+		fromAKA := p.Status == pingtrace.StatusPong && from == p.Address && pingtrace.Node3D(p.ReplyFromAddr) != p.Address
+		if p.Status != pingtrace.StatusPong || fromAKA {
 			p.Status = pingtrace.StatusPong
 			p.ReplyTime = reply.ReceivedAt
 			if d := p.ReplyTime.Sub(p.SentTime); d > 0 {

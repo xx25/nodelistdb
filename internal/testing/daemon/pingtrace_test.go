@@ -275,6 +275,9 @@ func TestPollRepliesFoldsPongTraceAndNDR(t *testing.T) {
 			Vias: []string{"2:5080/102 @20260906.122841.UTC hpt/lnx 1.4.0-sta 27-11-08"}, ReceivedAt: sent.Add(3 * time.Minute)},
 		{ID: 107, ToName: "NodelistDB", FromName: "Ping Robot", FromAddr: "2:221/6", Subject: "Pong: PING c9d8e7f6",
 			Body: "arrived", ReceivedAt: sent.Add(4 * time.Hour)},
+		// The target itself answers after its AKA did: its answer wins.
+		{ID: 108, ToName: "NodelistDB", FromName: "Ping Robot", FromAddr: "2:221/1", Subject: "Pong: PING c9d8e7f6",
+			Body: "arrived", ReceivedAt: sent.Add(5 * time.Hour)},
 	}}
 	tr := testTracer(store, mailer, now)
 
@@ -316,11 +319,14 @@ func TestPollRepliesFoldsPongTraceAndNDR(t *testing.T) {
 		t.Errorf("transit pong not recorded as trace: %+v", store.replies[106])
 	}
 	a := store.ping(t, "2:221/1", "routed")
-	if a.Status != pingtrace.StatusPong || a.ReplyFromAddr != "2:221/6" {
-		t.Errorf("an answer from the target's other AKA is the pong: %+v", a)
+	if a.Status != pingtrace.StatusPong || a.ReplyFromAddr != "2:221/1" || a.ReplyMessageID != 108 || a.RTTSeconds != 5*3600 {
+		t.Errorf("the target's own answer must replace its AKA's: %+v", a)
+	}
+	if store.replies[107].Kind != pingtrace.KindPong {
+		t.Errorf("the AKA's answer stays recorded as a pong: %+v", store.replies[107])
 	}
 
-	if len(store.replies) != 6 {
+	if len(store.replies) != 7 {
 		t.Fatalf("every reply to our name is kept, got %d", len(store.replies))
 	}
 	if store.replies[104].Kind != pingtrace.KindUnmatched {
@@ -329,8 +335,8 @@ func TestPollRepliesFoldsPongTraceAndNDR(t *testing.T) {
 	if store.replies[101].Kind != pingtrace.KindTrace || store.replies[101].PingMSGID != target.MSGID {
 		t.Errorf("trace reply not linked: %+v", store.replies[101])
 	}
-	if tr.watermark != 107 {
-		t.Errorf("watermark = %d, want 107", tr.watermark)
+	if tr.watermark != 108 {
+		t.Errorf("watermark = %d, want 108", tr.watermark)
 	}
 
 	// A second pass re-reads nothing and changes nothing.

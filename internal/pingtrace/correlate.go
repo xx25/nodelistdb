@@ -99,8 +99,10 @@ type Reply struct {
 }
 
 var (
-	ndrRe   = regexp.MustCompile(`(?i)\bNDR\b|undeliverable|non-?delivery|could not be delivered|delivery (failure|failed)`)
-	traceRe = regexp.MustCompile(`(?i)\btrace\b|in[ -]transit|pass(ed|ing) through|transit`)
+	ndrRe = regexp.MustCompile(`(?i)\bNDR\b|undeliverable|non-?delivery|could not be delivered|delivery (failure|failed)`)
+	// "traceroute" is 3:712/848's spelling ("ping/traceroute report",
+	// From "mailer-daemon", sent for a ping merely passing through it).
+	traceRe = regexp.MustCompile(`(?i)\btrace\b|trace-?route|in[ -]transit|pass(ed|ing) through|transit`)
 )
 
 // Match finds the ping a reply answers, or nil.
