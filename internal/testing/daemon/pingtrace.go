@@ -424,10 +424,14 @@ func (t *PingTracer) sendDue(ctx context.Context) error {
 		}
 		return due[i].last.Before(due[j].last)
 	})
+	// Count the backlog before capping: the whole point of the line is to
+	// show a sweep of ~100 nodes draining, and both numbers were the capped
+	// one, so it always read "5 due, sending 5".
+	total := len(due)
 	if len(due) > t.cfg.MaxPerPoll {
 		due = due[:t.cfg.MaxPerPoll]
 	}
-	logging.Infof("PING/TRACE: %d ping(s) due, sending %d", len(due), len(due))
+	logging.Infof("PING/TRACE: %d ping(s) due, sending %d", total, len(due))
 	var firstErr error
 	for _, d := range due {
 		if err := ctx.Err(); err != nil {
