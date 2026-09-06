@@ -4,7 +4,7 @@
 
 {{define "page_title"}}Netmail PING &mdash; {{.Address}}{{end}}
 
-{{define "page_subtitle"}}<p class="subtitle">Every FTS-4010 PING sent to <a href="/node/{{.Address}}?domain={{.Domain}}">{{.Address}}</a>{{if .Domain}} ({{.Domain}}){{end}}, with the path each one walked &mdash; <a href="/analytics/pingtrace">back to the report</a></p>{{end}}
+{{define "page_subtitle"}}<p class="subtitle">Every FTS-4010 PING sent to {{if .NodeURL}}<a href="{{.NodeURL}}">{{.Address}}</a>{{else}}{{.Address}}{{end}}{{if .Domain}} ({{.Domain}}){{end}}, with the path each one walked &mdash; <a href="/analytics/pingtrace">back to the report</a></p>{{end}}
 
 {{define "extra_css"}}
 <style>
@@ -87,12 +87,12 @@
 {{define "ping_path_table"}}
 <div class="path" style="margin-bottom: 0.5rem;">{{range $i, $h := .}}{{if $i}}<span class="arrow">&rarr;</span>{{end}}{{if $h.Delta}}<span class="delta">{{$h.Delta}}</span> {{end}}<span class="hop{{if $h.IsOrigin}} origin{{end}}{{if $h.IsTarget}} target{{end}}">{{if $h.Address}}{{$h.Address}}{{else}}?{{end}}</span>{{end}}</div>
 <table class="data-table hop-table" style="width: auto; margin-bottom: 1rem;">
-    <thead><tr><th>#</th><th>Node</th><th>Time</th><th>Since previous</th><th>Software</th><th>Via line</th></tr></thead>
+    <thead><tr><th>#</th><th>Node</th><th>Time</th><th>Since previous UTC</th><th>Software</th><th>Via line</th></tr></thead>
     <tbody>
     {{range $i, $h := .}}
     <tr>
         <td>{{add $i 1}}</td>
-        <td class="nowrap">{{if $h.Address}}<a href="/node/{{$h.Address}}">{{$h.Address}}</a>{{else}}<span class="text-muted">?</span>{{end}}</td>
+        <td class="nowrap">{{if $h.NodeURL}}<a href="{{$h.NodeURL}}">{{$h.Address}}</a>{{else if $h.Address}}{{$h.Address}}{{else}}<span class="text-muted">?</span>{{end}}</td>
         <td class="nowrap">{{$h.Time}}</td>
         <td class="nowrap">{{$h.Delta}}</td>
         <td>{{$h.Software}}</td>

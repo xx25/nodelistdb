@@ -136,7 +136,7 @@
             <thead><tr><th>Node</th><th class="num">Notices</th><th>Flies TRACE</th></tr></thead>
             <tbody>
             {{range .Summary.Tracers}}
-            <tr><td><a href="/analytics/pingtrace/node?address={{.Address}}">{{.Address}}</a></td><td class="num">{{.Notices}}</td><td>{{if .Flagged}}yes{{else}}<span class="text-muted">no</span>{{end}}</td></tr>
+            <tr><td><a href="/analytics/pingtrace/node?address={{.Address}}{{if .Domain}}&amp;domain={{.Domain}}{{end}}">{{.Address}}</a></td><td class="num">{{.Notices}}</td><td>{{if .Flagged}}yes{{else}}<span class="text-muted">no</span>{{end}}</td></tr>
             {{end}}
             </tbody>
         </table>

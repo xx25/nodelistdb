@@ -188,6 +188,15 @@ func Addresses(hops []Hop) []string {
 	return out
 }
 
+// TimeIsUTCInVia reports whether a stored raw Via line carried the optional
+// FTS-4009 "UTC" marker. Hop.TimeIsUTC has no column of its own in the
+// ping tables -- the raw line is kept verbatim, so the flag is re-derived
+// from it on read rather than migrated in.
+func TimeIsUTCInVia(raw string) bool {
+	h, ok := ParseViaLine(raw)
+	return ok && h.TimeIsUTC
+}
+
 // Node3D reduces an address to its zone:net/node form (a point's Via is
 // attributed to its boss for path purposes).
 func Node3D(addr string) string {

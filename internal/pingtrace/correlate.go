@@ -174,14 +174,42 @@ func Classify(r Reply, p *Ping, outPath []Hop) string {
 		return KindPong
 	}
 	// No wording to go on. A sender that appears in the quoted outbound
-	// path as an intermediate is a transit node; anything else is most
-	// likely the destination answering from another AKA.
-	for i, h := range outPath {
-		if Node3D(h.Address) == from && i < len(outPath)-1 {
-			return KindTrace
+	// path is a transit node; anything else is most likely the destination
+	// answering from another AKA. Position in the path decides nothing:
+	// robots differ on whether they quote the chain as of arrival or after
+	// adding their own stamp, so the destination cannot be identified as
+	// "the last hop" -- it is p.Address, and a sender equal to it already
+	// returned above.
+	//
+	// Except under DIR, where the message was dialed straight at the node
+	// and no transit is possible at all: there an unexpected sender is the
+	// destination answering from an AKA, whatever the path says.
+	if p.Mode != ModeDirect {
+		for _, h := range outPath {
+			if Node3D(h.Address) == from {
+				return KindTrace
+			}
 		}
 	}
 	return KindPong
+}
+
+// OriginAddress is the address that authored a MSGID ("2:5001/100@fidonet
+// 6a99d1e1" -> "2:5001/100"), i.e. us for our own pings. A quoted path
+// holds a Via line only for systems that stamped one, and a sending
+// system normally does not stamp its own, so the first hop of a path is
+// a transit node as often as it is the origin. The MSGID is what names
+// the origin; the path must not be read positionally.
+func OriginAddress(msgid string) string {
+	f := strings.Fields(msgid)
+	if len(f) == 0 {
+		return ""
+	}
+	addr := f[0]
+	if i := strings.IndexByte(addr, '@'); i >= 0 {
+		addr = addr[:i]
+	}
+	return Node3D(addr)
 }
 
 // normalizeMSGID folds a MSGID for comparison: whitespace collapsed,

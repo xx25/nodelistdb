@@ -49,7 +49,7 @@ func TestMatchByTokenThenMSGIDThenSender(t *testing.T) {
 
 func TestClassify(t *testing.T) {
 	p := &Ping{Address: "2:280/5555"}
-	path := []Hop{{Address: "2:5001/100"}, {Address: "2:5020/715"}, {Address: "2:280/5555"}}
+	path := []Hop{{Address: "2:5001/100"}, {Address: "2:5020/715"}, {Address: "2:5020/0"}}
 	cases := []struct {
 		name string
 		r    Reply
@@ -62,7 +62,14 @@ func TestClassify(t *testing.T) {
 		{"trace wording", Reply{FromName: "Trace Robot", FromAddr: "2:5020/715", Subject: "Trace: your message to PING"}, p, KindTrace},
 		{"pong wording from an AKA", Reply{FromName: "Robot", FromAddr: "2:280/1", Subject: "Your message arrived"}, p, KindPong},
 		{"intermediate without wording is trace", Reply{FromName: "Robot", FromAddr: "2:5020/715", Subject: "PING"}, p, KindTrace},
+		// A transit robot stamps its own Via last before sending its
+		// notice, so being the newest hop must not read as "destination".
+		{"last hop without wording is still trace", Reply{FromName: "Robot", FromAddr: "2:5020/0", Subject: "PING"}, p, KindTrace},
 		{"unknown sender without wording is pong", Reply{FromName: "Robot", FromAddr: "2:280/2", Subject: "PING"}, p, KindPong},
+		// A DIR ping is dialed at the node, so nothing can answer it in
+		// transit: a sender on the path is the node under another AKA.
+		{"under DIR a path member is still a pong", Reply{FromName: "Robot", FromAddr: "2:5020/715", Subject: "PING"},
+			&Ping{Address: "2:280/5555", Mode: ModeDirect}, KindPong},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

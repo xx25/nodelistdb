@@ -437,9 +437,9 @@ func (t *PingTracer) sendPing(ctx context.Context, c pingtrace.Candidate, mode s
 		// Exactly "PING": every FTSC text keys the robot on the To name
 		// alone, but a script that also compares the subject would silently
 		// drop anything else. The correlation token rides in the body.
-		Subject:  "PING",
-		Body:     t.pingBody(c, mode, now, token),
-		Direct:   mode == pingtrace.ModeDirect,
+		Subject: "PING",
+		Body:    t.pingBody(c, mode, now, token),
+		Direct:  mode == pingtrace.ModeDirect,
 	}
 	if t.dryRun {
 		logging.Infof("PING/TRACE (dry-run): would send %s ping to %s (%s)", mode, c.Address, c.SystemName)

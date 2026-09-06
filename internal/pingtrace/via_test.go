@@ -124,3 +124,20 @@ func TestExtractPathAcceptsBareCanonicalLines(t *testing.T) {
 		t.Errorf("bare canonical lines = %v, want %v", got, want)
 	}
 }
+
+// TestTimeIsUTCInVia covers the flag's round trip: it has no column of its
+// own in the ping tables, so a hop read back from storage re-derives it
+// from the raw line.
+func TestTimeIsUTCInVia(t *testing.T) {
+	cases := map[string]bool{
+		"2:5020/715 @20260903.234155.UTC RNtrack 2.3.0/Lnx/Perl": true,
+		"2:292/854 @20260904.014604 D'Bridge 4":                  false,
+		"ZoneGate V8.1 by Alexey Presniakov, id : 493C":          false,
+		"": false,
+	}
+	for raw, want := range cases {
+		if got := TimeIsUTCInVia(raw); got != want {
+			t.Errorf("TimeIsUTCInVia(%q) = %v, want %v", raw, got, want)
+		}
+	}
+}

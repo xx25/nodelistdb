@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -17,10 +18,13 @@ type hopView struct {
 	Address  string
 	Software string
 	Time     string // "2026-09-03 12:00 UTC" or ""
-	Delta    string // "+32m" since the previous timed hop, or ""
+	Delta    string // "+32m" since the previous UTC-stamped hop, or ""
 	Raw      string
 	IsOrigin bool
 	IsTarget bool
+	// NodeURL is the hop's page in the archive, empty when the Via line
+	// named no address.
+	NodeURL string
 }
 
 // pingView is one ping with its fields pre-formatted for a template.
@@ -54,6 +58,36 @@ func fmtPingTime(t time.Time) string {
 	return t.UTC().Format("2006-01-02 15:04 UTC")
 }
 
+// fmtHopTime renders a hop's own stamp. The FTS-4009 "UTC" marker is
+// optional, and a line without it carries that system's local time -- which
+// is not ours to convert, so it is labelled for what it is instead of being
+// relabelled UTC.
+// nodeHistoryURL builds the archive link for an FTN address. The route is
+// /node/{zone}/{net}/{node}: an address written as one segment
+// ("/node/2:5020/715") answers 400, which is what every hop link on this
+// page used to do.
+func nodeHistoryURL(addr, domain string) string {
+	var zone, net, node int
+	if _, err := fmt.Sscanf(pingtrace.Node3D(addr), "%d:%d/%d", &zone, &net, &node); err != nil {
+		return ""
+	}
+	u := fmt.Sprintf("/node/%d/%d/%d", zone, net, node)
+	if domain != "" {
+		u += "?domain=" + url.QueryEscape(domain)
+	}
+	return u
+}
+
+func fmtHopTime(h pingtrace.Hop) string {
+	if h.Time.IsZero() {
+		return ""
+	}
+	if h.TimeIsUTC {
+		return h.Time.UTC().Format("2006-01-02 15:04 UTC")
+	}
+	return h.Time.Format("2006-01-02 15:04 local")
+}
+
 // fmtDurationShort renders a duration as "3d 4h", "2h 15m", "45m" or "30s".
 func fmtDurationShort(d time.Duration) string {
 	if d <= 0 {
@@ -78,23 +112,34 @@ func fmtDurationShort(d time.Duration) string {
 	}
 }
 
-func hopViews(hops []pingtrace.Hop, target string) []hopView {
+func hopViews(hops []pingtrace.Hop, origin, target, domain string) []hopView {
 	out := make([]hopView, 0, len(hops))
-	var prev time.Time
-	for i, h := range hops {
-		v := hopView{Address: h.Address, Software: h.Software, Time: fmtPingTime(h.Time), Raw: h.Raw}
-		if !h.Time.IsZero() {
-			if !prev.IsZero() {
-				if d := h.Time.Sub(prev); d > 0 {
+	// Elapsed time is measured between UTC-marked stamps only, skipping
+	// the hops in between. Subtracting a local stamp from a UTC one
+	// measures that hop's timezone rather than the time it held the
+	// message, which is where this page's negative "elapsed" times came
+	// from; a mailer that writes local time simply contributes no reading.
+	var prevUTC time.Time
+	for _, h := range hops {
+		v := hopView{Address: h.Address, Software: h.Software, Time: fmtHopTime(h), Raw: h.Raw}
+		if !h.Time.IsZero() && h.TimeIsUTC {
+			if !prevUTC.IsZero() {
+				if d := h.Time.Sub(prevUTC); d > 0 {
 					v.Delta = "+" + fmtDurationShort(d)
 				} else if d < 0 {
 					v.Delta = "-" + fmtDurationShort(-d)
 				}
 			}
-			prev = h.Time
+			prevUTC = h.Time
 		}
-		v.IsOrigin = i == 0
+		// The origin is named by the MSGID, not by being first: our own
+		// mailer stamps no Via, so hop 0 is normally the first system we
+		// routed through.
+		v.IsOrigin = origin != "" && h.Address != "" && pingtrace.Node3D(h.Address) == origin
 		v.IsTarget = h.Address != "" && pingtrace.Node3D(h.Address) == target
+		if h.Address != "" {
+			v.NodeURL = nodeHistoryURL(h.Address, domain)
+		}
 		out = append(out, v)
 	}
 	return out
@@ -127,8 +172,8 @@ func newPingView(p pingtrace.Ping) *pingView {
 		Sent:       fmtPingTime(p.SentTime),
 		Dispatched: fmtPingTime(p.DispatchedTime),
 		Reply:      fmtPingTime(p.ReplyTime),
-		Out:        hopViews(p.OutHops, p.Address),
-		Back:       hopViews(p.BackHops, p.Address),
+		Out:        hopViews(p.OutHops, pingtrace.OriginAddress(p.MSGID), p.Address, p.Domain),
+		Back:       hopViews(p.BackHops, pingtrace.OriginAddress(p.MSGID), p.Address, p.Domain),
 	}
 	if p.Status == pingtrace.StatusPong {
 		v.RTT = fmtDurationShort(time.Duration(p.RTTSeconds) * time.Second)
@@ -218,6 +263,7 @@ type pingtraceNodePage struct {
 	Version    string
 	Address    string
 	Domain     string
+	NodeURL    string
 	Pings      []*pingView
 	Replies    []replyView
 	Error      error
@@ -257,13 +303,15 @@ func (s *Server) PingTraceNodeHandler(w http.ResponseWriter, r *http.Request) {
 		Version:    version.GetVersionInfo(),
 		Address:    address,
 		Domain:     domain,
+		NodeURL:    nodeHistoryURL(address, domain),
 		Error:      displayError,
 	}
 	for _, p := range pings {
 		page.Pings = append(page.Pings, newPingView(p))
 	}
 	for _, rep := range replies {
-		v := replyView{R: rep, Received: fmtPingTime(rep.ReceivedAt), Hops: hopViews(rep.Hops, address), Body: rep.Body}
+		v := replyView{R: rep, Received: fmtPingTime(rep.ReceivedAt),
+			Hops: hopViews(rep.Hops, pingtrace.OriginAddress(rep.PingMSGID), address, domain), Body: rep.Body}
 		switch rep.Kind {
 		case pingtrace.KindPong:
 			v.KindClass = "badge-success"

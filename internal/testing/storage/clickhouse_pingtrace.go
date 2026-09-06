@@ -86,6 +86,7 @@ func joinHops(addrs []string, times []time.Time, software, raw []string) []pingt
 		}
 		if i < len(raw) {
 			h.Raw = raw[i]
+			h.TimeIsUTC = pingtrace.TimeIsUTCInVia(raw[i])
 		}
 		hops = append(hops, h)
 	}

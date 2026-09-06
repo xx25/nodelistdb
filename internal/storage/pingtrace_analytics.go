@@ -65,6 +65,9 @@ type PingNodeSummary struct {
 // or not it flies TRACE.
 type TracerStat struct {
 	Address string `json:"address"`
+	// Domain is the network the pings it answered belong to: without a
+	// ?domain= filter the same address can appear once per network.
+	Domain  string `json:"domain,omitempty"`
 	Notices int    `json:"notices"`
 	Flagged bool   `json:"flagged"`
 }
@@ -140,10 +143,24 @@ func pingHops(addrs []string, times []time.Time, software, raw []string) []pingt
 		}
 		if i < len(raw) {
 			h.Raw = raw[i]
+			h.TimeIsUTC = pingtrace.TimeIsUTCInVia(raw[i])
 		}
 		hops = append(hops, h)
 	}
 	return hops
+}
+
+// replyHops reconstructs the path a reply quoted. ping_replies stores each
+// hop's parsed fields but not its raw Via line, so the raw text -- and with
+// it the FTS-4009 "UTC" marker -- comes back only by re-parsing the stored
+// body, which is the same input the daemon parsed on arrival. The stored
+// columns stay the fallback for any row whose body no longer yields the
+// same path.
+func replyHops(body string, addrs []string, times []time.Time, soft []string) []pingtrace.Hop {
+	if hops := pingtrace.ExtractPath(body); len(hops) == len(addrs) {
+		return hops
+	}
+	return pingHops(addrs, times, soft, nil)
 }
 
 func scanPingRow(rows *sql.Rows) (pingtrace.Ping, error) {
@@ -254,7 +271,7 @@ func scanReplyRow(rows *sql.Rows) (PingReplyRow, error) {
 	r.Date = pingTime(date)
 	r.ReceivedAt = pingTime(received)
 	r.UpdatedAt = updated
-	r.Hops = pingHops(hops, times, soft, nil)
+	r.Hops = replyHops(r.Body, hops, times, soft)
 	return r, nil
 }
 
@@ -368,6 +385,13 @@ func (po *PingTraceOperations) GetPingTraceSummary(ctx context.Context, domain s
 	return summary, nil
 }
 
+// nodeKey identifies one node in one FTN network, the only safe key for
+// evidence gathered across networks.
+type nodeKey struct {
+	address string
+	domain  string
+}
+
 // foldPingTraceSummary is the pure aggregation over the loaded window,
 // split out so it can be tested without ClickHouse.
 func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings []pingtrace.Ping, notices []traceNotice) {
@@ -376,15 +400,20 @@ func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings
 		return pingDomain + "|" + pingAddress + "|" + sent.UTC().Format(time.RFC3339) + "|" + from
 	}
 	noticed := map[string]bool{}
-	tracers := map[string]int{}
+	// Transit evidence is keyed by node AND network: zone:net/node numbers
+	// are reused across FTN domains, and this summary is built with no
+	// domain filter whenever /api/analytics/pingtrace is called without
+	// ?domain=, so a bare address would pool one network's paths with
+	// another's.
+	tracers := map[nodeKey]int{}
 	for _, n := range notices {
 		noticed[noticeKey(n.pingDomain, n.pingAddress, n.pingSentTime, n.from)] = true
-		tracers[n.from]++
+		tracers[nodeKey{n.from, n.pingDomain}]++
 	}
 
 	// Per-node latest ping per mode, counts, and transit evidence.
-	seen := map[string]int{}   // transit node -> pings that crossed it
-	earned := map[string]int{} // transit node -> of those, with a notice
+	seen := map[nodeKey]int{}   // transit node -> pings that crossed it
+	earned := map[nodeKey]int{} // transit node -> of those, with a notice
 	robots := map[string]map[string]bool{}
 	var rtts []uint32
 	var hopCounts []int
@@ -420,21 +449,25 @@ func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings
 				robots[p.RobotPID][key] = true
 			}
 		}
-		// Transit hops: everything strictly between the origin (first
-		// hop) and the destination (last hop). A path of one or two hops
-		// crossed nobody.
-		if len(p.OutHops) > 2 {
-			crossed := map[string]bool{}
-			for _, h := range p.OutHops[1 : len(p.OutHops)-1] {
-				addr := pingtrace.Node3D(h.Address)
-				if addr == "" || addr == p.Address || crossed[addr] {
-					continue
-				}
-				crossed[addr] = true
-				seen[addr]++
-				if noticed[noticeKey(p.Domain, p.Address, p.SentTime, addr)] {
-					earned[addr]++
-				}
+		// Transit hops: every node on the quoted path that is neither
+		// endpoint. The endpoints are named, never positional -- the
+		// destination is p.Address and the origin is whoever authored the
+		// MSGID (us). Trimming the first and last hop instead would drop
+		// a real transit node at each end, because a sending system does
+		// not normally stamp its own Via and a robot quotes the path as
+		// it stood before its own toss stamp was added.
+		origin := pingtrace.OriginAddress(p.MSGID)
+		crossed := map[string]bool{}
+		for _, h := range p.OutHops {
+			addr := pingtrace.Node3D(h.Address)
+			if addr == "" || addr == p.Address || addr == origin || crossed[addr] {
+				continue
+			}
+			crossed[addr] = true
+			k := nodeKey{addr, p.Domain}
+			seen[k]++
+			if noticed[noticeKey(p.Domain, p.Address, p.SentTime, addr)] {
+				earned[k]++
 			}
 		}
 	}
@@ -460,8 +493,8 @@ func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings
 		}
 		if n.HasTrace {
 			summary.TraceNodes++
-			n.TraceSeen = seen[n.Address]
-			n.TraceNotices = earned[n.Address]
+			n.TraceSeen = seen[nodeKey{n.Address, n.Domain}]
+			n.TraceNotices = earned[nodeKey{n.Address, n.Domain}]
 			switch {
 			case n.TraceSeen == 0:
 				n.TraceVerdict = "unobserved"
@@ -484,25 +517,21 @@ func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings
 		sort.Ints(hopCounts)
 		summary.MedianHops = hopCounts[len(hopCounts)/2]
 	}
-	for addr, count := range tracers {
-		_, flagged := index[addr+"@"+summary.Domain]
-		if summary.Domain == "" {
-			for k := range index {
-				if len(k) > len(addr) && k[:len(addr)+1] == addr+"@" {
-					flagged = summary.Nodes[index[k]].HasTrace
-					break
-				}
-			}
-		} else if flagged {
-			flagged = summary.Nodes[index[addr+"@"+summary.Domain]].HasTrace
+	for k, count := range tracers {
+		flagged := false
+		if idx, ok := index[k.address+"@"+k.domain]; ok {
+			flagged = summary.Nodes[idx].HasTrace
 		}
-		summary.Tracers = append(summary.Tracers, TracerStat{Address: addr, Notices: count, Flagged: flagged})
+		summary.Tracers = append(summary.Tracers, TracerStat{Address: k.address, Domain: k.domain, Notices: count, Flagged: flagged})
 	}
 	sort.Slice(summary.Tracers, func(i, j int) bool {
 		if summary.Tracers[i].Notices != summary.Tracers[j].Notices {
 			return summary.Tracers[i].Notices > summary.Tracers[j].Notices
 		}
-		return summary.Tracers[i].Address < summary.Tracers[j].Address
+		if summary.Tracers[i].Address != summary.Tracers[j].Address {
+			return summary.Tracers[i].Address < summary.Tracers[j].Address
+		}
+		return summary.Tracers[i].Domain < summary.Tracers[j].Domain
 	})
 	for sw, nodes := range robots {
 		summary.Robots = append(summary.Robots, RobotStat{Software: sw, Nodes: len(nodes)})
