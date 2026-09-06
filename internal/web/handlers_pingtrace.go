@@ -217,14 +217,88 @@ func newPingView(p pingtrace.Ping) *pingView {
 	return v
 }
 
-// pingNodeRow is one row of the report table.
+// pingNodeRow is one row of the report table. The report shows no result
+// column of its own: each flag badge is coloured by how that flag tested and
+// carries the wording in its tooltip, so StatusLabel/TraceLabel are what a
+// reader gets on hover and what the column sorts by.
 type pingNodeRow struct {
 	N            storage.PingNodeSummary
 	Latest       *pingView
 	LatestDirect *pingView
 	StatusLabel  string
 	StatusClass  string
+	PingTitle    string
+	TraceLabel   string
 	TraceClass   string
+	TraceTitle   string
+}
+
+// newPingNodeRow builds one table row from the folded summary. Kept in one
+// place so the handler and the render test cannot drift apart.
+func newPingNodeRow(n storage.PingNodeSummary) pingNodeRow {
+	row := pingNodeRow{
+		N:          n,
+		TraceLabel: traceVerdictLabel(n.TraceVerdict),
+		TraceClass: traceVerdictClass(n.TraceVerdict),
+		TraceTitle: traceBadgeTitle(n),
+	}
+	if n.Latest != nil {
+		row.Latest = newPingView(*n.Latest)
+		row.StatusLabel, row.StatusClass = row.Latest.StatusLabel, row.Latest.StatusClass
+	} else if n.HasPing {
+		row.StatusLabel, row.StatusClass = pingStatusLabel("")
+	}
+	if n.LatestDirect != nil {
+		row.LatestDirect = newPingView(*n.LatestDirect)
+	}
+	row.PingTitle = pingBadgeTitle(&row)
+	return row
+}
+
+// pingBadgeTitle spells out everything the dropped "Last ping" and "Robot"
+// columns used to print as text: the routed result, the software that answered,
+// the error behind a failure, and the direct-dial ping, which is a separate
+// measurement rather than a retry.
+func pingBadgeTitle(row *pingNodeRow) string {
+	if !row.N.HasPing {
+		return ""
+	}
+	head := "Last ping: " + row.StatusLabel
+	if row.Latest != nil && row.Latest.RTT != "" {
+		head += " in " + row.Latest.RTT
+	}
+	parts := []string{head}
+	if row.Latest != nil && row.Latest.P.RobotPID != "" {
+		parts = append(parts, "robot: "+row.Latest.P.RobotPID)
+	}
+	if row.Latest != nil && row.Latest.P.Error != "" {
+		parts = append(parts, row.Latest.P.Error)
+	}
+	if row.LatestDirect != nil {
+		direct := "direct dial: " + row.LatestDirect.StatusLabel
+		if row.LatestDirect.RTT != "" {
+			direct += " in " + row.LatestDirect.RTT
+		}
+		parts = append(parts, direct)
+	}
+	return strings.Join(parts, " \u2014 ")
+}
+
+// traceBadgeTitle says why the verdict is what it is, since the verdict is
+// about transit and reads as a failure to anyone expecting it to be about
+// the node answering its own ping.
+func traceBadgeTitle(n storage.PingNodeSummary) string {
+	if !n.HasTrace {
+		return ""
+	}
+	switch n.TraceVerdict {
+	case "confirmed":
+		return fmt.Sprintf("TRACE: notified us on %d of the %d pings that passed through it", n.TraceNotices, n.TraceSeen)
+	case "silent":
+		return fmt.Sprintf("TRACE: %d pings passed through it and it never notified us", n.TraceSeen)
+	default:
+		return "TRACE: no ping of ours has been routed through this node, so nothing is known about its TRACE flag"
+	}
 }
 
 type pingtraceAnalyticsPage struct {
@@ -235,6 +309,16 @@ type pingtraceAnalyticsPage struct {
 	Rows       []pingNodeRow
 	Days       int
 	Error      error
+}
+
+// traceVerdictLabel renames the "unobserved" verdict for the table. The bare
+// word reads as a verdict on the node; the point is that our mail has never
+// been routed through it, which is a fact about our routes, not about it.
+func traceVerdictLabel(v string) string {
+	if v == "unobserved" {
+		return "not on our routes"
+	}
+	return v
 }
 
 func traceVerdictClass(v string) string {
@@ -266,17 +350,7 @@ func (s *Server) PingTraceAnalyticsHandler(w http.ResponseWriter, r *http.Reques
 
 	rows := make([]pingNodeRow, 0, len(summary.Nodes))
 	for _, n := range summary.Nodes {
-		row := pingNodeRow{N: n, TraceClass: traceVerdictClass(n.TraceVerdict)}
-		if n.Latest != nil {
-			row.Latest = newPingView(*n.Latest)
-			row.StatusLabel, row.StatusClass = row.Latest.StatusLabel, row.Latest.StatusClass
-		} else if n.HasPing {
-			row.StatusLabel, row.StatusClass = pingStatusLabel("")
-		}
-		if n.LatestDirect != nil {
-			row.LatestDirect = newPingView(*n.LatestDirect)
-		}
-		rows = append(rows, row)
+		rows = append(rows, newPingNodeRow(n))
 	}
 
 	s.renderStatus(w, "pingtrace_analytics", pingtraceAnalyticsPage{

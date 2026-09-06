@@ -438,9 +438,3 @@ table td:last-child {
     color: var(--text-secondary);
     font-size: 0.8em;
 }
-
-/* Inside a report table cell the chain stays on one line and scrolls. */
-table .path {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-}

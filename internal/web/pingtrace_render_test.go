@@ -65,27 +65,33 @@ func TestPingTraceAnalyticsRenders(t *testing.T) {
 	}
 	rows := make([]pingNodeRow, 0)
 	for _, n := range summary.Nodes {
-		row := pingNodeRow{N: n, TraceClass: traceVerdictClass(n.TraceVerdict)}
-		if n.Latest != nil {
-			row.Latest = newPingView(*n.Latest)
-			row.StatusLabel, row.StatusClass = row.Latest.StatusLabel, row.Latest.StatusClass
-		} else if n.HasPing {
-			row.StatusLabel, row.StatusClass = pingStatusLabel("")
-		}
-		rows = append(rows, row)
+		rows = append(rows, newPingNodeRow(n))
 	}
 	html := renderPingTemplate(t, "pingtrace_analytics", pingtraceAnalyticsPage{
 		Title: "Netmail PING/TRACE", ActivePage: "analytics", Version: "test", Summary: summary, Rows: rows, Days: 90,
 	})
 	for _, want := range []string{
-		"2:280/5555", "Answered", "3h 12m", "Never pinged", "confirmed", "2/3",
-		"/analytics/pingtrace/node?address=2%3a280%2f5555", "FMail 2.3", "ZoneGate",
-		// The elapsed reading skips the local-time 715 stamp and spans
-		// 12:01 UTC -> 15:00 UTC.
-		`class="hop origin"`, `class="hop target"`, "&#43;2h 59m",
+		"2:280/5555", "3h 12m", "confirmed", "2/3",
+		"/analytics/pingtrace/node?address=2%3a280%2f5555",
+		// The answering software rides in the badge tooltip and in the
+		// robot summary, not in a column of its own.
+		`title="Last ping: Answered in 3h 12m — robot: FMail 2.3"`,
+		// The report carries no result column of its own: the result is the
+		// colour of the flag badge, and its wording lives in the tooltip.
+		`title="Last ping: Never pinged"`,
+		// "unobserved" is a fact about our routes, so it is not printed as a
+		// verdict on the node.
+		"not on our routes",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered report lacks %q", want)
+		}
+	}
+	// The quoted path belongs to the per-ping page; the report links there
+	// rather than repeating a whole Via chain in every row.
+	for _, unwanted := range []string{`class="hop origin"`, "ZoneGate", ">Path<", ">Last ping<", ">Robot<"} {
+		if strings.Contains(html, unwanted) {
+			t.Errorf("report must not carry %q", unwanted)
 		}
 	}
 }

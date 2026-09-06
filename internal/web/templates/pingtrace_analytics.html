@@ -4,7 +4,7 @@
 
 {{define "page_title"}}Netmail PING/TRACE{{end}}
 
-{{define "page_subtitle"}}<p class="subtitle">Which nodes answer an FTS-4010 netmail PING, how long the round trip takes, and which path the mail walked</p>{{end}}
+{{define "page_subtitle"}}<p class="subtitle">Which nodes answer an FTS-4010 netmail PING, how long the round trip takes, and which TRACE nodes report the mail passing through them</p>{{end}}
 
 {{define "head_scripts"}}
 <script src="/static/sortable-table.js"></script>
@@ -58,17 +58,19 @@
         <code>PING</code> from 2:5001/100 about once every two weeks, sent through the ordinary
         netmail routing (not a direct dial). FTS-4010 says the destination bounces it back quoting
         the <code>^AVia</code> lines it collected on the way &mdash; that quoted chain is the outbound
-        path shown here, and the answer's own Via chain is the return path. A node advertising
-        <code>TRACE</code> should notify the sender when a PING merely passes through it:
-        <em>confirmed</em> means at least one of our pings crossed it and it did,
-        <em>silent</em> means pings crossed it and it never did, <em>unobserved</em> means no
-        ping of ours has been routed through it in the last {{.Days}} days, so nothing is known.
+        path, and the answer's own Via chain is the return path; both are drawn hop by hop on each
+        node's own page. A node advertising <code>TRACE</code> should notify the sender when a PING
+        merely passes <em>through</em> it on the way to someone else, so the TRACE verdict is never
+        about the node answering its own ping: <em>confirmed</em> means at least one of our pings
+        crossed it and it did notify us, <em>silent</em> means pings crossed it and it never did,
+        <em>not on our routes</em> means no ping of ours has been routed through it in the last
+        {{.Days}} days, so nothing is known.
         Unanswered pings are given 7 days; a late answer still counts.
     </p>
     <p class="text-muted" style="margin: 0.25rem 0;">
         Two limits of the TRACE column: only nodes that sit on 2:5001/100's own routes (its
         uplink, the zone and region hubs and the net hosts on the way) can ever be crossed, so
-        most TRACE nodes stay <em>unobserved</em> by construction rather than by fault; and the
+        most TRACE nodes stay <em>not on our routes</em> by construction rather than by fault; and the
         verdict pairs paths from the last {{.Days}} days with the flags on the <em>current</em>
         nodelist, so a node that added or dropped TRACE inside that window is judged by its
         present flag.
@@ -76,6 +78,17 @@
 </div>
 
 {{if .Summary.Nodes}}
+<p class="text-muted" style="margin: 0 0 0.75rem;">
+    Each flag badge is coloured by how that flag tested. <span class="badge badge-success">PING</span>
+    the node answered our last ping, <span class="badge badge-warning">PING</span> it did not,
+    <span class="badge badge-danger">PING</span> the mail bounced or never left this node,
+    <span class="badge badge-secondary">PING</span> it has not been pinged yet.
+    <span class="badge badge-success">TRACE</span> it notified us while a ping passed through,
+    <span class="badge badge-warning">TRACE</span> pings passed through and it stayed silent,
+    <span class="badge badge-secondary">TRACE</span> nothing of ours has passed through it.
+    Hover a badge for the wording, the answering robot, the error behind a failure and the separate
+    direct-dial result; the quoted path of every ping is on the node's own page.
+</p>
 <div class="table-responsive">
 <table class="data-table sortable-table">
     <thead>
@@ -83,12 +96,9 @@
             <th data-sortable data-type="address">Node</th>
             <th data-sortable data-type="string">System</th>
             <th data-sortable data-type="string">Flags</th>
-            <th data-sortable data-type="string">Last ping</th>
             <th data-sortable data-type="date">Sent</th>
             <th data-sortable data-type="number">Round trip</th>
             <th data-sortable data-type="number">Hops</th>
-            <th>Path</th>
-            <th data-sortable data-type="string">Robot</th>
             <th data-sortable data-type="string">TRACE</th>
         </tr>
     </thead>
@@ -98,16 +108,11 @@
             <td class="nowrap"><a href="/analytics/pingtrace/node?address={{.N.Address}}&domain={{.N.Domain}}">{{.N.Address}}</a>
                 <small><a href="/node/{{.N.Zone}}/{{.N.Net}}/{{.N.Node}}?domain={{.N.Domain}}" class="text-muted">history</a></small></td>
             <td>{{replaceUnderscores .N.SystemName}}<br><small class="text-muted">{{replaceUnderscores .N.SysopName}}</small></td>
-            <td class="nowrap">{{if .N.HasPing}}<span class="badge badge-success">PING</span>{{end}} {{if .N.HasTrace}}<span class="badge badge-info">TRACE</span>{{end}}</td>
-            <td>{{if .StatusLabel}}<span class="badge {{.StatusClass}}">{{.StatusLabel}}</span>{{end}}
-                {{if .Latest}}{{if .Latest.P.Error}}<br><small class="text-muted">{{.Latest.P.Error}}</small>{{end}}{{end}}
-                {{if .LatestDirect}}<br><small class="text-muted">direct: {{.LatestDirect.StatusLabel}}{{if .LatestDirect.RTT}} in {{.LatestDirect.RTT}}{{end}}</small>{{end}}</td>
+            <td class="nowrap" data-value="{{.StatusLabel}}">{{if .N.HasPing}}<span class="badge {{.StatusClass}}" title="{{.PingTitle}}">PING</span>{{end}} {{if .N.HasTrace}}<span class="badge {{.TraceClass}}" title="{{.TraceTitle}}">TRACE</span>{{end}}</td>
             <td class="nowrap" {{if .Latest}}data-value="{{.Latest.P.SentTime.Unix}}"{{else}}data-value="0"{{end}}>{{if .Latest}}<span class="text-muted">{{.Latest.Sent}}</span>{{end}}</td>
             <td class="num" {{if .Latest}}data-value="{{.Latest.P.RTTSeconds}}"{{else}}data-value="0"{{end}}>{{if .Latest}}{{.Latest.RTT}}{{end}}</td>
             <td class="num" {{if .Latest}}data-value="{{.Latest.OutCount}}"{{else}}data-value="0"{{end}}>{{if .Latest}}{{if .Latest.OutCount}}{{.Latest.OutCount}}{{end}}{{end}}</td>
-            <td>{{if .Latest}}{{template "ping_path" .Latest.Out}}{{end}}</td>
-            <td><small>{{if .Latest}}{{.Latest.P.RobotPID}}{{end}}</small></td>
-            <td class="nowrap">{{if .N.HasTrace}}<span class="badge {{.TraceClass}}">{{.N.TraceVerdict}}</span>
+            <td class="nowrap" data-value="{{.TraceLabel}}">{{if .N.HasTrace}}<span class="badge {{.TraceClass}}" title="{{.TraceTitle}}">{{.TraceLabel}}</span>
                 {{if .N.TraceSeen}}<small class="text-muted">{{.N.TraceNotices}}/{{.N.TraceSeen}}</small>{{end}}{{end}}</td>
         </tr>
         {{end}}
@@ -152,4 +157,3 @@
 {{end}}
 {{end}}
 
-{{define "ping_path"}}<div class="path">{{range $i, $h := .}}{{if $i}}<span class="arrow">&rarr;</span>{{end}}{{if $h.Delta}}<span class="delta">{{$h.Delta}}</span> {{end}}<span class="hop{{if $h.IsOrigin}} origin{{end}}{{if $h.IsTarget}} target{{end}}" title="{{$h.Raw}}">{{if $h.Address}}{{$h.Address}}{{else}}?{{end}}</span>{{end}}</div>{{end}}
