@@ -64,7 +64,12 @@ type NetmailStatus struct {
 	Status    string    `json:"status"`
 	ToAddr    string    `json:"to_addr"`
 	CreatedAt time.Time `json:"created_at"`
+	// UpdatedAt is null (left zero here) once fidomail has pruned the
+	// row into its archive, and moves on every write while it is hot.
 	UpdatedAt time.Time `json:"updated_at"`
+	// SentAt is fidomail's write-once hand-over instant (fidomail >=
+	// 33752da); nil from an older fidomail or for mail not yet sent.
+	SentAt *time.Time `json:"sent_at"`
 }
 
 // InboxItem is one inbound netmail from GET /api/v1/netmail/inbox.

@@ -304,7 +304,14 @@ func (t *PingTracer) refreshDispatch(ctx context.Context, recent []pingtrace.Pin
 			switch strings.ToLower(st.Status) {
 			case "sent", "delivered":
 				p.Status = pingtrace.StatusSent
+				// Hand-over time, best source first: fidomail's write-once
+				// sent_at; else updated_at, which at least bounds it while
+				// the row is hot; else this poll, which only bounds it by
+				// the poll interval.
 				p.DispatchedTime = st.UpdatedAt
+				if st.SentAt != nil && !st.SentAt.IsZero() {
+					p.DispatchedTime = *st.SentAt
+				}
 				if p.DispatchedTime.IsZero() {
 					p.DispatchedTime = t.now()
 				}

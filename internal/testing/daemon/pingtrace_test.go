@@ -361,7 +361,7 @@ func TestRefreshDispatchAndExpire(t *testing.T) {
 	store.StorePing(context.Background(), pingtrace.Ping{Domain: "fidonet", Address: "2:221/1", Mode: "routed", SentTime: fresh, FidomailMessageID: 4, Status: pingtrace.StatusQueued})
 	mailer := &fakeMailer{statuses: map[uint64]NetmailStatus{
 		2: {ID: 2, Status: "queued"},
-		3: {ID: 3, Status: "sent", UpdatedAt: now.Add(-30 * time.Minute)},
+		3: {ID: 3, Status: "sent", UpdatedAt: now.Add(-30 * time.Minute), SentAt: timePtr(now.Add(-40 * time.Minute))},
 		4: {ID: 4, Status: "failed"},
 	}}
 	tr := testTracer(store, mailer, now)
@@ -370,7 +370,9 @@ func TestRefreshDispatchAndExpire(t *testing.T) {
 	if err := tr.refreshDispatch(context.Background(), recent); err != nil {
 		t.Fatal(err)
 	}
-	if p := store.ping(t, "2:280/5555", "routed"); p.Status != pingtrace.StatusSent || !p.DispatchedTime.Equal(now.Add(-30*time.Minute)) {
+	// sent_at wins over updated_at: it is the hand-over instant, the
+	// other moves on every write to the row.
+	if p := store.ping(t, "2:280/5555", "routed"); p.Status != pingtrace.StatusSent || !p.DispatchedTime.Equal(now.Add(-40*time.Minute)) {
 		t.Errorf("sent state not recorded: %+v", p)
 	}
 	if p := store.ping(t, "2:221/1", "routed"); p.Status != pingtrace.StatusFailed {
@@ -495,3 +497,5 @@ func TestSendDueHonoursNodeAllowlist(t *testing.T) {
 		}
 	}
 }
+
+func timePtr(t time.Time) *time.Time { return &t }
