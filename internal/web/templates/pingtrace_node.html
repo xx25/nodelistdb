@@ -4,101 +4,208 @@
 
 {{define "page_title"}}Netmail PING &mdash; {{.Address}}{{end}}
 
-{{define "page_subtitle"}}<p class="subtitle">Every FTS-4010 PING sent to {{if .NodeURL}}<a href="{{.NodeURL}}">{{.Address}}</a>{{else}}{{.Address}}{{end}}{{if .Domain}} ({{.Domain}}){{end}}, with the path each one walked &mdash; <a href="/analytics/pingtrace">back to the report</a></p>{{end}}
+{{define "page_subtitle"}}<p class="subtitle">Every FTS-4010 PING sent to {{if .NodeURL}}<a href="{{.NodeURL}}">{{.Address}}</a>{{else}}{{.Address}}{{end}}{{if .Domain}} ({{.Domain}}){{end}}, with the path each one walked.</p>{{end}}
 
 {{define "extra_css"}}
 <style>
-    .path { font-family: monospace; font-size: 0.9em; }
-    .path .hop { display: inline-block; padding: 1px 6px; border-radius: 3px; background: #f0f2f5; margin: 1px 0; }
-    .path .hop.origin { background: #e3f2fd; }
-    .path .hop.target { background: #e8f5e9; font-weight: bold; }
-    .path .arrow { color: #999; margin: 0 3px; }
-    .path .delta { color: #666; font-size: 0.85em; }
-    .badge-secondary { background: #999; color: #fff; }
-    .badge-info { background: #2a78d6; color: #fff; }
-    .hop-table td, .hop-table th { padding: 2px 8px; font-size: 0.9em; }
-    .raw { font-family: monospace; font-size: 0.8em; color: #666; }
-    pre.body { font-size: 0.8em; max-height: 20em; overflow: auto; background: #f8f8f8; padding: 0.5rem; }
-    .ping-card { margin-bottom: 1.5rem; }
-    .nowrap { white-space: nowrap; }
+    .ping-links { margin-bottom: 1.25rem; }
+
+    .ping-card .results-header { margin-bottom: 1rem; }
+    .ping-card .section-tag { margin-bottom: 0.35rem; }
+    .ping-card .results-header p.muted { margin: 0.35rem 0 0; }
+    .ping-card .badge { margin-top: 0.2rem; }
+
+    /* Facts about the ping: the site's key/value grid, with the label
+       column trimmed to this page's short labels. Scoped to wide screens
+       so the grid still collapses to one column on phones like every
+       other detail grid. */
+    @media (min-width: 769px) {
+        .ping-meta { grid-template-columns: minmax(120px, 150px) 1fr; }
+    }
+    .ping-meta dd { color: var(--text-primary); }
+    .ping-meta code { font-size: 0.86em; }
+
+    .ping-path { margin-top: 1.25rem; }
+    .ping-path h4 { margin: 0 0 0.15rem; font-size: 0.98rem; font-weight: 700; }
+    .ping-path > p.muted { margin: 0 0 0.6rem; font-size: 0.9rem; }
+    .ping-path .path { margin-bottom: 0.75rem; }
+
+    /* The hop table is compact and nested inside a card; the shared
+       rule that pins every table's last column to 145px would squeeze
+       the software column, so it is undone here. */
+    .hop-table th, .hop-table td { padding: 0.5rem 0.8rem; font-size: 0.9rem; }
+    .hop-table th { font-size: 0.68rem; letter-spacing: 0.1em; }
+    .hop-table th:first-child { border-top-left-radius: 12px; }
+    .hop-table th:last-child { border-top-right-radius: 12px; }
+    .hop-table th:last-child, .hop-table td:last-child { width: auto; min-width: 0; }
+    .hop-table .num { width: 2.5rem; text-align: right; color: var(--text-secondary); }
+    .hop-table .nowrap { white-space: nowrap; }
+
+    details.raw-vias { margin-top: 0.5rem; }
+    details.raw-vias summary, details.reply-body summary {
+        cursor: pointer; font-size: 0.86rem; font-weight: 700; color: var(--text-secondary);
+    }
+    pre.raw-block, pre.body {
+        margin: 0.5rem 0 0; padding: 0.8rem 1rem; border-radius: 14px;
+        background: rgba(16, 35, 43, 0.05); font-size: 0.8rem; line-height: 1.45;
+        white-space: pre-wrap; word-break: break-word;
+    }
+    pre.body { max-height: 26em; overflow: auto; }
+
+    .ping-replies { margin-top: 2rem; }
+    .reply-card h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 1.05rem; }
+    .reply-card .results-header p.muted { margin: 0.35rem 0 0; font-size: 0.92rem; }
+    .reply-card h4 { margin: 1rem 0 0.35rem; font-size: 0.92rem; font-weight: 700; }
+    .reply-card .raw-list { margin: 0; padding: 0; list-style: none; font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace; font-size: 0.82rem; color: var(--text-secondary); }
+    .reply-card details.reply-body { margin-top: 1rem; }
+
+    .empty-state { text-align: center; padding: 2.5rem 1.4rem; }
+    .empty-state p { margin: 0; }
 </style>
 {{end}}
 
 {{define "content"}}
 {{template "error_display" .}}
 
+<div class="link-pills ping-links">
+    <a class="pill-link" href="/analytics/pingtrace">&larr; All PING/TRACE nodes</a>
+    {{if .NodeURL}}<a class="pill-link" href="{{.NodeURL}}">Node history for {{.Address}}</a>{{end}}
+</div>
+
 {{if not .Pings}}
-<div class="stats-box"><p>No ping has been sent to {{.Address}} yet.</p></div>
-{{end}}
-
-{{range .Pings}}
-<div class="stats-box ping-card">
-    <h4>
-        <span class="badge {{.StatusClass}}">{{.StatusLabel}}</span>
-        {{.P.Mode}} ping sent {{.Sent}}
-        {{if .RTT}}&mdash; answered in <strong>{{.RTT}}</strong>{{end}}
-    </h4>
-    <table class="data-table hop-table" style="width: auto;">
-        <tbody>
-            <tr><th>MSGID</th><td class="raw">{{.P.MSGID}}</td></tr>
-            <tr><th>First hop</th><td>{{.P.FirstHop}} <small class="text-muted">({{.P.RouteSource}})</small></td></tr>
-            {{if .Dispatched}}<tr><th>Handed over</th><td>{{.Dispatched}}</td></tr>{{end}}
-            {{if .Reply}}<tr><th>Answer stored</th><td>{{.Reply}} from {{.P.ReplyFromName}}, {{.P.ReplyFromAddr}}{{if .P.RobotPID}} &mdash; <code>{{.P.RobotPID}}</code>{{end}}</td></tr>{{end}}
-            {{if .P.TraceCount}}<tr><th>Transit notices</th><td>{{.P.TraceCount}}</td></tr>{{end}}
-            {{if .P.Error}}<tr><th>Note</th><td>{{.P.Error}}</td></tr>{{end}}
-        </tbody>
-    </table>
-
-    {{if .Out}}
-    <h5 style="margin-bottom: 0.25rem;">Outbound path (as quoted by the robot)</h5>
-    {{template "ping_path_table" .Out}}
-    {{end}}
-    {{if .Back}}
-    <h5 style="margin-bottom: 0.25rem;">Return path (the answer's own Via chain)</h5>
-    {{template "ping_path_table" .Back}}
-    {{end}}
+<div class="card empty-state">
+    <p class="muted">No ping has been sent to {{.Address}} yet.</p>
 </div>
 {{end}}
 
-{{if .Replies}}
-<h3>Replies</h3>
-{{range .Replies}}
-<details class="stats-box" style="margin-bottom: 0.75rem;">
-    <summary>
-        <span class="badge {{.KindClass}}">{{.R.Kind}}</span>
-        {{.Received}} &mdash; from {{.R.FromName}}, {{.R.FromAddr}}: <em>{{.R.Subject}}</em>
-        {{if .R.PingMSGID}}<small class="text-muted">(answers {{.R.PingMSGID}})</small>{{end}}
-    </summary>
-    {{if .Hops}}
-    <h5 style="margin: 0.5rem 0 0.25rem;">Path quoted in this reply</h5>
-    {{template "ping_path_table" .Hops}}
+{{range .Pings}}
+<article class="card ping-card"{{if .Anchor}} id="{{.Anchor}}"{{end}}>
+    <div class="results-header">
+        <div>
+            <p class="section-tag">{{if eq .P.Mode "direct"}}Direct{{else}}Routed{{end}} ping &middot; {{.Sent}}</p>
+            <h3>{{if .RTT}}Answered in {{.RTT}}{{else}}{{.StatusLabel}}{{end}}</h3>
+            <p class="muted">
+                {{if .RTT}}The robot at {{.P.ReplyFromAddr}} bounced it back {{.RTT}} after it left {{.Origin}}.
+                {{else if eq .P.Status "sent"}}Handed to the first hop; the answer has up to seven days to arrive.
+                {{else if eq .P.Status "queued"}}Waiting in {{.Origin}}'s outbound queue.
+                {{else if eq .P.Status "timeout"}}Nothing came back within seven days of sending.
+                {{else if eq .P.Status "ndr"}}A node on the way reported the mail undeliverable.
+                {{else if eq .P.Status "failed"}}The mail never left {{.Origin}}.
+                {{end}}
+            </p>
+        </div>
+        <span class="badge {{.StatusClass}}">{{.StatusLabel}}</span>
+    </div>
+
+    <dl class="detail-grid ping-meta">
+        <dt>MSGID</dt>
+        <dd><code>{{.P.MSGID}}</code></dd>
+        <dt>First hop</dt>
+        <dd>{{if .FirstHopURL}}<a href="{{.FirstHopURL}}">{{.P.FirstHop}}</a>{{else}}{{.P.FirstHop}}{{end}}{{if .P.RouteSource}} <span class="muted">({{.P.RouteSource}})</span>{{end}}</dd>
+        {{if .Dispatched}}
+        <dt>Handed over</dt>
+        <dd>{{.Dispatched}}</dd>
+        {{end}}
+        {{if .Reply}}
+        <dt>Answered</dt>
+        <dd>{{.Reply}} by {{.P.ReplyFromName}}, {{if .ReplyFromURL}}<a href="{{.ReplyFromURL}}">{{.P.ReplyFromAddr}}</a>{{else}}{{.P.ReplyFromAddr}}{{end}}</dd>
+        {{end}}
+        {{if .P.RobotPID}}
+        <dt>Robot</dt>
+        <dd><code>{{.P.RobotPID}}</code></dd>
+        {{end}}
+        {{if .P.TraceCount}}
+        <dt>Transit notices</dt>
+        <dd>{{.P.TraceCount}}</dd>
+        {{end}}
+        {{if .P.Error}}
+        <dt>Note</dt>
+        <dd>{{.P.Error}}</dd>
+        {{end}}
+    </dl>
+
+    {{if .Out}}
+    <section class="ping-path">
+        <h4>Outbound path</h4>
+        <p class="muted">The Via chain the robot quoted back: every system the ping passed through on its way out.</p>
+        {{template "ping_path_table" .Out}}
+    </section>
     {{end}}
-    {{if .R.Vias}}
-    <h5 style="margin: 0.5rem 0 0.25rem;">This reply's own Via lines</h5>
-    <div class="raw">{{range .R.Vias}}{{.}}<br>{{end}}</div>
+    {{if .Back}}
+    <section class="ping-path">
+        <h4>Return path</h4>
+        <p class="muted">The answer's own Via chain: the way back from the robot to {{.Origin}}.</p>
+        {{template "ping_path_table" .Back}}
+    </section>
     {{end}}
-    {{if .R.PID}}<p class="raw">PID: {{.R.PID}}{{if .R.Tearline}} &nbsp; {{.R.Tearline}}{{end}}</p>{{end}}
-    <pre class="body">{{.Body}}</pre>
-</details>
+</article>
 {{end}}
+
+{{if .Replies}}
+<section class="ping-replies">
+    <div class="section-heading">
+        <p class="section-tag">Evidence</p>
+        <h2>Replies</h2>
+        <p class="muted">Every netmail that came back about a ping to {{.Address}}, newest first, as the sending node received it. Pongs and transit notices are matched to the ping they answer.</p>
+    </div>
+
+    {{range .Replies}}
+    <article class="card reply-card">
+        <div class="results-header">
+            <div>
+                <p class="section-tag">{{.Received}}</p>
+                <h3><span class="badge {{.KindClass}}">{{.R.Kind}}</span> {{.R.Subject}}</h3>
+                <p class="muted">From {{.R.FromName}}, {{if .FromURL}}<a href="{{.FromURL}}">{{.R.FromAddr}}</a>{{else}}{{.R.FromAddr}}{{end}}{{if .R.PingMSGID}} &middot; answers {{if .PingAnchor}}<a href="#{{.PingAnchor}}"><code>{{.R.PingMSGID}}</code></a>{{else}}<code>{{.R.PingMSGID}}</code>{{end}}{{end}}</p>
+            </div>
+        </div>
+
+        {{if .Hops}}
+        <h4>Path quoted in this reply</h4>
+        {{template "ping_path_chips" .Hops}}
+        {{end}}
+        {{if .R.Vias}}
+        <h4>This reply's own Via lines</h4>
+        <ul class="raw-list">{{range .R.Vias}}<li>{{.}}</li>{{end}}</ul>
+        {{end}}
+        {{if .R.PID}}
+        <h4>Software</h4>
+        <p class="muted" style="margin: 0;"><code>{{.R.PID}}</code>{{if .R.Tearline}} &nbsp; {{.R.Tearline}}{{end}}</p>
+        {{end}}
+        <details class="reply-body">
+            <summary>Message text</summary>
+            <pre class="body">{{.Body}}</pre>
+        </details>
+    </article>
+    {{end}}
+</section>
 {{end}}
 {{end}}
 
+{{define "ping_path_chips"}}<div class="path">{{range $i, $h := .}}{{if $i}}<span class="arrow">&rarr;</span>{{end}}{{if $h.Delta}}<span class="delta">{{$h.Delta}}</span>{{end}}<span class="hop{{if $h.IsOrigin}} origin{{end}}{{if $h.IsTarget}} target{{end}}" title="{{$h.Raw}}">{{if $h.Address}}{{$h.Address}}{{else}}?{{end}}</span>{{end}}</div>{{end}}
+
 {{define "ping_path_table"}}
-<div class="path" style="margin-bottom: 0.5rem;">{{range $i, $h := .}}{{if $i}}<span class="arrow">&rarr;</span>{{end}}{{if $h.Delta}}<span class="delta">{{$h.Delta}}</span> {{end}}<span class="hop{{if $h.IsOrigin}} origin{{end}}{{if $h.IsTarget}} target{{end}}">{{if $h.Address}}{{$h.Address}}{{else}}?{{end}}</span>{{end}}</div>
-<table class="data-table hop-table" style="width: auto; margin-bottom: 1rem;">
-    <thead><tr><th>#</th><th>Node</th><th>Time</th><th>Since previous UTC</th><th>Software</th><th>Via line</th></tr></thead>
+{{template "ping_path_chips" .}}
+<div class="table-container">
+<table class="hop-table">
+    <thead><tr><th class="num">#</th><th>Node</th><th>Stamped</th><th>Elapsed</th><th>Software</th></tr></thead>
     <tbody>
     {{range $i, $h := .}}
     <tr>
-        <td>{{add $i 1}}</td>
-        <td class="nowrap">{{if $h.NodeURL}}<a href="{{$h.NodeURL}}">{{$h.Address}}</a>{{else if $h.Address}}{{$h.Address}}{{else}}<span class="text-muted">?</span>{{end}}</td>
-        <td class="nowrap">{{$h.Time}}</td>
-        <td class="nowrap">{{$h.Delta}}</td>
-        <td>{{$h.Software}}</td>
-        <td class="raw">{{$h.Raw}}</td>
+        <td class="num">{{add $i 1}}</td>
+        <td class="nowrap">{{if $h.NodeURL}}<a href="{{$h.NodeURL}}">{{$h.Address}}</a>{{else if $h.Address}}{{$h.Address}}{{else}}<span class="muted">?</span>{{end}}</td>
+        <td class="nowrap">{{if $h.Time}}{{$h.Time}}{{else}}<span class="muted">&ndash;</span>{{end}}</td>
+        <td class="nowrap">{{if $h.Delta}}{{$h.Delta}}{{else}}<span class="muted">&ndash;</span>{{end}}</td>
+        <td>{{if $h.Software}}{{$h.Software}}{{else}}<span class="muted">&ndash;</span>{{end}}</td>
     </tr>
     {{end}}
     </tbody>
 </table>
+</div>
+{{if anyRaw .}}
+<details class="raw-vias">
+    <summary>Raw Via lines</summary>
+    <pre class="raw-block">{{range .}}{{if .Raw}}{{.Raw}}
+{{end}}{{end}}</pre>
+</details>
+{{end}}
 {{end}}

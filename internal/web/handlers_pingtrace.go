@@ -40,6 +40,17 @@ type pingView struct {
 	Back        []hopView
 	OutCount    int
 	BackCount   int
+	// Anchor is the fragment id the node page gives this ping's card, so a
+	// reply can link to the ping it answers.
+	Anchor string
+	// Origin is the node that sent the ping, read from the MSGID. A ping
+	// still queued, or one fidomail refused, has no MSGID yet; the prose
+	// then says "the sending node" rather than leaving a hole.
+	Origin string
+	// FirstHopURL and ReplyFromURL are archive links for the first hop and
+	// the robot that answered ("" when the address does not parse).
+	FirstHopURL  string
+	ReplyFromURL string
 }
 
 // replyView is one stored reply for the node page.
@@ -49,6 +60,21 @@ type replyView struct {
 	KindClass string
 	Hops      []hopView
 	Body      string
+	FromURL   string
+	// PingAnchor is the fragment id of the ping this reply answers, empty
+	// when it was never matched to one.
+	PingAnchor string
+}
+
+// pingAnchor derives a fragment id from a MSGID ("2:5001/100@fidonet
+// 6a99d1e3" -> "ping-6a99d1e3"): the serial is unique per origin, and the
+// origin is always our own node on this page.
+func pingAnchor(msgid string) string {
+	f := strings.Fields(msgid)
+	if len(f) == 0 {
+		return ""
+	}
+	return "ping-" + f[len(f)-1]
 }
 
 func fmtPingTime(t time.Time) string {
@@ -179,6 +205,13 @@ func newPingView(p pingtrace.Ping) *pingView {
 		v.RTT = fmtDurationShort(time.Duration(p.RTTSeconds) * time.Second)
 	}
 	v.StatusLabel, v.StatusClass = pingStatusLabel(p.Status)
+	v.Anchor = pingAnchor(p.MSGID)
+	v.Origin = pingtrace.OriginAddress(p.MSGID)
+	if v.Origin == "" {
+		v.Origin = "the sending node"
+	}
+	v.FirstHopURL = nodeHistoryURL(p.FirstHop, p.Domain)
+	v.ReplyFromURL = nodeHistoryURL(p.ReplyFromAddr, p.Domain)
 	v.OutCount = len(pingtrace.Addresses(p.OutHops))
 	v.BackCount = len(pingtrace.Addresses(p.BackHops))
 	return v
@@ -306,25 +339,57 @@ func (s *Server) PingTraceNodeHandler(w http.ResponseWriter, r *http.Request) {
 		NodeURL:    nodeHistoryURL(address, domain),
 		Error:      displayError,
 	}
+	rendered := make(map[string]bool, len(pings))
 	for _, p := range pings {
-		page.Pings = append(page.Pings, newPingView(p))
+		v := newPingView(p)
+		rendered[v.Anchor] = true
+		page.Pings = append(page.Pings, v)
 	}
 	for _, rep := range replies {
-		v := replyView{R: rep, Received: fmtPingTime(rep.ReceivedAt),
-			Hops: hopViews(rep.Hops, pingtrace.OriginAddress(rep.PingMSGID), address, domain), Body: rep.Body}
-		switch rep.Kind {
-		case pingtrace.KindPong:
-			v.KindClass = "badge-success"
-		case pingtrace.KindTrace:
-			v.KindClass = "badge-info"
-		case pingtrace.KindNDR:
-			v.KindClass = "badge-danger"
-		default:
-			v.KindClass = "badge-secondary"
+		v := newReplyView(rep, address, domain)
+		// A reply may outlive its ping (the two tables expire on their own
+		// clocks, and the page reads more replies than pings), so it only
+		// links to a card that is actually on the page.
+		if !rendered[v.PingAnchor] {
+			v.PingAnchor = ""
 		}
 		page.Replies = append(page.Replies, v)
 	}
 	s.renderStatus(w, "pingtrace_node", page, statusFor(displayError))
+}
+
+// newReplyView formats one stored reply for the node page of `address`.
+func newReplyView(rep storage.PingReplyRow, address, domain string) replyView {
+	v := replyView{R: rep, Received: fmtPingTime(rep.ReceivedAt),
+		Hops:    hopViews(rep.Hops, pingtrace.OriginAddress(rep.PingMSGID), address, domain),
+		Body:    rep.Body,
+		FromURL: nodeHistoryURL(rep.FromAddr, domain),
+	}
+	if rep.PingMSGID != "" {
+		v.PingAnchor = pingAnchor(rep.PingMSGID)
+	}
+	switch rep.Kind {
+	case pingtrace.KindPong:
+		v.KindClass = "badge-success"
+	case pingtrace.KindTrace:
+		v.KindClass = "badge-info"
+	case pingtrace.KindNDR:
+		v.KindClass = "badge-danger"
+	default:
+		v.KindClass = "badge-secondary"
+	}
+	return v
+}
+
+// anyRaw reports whether any hop of a path kept its raw Via line, which
+// decides whether the "Raw Via lines" block is worth rendering.
+func anyRaw(hops []hopView) bool {
+	for _, h := range hops {
+		if h.Raw != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // parseLimitParam reads a bounded positive integer query parameter.

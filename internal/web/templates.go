@@ -368,6 +368,7 @@ func (s *Server) loadTemplates() error {
 			sort.Strings(emails)
 			return emails
 		},
+		"anyRaw": anyRaw,
 		"add": func(a, b int) int {
 			return a + b
 		},

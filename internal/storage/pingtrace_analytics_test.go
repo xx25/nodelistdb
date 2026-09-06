@@ -148,3 +148,33 @@ func TestReplyAndPingHopsRestoreTheRawLine(t *testing.T) {
 		t.Errorf("fallback to the stored columns failed: %+v", hops)
 	}
 }
+
+// TestPingHopsRereadRawLine pins that a stored hop is shown as the current
+// parser reads its raw line, not as the daemon's parser stored it: the rows
+// written before FMail's millisecond stamps were understood carry
+// ".188.UTC FMail-W32(Toss) ..." in the software column and a local-time
+// stamp, and re-importing them is not an option.
+func TestPingHopsRereadRawLine(t *testing.T) {
+	stored := time.Date(2026, 9, 3, 20, 0, 54, 0, time.UTC)
+	hops := pingHops(
+		[]string{"2:280/5555"},
+		[]time.Time{stored},
+		[]string{".188.UTC FMail-W32(Toss) 2.3.0.1-B20240319"},
+		[]string{"2:280/5555 @20260903.200054.188.UTC FMail-W32(Toss) 2.3.0.1-B20240319"},
+	)
+	if len(hops) != 1 {
+		t.Fatalf("got %d hops, want 1", len(hops))
+	}
+	h := hops[0]
+	if h.Software != "FMail-W32(Toss) 2.3.0.1-B20240319" {
+		t.Errorf("software = %q, want the stamp tail stripped", h.Software)
+	}
+	if !h.TimeIsUTC || !h.Time.Equal(stored) {
+		t.Errorf("time = %v utc=%v, want %v utc=true", h.Time, h.TimeIsUTC, stored)
+	}
+	// A hop whose raw line is missing keeps its stored columns.
+	bare := pingHops([]string{"2:5020/715"}, []time.Time{stored}, []string{"hpt"}, []string{""})
+	if bare[0].Software != "hpt" || !bare[0].Time.Equal(stored) {
+		t.Errorf("bare hop = %+v, want stored columns kept", bare[0])
+	}
+}

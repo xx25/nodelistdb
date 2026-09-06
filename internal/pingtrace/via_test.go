@@ -47,6 +47,11 @@ func TestParseViaLine(t *testing.T) {
 			in:   "2:280/5555 @20260903.120000.W123.UTC FMail 2.3",
 			want: Hop{Address: "2:280/5555", Time: time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC), TimeIsUTC: true, Software: "FMail 2.3"},
 		},
+		{
+			name: "FMail millisecond stamp keeps its UTC marker",
+			in:   "2:280/5555 @20260903.200054.188.UTC FMail-W32(Toss) 2.3.0.1-B20240319",
+			want: Hop{Address: "2:280/5555", Time: time.Date(2026, 9, 3, 20, 0, 54, 0, time.UTC), TimeIsUTC: true, Software: "FMail-W32(Toss) 2.3.0.1-B20240319"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

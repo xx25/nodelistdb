@@ -397,3 +397,50 @@ table td:last-child {
     background: rgba(180, 35, 24, 0.08);
     color: #842019;
 }
+
+/* PING/TRACE paths (the /analytics/pingtrace report and its node pages):
+   one chip per hop, the origin and the target tinted, the elapsed time
+   between UTC stamps written in front of the hop that earned it. */
+.path {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.35rem;
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+    font-size: 0.86rem;
+}
+
+.path .hop {
+    display: inline-block;
+    padding: 0.16rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(16, 35, 43, 0.07);
+    color: #10232b;
+    white-space: nowrap;
+}
+
+.path .hop.origin {
+    background: rgba(15, 118, 110, 0.12);
+    color: #0d625c;
+}
+
+.path .hop.target {
+    background: rgba(31, 143, 96, 0.16);
+    color: #0e6f49;
+    font-weight: 700;
+}
+
+.path .arrow {
+    color: var(--text-secondary);
+}
+
+.path .delta {
+    color: var(--text-secondary);
+    font-size: 0.8em;
+}
+
+/* Inside a report table cell the chain stays on one line and scrolls. */
+table .path {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+}

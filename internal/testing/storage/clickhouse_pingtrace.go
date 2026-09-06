@@ -75,22 +75,7 @@ func splitHops(hops []pingtrace.Hop) (addrs []string, times []time.Time, softwar
 }
 
 func joinHops(addrs []string, times []time.Time, software, raw []string) []pingtrace.Hop {
-	hops := make([]pingtrace.Hop, 0, len(addrs))
-	for i := range addrs {
-		h := pingtrace.Hop{Address: addrs[i]}
-		if i < len(times) {
-			h.Time = fromCHTime(times[i])
-		}
-		if i < len(software) {
-			h.Software = software[i]
-		}
-		if i < len(raw) {
-			h.Raw = raw[i]
-			h.TimeIsUTC = pingtrace.TimeIsUTCInVia(raw[i])
-		}
-		hops = append(hops, h)
-	}
-	return hops
+	return pingtrace.HopsFromColumns(addrs, times, software, raw, fromCHTime)
 }
 
 // GetPingCandidates lists the nodes on the latest nodelist of each given

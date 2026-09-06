@@ -95,23 +95,33 @@ func TestPingTraceNodeRenders(t *testing.T) {
 	page := pingtraceNodePage{
 		Title: "x", ActivePage: "analytics", Version: "test", Address: "2:280/5555", Domain: "fidonet",
 		Pings: []*pingView{newPingView(p)},
-		Replies: []replyView{{
-			R: storage.PingReplyRow{Reply: pingtrace.Reply{FidomailMessageID: 9, Kind: pingtrace.KindTrace, FromName: "Trace Robot", FromAddr: "2:5020/715",
-				Subject: "Trace: your message to PING", PingMSGID: p.MSGID, Vias: []string{"2:5020/715 @20260903.123000 hpt/lnx 1.9.0"}, PID: "hpt/lnx 1.9.0"}},
-			Received: "2026-09-03 12:31 UTC", KindClass: "badge-info", Body: "passed through",
-		}},
+		Replies: []replyView{newReplyView(storage.PingReplyRow{Reply: pingtrace.Reply{FidomailMessageID: 9, Kind: pingtrace.KindTrace, FromName: "Trace Robot", FromAddr: "2:5020/715",
+			Subject: "Trace: your message to PING", PingMSGID: p.MSGID, Vias: []string{"2:5020/715 @20260903.123000 hpt/lnx 1.9.0"}, PID: "hpt/lnx 1.9.0",
+			ReceivedAt: time.Date(2026, 9, 3, 12, 31, 0, 0, time.UTC), Body: "passed through"}}, "2:280/5555", "fidonet")},
 	}
 	html := renderPingTemplate(t, "pingtrace_node", page)
 	for _, want := range []string{"Outbound path", "Return path", "2:5020/715", "hpt/lnx 1.9.0", "Trace Robot", "passed through", "68b8a1c2", "Transit notices",
 		// A stamp without the UTC marker is labelled for what it is, and
 		// contributes no elapsed reading of its own.
-		"2026-09-03 12:30 local", "2026-09-03 12:01 UTC"} {
+		"2026-09-03 12:30 local", "2026-09-03 12:01 UTC",
+		// The reply links to the card of the ping it answers.
+		`id="ping-68b8a1c2"`, `href="#ping-68b8a1c2"`,
+		// Hop and robot addresses link to the archive, not to a 400.
+		`href="/node/2/5020/715?domain=fidonet"`, `href="/node/2/280/5555?domain=fidonet"`} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered node page lacks %q", want)
 		}
 	}
 	if strings.Contains(html, "&#43;29m") {
 		t.Error("elapsed time must not be measured across a local-time stamp")
+	}
+	// A ping with no MSGID yet (still queued, or refused by fidomail)
+	// must not leave a hole in the prose.
+	queued := samplePing()
+	queued.MSGID, queued.Status, queued.OutHops, queued.BackHops = "", pingtrace.StatusFailed, nil, nil
+	failed := renderPingTemplate(t, "pingtrace_node", pingtraceNodePage{Title: "x", Address: "2:280/5555", Version: "test", Pings: []*pingView{newPingView(queued)}})
+	if !strings.Contains(failed, "never left the sending node") {
+		t.Error("a ping without a MSGID must fall back to a generic origin")
 	}
 	empty := renderPingTemplate(t, "pingtrace_node", pingtraceNodePage{Title: "x", Address: "1:1/19", Version: "test"})
 	if !strings.Contains(empty, "No ping has been sent") {

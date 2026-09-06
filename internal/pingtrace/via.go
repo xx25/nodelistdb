@@ -49,7 +49,13 @@ var (
 
 	// canonicalTimeRe is FTS-4009 §2: "@YYYYMMDD.HHMMSS[.Wxyz][.UTC]", where
 	// several mailers write HHMM rather than HHMMSS and some omit the "@".
-	canonicalTimeRe = regexp.MustCompile(`@?\b(\d{8})[.\s](\d{6}|\d{4})(?:\.W[A-Za-z0-9]{0,4})?(\.UTC)?\b`)
+	// FMail squeezes milliseconds in between ("@20260903.200054.188.UTC");
+	// without allowing for them the stamp read as local time and the
+	// ".188.UTC" tail ended up at the front of the software name. The
+	// fraction is optional and unanchored, so a version glued straight onto
+	// the stamp with no space ("...200054.2.3.0") would lose its first
+	// digit; no mailer writes that, and the canonical form is space-separated.
+	canonicalTimeRe = regexp.MustCompile(`@?\b(\d{8})[.\s](\d{6}|\d{4})(?:\.\d{1,3})?(?:\.W[A-Za-z0-9]{0,4})?(\.UTC)?\b`)
 
 	// clockTimeRe is the deprecated FTS-4009 §4 spelling "YYYYMMDD HH:MM[:SS]".
 	clockTimeRe = regexp.MustCompile(`\b(\d{8})\s+(\d{2}):(\d{2})(?::(\d{2}))?\b`)
@@ -204,4 +210,41 @@ func Node3D(addr string) string {
 		return addr[:i]
 	}
 	return addr
+}
+
+// HopsFromColumns rebuilds a stored path from the parallel arrays the
+// ping tables keep (addresses, stamps, software, raw lines). columnTime
+// maps a stored stamp back to Go time (the tables store the zero time as
+// the epoch). The stamp and software columns hold whatever the daemon's
+// parser made of the line when the row was written; when the raw line is
+// there it is read again with the current parser, so a line misread then
+// (FMail's millisecond stamps left ".188.UTC" at the front of the
+// software column and marked the time local) shows correctly now without
+// re-importing anything. Both storage layers share this so they cannot
+// drift apart on that rule.
+func HopsFromColumns(addrs []string, times []time.Time, software, raw []string, columnTime func(time.Time) time.Time) []Hop {
+	hops := make([]Hop, 0, len(addrs))
+	for i := range addrs {
+		h := Hop{Address: addrs[i]}
+		if i < len(times) {
+			h.Time = columnTime(times[i])
+		}
+		if i < len(software) {
+			h.Software = software[i]
+		}
+		if i < len(raw) && raw[i] != "" {
+			h.Raw = raw[i]
+			if parsed, ok := ParseViaLine(raw[i]); ok {
+				h.TimeIsUTC = parsed.TimeIsUTC
+				if !parsed.Time.IsZero() {
+					h.Time = parsed.Time
+				}
+				if parsed.Software != "" {
+					h.Software = parsed.Software
+				}
+			}
+		}
+		hops = append(hops, h)
+	}
+	return hops
 }

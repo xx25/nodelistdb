@@ -132,22 +132,7 @@ func pingTime(t time.Time) time.Time {
 }
 
 func pingHops(addrs []string, times []time.Time, software, raw []string) []pingtrace.Hop {
-	hops := make([]pingtrace.Hop, 0, len(addrs))
-	for i := range addrs {
-		h := pingtrace.Hop{Address: addrs[i]}
-		if i < len(times) {
-			h.Time = pingTime(times[i])
-		}
-		if i < len(software) {
-			h.Software = software[i]
-		}
-		if i < len(raw) {
-			h.Raw = raw[i]
-			h.TimeIsUTC = pingtrace.TimeIsUTCInVia(raw[i])
-		}
-		hops = append(hops, h)
-	}
-	return hops
+	return pingtrace.HopsFromColumns(addrs, times, software, raw, pingTime)
 }
 
 // replyHops reconstructs the path a reply quoted. ping_replies stores each
