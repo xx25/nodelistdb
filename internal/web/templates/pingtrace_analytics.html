@@ -14,20 +14,29 @@
 <style>
     .nowrap { white-space: nowrap; }
     .num { text-align: right; }
+    /* Verdict glossary: badge in one column, meaning in the next, so the
+       page explains itself at a glance instead of in a wall of prose. */
+    .legend { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 0.75rem;
+              margin: 0.75rem 0 0; align-items: baseline; }
+    .legend dt { white-space: nowrap; }
+    .legend dd { margin: 0; color: var(--text-secondary); font-size: 0.93rem; }
+    details.method { margin-top: 0.9rem; }
+    details.method > summary { cursor: pointer; color: var(--text-secondary); font-size: 0.93rem; }
+    details.method p { margin: 0.6rem 0 0; }
 </style>
 {{end}}
 
 {{define "content"}}
 {{template "error_display" .}}
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
     <div class="stats-box">
         <h3>{{.Summary.PingNodes}}</h3>
         <p>Nodes flying PING</p>
     </div>
     <div class="stats-box">
         <h3>{{.Summary.Answered}}</h3>
-        <p>Answered the latest ping</p>
+        <p>Answered</p>
     </div>
     <div class="stats-box">
         <h3>{{.Summary.Timeouts}}</h3>
@@ -39,79 +48,68 @@
     </div>
     <div class="stats-box">
         <h3>{{.Summary.Refused}}</h3>
-        <p>Refused (mail dropped)</p>
+        <p>Refused</p>
     </div>
     <div class="stats-box">
         <h3>{{.Summary.AnsweredDirect}}</h3>
-        <p>Answered direct, not routed</p>
+        <p>Answered direct</p>
     </div>
     <div class="stats-box">
         <h3>{{if .Summary.MedianRTTSeconds}}{{.Summary.MedianRTTSeconds | secondsShort}}{{else}}&ndash;{{end}}</h3>
-        <p>Median round trip</p>
-    </div>
-    <div class="stats-box">
-        <h3>{{if .Summary.MedianHops}}{{.Summary.MedianHops}}{{else}}&ndash;{{end}}</h3>
-        <p>Median hops (one way)</p>
+        <p>Median round trip{{if .Summary.MedianHops}}, {{.Summary.MedianHops}} hops{{end}}</p>
     </div>
     <div class="stats-box">
         <h3>{{.Summary.TraceConfirmed}} / {{.Summary.TraceNodes}}</h3>
-        <p>TRACE nodes confirmed</p>
+        <p>TRACE confirmed</p>
     </div>
 </div>
 
 <div class="stats-box" style="margin-bottom: 1.5rem;">
     <h4>How this is measured</h4>
     <p class="text-muted" style="margin: 0.25rem 0;">
-        Every node advertising the <code>PING</code> flag receives a netmail addressed to user
-        <code>PING</code> from 2:5001/100 about once every two weeks, sent through the ordinary
-        netmail routing (not a direct dial). FTS-4010 says the destination bounces it back quoting
-        the <code>^AVia</code> lines it collected on the way &mdash; that quoted chain is the outbound
-        path, and the answer's own Via chain is the return path; both are drawn hop by hop on each
-        node's own page. A node advertising <code>TRACE</code> should notify the sender when a PING
-        merely passes <em>through</em> it on the way to someone else, so the TRACE verdict is never
-        about the node answering its own ping: <em>confirmed</em> means at least one of our pings
-        crossed it and it did notify us, <em>silent</em> means pings crossed it and it never did,
-        <em>not on our routes</em> means no ping of ours has been routed through it in the last
-        {{.Days}} days, so nothing is known.
-        Unanswered pings are given 7 days; a late answer still counts.
-        <em>Refused</em> is neither: a robot told us the message was deleted rather than answered,
-        so no reply is coming and the ping is closed at once instead of waiting out the window.
-        A refusal is recorded whoever sends it &mdash; the destination declining PING traffic is
-        its sysop's right, while a refusal from a system merely on the way means the ping never
-        reached the node at all and that node is being recorded on someone else's decision. It is
-        counted as a refusal and never as a pong, however it is worded, and it earns no
-        <code>TRACE</code> credit: notifying the sender while deleting the mail is not what
-        FTS-4010 asks for, which is to notify AND forward the original unaltered.
-        An answer marked <em>direct</em> did not come back down our uplink with the rest of the
-        mail: the answering system connected to 2:5001/100 itself, over a session we hold no link
-        for and so cannot authenticate. It says how the ANSWER was delivered, not which way the
-        ping travelled out, and it is why such a reply's sender address is taken as a claim rather
-        than as proof &mdash; it is never credited on the strength of that address alone.
+        Every node flying <code>PING</code> gets a netmail addressed to user <code>PING</code> from
+        2:5001/100 about once a fortnight, through ordinary routing. FTS-4010 says the destination
+        bounces it back quoting the <code>^AVia</code> lines it collected on the way; that chain is
+        the path drawn on each node's page. Unanswered pings are given 7 days, and a late answer
+        still counts.
     </p>
-    <p class="text-muted" style="margin: 0.25rem 0;">
-        Two limits of the TRACE column: only nodes that sit on 2:5001/100's own routes (its
-        uplink, the zone and region hubs and the net hosts on the way) can ever be crossed, so
-        most TRACE nodes stay <em>not on our routes</em> by construction rather than by fault; and the
-        verdict pairs paths from the last {{.Days}} days with the flags on the <em>current</em>
-        nodelist, so a node that added or dropped TRACE inside that window is judged by its
-        present flag.
-    </p>
+    <dl class="legend">
+        <dt><span class="badge badge-success">PING</span></dt><dd>answered our last ping</dd>
+        <dt><span class="badge badge-warning">PING</span></dt><dd>no answer yet</dd>
+        <dt><span class="badge badge-danger">PING</span></dt><dd>bounced, refused, or never left this node</dd>
+        <dt><span class="badge badge-secondary">PING</span></dt><dd>not pinged yet</dd>
+        <dt><span class="badge badge-warning">direct</span></dt><dd>the answer was handed to us by the node itself, not routed back</dd>
+        <dt><span class="badge badge-success">TRACE</span></dt><dd>notified us while a ping passed <em>through</em> it</dd>
+        <dt><span class="badge badge-warning">TRACE</span></dt><dd>pings passed through and it stayed silent</dd>
+        <dt><span class="badge badge-secondary">TRACE</span></dt><dd>nothing of ours has passed through it</dd>
+    </dl>
+    <details class="method">
+        <summary>Why a TRACE node can be untested, and what <em>refused</em> and <em>direct</em> mean</summary>
+        <p class="text-muted">
+            <strong>TRACE is about transit only.</strong> It is never about a node answering its own
+            ping &mdash; a node can answer in a minute and still read <em>nothing of ours has passed
+            through it</em>. Only systems on 2:5001/100's own routes can ever be crossed, so most
+            TRACE nodes stay untested by construction rather than by fault, and the verdict pairs
+            paths from the last {{.Days}} days with the flags on the <em>current</em> nodelist.
+        </p>
+        <p class="text-muted">
+            <strong>Refused</strong> means a robot told us the message was deleted rather than
+            answered, so the ping is closed at once instead of waiting out the window. It is never
+            counted as an answer, however it is worded, and it earns no <code>TRACE</code> credit:
+            notifying the sender while deleting the mail is not what FTS-4010 asks, which is to
+            notify <em>and</em> forward the original unaltered. A refusal from a system merely on the
+            way means the ping never reached the node at all.
+        </p>
+        <p class="text-muted">
+            <strong>Direct</strong> describes how the ANSWER arrived, not which way the ping went
+            out: the answering system connected to 2:5001/100 itself over a session we hold no link
+            for and cannot authenticate. Such a reply's sender address is a claim rather than proof,
+            so it is never credited on the strength of that address alone.
+        </p>
+    </details>
 </div>
 
 {{if .Summary.Nodes}}
-<p class="text-muted" style="margin: 0 0 0.75rem;">
-    Each flag badge is coloured by how that flag tested. <span class="badge badge-success">PING</span>
-    the node answered our last ping, <span class="badge badge-warning">PING</span> it did not,
-    <span class="badge badge-danger">PING</span> the mail bounced or never left this node,
-    <span class="badge badge-secondary">PING</span> it has not been pinged yet.
-    <span class="badge badge-success">TRACE</span> it notified us while a ping passed through,
-    <span class="badge badge-warning">TRACE</span> pings passed through and it stayed silent,
-    <span class="badge badge-secondary">TRACE</span> nothing of ours has passed through it.
-    Hover a badge for the wording, the answering robot, the error behind a failure and the separate
-    direct-dial result; the quoted path of every ping is on the node's own page. A
-    <span class="badge badge-warning">direct</span> mark under a round trip means the answer was
-    handed to us by the node itself rather than routed back.
-</p>
 <div class="table-responsive">
 <table class="data-table sortable-table">
     <thead>

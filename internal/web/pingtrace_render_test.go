@@ -260,7 +260,7 @@ func TestReportMarksAnswersDeliveredDirect(t *testing.T) {
 	if !strings.Contains(html, ">direct</small>") {
 		t.Error("a directly delivered answer must be marked in its row")
 	}
-	if !strings.Contains(html, "Answered direct, not routed") {
+	if !strings.Contains(html, "Answered direct") {
 		t.Error("the summary must count them")
 	}
 	if strings.Count(html, ">direct</small>") != 1 {
