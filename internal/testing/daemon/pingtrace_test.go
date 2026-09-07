@@ -191,7 +191,7 @@ func TestSendDueRespectsFlagsIntervalAndCap(t *testing.T) {
 	mailer := &fakeMailer{}
 	tr := testTracer(store, mailer, now)
 
-	if err := tr.sendDue(context.Background()); err != nil {
+	if err := tr.sendDue(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(mailer.sent) != 2 {
@@ -219,7 +219,7 @@ func TestSendDueRespectsFlagsIntervalAndCap(t *testing.T) {
 	}
 
 	// A second pass in the same instant sends the remaining due node only.
-	if err := tr.sendDue(context.Background()); err != nil {
+	if err := tr.sendDue(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(mailer.sent) != 2 {
@@ -238,7 +238,7 @@ func TestSendDueBothModeSkipsDirectWithoutIBN(t *testing.T) {
 	tr := testTracer(store, mailer, now)
 	tr.cfg.Mode = "both"
 	tr.cfg.MaxPerPoll = 10
-	if err := tr.sendDue(context.Background()); err != nil {
+	if err := tr.sendDue(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
 	var direct, routed int
@@ -511,7 +511,7 @@ func TestSendDueHonoursNodeAllowlist(t *testing.T) {
 	tr := testTracer(store, mailer, now)
 	tr.cfg.MaxPerPoll = 10
 	tr.cfg.Nodes = []string{"2:280/5555@fidonet", " 1:1/19 "}
-	if err := tr.sendDue(context.Background()); err != nil {
+	if err := tr.sendDue(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(mailer.sent) != 2 {
@@ -748,7 +748,7 @@ func TestSameSystemAKAsAreRecordedNotPinged(t *testing.T) {
 		Note:      "sysop states all AKAs answer via 2:292/854",
 	}}
 
-	if err := tr.sendDue(context.Background()); err != nil {
+	if err := tr.sendDue(context.Background(), nil); err != nil {
 		t.Fatalf("sendDue: %v", err)
 	}
 	if len(mailer.sent) != 1 || mailer.sent[0].ToAddr != "2:292/854@fidonet" {
@@ -765,7 +765,7 @@ func TestSameSystemAKAsAreRecordedNotPinged(t *testing.T) {
 	}
 	// A second pass inside the interval neither re-pings nor re-records.
 	before := len(store.pings)
-	if err := tr.sendDue(context.Background()); err != nil {
+	if err := tr.sendDue(context.Background(), nil); err != nil {
 		t.Fatalf("second sendDue: %v", err)
 	}
 	if len(mailer.sent) != 1 || len(store.pings) != before {
@@ -775,5 +775,54 @@ func TestSameSystemAKAsAreRecordedNotPinged(t *testing.T) {
 	tr.cfg.SameSystem[0].AKAs = append(tr.cfg.SameSystem[0].AKAs, "2:292/854")
 	if _, skipped := tr.sameSystemAKAs()["2:292/854"]; skipped {
 		t.Error("the address that answers must never be skipped")
+	}
+}
+
+// TestSameSystemClosesAPingAlreadyWaiting pins the transition. Declaring a
+// group while pings to its AKAs are still open must take effect at once:
+// the declaration says no answer is addressed to those AKAs, so leaving
+// them to run out the 7-day window would publish "No answer" for nodes we
+// have decided not to test. The first version of this shipped without it
+// and would have done exactly that, because the AKAs' rows were younger
+// than the 14-day interval and so looked "already recorded".
+func TestSameSystemClosesAPingAlreadyWaiting(t *testing.T) {
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	sent := now.Add(-12 * time.Hour) // well inside the interval
+	store := newFakePingStore()
+	store.candidates = []pingtrace.Candidate{
+		{Domain: "fidonet", Zone: 2, Net: 2, Node: 0, Address: "2:2/0", HasPing: true},
+	}
+	open := pingtrace.Ping{
+		Domain: "fidonet", Zone: 2, Net: 2, Node: 0, Address: "2:2/0",
+		Mode: pingtrace.ModeRouted, SentTime: sent, Status: pingtrace.StatusSent,
+		MSGID: "2:5001/100@fidonet 6a9df9c7",
+	}
+	store.pings[pingKey(open)] = open
+
+	mailer := &fakeMailer{}
+	tr := testTracer(store, mailer, now)
+	tr.cfg.SameSystem = []SameSystemGroup{{AnswersAs: "2:292/854", AKAs: []string{"2:2/0"}, Note: "sysop says so"}}
+
+	recent, _ := store.GetRecentPings(context.Background(), tr.lookback())
+	if err := tr.sendDue(context.Background(), recent); err != nil {
+		t.Fatalf("sendDue: %v", err)
+	}
+	if len(mailer.sent) != 0 {
+		t.Errorf("a skipped AKA must draw no netmail, sent %+v", mailer.sent)
+	}
+	p := store.ping(t, "2:2/0", pingtrace.ModeRouted)
+	if p.Status != pingtrace.StatusSkipped {
+		t.Errorf("the waiting ping must be closed as skipped, got %q", p.Status)
+	}
+	if !strings.Contains(p.Error, "same system as 2:292/854") {
+		t.Errorf("the closed row must carry the reason, got %q", p.Error)
+	}
+	// Rewritten in place, not duplicated: same sent_time keeps it one row
+	// in a ReplacingMergeTree keyed on (…, mode, sent_time).
+	if !p.SentTime.Equal(sent) {
+		t.Errorf("the row must keep its sent_time to replace rather than duplicate, got %s", p.SentTime)
+	}
+	if len(store.pings) != 1 {
+		t.Errorf("expected one row for this node, got %d", len(store.pings))
 	}
 }

@@ -130,7 +130,7 @@ func (t *PingTracer) RunOnce(ctx context.Context) error {
 	note(t.pollReplies(ctx, recent))
 	note(t.refreshDispatch(ctx, recent))
 	note(t.expire(ctx, recent))
-	note(t.sendDue(ctx))
+	note(t.sendDue(ctx, recent))
 	return firstErr
 }
 
@@ -496,6 +496,35 @@ type dueEntry struct {
 	last time.Time
 }
 
+// skipReason is what the row says about why nothing was sent.
+func skipReason(g SameSystemGroup) string {
+	reason := "not tested: same system as " + g.AnswersAs
+	if note := strings.TrimSpace(g.Note); note != "" {
+		reason += " (" + note + ")"
+	}
+	return reason
+}
+
+// latestOpenPing finds this node's newest ping that is still waiting for an
+// answer, or nil. Only routed pings: a DIR ping is a separate measurement
+// and is not what a declared AKA set speaks for.
+func latestOpenPing(recent []pingtrace.Ping, c pingtrace.Candidate) *pingtrace.Ping {
+	var best *pingtrace.Ping
+	for i := range recent {
+		p := &recent[i]
+		if p.Address != c.Address || p.Domain != c.Domain || p.Mode != pingtrace.ModeRouted {
+			continue
+		}
+		if p.Status != pingtrace.StatusSent && p.Status != pingtrace.StatusQueued {
+			continue
+		}
+		if best == nil || p.SentTime.After(best.SentTime) {
+			best = p
+		}
+	}
+	return best
+}
+
 // sameSystemAKAs indexes the configured AKA sets by the addresses that are
 // NOT pinged, so the due loop can recognise one in a map lookup.
 func (t *PingTracer) sameSystemAKAs() map[string]SameSystemGroup {
@@ -518,15 +547,34 @@ func (t *PingTracer) sameSystemAKAs() map[string]SameSystemGroup {
 // recordSkipped writes the "not tested" row for one AKA, on the same
 // cadence a ping would have used, so the report shows a current state
 // rather than a stale one and the row carries the reason with it.
-func (t *PingTracer) recordSkipped(ctx context.Context, c pingtrace.Candidate, g SameSystemGroup, latest map[string]time.Time, now time.Time) {
+func (t *PingTracer) recordSkipped(ctx context.Context, c pingtrace.Candidate, g SameSystemGroup, latest map[string]time.Time, recent []pingtrace.Ping, now time.Time) {
+	// A ping still waiting for an answer when the group is declared must be
+	// closed NOW, not left to time out: the declaration says no answer is
+	// addressed to this AKA, so waiting out the window would publish "No
+	// answer" for a node we have decided not to test. The open row is
+	// rewritten in place -- same sent_time, so it replaces rather than
+	// duplicates -- which is also what makes a newly declared group take
+	// effect immediately instead of at the next interval.
+	if open := latestOpenPing(recent, c); open != nil {
+		open.Status = pingtrace.StatusSkipped
+		open.Error = skipReason(g)
+		open.UpdatedAt = now
+		if t.dryRun {
+			logging.Infof("PING/TRACE (dry-run): would close the open ping to %s as %s", c.Address, open.Error)
+			return
+		}
+		if err := t.store.StorePing(ctx, *open); err != nil {
+			logging.Errorf("PING/TRACE: cannot close the open ping to %s: %v", c.Address, err)
+			return
+		}
+		logging.Infof("PING/TRACE: %s %s (closed the ping still waiting)", c.Address, open.Error)
+		return
+	}
 	last := latest[pingtrace.DueKey(c.Address, c.Domain, pingtrace.ModeRouted)]
 	if !last.IsZero() && now.Sub(last) < t.cfg.Interval {
 		return // already recorded this cycle
 	}
-	reason := "not tested: same system as " + g.AnswersAs
-	if note := strings.TrimSpace(g.Note); note != "" {
-		reason += " (" + note + ")"
-	}
+	reason := skipReason(g)
 	if t.dryRun {
 		logging.Infof("PING/TRACE (dry-run): would record %s as %s", c.Address, reason)
 		return
@@ -545,7 +593,7 @@ func (t *PingTracer) recordSkipped(ctx context.Context, c pingtrace.Candidate, g
 
 // sendDue sends the pings whose interval has elapsed, oldest first, up to
 // the per-pass cap.
-func (t *PingTracer) sendDue(ctx context.Context) error {
+func (t *PingTracer) sendDue(ctx context.Context, recent []pingtrace.Ping) error {
 	candidates, err := t.store.GetPingCandidates(ctx, t.cfg.Networks)
 	if err != nil {
 		return fmt.Errorf("pingtrace: read candidates: %w", err)
@@ -574,7 +622,7 @@ func (t *PingTracer) sendDue(ctx context.Context) error {
 			// sysop's inbox for an answer we could not attribute anyway:
 			// such a robot replies from its one address, quoting nothing
 			// that says which AKA was asked. Record the fact instead.
-			t.recordSkipped(ctx, c, g, latest, now)
+			t.recordSkipped(ctx, c, g, latest, recent, now)
 			continue
 		}
 		for _, mode := range t.modes() {
