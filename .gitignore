@@ -52,6 +52,7 @@ debug-*.sh
 debug_*.go
 check_*.go
 CLAUDE.md
+MODEM-INFRASTRUCTURE.md
 test.db
 # Sync script configuration (contains credentials)
 sync_config.conf
