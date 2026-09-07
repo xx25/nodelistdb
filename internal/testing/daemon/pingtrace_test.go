@@ -664,3 +664,56 @@ func TestPollReadsBothSources(t *testing.T) {
 		t.Errorf("the inbox pass must still have been absorbed, stored %d", len(store2.replies))
 	}
 }
+
+// TestDrainFollowsTheWatermarkPastShortPages pins that a short page is not
+// treated as the end of a source. fidomail caps how many IDS one request
+// decides, so a scan can walk thousands of rows and admit two items; a
+// loop that stopped there would advance one cap per poll and take an hour
+// after a restart to reach mail that had already arrived.
+func TestDrainFollowsTheWatermarkPastShortPages(t *testing.T) {
+	now := time.Date(2026, 9, 6, 23, 0, 0, 0, time.UTC)
+	store := newFakePingStore()
+	p := pingtrace.Ping{Domain: "fidonet", Address: "1:320/119", Mode: "routed",
+		SentTime: now.Add(-time.Hour), Status: pingtrace.StatusSent,
+		MSGID: "2:5001/100@fidonet m1", Token: "t1"}
+	store.pings[pingKey(p)] = p
+
+	// Three pages: two decide a wide id range while admitting nothing,
+	// the third carries the answer. None is full.
+	var asked []uint64
+	pages := []InboxPage{
+		{MaxID: 2000},
+		{MaxID: 4000},
+		{Items: []InboxItem{{ID: 4321, FromAddr: "1:320/119", ToName: "Dmitry Protasoff",
+			ReplyID: "2:5001/100@fidonet m1", ReceivedAt: now}}, MaxID: 4321},
+		{MaxID: 4321}, // watermark stops moving: end of source
+	}
+	tr := testTracer(store, &fakeMailer{}, now)
+	fetch := func(_ context.Context, minID uint64, _ int) (InboxPage, error) {
+		asked = append(asked, minID)
+		if len(asked) > len(pages) {
+			t.Fatalf("drain did not stop: asked %v", asked)
+		}
+		return pages[len(asked)-1], nil
+	}
+	var wm uint64
+	if err := tr.drain(context.Background(), "replies", fetch, &wm, map[uint64]bool{}, []pingtrace.Ping{p}); err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if len(asked) != 4 {
+		t.Errorf("expected to follow the watermark across all pages, asked %v", asked)
+	}
+	if want := []uint64{0, 2001, 4001, 4322}; len(asked) == 4 {
+		for i := range want {
+			if asked[i] != want[i] {
+				t.Errorf("request %d resumed at %d, want %d (watermark+1)", i, asked[i], want[i])
+			}
+		}
+	}
+	if wm != 4321 {
+		t.Errorf("watermark = %d, want 4321", wm)
+	}
+	if len(store.replies) != 1 {
+		t.Errorf("the answer on the third page must have been absorbed, stored %d", len(store.replies))
+	}
+}

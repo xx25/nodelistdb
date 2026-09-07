@@ -199,9 +199,6 @@ func (t *PingTracer) drain(ctx context.Context, source string,
 			return fmt.Errorf("pingtrace: read %s: %w", source, err)
 		}
 		for _, item := range page.Items {
-			if item.ID > minID {
-				minID = item.ID
-			}
 			if known[item.ID] {
 				continue
 			}
@@ -218,10 +215,20 @@ func (t *PingTracer) drain(ctx context.Context, source string,
 			}
 			t.mu.Unlock()
 		}
-		if len(page.Items) < pageSize {
-			return nil
+		// Resume from the WATERMARK, not from the last item, and keep
+		// going while it moves. A short page is not the end of the
+		// source: fidomail caps how many ids one request decides, so a
+		// scan that admitted two items may have walked past two thousand
+		// -- which is exactly the shape of the by-answered-mail source,
+		// where 30 answers are scattered through 12,933 netmail rows.
+		// Stopping on a short page instead would advance one cap per
+		// poll, so a restart (the watermark is in memory) would take an
+		// hour to see mail that had already arrived.
+		next := page.MaxID + 1
+		if next <= minID {
+			return nil // the watermark did not move: nothing further to decide
 		}
-		minID++
+		minID = next
 	}
 }
 
