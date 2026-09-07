@@ -51,6 +51,10 @@
         <p>Refused</p>
     </div>
     <div class="stats-box">
+        <h3>{{.Summary.NotTested}}</h3>
+        <p>Not tested</p>
+    </div>
+    <div class="stats-box">
         <h3>{{.Summary.AnsweredDirect}}</h3>
         <p>Answered direct</p>
     </div>
@@ -77,7 +81,7 @@
         <dt><span class="badge badge-success">PING</span></dt><dd>answered our last ping</dd>
         <dt><span class="badge badge-warning">PING</span></dt><dd>no answer yet</dd>
         <dt><span class="badge badge-danger">PING</span></dt><dd>bounced, refused, or never left this node</dd>
-        <dt><span class="badge badge-secondary">PING</span></dt><dd>not pinged yet</dd>
+        <dt><span class="badge badge-secondary">PING</span></dt><dd>not pinged yet, or not tested at all &mdash; the row says which</dd>
         <dt><span class="badge badge-warning">direct</span></dt><dd>the answer was handed to us by the node itself, not routed back</dd>
         <dt><span class="badge badge-success">TRACE</span></dt><dd>notified us while a ping passed <em>through</em> it</dd>
         <dt><span class="badge badge-warning">TRACE</span></dt><dd>pings passed through and it stayed silent</dd>
@@ -99,6 +103,14 @@
             notifying the sender while deleting the mail is not what FTS-4010 asks, which is to
             notify <em>and</em> forward the original unaltered. A refusal from a system merely on the
             way means the ping never reached the node at all.
+        </p>
+        <p class="text-muted">
+            <strong>Not tested</strong> means no netmail was sent to that address at all. Some
+            systems hold several addresses and answer for all of them through one, so pinging the
+            others would put extra mail in one sysop's inbox for an answer that cannot say which
+            address was asked. Those sets are declared rather than guessed: two systems with one
+            sysop, one host and one hostname apiece can still differ in whether they answer
+            per-address, so the row names the address that answers on their behalf.
         </p>
         <p class="text-muted">
             <strong>Direct</strong> describes how the ANSWER arrived, not which way the ping went

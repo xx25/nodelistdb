@@ -496,6 +496,53 @@ type dueEntry struct {
 	last time.Time
 }
 
+// sameSystemAKAs indexes the configured AKA sets by the addresses that are
+// NOT pinged, so the due loop can recognise one in a map lookup.
+func (t *PingTracer) sameSystemAKAs() map[string]SameSystemGroup {
+	if len(t.cfg.SameSystem) == 0 {
+		return nil
+	}
+	out := make(map[string]SameSystemGroup)
+	for _, g := range t.cfg.SameSystem {
+		for _, aka := range g.AKAs {
+			aka = strings.TrimSpace(aka)
+			if aka == "" || aka == strings.TrimSpace(g.AnswersAs) {
+				continue // never skip the address that does the answering
+			}
+			out[pingtrace.Node3D(aka)] = g
+		}
+	}
+	return out
+}
+
+// recordSkipped writes the "not tested" row for one AKA, on the same
+// cadence a ping would have used, so the report shows a current state
+// rather than a stale one and the row carries the reason with it.
+func (t *PingTracer) recordSkipped(ctx context.Context, c pingtrace.Candidate, g SameSystemGroup, latest map[string]time.Time, now time.Time) {
+	last := latest[pingtrace.DueKey(c.Address, c.Domain, pingtrace.ModeRouted)]
+	if !last.IsZero() && now.Sub(last) < t.cfg.Interval {
+		return // already recorded this cycle
+	}
+	reason := "not tested: same system as " + g.AnswersAs
+	if note := strings.TrimSpace(g.Note); note != "" {
+		reason += " (" + note + ")"
+	}
+	if t.dryRun {
+		logging.Infof("PING/TRACE (dry-run): would record %s as %s", c.Address, reason)
+		return
+	}
+	p := pingtrace.Ping{
+		Domain: c.Domain, Zone: c.Zone, Net: c.Net, Node: c.Node, Address: c.Address,
+		Mode: pingtrace.ModeRouted, SentTime: now, Status: pingtrace.StatusSkipped,
+		Error: reason, UpdatedAt: now,
+	}
+	if err := t.store.StorePing(ctx, p); err != nil {
+		logging.Errorf("PING/TRACE: cannot record %s as not tested: %v", c.Address, err)
+		return
+	}
+	logging.Infof("PING/TRACE: %s %s", c.Address, reason)
+}
+
 // sendDue sends the pings whose interval has elapsed, oldest first, up to
 // the per-pass cap.
 func (t *PingTracer) sendDue(ctx context.Context) error {
@@ -512,12 +559,22 @@ func (t *PingTracer) sendDue(ctx context.Context) error {
 	for _, a := range t.cfg.Nodes {
 		allow[strings.ToLower(strings.TrimSpace(a))] = true
 	}
+	spokenFor := t.sameSystemAKAs()
 	var due []dueEntry
 	for _, c := range candidates {
 		if !c.HasPing {
 			continue // a TRACE-only node is evaluated from transit, never pinged
 		}
 		if len(allow) > 0 && !allow[c.Address] && !allow[strings.ToLower(c.Address+"@"+c.Domain)] {
+			continue
+		}
+		if g, ok := spokenFor[c.Address]; ok {
+			// A declared AKA of a system that answers through another
+			// address. Sending here would put a second netmail in one
+			// sysop's inbox for an answer we could not attribute anyway:
+			// such a robot replies from its one address, quoting nothing
+			// that says which AKA was asked. Record the fact instead.
+			t.recordSkipped(ctx, c, g, latest, now)
 			continue
 		}
 		for _, mode := range t.modes() {

@@ -90,7 +90,11 @@ type PingTraceSummary struct {
 	// Refused counts nodes whose last ping drew a robot saying the mail
 	// was dropped rather than answered -- at the destination or by a
 	// system it merely crossed.
-	Refused     int `json:"refused"`
+	Refused int `json:"refused"`
+	// NotTested counts declared AKAs of a system that answers through
+	// another of its addresses: no netmail was sent to them at all. Kept
+	// out of Answered and NeverPinged so neither reads as a result.
+	NotTested   int `json:"not_tested"`
 	NeverPinged int `json:"never_pinged"`
 
 	// AnsweredDirect counts the answered nodes whose answer was handed to
@@ -489,6 +493,8 @@ func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings
 				summary.Bounced++
 			case n.Latest.Status == pingtrace.StatusRefused:
 				summary.Refused++
+			case n.Latest.Status == pingtrace.StatusSkipped:
+				summary.NotTested++
 			default:
 				summary.Pending++
 			}

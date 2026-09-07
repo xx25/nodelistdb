@@ -26,6 +26,11 @@ const (
 	// old classifier would have called this whenever the refusal came
 	// from the target's own address.
 	StatusRefused = "refused"
+	// StatusSkipped: not pinged at all, because this address is a declared
+	// AKA of a system that answers through another one. Distinct from
+	// every other status in that no netmail was ever sent -- it is the
+	// report saying "not tested", not "tested and silent".
+	StatusSkipped = "skipped"
 )
 
 // Reply kinds.

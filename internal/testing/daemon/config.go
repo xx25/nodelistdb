@@ -183,6 +183,33 @@ type PingTraceConfig struct {
 	// ("2:280/5555" or "2:280/5555@fidonet"). For a staged rollout: the
 	// poller still reads every reply, only the due list is narrowed.
 	Nodes []string `yaml:"nodes"`
+	// SameSystem declares AKA sets that answer through ONE address, so the
+	// others are not pinged at all and are reported as untested rather
+	// than as unanswered.
+	//
+	// It is explicit because it cannot be inferred. Ward Dossche's five
+	// (2:2/0, 2:2/1000, 2:2/1002, 2:292/80, 2:292/854) and Christoph
+	// Lowagie's four (2:291/0, /1, /10, /111) are each one sysop, one
+	// system, one hostname -- and the first answers everything as
+	// 2:292/854 while the second answers as each AKA in turn. Whether a
+	// system speaks per-AKA or through one address is a property of its
+	// robot's configuration and appears nowhere in the nodelist, so
+	// grouping by sysop or by hostname would have silently dropped four
+	// real measurements to save four netmails.
+	SameSystem []SameSystemGroup `yaml:"same_system"`
+}
+
+// SameSystemGroup is one system reachable at several addresses that
+// answers through a single one of them.
+type SameSystemGroup struct {
+	// AnswersAs is the address that is pinged and that replies.
+	AnswersAs string `yaml:"answers_as"`
+	// AKAs are the other addresses of the same system: never pinged,
+	// reported as "not tested".
+	AKAs []string `yaml:"akas"`
+	// Note is quoted in the report so a reader can see WHY a node was not
+	// tested -- usually that the sysop said so.
+	Note string `yaml:"note"`
 }
 
 // ResolveToken returns the bearer token, reading APITokenFile when set.

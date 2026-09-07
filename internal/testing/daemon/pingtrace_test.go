@@ -717,3 +717,63 @@ func TestDrainFollowsTheWatermarkPastShortPages(t *testing.T) {
 		t.Errorf("the answer on the third page must have been absorbed, stored %d", len(store.replies))
 	}
 }
+
+// TestSameSystemAKAsAreRecordedNotPinged pins the declared-AKA rule. Ward
+// Dossche holds five PING addresses on one host and answers for all of
+// them as 2:292/854, quoting nothing that says which was asked — so the
+// four others are recorded as untested instead of drawing four netmails
+// into one inbox for four unattributable replies.
+func TestSameSystemAKAsAreRecordedNotPinged(t *testing.T) {
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	store := newFakePingStore()
+	for _, a := range []string{"2:292/854", "2:2/0", "2:2/1000", "2:292/80"} {
+		z, n, nd := 2, 292, 854
+		switch a {
+		case "2:2/0":
+			z, n, nd = 2, 2, 0
+		case "2:2/1000":
+			z, n, nd = 2, 2, 1000
+		case "2:292/80":
+			z, n, nd = 2, 292, 80
+		}
+		store.candidates = append(store.candidates, pingtrace.Candidate{
+			Domain: "fidonet", Zone: z, Net: n, Node: nd, Address: a, HasPing: true, HasIBN: true})
+	}
+	mailer := &fakeMailer{}
+	tr := testTracer(store, mailer, now)
+	tr.cfg.MaxPerPoll = 10
+	tr.cfg.SameSystem = []SameSystemGroup{{
+		AnswersAs: "2:292/854",
+		AKAs:      []string{"2:2/0", "2:2/1000", "2:292/80"},
+		Note:      "sysop states all AKAs answer via 2:292/854",
+	}}
+
+	if err := tr.sendDue(context.Background()); err != nil {
+		t.Fatalf("sendDue: %v", err)
+	}
+	if len(mailer.sent) != 1 || mailer.sent[0].ToAddr != "2:292/854@fidonet" {
+		t.Fatalf("only the answering address may be pinged, sent %+v", mailer.sent)
+	}
+	for _, a := range []string{"2:2/0", "2:2/1000", "2:292/80"} {
+		p := store.ping(t, a, pingtrace.ModeRouted)
+		if p.Status != pingtrace.StatusSkipped {
+			t.Errorf("%s: status = %q, want %q", a, p.Status, pingtrace.StatusSkipped)
+		}
+		if !strings.Contains(p.Error, "same system as 2:292/854") || !strings.Contains(p.Error, "sysop states") {
+			t.Errorf("%s: the row must carry the reason and the note, got %q", a, p.Error)
+		}
+	}
+	// A second pass inside the interval neither re-pings nor re-records.
+	before := len(store.pings)
+	if err := tr.sendDue(context.Background()); err != nil {
+		t.Fatalf("second sendDue: %v", err)
+	}
+	if len(mailer.sent) != 1 || len(store.pings) != before {
+		t.Errorf("nothing is due again inside the interval: sent %d, rows %d->%d", len(mailer.sent), before, len(store.pings))
+	}
+	// The answering address is never skipped, even if it is listed twice.
+	tr.cfg.SameSystem[0].AKAs = append(tr.cfg.SameSystem[0].AKAs, "2:292/854")
+	if _, skipped := tr.sameSystemAKAs()["2:292/854"]; skipped {
+		t.Error("the address that answers must never be skipped")
+	}
+}

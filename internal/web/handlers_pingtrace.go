@@ -205,6 +205,8 @@ func pingStatusLabel(status string) (string, string) {
 		return "Bounced", "badge-danger"
 	case pingtrace.StatusRefused:
 		return "Refused", "badge-danger"
+	case pingtrace.StatusSkipped:
+		return "Not tested", "badge-secondary"
 	case pingtrace.StatusFailed:
 		return "Not sent", "badge-danger"
 	case "":
