@@ -147,3 +147,45 @@ func TestMatchRefusesUnsecureSenderOnlyClaim(t *testing.T) {
 		t.Error("a REPLY kludge naming our MSGID must match however it arrived")
 	}
 }
+
+// TestClassifyRefusalNeverReadsAsAPong pins the verdict for a robot that
+// says it dropped the mail. The dangerous case is the refusal arriving
+// FROM the pinged node's own address: "sender == target" would otherwise
+// publish the strongest positive result the report has -- that node
+// answered -- on the strength of a message saying the opposite.
+func TestClassifyRefusalNeverReadsAsAPong(t *testing.T) {
+	target := &Ping{Domain: "fidonet", Address: "1:229/426", Mode: ModeRouted, Status: StatusSent}
+	// The real shape: a bland subject, the wording in the body.
+	refusal := Reply{
+		FromName: "One Ping To Rule Them All", FromAddr: "1:229/426", Subject: "Autoreply",
+		Body: "This is an automated message, which repeats for every time you continue\n" +
+			"to send silly nonsense to my system and of which any in-transit or host\n" +
+			"routed nonsense to others is DELETED.\n",
+	}
+	if got := Classify(refusal, target, nil, nil); got != KindRefused {
+		t.Errorf("a refusal from the target itself must not be a pong, got %q", got)
+	}
+	// Same wording from a system merely on the way: still a refusal, and
+	// NOT a trace notice -- "in-transit" appears in the text, and TRACE
+	// credit is for notifying AND forwarding, not for announcing deletion.
+	fromTransit := refusal
+	fromTransit.FromAddr = "1:229/426"
+	other := &Ping{Domain: "fidonet", Address: "1:120/544", Mode: ModeRouted, Status: StatusSent}
+	if got := Classify(fromTransit, other, nil, func(string, string) bool { return false }); got != KindRefused {
+		t.Errorf("a transit refusal must not be credited as a trace notice, got %q", got)
+	}
+	// An ordinary pong is untouched, including one that merely mentions
+	// a word the detector looks for in another sense.
+	pong := Reply{FromName: "Ping Robot", FromAddr: "1:229/426", Subject: "Pong",
+		Body: "Your PING arrived and is answered here.\n@Via 1:229/426 @20260907.031453.UTC\n"}
+	if got := Classify(pong, target, nil, nil); got != KindPong {
+		t.Errorf("a real pong must still be a pong, got %q", got)
+	}
+	// A sysop grumbling in prose is not a refusal: the detector looks for
+	// the mail's fate, not for the tone.
+	rude := Reply{FromName: "Ping Robot", FromAddr: "1:229/426", Subject: "Pong",
+		Body: "Go away, I think this whole ping business is nonsense.\n"}
+	if got := Classify(rude, target, nil, nil); got != KindPong {
+		t.Errorf("rudeness alone must not change the verdict, got %q", got)
+	}
+}

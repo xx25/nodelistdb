@@ -38,6 +38,10 @@
         <p>Waiting</p>
     </div>
     <div class="stats-box">
+        <h3>{{.Summary.Refused}}</h3>
+        <p>Refused (mail dropped)</p>
+    </div>
+    <div class="stats-box">
         <h3>{{.Summary.AnsweredDirect}}</h3>
         <p>Answered direct, not routed</p>
     </div>
@@ -70,6 +74,14 @@
         <em>not on our routes</em> means no ping of ours has been routed through it in the last
         {{.Days}} days, so nothing is known.
         Unanswered pings are given 7 days; a late answer still counts.
+        <em>Refused</em> is neither: a robot told us the message was deleted rather than answered,
+        so no reply is coming and the ping is closed at once instead of waiting out the window.
+        A refusal is recorded whoever sends it &mdash; the destination declining PING traffic is
+        its sysop's right, while a refusal from a system merely on the way means the ping never
+        reached the node at all and that node is being recorded on someone else's decision. It is
+        counted as a refusal and never as a pong, however it is worded, and it earns no
+        <code>TRACE</code> credit: notifying the sender while deleting the mail is not what
+        FTS-4010 asks for, which is to notify AND forward the original unaltered.
         An answer marked <em>direct</em> did not come back down our uplink with the rest of the
         mail: the answering system connected to 2:5001/100 itself, over a session we hold no link
         for and so cannot authenticate. It says how the ANSWER was delivered, not which way the

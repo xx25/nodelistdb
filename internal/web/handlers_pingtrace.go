@@ -203,6 +203,8 @@ func pingStatusLabel(status string) (string, string) {
 		return "No answer", "badge-warning"
 	case pingtrace.StatusNDR:
 		return "Bounced", "badge-danger"
+	case pingtrace.StatusRefused:
+		return "Refused", "badge-danger"
 	case pingtrace.StatusFailed:
 		return "Not sent", "badge-danger"
 	case "":
@@ -478,7 +480,7 @@ func newReplyView(rep storage.PingReplyRow, address, domain string) replyView {
 		v.KindClass = "badge-success"
 	case pingtrace.KindTrace:
 		v.KindClass = "badge-info"
-	case pingtrace.KindNDR:
+	case pingtrace.KindNDR, pingtrace.KindRefused:
 		v.KindClass = "badge-danger"
 	default:
 		v.KindClass = "badge-secondary"

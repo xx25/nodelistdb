@@ -82,11 +82,15 @@ type PingTraceSummary struct {
 	PingNodes int `json:"ping_nodes"`
 	// Answered / Pending / Timeouts / Failed / Bounced classify the latest
 	// routed ping of each PING node; NeverPinged is how many have none yet.
-	Answered    int `json:"answered"`
-	Pending     int `json:"pending"`
-	Timeouts    int `json:"timeouts"`
-	Failed      int `json:"failed"`
-	Bounced     int `json:"bounced"`
+	Answered int `json:"answered"`
+	Pending  int `json:"pending"`
+	Timeouts int `json:"timeouts"`
+	Failed   int `json:"failed"`
+	Bounced  int `json:"bounced"`
+	// Refused counts nodes whose last ping drew a robot saying the mail
+	// was dropped rather than answered -- at the destination or by a
+	// system it merely crossed.
+	Refused     int `json:"refused"`
 	NeverPinged int `json:"never_pinged"`
 
 	// AnsweredDirect counts the answered nodes whose answer was handed to
@@ -483,6 +487,8 @@ func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings
 				summary.Failed++
 			case n.Latest.Status == pingtrace.StatusNDR:
 				summary.Bounced++
+			case n.Latest.Status == pingtrace.StatusRefused:
+				summary.Refused++
 			default:
 				summary.Pending++
 			}

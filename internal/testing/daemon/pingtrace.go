@@ -351,6 +351,35 @@ func (t *PingTracer) absorbReply(ctx context.Context, item InboxItem, recent []p
 		p.TraceCount++
 		changed = true
 		logging.Infof("PING/TRACE: trace notice from %s for ping to %s", item.FromAddr, p.Address)
+	case pingtrace.KindRefused:
+		// A refusal is terminal for this ping: the mail was dropped, so
+		// no FTS-4010 answer is coming and waiting out the 7-day window
+		// would record silence for something we were told about. A pong
+		// already recorded stands -- a later refusal cannot unmake an
+		// answer we hold.
+		if p.Status != pingtrace.StatusPong {
+			p.Status = pingtrace.StatusRefused
+			p.ReplyTime = reply.ReceivedAt
+			p.ReplyMessageID = item.ID
+			p.ReplyFromName = item.FromName
+			p.ReplyFromAddr = item.FromAddr
+			p.ReplyInboundAuth = reply.InboundAuth
+			p.ReplyInboundTier = reply.InboundTier
+			// Who refused matters as much as that it happened: at the
+			// destination it is that node's own policy, but from a system
+			// merely on the way it means the ping never arrived and the
+			// node behind it is being recorded on someone else's choice.
+			where := "the destination"
+			if pingtrace.Node3D(item.FromAddr) != p.Address {
+				where = "in transit at " + pingtrace.Node3D(item.FromAddr)
+			}
+			p.Error = "refused " + where
+			if s := strings.TrimSpace(item.Subject); s != "" {
+				p.Error += ": " + s
+			}
+			changed = true
+			logging.Infof("PING/TRACE: ping to %s refused by %s (%s)", p.Address, item.FromAddr, where)
+		}
 	case pingtrace.KindNDR:
 		if p.Status != pingtrace.StatusPong {
 			p.Status = pingtrace.StatusNDR

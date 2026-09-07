@@ -20,6 +20,12 @@ const (
 	StatusPong    = "pong"    // the destination's robot answered
 	StatusNDR     = "ndr"     // bounced as undeliverable
 	StatusTimeout = "timeout" // no answer within the reply window
+	// StatusRefused: a robot told us the mail was dropped rather than
+	// answered -- at the destination, or by a system it merely crossed.
+	// Distinct from timeout, which is silence, and from pong, which the
+	// old classifier would have called this whenever the refusal came
+	// from the target's own address.
+	StatusRefused = "refused"
 )
 
 // Reply kinds.
@@ -28,6 +34,14 @@ const (
 	KindTrace     = "trace"
 	KindNDR       = "ndr"
 	KindUnmatched = "unmatched"
+	// KindRefused is a reply that says our mail was deleted, dropped or
+	// refused instead of answered. It is not a pong: FTS-4010's response
+	// is the message bounced back "clearly quoting all the original via
+	// lines", and an announcement of deletion is the opposite of that.
+	// It is not a trace notice either -- TRACE requires notifying the
+	// sender AND forwarding the original unaltered, so a system that
+	// deletes what it notifies about earns no compliance credit.
+	KindRefused = "refused"
 )
 
 // Ping is one netmail PING sent to one node, and everything learned about
@@ -138,6 +152,19 @@ var (
 	// "traceroute" is 3:712/848's spelling ("ping/traceroute report",
 	// From "mailer-daemon", sent for a ping merely passing through it).
 	traceRe = regexp.MustCompile(`(?i)\btrace\b|trace-?route|in[ -]transit|pass(ed|ing) through|transit`)
+	// refusalRe matches a robot announcing that it dropped the mail. Read
+	// against the BODY as well as the names and subject, because that is
+	// where such a robot says so -- 1:229/426's autoreply carries the
+	// wording in the body under the subject "Autoreply", which on its own
+	// is indistinguishable from a vacation notice.
+	//
+	// Deliberately narrow: it looks for the mail's fate, not for rudeness.
+	// A sysop is entitled to refuse PING traffic, and the measurement's
+	// job is to record what happened to the message, not to grade the
+	// tone of the reply.
+	refusalRe = regexp.MustCompile(`(?i)\b(is|are|was|were|will be|has been|have been)\s+(deleted|discarded|dropped|refused|rejected|binned)\b|` +
+		`\b(delete|discard|drop|refuse|reject)(s|ing)?\s+(all\s+|any\s+|such\s+)?(your\s+)?(mail|messages?|netmail|ping|nonsense|traffic)\b|` +
+		`\bnot\s+(be\s+)?(forwarded|routed|delivered|relayed)\b`)
 )
 
 // Match finds the ping a reply answers, or nil.
@@ -235,6 +262,16 @@ func Classify(r Reply, p *Ping, outPath []Hop, sameSystem func(from, target stri
 	}
 	if p == nil {
 		return KindUnmatched
+	}
+	// A refusal outranks every verdict below it, including the target's
+	// own address. A robot that answers from the destination saying the
+	// mail was deleted would otherwise be recorded as that node having
+	// answered the ping -- the strongest positive result the report can
+	// publish -- on the strength of a message that says the opposite.
+	// The body is searched too: such a robot puts the wording there,
+	// under a subject as bland as "Autoreply".
+	if refusalRe.MatchString(text + "\n" + r.Body) {
+		return KindRefused
 	}
 	from := Node3D(r.FromAddr)
 	if from == p.Address {
