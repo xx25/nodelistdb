@@ -32,7 +32,7 @@
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
     <div class="stats-box">
         <h3>{{.Summary.PingNodes}}</h3>
-        <p>Nodes flying PING</p>
+        <p>Nodes announcing PING</p>
     </div>
     <div class="stats-box">
         <h3>{{.Summary.Answered}}</h3>
@@ -67,7 +67,7 @@
 <div class="stats-box" style="margin-bottom: 1.5rem;">
     <h4>How this is measured</h4>
     <p class="text-muted" style="margin: 0.25rem 0;">
-        Every node flying <code>PING</code> gets a netmail addressed to user <code>PING</code> from
+        Every node announcing the <code>PING</code> flag gets a netmail addressed to user <code>PING</code> from
         2:5001/100 about once a fortnight, through ordinary routing. FTS-4010 says the destination
         bounces it back quoting the <code>^AVia</code> lines it collected on the way; that chain is
         the path drawn on each node's page. Unanswered pings are given 7 days, and a late answer
@@ -151,7 +151,7 @@
         <h4>Who sends transit notices</h4>
         <p class="text-muted" style="margin-top: 0;">Every node that answered a ping in transit in the last {{.Days}} days. A node without the flag still gets credit here.</p>
         <table class="data-table">
-            <thead><tr><th>Node</th><th class="num">Notices</th><th>Flies TRACE</th></tr></thead>
+            <thead><tr><th>Node</th><th class="num">Notices</th><th>Announces TRACE</th></tr></thead>
             <tbody>
             {{range .Summary.Tracers}}
             <tr><td><a href="/analytics/pingtrace/node?address={{.Address}}{{if .Domain}}&amp;domain={{.Domain}}{{end}}">{{.Address}}</a></td><td class="num">{{.Notices}}</td><td>{{if .Flagged}}yes{{else}}<span class="text-muted">no</span>{{end}}</td></tr>
