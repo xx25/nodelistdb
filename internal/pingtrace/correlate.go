@@ -110,13 +110,19 @@ type Reply struct {
 	PingSentTime time.Time
 	PingMSGID    string
 
-	MSGID      string
-	ReplyID    string
-	FromName   string
-	FromAddr   string
-	ToName     string
-	Subject    string
-	Body       string
+	MSGID    string
+	ReplyID  string
+	FromName string
+	FromAddr string
+	ToName   string
+	Subject  string
+	// Body is the netmail as it arrived. It is STORED -- the hop chain a
+	// reply quotes is parsed out of it on read, and correlation matches
+	// our token in it -- but never published: it is a third party's
+	// private mail, and this node holds it only because it was addressed
+	// here. json:"-" keeps it out of /api/nodes/{z}/{n}/{n}/ping, which
+	// serialises the stored row wholesale.
+	Body       string `json:"-"`
 	Date       time.Time
 	ReceivedAt time.Time
 	PID        string

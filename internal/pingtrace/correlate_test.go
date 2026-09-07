@@ -1,6 +1,8 @@
 package pingtrace
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -187,5 +189,28 @@ func TestClassifyRefusalNeverReadsAsAPong(t *testing.T) {
 		Body: "Go away, I think this whole ping business is nonsense.\n"}
 	if got := Classify(rude, target, nil, nil); got != KindPong {
 		t.Errorf("rudeness alone must not change the verdict, got %q", got)
+	}
+}
+
+// TestReplyBodyIsNotSerialised pins the API surface. The node ping
+// endpoint serialises the stored reply row wholesale, so a Body without
+// `json:"-"` publishes other people's netmail as machine-readable JSON --
+// which is how it shipped until 2026-09-07.
+func TestReplyBodyIsNotSerialised(t *testing.T) {
+	b, err := json.Marshal(Reply{
+		FromAddr: "2:221/1", Subject: "Pong receipt",
+		Body: "PRIVATE-NETMAIL-BODY",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "PRIVATE-NETMAIL-BODY") || strings.Contains(string(b), `"Body"`) {
+		t.Errorf("a reply's body must never reach JSON: %s", b)
+	}
+	// The headers that explain a verdict do travel.
+	for _, want := range []string{"Pong receipt", "2:221/1"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("expected %q in the serialised reply: %s", want, b)
+		}
 	}
 }

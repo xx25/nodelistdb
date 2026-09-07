@@ -103,10 +103,10 @@ func TestPingTraceNodeRenders(t *testing.T) {
 		Pings: []*pingView{newPingView(p)},
 		Replies: []replyView{newReplyView(storage.PingReplyRow{Reply: pingtrace.Reply{FidomailMessageID: 9, Kind: pingtrace.KindTrace, FromName: "Trace Robot", FromAddr: "2:5020/715",
 			Subject: "Trace: your message to PING", PingMSGID: p.MSGID, Vias: []string{"2:5020/715 @20260903.123000 hpt/lnx 1.9.0"}, PID: "hpt/lnx 1.9.0",
-			ReceivedAt: time.Date(2026, 9, 3, 12, 31, 0, 0, time.UTC), Body: "passed through"}}, "2:280/5555", "fidonet")},
+			ReceivedAt: time.Date(2026, 9, 3, 12, 31, 0, 0, time.UTC), Body: "PRIVATE-NETMAIL-BODY"}}, "2:280/5555", "fidonet")},
 	}
 	html := renderPingTemplate(t, "pingtrace_node", page)
-	for _, want := range []string{"Outbound path", "Return path", "2:5020/715", "hpt/lnx 1.9.0", "Trace Robot", "passed through", "68b8a1c2", "Transit notices",
+	for _, want := range []string{"Outbound path", "Return path", "2:5020/715", "hpt/lnx 1.9.0", "Trace Robot", "68b8a1c2", "Transit notices",
 		// A stamp without the UTC marker is labelled for what it is, and
 		// contributes no elapsed reading of its own.
 		"2026-09-03 12:30 local", "2026-09-03 12:01 UTC",
@@ -117,6 +117,11 @@ func TestPingTraceNodeRenders(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered node page lacks %q", want)
 		}
+	}
+	// The netmail body is a third party's private mail. It is stored so
+	// the quoted hop chain can be parsed out of it, never shown.
+	if strings.Contains(html, "PRIVATE-NETMAIL-BODY") || strings.Contains(html, "Message text") {
+		t.Error("a reply's message text must not be published on the node page")
 	}
 	if strings.Contains(html, "&#43;29m") {
 		t.Error("elapsed time must not be measured across a local-time stamp")

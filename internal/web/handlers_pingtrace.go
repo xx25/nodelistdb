@@ -59,7 +59,6 @@ type replyView struct {
 	Received  string
 	KindClass string
 	Hops      []hopView
-	Body      string
 	FromURL   string
 	// PingAnchor is the fragment id of the ping this reply answers, empty
 	// when it was never matched to one.
@@ -479,7 +478,6 @@ func (s *Server) PingTraceNodeHandler(w http.ResponseWriter, r *http.Request) {
 func newReplyView(rep storage.PingReplyRow, address, domain string) replyView {
 	v := replyView{R: rep, Received: fmtPingTime(rep.ReceivedAt),
 		Hops:    hopViews(rep.Hops, pingtrace.OriginAddress(rep.PingMSGID), address, domain),
-		Body:    rep.Body,
 		FromURL: nodeHistoryURL(rep.FromAddr, domain),
 	}
 	if rep.PingMSGID != "" {
