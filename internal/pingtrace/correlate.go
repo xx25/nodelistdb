@@ -119,6 +119,12 @@ const (
 	AuthUnsecure   = "unsecure"
 )
 
+// inboundTierA is fidomail's tier for a configured link that authenticated
+// with a session password -- the only receipt that positively evidences an
+// authenticated wire session. Tier 0 is "no session was recorded", which
+// is not the same thing and is not treated as one.
+const inboundTierA = 1
+
 var (
 	ndrRe = regexp.MustCompile(`(?i)\bNDR\b|undeliverable|non-?delivery|could not be delivered|delivery (failure|failed)`)
 	// "traceroute" is 3:712/848's spelling ("ping/traceroute report",
@@ -130,8 +136,8 @@ var (
 //
 // Evidence in order of strength: the REPLY kludge naming our MSGID; the
 // subject token; our MSGID quoted anywhere in the body; and, for a reply
-// coming from the pinged node itself that arrived over an authenticated
-// session, the only open ping to that node.
+// coming from the pinged node itself over a receipt that evidences an
+// authenticated session, the only open ping to that node.
 // Flag order or wording is never consulted here -- that is Classify's job.
 func Match(r Reply, open []Ping) *Ping {
 	if rid := normalizeMSGID(r.ReplyID); rid != "" {
@@ -157,20 +163,36 @@ func Match(r Reply, open []Ping) *Ping {
 	// earlier one is still open) the one still waiting for an answer is
 	// the most plausible target, and failing that the newest.
 	//
-	// This branch rests on NOTHING but the From line, so it is refused to
-	// a reply that arrived over a session fidomail did not authenticate.
-	// On tier B or C the sender address is an unverified claim, a ping is
-	// open against most monitored nodes for most of every cycle, and
-	// nothing above needs to be known to forge one -- so without this
-	// gate a stranger could have any node recorded as "answered" without
-	// ever seeing its ping. The evidence branches above stay ungated on
-	// purpose: quoting our token or MSGID back proves the sender saw the
-	// ping, which is why the real unauthenticated answers (2:221/0 and
-	// 2:221/1 deposit directly, and quote the token) still match.
+	// This branch rests on NOTHING but the From line, so it takes POSITIVE
+	// evidence of an authenticated session, not merely the absence of a
+	// warning. A ping is open against most monitored nodes for most of
+	// every cycle and nothing above needs to be known to forge one, so a
+	// stranger could otherwise have any node recorded as "answered"
+	// without ever seeing its ping.
+	//
+	// Tier A -- a configured link that passed its session password -- is
+	// the only receipt that evidences one. Tier B and C are strangers.
+	// Tier 0 means fidomail recorded NO session at all, which for mail
+	// claiming to come from another node should not happen: it is what
+	// this node's own robot mail carries, and our own mail can never be
+	// the answer to our own ping. Trusting it would also mean that any
+	// future receive path that skipped classification silently reopened
+	// this hole -- which has happened before, in the quarantine retoss.
+	//
+	// An unreported receipt still passes: a fidomail predating the field
+	// says nothing about the session, and refusing it there would drop
+	// real answers (3 of the first 57 matched on this branch alone --
+	// 4:80/1 and 2:240/1120 quote neither our token nor a REPLY kludge)
+	// and publish them as timeouts.
+	//
+	// The evidence branches above stay ungated on purpose: quoting our
+	// token or MSGID back proves the sender saw the ping, which is why
+	// the real unauthenticated answers (2:221/0 and 2:221/1 deposit
+	// directly, and quote the token) still match.
 	//
 	// A refused reply is not discarded: it is stored unmatched, with its
 	// sender and body, so a claim we would not credit is still visible.
-	if r.InboundAuth == AuthUnsecure {
+	if r.InboundAuth != AuthUnreported && r.InboundTier != inboundTierA {
 		return nil
 	}
 	from := Node3D(r.FromAddr)

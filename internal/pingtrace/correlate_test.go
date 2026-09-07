@@ -105,25 +105,44 @@ func TestMatchRefusesUnsecureSenderOnlyClaim(t *testing.T) {
 		Token: "6a9dee0f", Status: StatusSent, SentTime: time.Date(2026, 9, 6, 22, 49, 47, 0, time.UTC)}}
 	claim := Reply{FromAddr: "2:341/66", Subject: "Pong", Body: "hello"}
 
+	// Unreported: an older fidomail says nothing about the session, and
+	// refusing there would drop the real answers that match on this
+	// branch alone and publish them as timeouts.
 	if got := Match(claim, open); got == nil {
-		t.Fatal("an unremarkable reply from the pinged node still matches when the receipt is not flagged")
+		t.Fatal("an unreported receipt must still match: it is absence of information, not evidence against")
 	}
-	claim.InboundAuth = AuthSecure
+	// Tier A is the only receipt that evidences an authenticated session.
+	claim.InboundAuth, claim.InboundTier = AuthSecure, inboundTierA
 	if got := Match(claim, open); got == nil {
-		t.Error("an authenticated reply from the pinged node must still match")
+		t.Error("a reply over an authenticated link must still match")
 	}
-	claim.InboundAuth = AuthUnsecure
-	if got := Match(claim, open); got != nil {
-		t.Errorf("an unauthenticated sender-only claim must not be credited, matched %s", got.Address)
+	for _, bad := range []struct {
+		name string
+		auth string
+		tier uint8
+	}{
+		{"in the nodelist, no configured link", AuthUnsecure, 2},
+		{"unknown to the nodelist", AuthUnsecure, 3},
+		// Reported as tier 0: fidomail recorded NO session. That is what
+		// this node's own robot mail carries, and our own mail is never
+		// the answer to our own ping -- so it is not positive evidence,
+		// and any future receive path that skipped classification would
+		// otherwise silently reopen this hole.
+		{"reported, but no session recorded", AuthSecure, 0},
+	} {
+		claim.InboundAuth, claim.InboundTier = bad.auth, bad.tier
+		if got := Match(claim, open); got != nil {
+			t.Errorf("%s: sender-only claim must not be credited, matched %s", bad.name, got.Address)
+		}
 	}
 	// ...but quoting the ping back proves the sender saw it, so the
 	// evidence branches stay open to an unauthenticated receipt. This is
 	// how 2:221/0 and 2:221/1's real pongs arrive.
-	quoting := Reply{FromAddr: "2:221/1", Body: "Ref: 6a9dee0f", InboundAuth: AuthUnsecure}
+	quoting := Reply{FromAddr: "2:221/1", Body: "Ref: 6a9dee0f", InboundAuth: AuthUnsecure, InboundTier: 2}
 	if got := Match(quoting, open); got == nil {
 		t.Error("a reply quoting our token must match however it arrived")
 	}
-	byReplyID := Reply{FromAddr: "2:221/1", ReplyID: "2:5001/100@fidonet 6a9dee0f", InboundAuth: AuthUnsecure}
+	byReplyID := Reply{FromAddr: "2:221/1", ReplyID: "2:5001/100@fidonet 6a9dee0f", InboundAuth: AuthUnsecure, InboundTier: 2}
 	if got := Match(byReplyID, open); got == nil {
 		t.Error("a REPLY kludge naming our MSGID must match however it arrived")
 	}
