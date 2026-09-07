@@ -62,7 +62,7 @@ type PingNodeSummary struct {
 }
 
 // TracerStat is a node that sent transit notices in the window, whether
-// or not it announces TRACE.
+// or not it flies TRACE.
 type TracerStat struct {
 	Address string `json:"address"`
 	// Domain is the network the pings it answered belong to: without a
