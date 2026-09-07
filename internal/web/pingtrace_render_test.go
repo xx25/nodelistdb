@@ -228,3 +228,47 @@ func TestPingReplyShowsUnsecureReceipt(t *testing.T) {
 		}
 	}
 }
+
+// TestReportMarksAnswersDeliveredDirect pins the report's answer-delivery
+// column. A pong handed to us by the answering node over a session we
+// hold no link for did not come back down our uplink with the rest of the
+// mail, and nothing else on the page distinguishes the two.
+func TestReportMarksAnswersDeliveredDirect(t *testing.T) {
+	direct, routed := samplePing(), samplePing()
+	direct.ReplyInboundAuth, direct.ReplyInboundTier = pingtrace.AuthUnsecure, 2
+	routed.Address, routed.Zone, routed.Net, routed.Node = "2:221/1", 2, 221, 1
+	routed.ReplyInboundAuth, routed.ReplyInboundTier = pingtrace.AuthSecure, 1
+
+	summary := &storage.PingTraceSummary{
+		Domain: "fidonet", Days: 90,
+		Nodes: []storage.PingNodeSummary{
+			{Domain: "fidonet", Zone: 2, Net: 280, Node: 5555, Address: "2:280/5555", HasPing: true, Latest: &direct},
+			{Domain: "fidonet", Zone: 2, Net: 221, Node: 1, Address: "2:221/1", HasPing: true, Latest: &routed},
+		},
+		PingNodes: 2, Answered: 2, AnsweredDirect: 1,
+	}
+	rows := make([]pingNodeRow, 0, len(summary.Nodes))
+	for _, n := range summary.Nodes {
+		rows = append(rows, newPingNodeRow(n))
+	}
+	if !rows[0].AnsweredDirect || rows[1].AnsweredDirect {
+		t.Fatalf("only the unauthenticated receipt is direct: %v / %v", rows[0].AnsweredDirect, rows[1].AnsweredDirect)
+	}
+	html := renderPingTemplate(t, "pingtrace_analytics", pingtraceAnalyticsPage{
+		Title: "x", ActivePage: "analytics", Version: "test", Summary: summary, Rows: rows, Days: 90,
+	})
+	if !strings.Contains(html, ">direct</small>") {
+		t.Error("a directly delivered answer must be marked in its row")
+	}
+	if !strings.Contains(html, "Answered direct, not routed") {
+		t.Error("the summary must count them")
+	}
+	if strings.Count(html, ">direct</small>") != 1 {
+		t.Errorf("only the direct answer carries the mark, got %d", strings.Count(html, ">direct</small>"))
+	}
+	// The tooltip must say what it means, since the word alone reads like
+	// the separate direct-DIAL ping mode.
+	if !strings.Contains(html, "not relayed back down our uplink") {
+		t.Error("the PING badge tooltip must explain the delivery")
+	}
+}

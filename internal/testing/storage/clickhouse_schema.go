@@ -168,6 +168,8 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 	    reply_from_addr String DEFAULT '',
 	    robot_pid String DEFAULT '',
 	    robot_tearline String DEFAULT '',
+	    reply_inbound_auth LowCardinality(String) DEFAULT '',
+	    reply_inbound_tier UInt8 DEFAULT 0,
 	    out_hops Array(String) DEFAULT [],
 	    out_hop_times Array(DateTime) DEFAULT [],
 	    out_hop_software Array(String) DEFAULT [],

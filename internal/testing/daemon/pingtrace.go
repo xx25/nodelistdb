@@ -338,6 +338,8 @@ func (t *PingTracer) absorbReply(ctx context.Context, item InboxItem, recent []p
 			p.ReplyFromAddr = item.FromAddr
 			p.RobotPID = item.PID
 			p.RobotTearline = item.Tearline
+			p.ReplyInboundAuth = reply.InboundAuth
+			p.ReplyInboundTier = reply.InboundTier
 			p.OutHops = quoted
 			p.BackHops = pingtrace.ParseVias(item.Vias)
 			p.Error = ""

@@ -89,6 +89,12 @@ type PingTraceSummary struct {
 	Bounced     int `json:"bounced"`
 	NeverPinged int `json:"never_pinged"`
 
+	// AnsweredDirect counts the answered nodes whose answer was handed to
+	// us by a peer we hold no link with -- the node dialling this system
+	// directly -- rather than relayed back down our uplink. A property of
+	// the ANSWER's delivery, not of the path the ping took getting there.
+	AnsweredDirect int `json:"answered_direct"`
+
 	MedianRTTSeconds uint32 `json:"median_rtt_seconds"`
 	MedianHops       int    `json:"median_hops"`
 
@@ -118,6 +124,7 @@ type PingReplyRow struct {
 const pingTestReadColumns = `domain, zone, net, node, address, mode, sent_time, token, msgid, fidomail_message_id,
 	first_hop, route_source, status, dispatched_time, reply_time, rtt_seconds,
 	reply_message_id, reply_msgid, reply_from_name, reply_from_addr, robot_pid, robot_tearline,
+	reply_inbound_auth, reply_inbound_tier,
 	out_hops, out_hop_times, out_hop_software, out_vias_raw,
 	back_hops, back_hop_times, back_hop_software, back_vias_raw,
 	trace_count, error, updated_at`
@@ -161,6 +168,7 @@ func scanPingRow(rows *sql.Rows) (pingtrace.Ping, error) {
 		&p.Domain, &zone, &net, &node, &p.Address, &p.Mode, &sentTime, &p.Token, &p.MSGID, &p.FidomailMessageID,
 		&p.FirstHop, &p.RouteSource, &p.Status, &dispatched, &replyTime, &p.RTTSeconds,
 		&p.ReplyMessageID, &p.ReplyMSGID, &p.ReplyFromName, &p.ReplyFromAddr, &p.RobotPID, &p.RobotTearline,
+		&p.ReplyInboundAuth, &p.ReplyInboundTier,
 		&outHops, &outTimes, &outSoft, &outRaw,
 		&backHops, &backTimes, &backSoft, &backRaw,
 		&p.TraceCount, &p.Error, &updatedAt,
@@ -466,6 +474,9 @@ func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings
 				summary.NeverPinged++
 			case n.Latest.Status == pingtrace.StatusPong:
 				summary.Answered++
+				if n.Latest.ReplyInboundAuth == pingtrace.AuthUnsecure {
+					summary.AnsweredDirect++
+				}
 			case n.Latest.Status == pingtrace.StatusTimeout:
 				summary.Timeouts++
 			case n.Latest.Status == pingtrace.StatusFailed:

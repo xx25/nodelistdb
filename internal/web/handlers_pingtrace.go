@@ -248,9 +248,13 @@ type pingNodeRow struct {
 	StatusLabel  string
 	StatusClass  string
 	PingTitle    string
-	TraceLabel   string
-	TraceClass   string
-	TraceTitle   string
+	// AnsweredDirect: the answer came in over a session we did not
+	// authenticate -- the node handing it to us itself -- rather than
+	// relayed back with the rest of our mail.
+	AnsweredDirect bool
+	TraceLabel     string
+	TraceClass     string
+	TraceTitle     string
 }
 
 // newPingNodeRow builds one table row from the folded summary. Kept in one
@@ -271,6 +275,9 @@ func newPingNodeRow(n storage.PingNodeSummary) pingNodeRow {
 	if n.LatestDirect != nil {
 		row.LatestDirect = newPingView(*n.LatestDirect)
 	}
+	row.AnsweredDirect = n.Latest != nil &&
+		n.Latest.Status == pingtrace.StatusPong &&
+		n.Latest.ReplyInboundAuth == pingtrace.AuthUnsecure
 	row.PingTitle = pingBadgeTitle(&row)
 	return row
 }
@@ -288,6 +295,9 @@ func pingBadgeTitle(row *pingNodeRow) string {
 		head += " in " + row.Latest.RTT
 	}
 	parts := []string{head}
+	if row.AnsweredDirect {
+		parts = append(parts, "the answer was delivered straight to us over an unauthenticated session, not relayed back down our uplink")
+	}
 	if row.Latest != nil && row.Latest.P.RobotPID != "" {
 		parts = append(parts, "robot: "+row.Latest.P.RobotPID)
 	}

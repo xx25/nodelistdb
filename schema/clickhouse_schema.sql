@@ -470,6 +470,8 @@ CREATE TABLE IF NOT EXISTS nodelistdb.ping_tests
     `reply_from_addr` String DEFAULT '',        -- the AKA the robot answered from
     `robot_pid` String DEFAULT '',              -- PID kludge of the pong
     `robot_tearline` String DEFAULT '',
+    `reply_inbound_auth` LowCardinality(String) DEFAULT '', -- how the ANSWER reached us: '' not reported | secure | unsecure
+    `reply_inbound_tier` UInt8 DEFAULT 0,       -- fidomail receipt tier of the answer: 0 not reported, 1 A, 2 B, 3 C
     `out_hops` Array(String) DEFAULT [],        -- outbound path, as quoted by the robot
     `out_hop_times` Array(DateTime) DEFAULT [],
     `out_hop_software` Array(String) DEFAULT [],

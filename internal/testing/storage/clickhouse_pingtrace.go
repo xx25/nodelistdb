@@ -24,6 +24,7 @@ const pingTestInsertSQL = `INSERT INTO ping_tests
 	(domain, zone, net, node, address, mode, sent_time, token, msgid, fidomail_message_id,
 	 first_hop, route_source, status, dispatched_time, reply_time, rtt_seconds,
 	 reply_message_id, reply_msgid, reply_from_name, reply_from_addr, robot_pid, robot_tearline,
+	 reply_inbound_auth, reply_inbound_tier,
 	 out_hops, out_hop_times, out_hop_software, out_vias_raw,
 	 back_hops, back_hop_times, back_hop_software, back_vias_raw,
 	 trace_count, error, updated_at)`
@@ -36,6 +37,7 @@ const pingReplyInsertSQL = `INSERT INTO ping_replies
 const pingTestSelectColumns = `domain, zone, net, node, address, mode, sent_time, token, msgid, fidomail_message_id,
 	first_hop, route_source, status, dispatched_time, reply_time, rtt_seconds,
 	reply_message_id, reply_msgid, reply_from_name, reply_from_addr, robot_pid, robot_tearline,
+	reply_inbound_auth, reply_inbound_tier,
 	out_hops, out_hop_times, out_hop_software, out_vias_raw,
 	back_hops, back_hop_times, back_hop_software, back_vias_raw,
 	trace_count, error, updated_at`
@@ -246,6 +248,7 @@ func scanPing(row pingScanner) (pingtrace.Ping, error) {
 		&p.Domain, &zone, &net, &node, &p.Address, &p.Mode, &sentTime, &p.Token, &p.MSGID, &p.FidomailMessageID,
 		&p.FirstHop, &p.RouteSource, &p.Status, &dispatched, &replyTime, &p.RTTSeconds,
 		&p.ReplyMessageID, &p.ReplyMSGID, &p.ReplyFromName, &p.ReplyFromAddr, &p.RobotPID, &p.RobotTearline,
+		&p.ReplyInboundAuth, &p.ReplyInboundTier,
 		&outHops, &outTimes, &outSoft, &outRaw,
 		&backHops, &backTimes, &backSoft, &backRaw,
 		&p.TraceCount, &p.Error, &updatedAt,
@@ -279,6 +282,7 @@ func (s *ClickHouseStorage) StorePing(ctx context.Context, p pingtrace.Ping) err
 		p.Domain, uint16(p.Zone), uint16(p.Net), uint16(p.Node), p.Address, p.Mode, chTime(p.SentTime), p.Token, p.MSGID, p.FidomailMessageID,
 		p.FirstHop, p.RouteSource, p.Status, chTime(p.DispatchedTime), chTime(p.ReplyTime), p.RTTSeconds,
 		p.ReplyMessageID, p.ReplyMSGID, p.ReplyFromName, p.ReplyFromAddr, p.RobotPID, p.RobotTearline,
+		p.ReplyInboundAuth, p.ReplyInboundTier,
 		outHops, outTimes, outSoft, outRaw,
 		backHops, backTimes, backSoft, backRaw,
 		p.TraceCount, p.Error, updated.UTC(),

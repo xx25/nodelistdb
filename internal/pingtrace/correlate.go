@@ -58,11 +58,19 @@ type Ping struct {
 	ReplyFromAddr     string
 	RobotPID          string
 	RobotTearline     string
-	OutHops           []Hop
-	BackHops          []Hop
-	TraceCount        uint32
-	Error             string
-	UpdatedAt         time.Time
+	// ReplyInboundAuth / ReplyInboundTier record how the ANSWER reached
+	// us, copied from the reply that set this verdict. An answer on an
+	// unauthenticated session was handed to us by a peer we have no link
+	// with -- in practice the answering node dialing us directly -- rather
+	// than relayed back down our uplink, which is a different thing from
+	// the path the ping took getting there.
+	ReplyInboundAuth string
+	ReplyInboundTier uint8
+	OutHops          []Hop
+	BackHops         []Hop
+	TraceCount       uint32
+	Error            string
+	UpdatedAt        time.Time
 }
 
 // Key identifies the node a ping targets.
