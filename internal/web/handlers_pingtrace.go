@@ -256,9 +256,12 @@ type pingNodeRow struct {
 	// authenticate -- the node handing it to us itself -- rather than
 	// relayed back with the rest of our mail.
 	AnsweredDirect bool
-	TraceLabel     string
-	TraceClass     string
-	TraceTitle     string
+	// NotTested: a declared AKA of a system that answers through another
+	// address. No ping was sent, so the row shows no send time.
+	NotTested  bool
+	TraceLabel string
+	TraceClass string
+	TraceTitle string
 }
 
 // newPingNodeRow builds one table row from the folded summary. Kept in one
@@ -279,6 +282,7 @@ func newPingNodeRow(n storage.PingNodeSummary) pingNodeRow {
 	if n.LatestDirect != nil {
 		row.LatestDirect = newPingView(*n.LatestDirect)
 	}
+	row.NotTested = n.Latest != nil && n.Latest.Status == pingtrace.StatusSkipped
 	row.AnsweredDirect = n.Latest != nil &&
 		n.Latest.Status == pingtrace.StatusPong &&
 		n.Latest.ReplyInboundAuth == pingtrace.AuthUnsecure
@@ -293,6 +297,11 @@ func newPingNodeRow(n storage.PingNodeSummary) pingNodeRow {
 func pingBadgeTitle(row *pingNodeRow) string {
 	if !row.N.HasPing {
 		return ""
+	}
+	// A skipped node was never pinged, so "Last ping:" would be a lie and
+	// the stored reason already reads as a sentence on its own.
+	if row.Latest != nil && row.Latest.P.Status == pingtrace.StatusSkipped {
+		return strings.TrimSpace(row.Latest.P.Error)
 	}
 	head := "Last ping: " + row.StatusLabel
 	if row.Latest != nil && row.Latest.RTT != "" {

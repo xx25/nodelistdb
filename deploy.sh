@@ -44,7 +44,16 @@ build_binaries() {
     echo ""
 }
 
-# Server 1: oracle-main.thodin.net (ARM64, parser + testdaemon)
+# Server 1: main (ARM64, parser + testdaemon) — reached over ZeroTier
+#
+# Shipped over the private overlay at 10.121.20.211 rather than the public
+# name: it is the same host, but the overlay path does not depend on public
+# DNS or on which network the dev box is sitting on. The public name stays
+# in the messages so a failure still says which host it was, and remains
+# the fallback if the overlay is down (it was, briefly, on 2026-09-07 —
+# ssh, ClickHouse native and HTTP all went away together and came back a
+# few minutes later, so a stalled transfer here is worth retrying over
+# oracle-main.thodin.net before assuming the host is at fault).
 #
 # This host keeps ClickHouse, the parser, sync_nodelists.sh and the testdaemon.
 # It does NOT run the web server any more: that moved to oracle-vm1 on
@@ -53,9 +62,9 @@ build_binaries() {
 # resurrected a second web server on this host — and the is-active check
 # afterwards would have called it a success.
 deploy_oracle_main() {
-    echo -e "${YELLOW}[1/3] Deploying to oracle-main.thodin.net (ARM64, parser + testdaemon)...${NC}"
+    echo -e "${YELLOW}[1/3] Deploying to main / oracle-main.thodin.net (ARM64, parser + testdaemon)...${NC}"
 
-    HOST="dp@oracle-main.thodin.net"
+    HOST="dp@${DEPLOY_MAIN_HOST:-10.121.20.211}"
     REMOTE_PATH="/opt/nodelistdb"
 
     # Check binaries exist
@@ -89,7 +98,7 @@ deploy_oracle_main() {
     echo "  Verifying..."
     sleep 2
     if ssh "$HOST" "systemctl is-active --quiet nodelistdb-testdaemon"; then
-        echo -e "  ${GREEN}✓ oracle-main.thodin.net deployed successfully${NC}"
+        echo -e "  ${GREEN}✓ main (${HOST#dp@}) deployed successfully${NC}"
     else
         echo -e "  ${RED}✗ Service verification failed!${NC}"
         ssh "$HOST" "systemctl status nodelistdb-testdaemon --no-pager -n 15"
@@ -280,17 +289,20 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --no-build     Skip building, use existing binaries"
-            echo "  --oracle-main  Deploy only to oracle-main.thodin.net (ARM64)"
+            echo "  --oracle-main  Deploy only to main / oracle-main.thodin.net (ARM64)"
             echo "  --vm1          Deploy only to oracle-vm1 / nodelist.fidonet.cc"
             echo "  --5001         Deploy only to nodelist.5001.ru (x86_64)"
             echo "  (default)      Build and deploy to all servers"
             echo ""
             echo "Servers:"
-            echo "  oracle-main.thodin.net  ARM64, parser + testdaemon (+ ClickHouse, sync)"
+            echo "  main (10.121.20.211)    ARM64, parser + testdaemon (+ ClickHouse, sync)"
             echo "  nodelist.fidonet.cc     x86_64, server only — the public site since 2026-07-30"
             echo "  nodelist.5001.ru        x86_64, server only (via jumphost by default)"
             echo ""
             echo "Environment:"
+            echo "  DEPLOY_MAIN_HOST        ssh host for main (default: 10.121.20.211, the"
+            echo "                          ZeroTier address; set oracle-main.thodin.net to"
+            echo "                          fall back to the public name)"
             echo "  DEPLOY_5001_JUMPHOST    SSH jumphost for 5001 (default: dp@192.168.89.5;"
             echo "                          set empty for a direct connection)"
             exit 0

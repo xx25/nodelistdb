@@ -141,8 +141,8 @@
             <td class="nowrap"><a href="/analytics/pingtrace/node?address={{.N.Address}}&domain={{.N.Domain}}">{{.N.Address}}</a>
                 <small><a href="/node/{{.N.Zone}}/{{.N.Net}}/{{.N.Node}}?domain={{.N.Domain}}" class="text-muted">history</a></small></td>
             <td>{{replaceUnderscores .N.SystemName}}<br><small class="text-muted">{{replaceUnderscores .N.SysopName}}</small></td>
-            <td class="nowrap" data-value="{{.StatusLabel}}">{{if .N.HasPing}}<span class="badge {{.StatusClass}}" title="{{.PingTitle}}">PING</span>{{end}} {{if .N.HasTrace}}<span class="badge {{.TraceClass}}" title="{{.TraceTitle}}">TRACE</span>{{end}}</td>
-            <td class="nowrap" {{if .Latest}}data-value="{{.Latest.P.SentTime.Unix}}"{{else}}data-value="0"{{end}}>{{if .Latest}}<span class="text-muted">{{.Latest.Sent}}</span>{{end}}</td>
+            <td class="nowrap" data-value="{{.StatusLabel}}">{{if .N.HasPing}}<span class="badge {{.StatusClass}}" title="{{.PingTitle}}">PING</span>{{end}} {{if .N.HasTrace}}<span class="badge {{.TraceClass}}" title="{{.TraceTitle}}">TRACE</span>{{end}}{{if .NotTested}}<br><small class="text-muted">not tested</small>{{end}}</td>
+            <td class="nowrap" {{if .Latest}}data-value="{{.Latest.P.SentTime.Unix}}"{{else}}data-value="0"{{end}}>{{if and .Latest (not .NotTested)}}<span class="text-muted">{{.Latest.Sent}}</span>{{end}}</td>
             <td class="num" {{if .Latest}}data-value="{{.Latest.P.RTTSeconds}}"{{else}}data-value="0"{{end}}>{{if .Latest}}{{.Latest.RTT}}{{end}}{{if .AnsweredDirect}}<br><small class="badge badge-warning" title="Delivered straight to us over a session we did not authenticate &mdash; the node handed the answer over itself instead of routing it back">direct</small>{{end}}</td>
             <td class="num" {{if .Latest}}data-value="{{.Latest.OutCount}}"{{else}}data-value="0"{{end}}>{{if .Latest}}{{if .Latest.OutCount}}{{.Latest.OutCount}}{{end}}{{end}}</td>
             <td class="nowrap" data-value="{{.TraceLabel}}">{{if .N.HasTrace}}<span class="badge {{.TraceClass}}" title="{{.TraceTitle}}">{{.TraceLabel}}</span>

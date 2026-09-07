@@ -505,6 +505,21 @@ func skipReason(g SameSystemGroup) string {
 	return reason
 }
 
+// latestRoutedPing finds this node's newest routed ping whatever its state.
+func latestRoutedPing(recent []pingtrace.Ping, c pingtrace.Candidate) *pingtrace.Ping {
+	var best *pingtrace.Ping
+	for i := range recent {
+		p := &recent[i]
+		if p.Address != c.Address || p.Domain != c.Domain || p.Mode != pingtrace.ModeRouted {
+			continue
+		}
+		if best == nil || p.SentTime.After(best.SentTime) {
+			best = p
+		}
+	}
+	return best
+}
+
 // latestOpenPing finds this node's newest ping that is still waiting for an
 // answer, or nil. Only routed pings: a DIR ping is a separate measurement
 // and is not what a declared AKA set speaks for.
@@ -570,11 +585,30 @@ func (t *PingTracer) recordSkipped(ctx context.Context, c pingtrace.Candidate, g
 		logging.Infof("PING/TRACE: %s %s (closed the ping still waiting)", c.Address, open.Error)
 		return
 	}
+	reason := skipReason(g)
+	// An edit to the declaration -- a corrected note, a different
+	// answering address -- reaches the row on the next poll rather than at
+	// the next interval, since the row is what the report reads and there
+	// is nothing to wait for.
+	if prev := latestRoutedPing(recent, c); prev != nil && prev.Status == pingtrace.StatusSkipped {
+		if prev.Error == reason {
+			return
+		}
+		prev.Error = reason
+		prev.UpdatedAt = now
+		if t.dryRun {
+			logging.Infof("PING/TRACE (dry-run): would restate %s as %s", c.Address, reason)
+			return
+		}
+		if err := t.store.StorePing(ctx, *prev); err != nil {
+			logging.Errorf("PING/TRACE: cannot restate %s: %v", c.Address, err)
+		}
+		return
+	}
 	last := latest[pingtrace.DueKey(c.Address, c.Domain, pingtrace.ModeRouted)]
 	if !last.IsZero() && now.Sub(last) < t.cfg.Interval {
 		return // already recorded this cycle
 	}
-	reason := skipReason(g)
 	if t.dryRun {
 		logging.Infof("PING/TRACE (dry-run): would record %s as %s", c.Address, reason)
 		return
