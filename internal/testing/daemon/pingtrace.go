@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -32,6 +34,7 @@ type pingMailer interface {
 	SendNetmail(ctx context.Context, req SendNetmailRequest) (SendNetmailResponse, error)
 	NetmailStatus(ctx context.Context, id uint64) (NetmailStatus, error)
 	Inbox(ctx context.Context, network, toName string, minID uint64, since time.Time, limit int) (InboxPage, error)
+	Replies(ctx context.Context, network, fromName string, minID uint64, since time.Time, limit int) (InboxPage, error)
 }
 
 // PingTracer runs the FTS-4010 PING/TRACE measurement.
@@ -50,8 +53,14 @@ type PingTracer struct {
 	dryRun bool
 	now    func() time.Time
 
-	mu        sync.Mutex
-	watermark uint64 // highest inbox id consumed
+	mu sync.Mutex
+	// Two watermarks, never one. Each is "every id at or below this that
+	// THIS source's filter admits has been decided", and the two sources
+	// admit different sets of the same id space -- an answer addressed to
+	// the sysop is invisible to the inbox scan. Sharing a watermark would
+	// let one source's max_id carry the other past rows it never saw.
+	watermark        uint64 // highest id consumed from the by-recipient inbox
+	repliesWatermark uint64 // highest id consumed from the by-answered-mail scan
 
 	stopOnce sync.Once
 	done     chan struct{}
@@ -132,25 +141,62 @@ func (t *PingTracer) lookback() time.Time {
 	return t.now().Add(-(t.cfg.Interval + t.cfg.ReplyTimeout))
 }
 
-// pollReplies reads new inbox items and folds each into the ping it
-// answers. recent is updated in place so a later reply in the same page
-// sees the earlier one's effect.
+// pollReplies folds every new answer into the ping it answers, from BOTH
+// of fidomail's views of the inbound mail. recent is updated in place so
+// a later reply in the same page sees the earlier one's effect.
+//
+// Two sources are needed because a robot need not echo our From name onto
+// its answer. O/T-Track+ addresses its PING response to the sysop name
+// from the nodelist, so the by-recipient inbox never shows it and the
+// node would be recorded as never having answered; the by-answered-mail
+// scan finds it through the ^AREPLY kludge instead. Neither subsumes the
+// other -- an answer with no ^AREPLY at all is only findable by name --
+// and an answer both return is stored once, because dedup is by
+// fidomail's message id.
 func (t *PingTracer) pollReplies(ctx context.Context, recent []pingtrace.Ping) error {
 	known, err := t.store.GetKnownReplyIDs(ctx, t.lookback())
 	if err != nil {
 		return fmt.Errorf("pingtrace: read known replies: %w", err)
 	}
+	inbox := func(ctx context.Context, minID uint64, limit int) (InboxPage, error) {
+		return t.mailer.Inbox(ctx, t.cfg.Networks[0], t.cfg.FromName, minID, t.lookback(), limit)
+	}
+	if err := t.drain(ctx, "inbox", inbox, &t.watermark, known, recent); err != nil {
+		return err
+	}
+	replies := func(ctx context.Context, minID uint64, limit int) (InboxPage, error) {
+		return t.mailer.Replies(ctx, t.cfg.Networks[0], t.cfg.FromName, minID, t.lookback(), limit)
+	}
+	if err := t.drain(ctx, "replies", replies, &t.repliesWatermark, known, recent); err != nil {
+		// An older fidomail has no such endpoint. The inbox pass above
+		// already ran, so this is a narrowing of coverage, not an outage:
+		// say so once per poll and carry on rather than failing the pass
+		// and re-reading everything next time.
+		if apiErr := (*APIError)(nil); errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+			logging.Warnf("PING/TRACE: fidomail has no /netmail/replies endpoint; answers addressed to another name will be missed until it is upgraded")
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// drain consumes one paged source to exhaustion, advancing its own
+// watermark. fetch takes the id to resume from and the page size.
+func (t *PingTracer) drain(ctx context.Context, source string,
+	fetch func(context.Context, uint64, int) (InboxPage, error),
+	watermark *uint64, known map[uint64]bool, recent []pingtrace.Ping) error {
 	t.mu.Lock()
-	minID := t.watermark
+	minID := *watermark
 	t.mu.Unlock()
 	if minID > 0 {
 		minID++
 	}
 	const pageSize = 200
 	for {
-		page, err := t.mailer.Inbox(ctx, t.cfg.Networks[0], t.cfg.FromName, minID, t.lookback(), pageSize)
+		page, err := fetch(ctx, minID, pageSize)
 		if err != nil {
-			return fmt.Errorf("pingtrace: read inbox: %w", err)
+			return fmt.Errorf("pingtrace: read %s: %w", source, err)
 		}
 		for _, item := range page.Items {
 			if item.ID > minID {
@@ -167,8 +213,8 @@ func (t *PingTracer) pollReplies(ctx context.Context, recent []pingtrace.Ping) e
 		}
 		if page.MaxID > 0 {
 			t.mu.Lock()
-			if page.MaxID > t.watermark {
-				t.watermark = page.MaxID
+			if page.MaxID > *watermark {
+				*watermark = page.MaxID
 			}
 			t.mu.Unlock()
 		}
@@ -177,6 +223,36 @@ func (t *PingTracer) pollReplies(ctx context.Context, recent []pingtrace.Ping) e
 		}
 		minID++
 	}
+}
+
+// inboundTier narrows fidomail's JSON int to the stored UInt8. A bare
+// conversion would wrap a value outside the declared range (256 -> 0,
+// which reads back as "not reported"), so anything unrecognised is stored
+// as unknown instead of as a different tier. The auth verdict travels
+// separately and is unaffected.
+func inboundTier(tier int) uint8 {
+	if tier < 0 || tier > int(maxInboundTier) {
+		logging.Warnf("PING/TRACE: fidomail reported inbound tier %d, outside the known range; recording it as unknown", tier)
+		return 0
+	}
+	return uint8(tier)
+}
+
+// maxInboundTier is fidomail's highest declared domain.Tier (C).
+const maxInboundTier = 3
+
+// inboundAuth is fidomail's session-security verdict for one inbound
+// message, copied rather than recomputed. An older fidomail reports
+// neither field; that is recorded as "not reported" rather than as
+// "unsecure", because absent provenance is not evidence of a stranger.
+func inboundAuth(item InboxItem) string {
+	if item.Secure == nil {
+		return pingtrace.AuthUnreported
+	}
+	if *item.Secure {
+		return pingtrace.AuthSecure
+	}
+	return pingtrace.AuthUnsecure
 }
 
 // absorbReply classifies one inbound message, stores it, and updates the
@@ -197,6 +273,8 @@ func (t *PingTracer) absorbReply(ctx context.Context, item InboxItem, recent []p
 		Tearline:          item.Tearline,
 		Vias:              item.Vias,
 		UpdatedAt:         t.now(),
+		InboundTier:       inboundTier(item.InboundTier),
+		InboundAuth:       inboundAuth(item),
 	}
 	if reply.ReceivedAt.IsZero() {
 		reply.ReceivedAt = t.now()

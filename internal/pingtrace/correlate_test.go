@@ -94,3 +94,37 @@ func TestClassify(t *testing.T) {
 		t.Errorf("nil oracle: got %s want trace", got)
 	}
 }
+
+// TestMatchRefusesUnsecureSenderOnlyClaim pins the one correlation branch
+// that rests on nothing but the From line. A ping is open against most
+// monitored nodes for most of a 14-day cycle, so an unauthenticated peer
+// that simply claims to be one of them would otherwise be recorded as
+// that node answering -- the exact headline the report publishes.
+func TestMatchRefusesUnsecureSenderOnlyClaim(t *testing.T) {
+	open := []Ping{{Domain: "fidonet", Address: "2:341/66", MSGID: "2:5001/100@fidonet 6a9dee0f",
+		Token: "6a9dee0f", Status: StatusSent, SentTime: time.Date(2026, 9, 6, 22, 49, 47, 0, time.UTC)}}
+	claim := Reply{FromAddr: "2:341/66", Subject: "Pong", Body: "hello"}
+
+	if got := Match(claim, open); got == nil {
+		t.Fatal("an unremarkable reply from the pinged node still matches when the receipt is not flagged")
+	}
+	claim.InboundAuth = AuthSecure
+	if got := Match(claim, open); got == nil {
+		t.Error("an authenticated reply from the pinged node must still match")
+	}
+	claim.InboundAuth = AuthUnsecure
+	if got := Match(claim, open); got != nil {
+		t.Errorf("an unauthenticated sender-only claim must not be credited, matched %s", got.Address)
+	}
+	// ...but quoting the ping back proves the sender saw it, so the
+	// evidence branches stay open to an unauthenticated receipt. This is
+	// how 2:221/0 and 2:221/1's real pongs arrive.
+	quoting := Reply{FromAddr: "2:221/1", Body: "Ref: 6a9dee0f", InboundAuth: AuthUnsecure}
+	if got := Match(quoting, open); got == nil {
+		t.Error("a reply quoting our token must match however it arrived")
+	}
+	byReplyID := Reply{FromAddr: "2:221/1", ReplyID: "2:5001/100@fidonet 6a9dee0f", InboundAuth: AuthUnsecure}
+	if got := Match(byReplyID, open); got == nil {
+		t.Error("a REPLY kludge naming our MSGID must match however it arrived")
+	}
+}

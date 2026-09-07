@@ -90,6 +90,13 @@ type InboxItem struct {
 	Vias          []string  `json:"vias"`
 	Body          string    `json:"body"`
 	BodyTruncated bool      `json:"body_truncated"`
+	// InboundTier is fidomail's receipt-time trust of the session that
+	// delivered this reply (0 unknown, 1 A, 2 B, 3 C) and Secure is
+	// fidomail's own verdict on it. Secure is a POINTER so "an older
+	// fidomail did not report it" stays distinguishable from "it reported
+	// false": absent must not silently mark every reply unauthenticated.
+	InboundTier int   `json:"inbound_tier"`
+	Secure      *bool `json:"secure"`
 }
 
 // InboxPage is one page of inbox items, oldest first, with the id
@@ -150,6 +157,29 @@ func (c *FidomailClient) Inbox(ctx context.Context, network, toName string, minI
 	}
 	var out InboxPage
 	err := c.do(ctx, http.MethodGet, "/api/v1/netmail/inbox", q, nil, &out)
+	return out, err
+}
+
+// Replies lists inbound netmail that ANSWERS mail this node authored as
+// fromName, whatever name the answer was addressed to. Same paging and
+// watermark as Inbox; see the endpoint's own note for why both are read.
+func (c *FidomailClient) Replies(ctx context.Context, network, fromName string, minID uint64, since time.Time, limit int) (InboxPage, error) {
+	q := url.Values{}
+	q.Set("from_name", fromName)
+	if network != "" {
+		q.Set("network", network)
+	}
+	if minID > 0 {
+		q.Set("min_id", strconv.FormatUint(minID, 10))
+	}
+	if !since.IsZero() {
+		q.Set("since", since.UTC().Format(time.RFC3339))
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	var out InboxPage
+	err := c.do(ctx, http.MethodGet, "/api/v1/netmail/replies", q, nil, &out)
 	return out, err
 }
 

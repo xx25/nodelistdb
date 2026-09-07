@@ -209,6 +209,8 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 	    hops Array(String) DEFAULT [],
 	    hop_times Array(DateTime) DEFAULT [],
 	    hop_software Array(String) DEFAULT [],
+	    inbound_tier UInt8 DEFAULT 0,
+	    inbound_auth LowCardinality(String) DEFAULT '',
 	    updated_at DateTime64(3) DEFAULT now64(3)
 	)
 	ENGINE = ReplacingMergeTree(updated_at)

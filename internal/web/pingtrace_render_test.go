@@ -195,3 +195,36 @@ func TestFmtDurationShort(t *testing.T) {
 		}
 	}
 }
+
+// TestPingReplyShowsUnsecureReceipt pins that a reply delivered over an
+// unauthenticated session says so on the page. Four of the first 26 real
+// replies arrived that way (2:221/0 and 2:221/1 depositing directly), and
+// without the badge they are indistinguishable from mail our contracted
+// uplink relayed.
+func TestPingReplyShowsUnsecureReceipt(t *testing.T) {
+	row := func(auth string) storage.PingReplyRow {
+		return storage.PingReplyRow{Reply: pingtrace.Reply{
+			FidomailMessageID: 1, Kind: pingtrace.KindPong, FromName: "Postmaster", FromAddr: "2:221/1",
+			Subject: "Pong receipt", Body: "pong", InboundAuth: auth,
+			ReceivedAt: time.Date(2026, 9, 6, 23, 55, 2, 0, time.UTC),
+		}}
+	}
+	page := func(auth string) string {
+		return renderPingTemplate(t, "pingtrace_node", pingtraceNodePage{
+			Title: "x", ActivePage: "analytics", Version: "test", Address: "2:221/1", Domain: "fidonet",
+			Replies: []replyView{newReplyView(row(auth), "2:221/1", "fidonet")},
+		})
+	}
+	if html := page(pingtrace.AuthUnsecure); !strings.Contains(html, `>unsecure</span>`) ||
+		!strings.Contains(html, "unverified claim") {
+		t.Error("an unauthenticated receipt must be marked on the reply card")
+	}
+	// The other two states carry no badge: "secure" authenticates the link
+	// that relayed the mail, not the sender, and an unreported receipt is
+	// not evidence of anything at all.
+	for _, auth := range []string{pingtrace.AuthSecure, pingtrace.AuthUnreported} {
+		if strings.Contains(page(auth), `>unsecure</span>`) {
+			t.Errorf("auth %q must not be badged unsecure", auth)
+		}
+	}
+}

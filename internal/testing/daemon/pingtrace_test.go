@@ -91,12 +91,18 @@ func (f *fakePingStore) ping(t *testing.T, address, mode string) pingtrace.Ping 
 
 // fakeMailer records sends and serves a scripted inbox + status table.
 type fakeMailer struct {
-	sendErr  error
-	sent     []SendNetmailRequest
-	nextID   uint64
-	inbox    []InboxItem
-	statuses map[uint64]NetmailStatus
-	local    bool
+	sendErr error
+	sent    []SendNetmailRequest
+	nextID  uint64
+	inbox   []InboxItem
+	// answers is what GET /netmail/replies returns: mail answering our
+	// own, whatever name it was addressed to. Disjoint from inbox here so
+	// a test can tell which source found a reply. repliesErr simulates an
+	// older fidomail that has no such endpoint.
+	answers    []InboxItem
+	repliesErr error
+	statuses   map[uint64]NetmailStatus
+	local      bool
 }
 
 func (m *fakeMailer) SendNetmail(_ context.Context, req SendNetmailRequest) (SendNetmailResponse, error) {
@@ -119,6 +125,26 @@ func (m *fakeMailer) NetmailStatus(_ context.Context, id uint64) (NetmailStatus,
 		return NetmailStatus{}, &APIError{Status: 404, Code: "not_found"}
 	}
 	return st, nil
+}
+
+func (m *fakeMailer) Replies(_ context.Context, _, _ string, minID uint64, _ time.Time, limit int) (InboxPage, error) {
+	if m.repliesErr != nil {
+		return InboxPage{}, m.repliesErr
+	}
+	var page InboxPage
+	for _, it := range m.answers {
+		if it.ID < minID {
+			continue
+		}
+		page.Items = append(page.Items, it)
+		if it.ID > page.MaxID {
+			page.MaxID = it.ID
+		}
+		if len(page.Items) >= limit {
+			break
+		}
+	}
+	return page, nil
 }
 
 func (m *fakeMailer) Inbox(_ context.Context, _, toName string, minID uint64, _ time.Time, limit int) (InboxPage, error) {
@@ -499,3 +525,142 @@ func TestSendDueHonoursNodeAllowlist(t *testing.T) {
 }
 
 func timePtr(t time.Time) *time.Time { return &t }
+
+// TestInboundAuthKeepsUnreportedDistinct pins the three-state mapping. The
+// dangerous collapse is absent -> "unsecure": a fidomail predating the API
+// field reports nothing, and reading that as a stranger's deposit would
+// brand every historical reply unauthenticated.
+func TestInboundAuthKeepsUnreportedDistinct(t *testing.T) {
+	yes, no := true, false
+	cases := []struct {
+		name string
+		item InboxItem
+		want string
+	}{
+		{"older fidomail reports nothing", InboxItem{}, pingtrace.AuthUnreported},
+		{"authenticated link", InboxItem{InboundTier: 1, Secure: &yes}, pingtrace.AuthSecure},
+		{"in nodelist, no link", InboxItem{InboundTier: 2, Secure: &no}, pingtrace.AuthUnsecure},
+		{"unknown to the nodelist", InboxItem{InboundTier: 3, Secure: &no}, pingtrace.AuthUnsecure},
+	}
+	for _, c := range cases {
+		if got := inboundAuth(c.item); got != c.want {
+			t.Errorf("%s: inboundAuth = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestInboxDecodesReceiptProvenanceOverTheWire covers the mechanism the
+// three-state design rests on, which a struct-literal test cannot reach:
+// the pointer must survive a real JSON decode, so that an older fidomail
+// (field absent) stays distinguishable from a new one reporting false.
+// Hand-built InboxItem values would keep passing if the json tag broke or
+// omitempty were added on the fidomail side.
+func TestInboxDecodesReceiptProvenanceOverTheWire(t *testing.T) {
+	// Written as fidomail serialises it, not as a Go literal.
+	const body = `{"items":[
+		{"id":1,"from_addr":"2:5020/715","inbound_tier":1,"secure":true},
+		{"id":2,"from_addr":"2:221/1","inbound_tier":2,"secure":false},
+		{"id":3,"from_addr":"1:1/19"},
+		{"id":4,"from_addr":"2:5001/100","inbound_tier":300,"secure":false}
+	],"max_id":4}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	page, err := NewFidomailClient(srv.URL+"/", "secret", time.Second).Inbox(context.Background(), "fidonet", "NodelistDB", 0, time.Time{}, 10)
+	if err != nil {
+		t.Fatalf("inbox: %v", err)
+	}
+	if len(page.Items) != 4 {
+		t.Fatalf("got %d items", len(page.Items))
+	}
+	want := []struct {
+		auth string
+		tier uint8
+	}{
+		{pingtrace.AuthSecure, 1},
+		{pingtrace.AuthUnsecure, 2},
+		// Field absent: an older fidomail, not a stranger.
+		{pingtrace.AuthUnreported, 0},
+		// Out of range: stored as unknown rather than wrapped to 44.
+		{pingtrace.AuthUnsecure, 0},
+	}
+	for i, w := range want {
+		item := page.Items[i]
+		if got := inboundAuth(item); got != w.auth {
+			t.Errorf("item %d: auth = %q, want %q", item.ID, got, w.auth)
+		}
+		if got := inboundTier(item.InboundTier); got != w.tier {
+			t.Errorf("item %d: tier = %d, want %d", item.ID, got, w.tier)
+		}
+		_ = i
+	}
+	if page.Items[2].Secure != nil {
+		t.Error("an absent secure field must decode to nil, not to false")
+	}
+	if page.Items[1].Secure == nil || *page.Items[1].Secure {
+		t.Error("an explicit false must decode to a non-nil false")
+	}
+}
+
+// TestPollReadsBothSources is the fix for answers that never reach the
+// by-recipient inbox: O/T-Track+ addresses its PING response to the sysop
+// name from the nodelist, so only the by-answered-mail scan sees it. The
+// two sources share an id space but admit different sets, which is why
+// each carries its own watermark.
+func TestPollReadsBothSources(t *testing.T) {
+	now := time.Date(2026, 9, 6, 23, 0, 0, 0, time.UTC)
+	store := newFakePingStore()
+	sent := now.Add(-30 * time.Minute)
+	for _, addr := range []string{"1:320/119", "2:341/66"} {
+		p := pingtrace.Ping{Domain: "fidonet", Address: addr, Mode: "routed",
+			SentTime: sent, Status: pingtrace.StatusSent,
+			MSGID: "2:5001/100@fidonet msg-" + addr, Token: "tok-" + addr}
+		// Keyed as StorePing keys it, so the absorbed verdict overwrites
+		// this row instead of sitting beside it.
+		store.pings[pingKey(p)] = p
+	}
+	mailer := &fakeMailer{
+		// Addressed to us: the ordinary path.
+		inbox: []InboxItem{{ID: 10, FromAddr: "2:341/66", ToName: "NodelistDB", Subject: "Pong",
+			ReplyID: "2:5001/100@fidonet msg-2:341/66", ReceivedAt: now}},
+		// Addressed to the sysop: invisible to the inbox scan.
+		answers: []InboxItem{{ID: 11, FromAddr: "1:320/119", ToName: "Dmitry Protasoff",
+			FromName: "O/T-Track+ 2.85", Subject: `"Ping"-response processing at destination`,
+			ReplyID: "2:5001/100@fidonet msg-1:320/119", ReceivedAt: now}},
+	}
+	tr := testTracer(store, mailer, now)
+	recent, _ := store.GetRecentPings(context.Background(), tr.lookback())
+	if err := tr.pollReplies(context.Background(), recent); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if len(store.replies) != 2 {
+		t.Fatalf("both sources must be drained, stored %d replies", len(store.replies))
+	}
+	if got := store.ping(t, "1:320/119", "routed").Status; got != pingtrace.StatusPong {
+		t.Errorf("the answer addressed to the sysop must still flip its ping, status = %q", got)
+	}
+	if tr.watermark != 10 || tr.repliesWatermark != 11 {
+		t.Errorf("each source keeps its own watermark, got inbox=%d replies=%d", tr.watermark, tr.repliesWatermark)
+	}
+
+	// An older fidomail has no such endpoint: the inbox pass still counts,
+	// and the poll does not fail.
+	store2 := newFakePingStore()
+	p2 := pingtrace.Ping{Domain: "fidonet", Address: "2:341/66", Mode: "routed",
+		SentTime: sent, Status: pingtrace.StatusSent, MSGID: "2:5001/100@fidonet m", Token: "tk"}
+	store2.pings[pingKey(p2)] = p2
+	old := &fakeMailer{
+		inbox:      []InboxItem{{ID: 7, FromAddr: "2:341/66", ToName: "NodelistDB", Subject: "Pong", ReplyID: "2:5001/100@fidonet m", ReceivedAt: now}},
+		repliesErr: &APIError{Status: http.StatusNotFound, Code: "not_found"},
+	}
+	tr2 := testTracer(store2, old, now)
+	recent2, _ := store2.GetRecentPings(context.Background(), tr2.lookback())
+	if err := tr2.pollReplies(context.Background(), recent2); err != nil {
+		t.Fatalf("a missing replies endpoint must not fail the poll: %v", err)
+	}
+	if len(store2.replies) != 1 {
+		t.Errorf("the inbox pass must still have been absorbed, stored %d", len(store2.replies))
+	}
+}

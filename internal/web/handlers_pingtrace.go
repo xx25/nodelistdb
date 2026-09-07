@@ -64,6 +64,26 @@ type replyView struct {
 	// PingAnchor is the fragment id of the ping this reply answers, empty
 	// when it was never matched to one.
 	PingAnchor string
+	// Unsecure marks a reply that arrived over a session fidomail never
+	// authenticated, with AuthTitle spelling out what that does and does
+	// not mean. Empty for a reply whose provenance was not reported.
+	Unsecure  bool
+	AuthTitle string
+}
+
+// replyAuth renders the receipt provenance of one reply. Only the
+// unauthenticated case is shown: badging the other 85% "secure" would
+// overstate it, since tier A authenticates the link that relayed the mail
+// to us, never the node the From line claims.
+func replyAuth(auth string) (unsecure bool, title string) {
+	switch auth {
+	case pingtrace.AuthUnsecure:
+		return true, "Delivered over a session fidomail did not authenticate " +
+			"(no configured link): the sender address on this reply is an unverified claim"
+	case pingtrace.AuthSecure:
+		return false, "Relayed to us by an authenticated link (which vouches for the transport, not for the sender address)"
+	}
+	return false, ""
 }
 
 // pingAnchor derives a fragment id from a MSGID ("2:5001/100@fidonet
@@ -442,6 +462,7 @@ func newReplyView(rep storage.PingReplyRow, address, domain string) replyView {
 	if rep.PingMSGID != "" {
 		v.PingAnchor = pingAnchor(rep.PingMSGID)
 	}
+	v.Unsecure, v.AuthTitle = replyAuth(rep.InboundAuth)
 	switch rep.Kind {
 	case pingtrace.KindPong:
 		v.KindClass = "badge-success"

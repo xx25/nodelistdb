@@ -31,7 +31,7 @@ const pingTestInsertSQL = `INSERT INTO ping_tests
 const pingReplyInsertSQL = `INSERT INTO ping_replies
 	(fidomail_message_id, kind, ping_domain, ping_zone, ping_net, ping_node, ping_sent_time, ping_msgid,
 	 msgid, reply_id, from_name, from_addr, to_name, subject, body, date, received_at, pid, tearline,
-	 vias, hops, hop_times, hop_software, updated_at)`
+	 vias, hops, hop_times, hop_software, inbound_tier, inbound_auth, updated_at)`
 
 const pingTestSelectColumns = `domain, zone, net, node, address, mode, sent_time, token, msgid, fidomail_message_id,
 	first_hop, route_source, status, dispatched_time, reply_time, rtt_seconds,
@@ -309,7 +309,7 @@ func (s *ClickHouseStorage) StorePingReply(ctx context.Context, r pingtrace.Repl
 	if err := batch.Append(
 		r.FidomailMessageID, r.Kind, r.PingDomain, uint16(r.PingZone), uint16(r.PingNet), uint16(r.PingNode), chTime(r.PingSentTime), r.PingMSGID,
 		r.MSGID, r.ReplyID, r.FromName, r.FromAddr, r.ToName, r.Subject, r.Body, chTime(r.Date), chTime(r.ReceivedAt), r.PID, r.Tearline,
-		vias, hopAddrs, hopTimes, hopSoft, updated.UTC(),
+		vias, hopAddrs, hopTimes, hopSoft, r.InboundTier, r.InboundAuth, updated.UTC(),
 	); err != nil {
 		return fmt.Errorf("append reply: %w", err)
 	}

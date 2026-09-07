@@ -154,7 +154,7 @@
         <div class="results-header">
             <div>
                 <p class="section-tag">{{.Received}}</p>
-                <h3><span class="badge {{.KindClass}}">{{.R.Kind}}</span> {{.R.Subject}}</h3>
+                <h3><span class="badge {{.KindClass}}">{{.R.Kind}}</span>{{if .Unsecure}} <span class="badge badge-warning" title="{{.AuthTitle}}">unsecure</span>{{end}} {{.R.Subject}}</h3>
                 <p class="muted">From {{.R.FromName}}, {{if .FromURL}}<a href="{{.FromURL}}">{{.R.FromAddr}}</a>{{else}}{{.R.FromAddr}}{{end}}{{if .R.PingMSGID}} &middot; answers {{if .PingAnchor}}<a href="#{{.PingAnchor}}"><code>{{.R.PingMSGID}}</code></a>{{else}}<code>{{.R.PingMSGID}}</code>{{end}}{{end}}</p>
             </div>
         </div>

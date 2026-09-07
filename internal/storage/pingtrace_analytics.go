@@ -214,7 +214,7 @@ func (po *PingTraceOperations) GetNodePingReplies(ctx context.Context, domain st
 	}
 	query := fmt.Sprintf(`SELECT fidomail_message_id, kind, ping_domain, ping_zone, ping_net, ping_node, ping_sent_time, ping_msgid,
 			msgid, reply_id, from_name, from_addr, to_name, subject, body, date, received_at, pid, tearline,
-			vias, hops, hop_times, hop_software, updated_at
+			vias, hops, hop_times, hop_software, inbound_tier, inbound_auth, updated_at
 		FROM ping_replies FINAL
 		WHERE ping_zone = ? AND ping_net = ? AND ping_node = ? %s
 		ORDER BY received_at DESC
@@ -247,7 +247,7 @@ func scanReplyRow(rows *sql.Rows) (PingReplyRow, error) {
 	if err := rows.Scan(
 		&r.FidomailMessageID, &r.Kind, &r.PingDomain, &pz, &pn, &pnode, &pingSent, &r.PingMSGID,
 		&r.MSGID, &r.ReplyID, &r.FromName, &r.FromAddr, &r.ToName, &r.Subject, &r.Body, &date, &received, &r.PID, &r.Tearline,
-		&r.Vias, &hops, &times, &soft, &updated,
+		&r.Vias, &hops, &times, &soft, &r.InboundTier, &r.InboundAuth, &updated,
 	); err != nil {
 		return r, fmt.Errorf("scan ping reply: %w", err)
 	}

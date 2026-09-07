@@ -96,7 +96,28 @@ type Reply struct {
 	Tearline   string
 	Vias       []string
 	UpdatedAt  time.Time
+
+	// InboundTier and InboundAuth record HOW this reply reached us, not
+	// what it says. On an unauthenticated session (fidomail tier B or C)
+	// the From address is an unverified claim -- worth keeping beside the
+	// evidence, because the whole output of this measurement is "node X
+	// answered". Tier A is no proof of the ORIGINATOR either: it says a
+	// contracted link relayed the mail to us.
+	//
+	// InboundAuth is fidomail's verdict copied verbatim ("secure" /
+	// "unsecure"), empty when it did not report one, so the rule for which
+	// tiers count as authenticated is never restated here and cannot drift
+	// from fidomail's own Unsecure view.
+	InboundTier uint8
+	InboundAuth string
 }
+
+// Inbound auth verdicts, as stored in ping_replies.inbound_auth.
+const (
+	AuthUnreported = ""
+	AuthSecure     = "secure"
+	AuthUnsecure   = "unsecure"
+)
 
 var (
 	ndrRe = regexp.MustCompile(`(?i)\bNDR\b|undeliverable|non-?delivery|could not be delivered|delivery (failure|failed)`)
@@ -109,7 +130,8 @@ var (
 //
 // Evidence in order of strength: the REPLY kludge naming our MSGID; the
 // subject token; our MSGID quoted anywhere in the body; and, for a reply
-// coming from the pinged node itself, the only open ping to that node.
+// coming from the pinged node itself that arrived over an authenticated
+// session, the only open ping to that node.
 // Flag order or wording is never consulted here -- that is Classify's job.
 func Match(r Reply, open []Ping) *Ping {
 	if rid := normalizeMSGID(r.ReplyID); rid != "" {
@@ -134,6 +156,23 @@ func Match(r Reply, open []Ping) *Ping {
 	// pings to it in the window (mode "both", or a re-ping while an
 	// earlier one is still open) the one still waiting for an answer is
 	// the most plausible target, and failing that the newest.
+	//
+	// This branch rests on NOTHING but the From line, so it is refused to
+	// a reply that arrived over a session fidomail did not authenticate.
+	// On tier B or C the sender address is an unverified claim, a ping is
+	// open against most monitored nodes for most of every cycle, and
+	// nothing above needs to be known to forge one -- so without this
+	// gate a stranger could have any node recorded as "answered" without
+	// ever seeing its ping. The evidence branches above stay ungated on
+	// purpose: quoting our token or MSGID back proves the sender saw the
+	// ping, which is why the real unauthenticated answers (2:221/0 and
+	// 2:221/1 deposit directly, and quote the token) still match.
+	//
+	// A refused reply is not discarded: it is stored unmatched, with its
+	// sender and body, so a claim we would not credit is still visible.
+	if r.InboundAuth == AuthUnsecure {
+		return nil
+	}
 	from := Node3D(r.FromAddr)
 	var best *Ping
 	for i := range open {

@@ -512,6 +512,8 @@ CREATE TABLE IF NOT EXISTS nodelistdb.ping_replies
     `hops` Array(String) DEFAULT [],            -- the path quoted in the body (trace notices carry it too)
     `hop_times` Array(DateTime) DEFAULT [],
     `hop_software` Array(String) DEFAULT [],
+    `inbound_tier` UInt8 DEFAULT 0,             -- fidomail receipt trust: 0 not reported, 1 A, 2 B, 3 C
+    `inbound_auth` LowCardinality(String) DEFAULT '', -- fidomail's verdict: '' not reported | secure | unsecure
     `updated_at` DateTime64(3) DEFAULT now64(3)
 )
 ENGINE = ReplacingMergeTree(updated_at)
