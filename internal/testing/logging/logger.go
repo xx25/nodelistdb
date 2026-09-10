@@ -249,3 +249,26 @@ func Printf(format string, v ...interface{}) {
 func Println(v ...interface{}) {
 	GetLogger().Info(fmt.Sprint(v...))
 }
+
+// DebugEnabled reports whether debug messages are being emitted. Callers use
+// it to skip assembling expensive diagnostics, and to decide whether to hand
+// a chatty third-party library a live writer or a sink.
+func DebugEnabled() bool {
+	return GetLogger().logger.GetLevel() <= zerolog.DebugLevel
+}
+
+// debugWriter adapts the global logger to io.Writer so a library that only
+// speaks io.Writer (log/slog's handlers, say) can be routed into our log
+// rather than discarded or dumped on stderr.
+type debugWriter struct{}
+
+func (debugWriter) Write(p []byte) (int, error) {
+	Debugf("%s", strings.TrimRight(string(p), "\n"))
+	return len(p), nil
+}
+
+// DebugWriter returns an io.Writer that forwards each write to the global
+// logger at debug level.
+func DebugWriter() io.Writer {
+	return debugWriter{}
+}

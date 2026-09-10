@@ -56,8 +56,7 @@ func finishEMSISession(ctx context.Context, sess *emsi.Session, expectedAddress 
 	defer cancel()
 	_ = conn.SetDeadline(time.Now().Add(emsiFinishTimeout))
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	res, err := drv.Exchange(ctx, conn, xfer.RoleOriginator, nothingToSend{}, declineEverything{}, log)
+	res, err := drv.Exchange(ctx, conn, xfer.RoleOriginator, nothingToSend{}, declineEverything{}, transferLogger())
 	if err != nil {
 		return fmt.Errorf("%s transfer phase: %w", name, err)
 	}
@@ -77,6 +76,17 @@ func finishEMSISession(ctx context.Context, sess *emsi.Session, expectedAddress 
 // emsiLingerWindow bounds the wait for the remote to close after the
 // transfer phase.
 const emsiLingerWindow = 1500 * time.Millisecond
+
+// transferLogger routes the transfer driver's slog output into our own
+// logger at debug level. The alternative — discarding it — makes an
+// interop failure in the data phase undiagnosable, which is exactly the
+// class of bug this phase exists to avoid causing.
+func transferLogger() *slog.Logger {
+	if !logging.DebugEnabled() {
+		return slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	return slog.New(slog.NewTextHandler(logging.DebugWriter(), &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
 
 // nothingToSend is the send side of an empty batch.
 type nothingToSend struct{}
