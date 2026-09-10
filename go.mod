@@ -26,7 +26,7 @@ require (
 
 replace github.com/mfkenney/go-serial/v2 => github.com/xx25/go-serial/v2 v2.0.0-20260621135723-af8dce8aa671
 
-replace github.com/pstroka/zmodem => github.com/xx25/go-zmodem v0.0.0-20260622223512-3abc1a5e9fbd
+replace github.com/pstroka/zmodem => github.com/xx25/go-zmodem v0.0.0-20260910145552-e24cee1586cf
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
