@@ -82,7 +82,7 @@
 <article class="card ping-card"{{if .Anchor}} id="{{.Anchor}}"{{end}}>
     <div class="results-header">
         <div>
-            <p class="section-tag">{{if eq .P.Mode "direct"}}Direct{{else}}Routed{{end}} ping &middot; {{.Sent}}</p>
+            <p class="section-tag">{{if eq .P.Mode "direct"}}Direct-dial ping (FSC-0053 DIR){{else}}Routed ping{{end}} &middot; {{.Sent}}</p>
             <h3>{{if .RTT}}Answered in {{.RTT}}{{else}}{{.StatusLabel}}{{end}}</h3>
             <p class="muted">
                 {{if .RTT}}The robot at {{.P.ReplyFromAddr}} bounced it back {{.RTT}} after it left {{.Origin}}.
@@ -134,7 +134,10 @@
     {{if .Back}}
     <section class="ping-path">
         <h4>Return path</h4>
-        <p class="muted">The answer's own Via chain: the way back from the robot to {{.Origin}}.</p>
+        <p class="muted">The answer's own Via chain: the way back from the robot to {{.Origin}}, as each
+            relay on it recorded itself. The answer need not come back the way the ping went out, and a
+            relay that stamps no Via line of its own leaves no mark here, so this is the relays' account
+            of the trip rather than a verified route.</p>
         {{template "ping_path_table" .Back}}
     </section>
     {{end}}

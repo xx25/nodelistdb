@@ -97,11 +97,13 @@ type PingTraceSummary struct {
 	NotTested   int `json:"not_tested"`
 	NeverPinged int `json:"never_pinged"`
 
-	// AnsweredDirect counts the answered nodes whose answer was handed to
-	// us by a peer we hold no link with -- the node dialling this system
-	// directly -- rather than relayed back down our uplink. A property of
-	// the ANSWER's delivery, not of the path the ping took getting there.
-	AnsweredDirect int `json:"answered_direct"`
+	// AnsweredUnsecure counts the answered nodes whose answer reached us
+	// over a session we could not authenticate: no password-protected link
+	// of ours relayed it. A property of the ANSWER's last wire hop, not of
+	// the path the ping took getting there, and no evidence of WHICH system
+	// handed it over -- the answering node, one of its uplinks, or a
+	// link-less session either side placed all read the same way here.
+	AnsweredUnsecure int `json:"answered_unsecure"`
 
 	MedianRTTSeconds uint32 `json:"median_rtt_seconds"`
 	MedianHops       int    `json:"median_hops"`
@@ -483,7 +485,7 @@ func foldPingTraceSummary(summary *PingTraceSummary, index map[string]int, pings
 			case n.Latest.Status == pingtrace.StatusPong:
 				summary.Answered++
 				if n.Latest.ReplyInboundAuth == pingtrace.AuthUnsecure {
-					summary.AnsweredDirect++
+					summary.AnsweredUnsecure++
 				}
 			case n.Latest.Status == pingtrace.StatusTimeout:
 				summary.Timeouts++

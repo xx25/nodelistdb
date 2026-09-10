@@ -52,6 +52,39 @@ func TestParseViaLine(t *testing.T) {
 			in:   "2:280/5555 @20260903.200054.188.UTC FMail-W32(Toss) 2.3.0.1-B20240319",
 			want: Hop{Address: "2:280/5555", Time: time.Date(2026, 9, 3, 20, 0, 54, 0, time.UTC), TimeIsUTC: true, Software: "FMail-W32(Toss) 2.3.0.1-B20240319"},
 		},
+		{
+			// Verbatim from the pong 2:423/39 sent on 2026-09-07: T-Mail
+			// stamps local time and writes the offset after the marker, so
+			// 02:46:32+2 is 00:46:32 UTC -- which is the second fidomail
+			// logged the inbound session. Read as bare ".UTC" the hop was
+			// shown two hours in the future, ahead of our own receipt.
+			name: "T-Mail zone offset after the UTC marker",
+			in:   "2:423/81@fidonet.org @20260907.024632.UTC+2 T-Mail 2608.OS2 0428",
+			want: Hop{Address: "2:423/81", Time: time.Date(2026, 9, 7, 0, 46, 32, 0, time.UTC), TimeIsUTC: true, Software: "T-Mail 2608.OS2 0428"},
+		},
+		{
+			name: "four-digit offset west of UTC",
+			in:   "1:153/757 @20260907.194500.UTC-0430 binkd/1.1a",
+			want: Hop{Address: "1:153/757", Time: time.Date(2026, 9, 8, 0, 15, 0, 0, time.UTC), TimeIsUTC: true, Software: "binkd/1.1a"},
+		},
+		{
+			// The two ends of the real range are not symmetric: UTC+14
+			// exists (Kiribati), UTC-14 does not, and a stamp shifted by an
+			// offset no zone has is worse than an unshifted one.
+			name: "offset beyond the western end is not an offset",
+			in:   "2:280/5555 @20260907.194500.UTC-14 SomeMailer 1.0",
+			want: Hop{Address: "2:280/5555", Time: time.Date(2026, 9, 7, 19, 45, 0, 0, time.UTC), TimeIsUTC: true, Software: "SomeMailer 1.0"},
+		},
+		{
+			name: "offset at the eastern end still applies",
+			in:   "3:770/1 @20260907.194500.UTC+14 SomeMailer 1.0",
+			want: Hop{Address: "3:770/1", Time: time.Date(2026, 9, 7, 5, 45, 0, 0, time.UTC), TimeIsUTC: true, Software: "SomeMailer 1.0"},
+		},
+		{
+			name: "colon-separated offset",
+			in:   "2:5020/715 @20260907.034500.UTC+01:00 hpt/lnx 1.9",
+			want: Hop{Address: "2:5020/715", Time: time.Date(2026, 9, 7, 2, 45, 0, 0, time.UTC), TimeIsUTC: true, Software: "hpt/lnx 1.9"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

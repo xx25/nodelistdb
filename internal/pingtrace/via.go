@@ -17,6 +17,7 @@ package pingtrace
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -55,7 +56,13 @@ var (
 	// fraction is optional and unanchored, so a version glued straight onto
 	// the stamp with no space ("...200054.2.3.0") would lose its first
 	// digit; no mailer writes that, and the canonical form is space-separated.
-	canonicalTimeRe = regexp.MustCompile(`@?\b(\d{8})[.\s](\d{6}|\d{4})(?:\.\d{1,3})?(?:\.W[A-Za-z0-9]{0,4})?(\.UTC)?\b`)
+	//
+	// T-Mail writes the zone offset after the marker ("@20260907.024632.UTC+2",
+	// seen on 2:423/81), which the spec does not define. That stamp is LOCAL
+	// time, so reading the ".UTC" and stopping there both misdated the hop by
+	// the offset and left "+2" at the front of the software name; the offset is
+	// captured and applied instead.
+	canonicalTimeRe = regexp.MustCompile(`@?\b(\d{8})[.\s](\d{6}|\d{4})(?:\.\d{1,3})?(?:\.W[A-Za-z0-9]{0,4})?(?:(\.UTC)([+-]\d{1,2}(?::?\d{2})?)?)?\b`)
 
 	// clockTimeRe is the deprecated FTS-4009 §4 spelling "YYYYMMDD HH:MM[:SS]".
 	clockTimeRe = regexp.MustCompile(`\b(\d{8})\s+(\d{2}):(\d{2})(?::(\d{2}))?\b`)
@@ -112,6 +119,16 @@ func ParseViaLine(line string) (Hop, bool) {
 		if t, err := time.Parse("20060102150405", date+clock); err == nil {
 			h.Time = t
 			h.TimeIsUTC = m[6] >= 0
+			// An offset marks the stamp as local: convert it to the UTC
+			// the rest of the chain is compared in. An offset we cannot
+			// read leaves the stamp as the mailer wrote it rather than
+			// shifting it by a guess.
+			if m[8] >= 0 {
+				if off, ok := utcOffset(rest[m[8]:m[9]]); ok {
+					h.Time = t.Add(-off)
+					h.TimeIsUTC = true
+				}
+			}
 		}
 		rest = rest[:m[0]] + " " + rest[m[1]:]
 	} else if m := clockTimeRe.FindStringSubmatchIndex(rest); m != nil {
@@ -143,6 +160,41 @@ func ParseViaLine(line string) (Hop, bool) {
 	rest = spaceRe.ReplaceAllString(rest, " ")
 	h.Software = strings.Trim(rest, " -;")
 	return h, true
+}
+
+// utcOffset reads the zone offset a mailer glued onto its ".UTC" marker
+// ("+2", "-5", "+0200", "+02:00") as a duration east of UTC.
+func utcOffset(s string) (time.Duration, bool) {
+	if len(s) < 2 {
+		return 0, false
+	}
+	sign := time.Duration(1)
+	if s[0] == '-' {
+		sign = -1
+	}
+	digits := strings.Replace(s[1:], ":", "", 1)
+	var hours, minutes int
+	switch len(digits) {
+	case 1, 2:
+		hours, _ = strconv.Atoi(digits)
+	case 3, 4:
+		hours, _ = strconv.Atoi(digits[:len(digits)-2])
+		minutes, _ = strconv.Atoi(digits[len(digits)-2:])
+	default:
+		return 0, false
+	}
+	// Nothing past UTC+14 / UTC-12 exists, and the two ceilings differ: a
+	// single "hours > 14" test accepts "UTC-14" and silently shifts the hop
+	// by an offset no zone has, which is worse than leaving the stamp as the
+	// mailer wrote it.
+	east := 14
+	if sign < 0 {
+		east = 12
+	}
+	if hours > east || minutes > 59 {
+		return 0, false
+	}
+	return sign * (time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute), true
 }
 
 // ParseVias parses a message's own Via chain (the kludge values, in wire

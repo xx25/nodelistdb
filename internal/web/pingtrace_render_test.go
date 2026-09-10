@@ -234,11 +234,11 @@ func TestPingReplyShowsUnsecureReceipt(t *testing.T) {
 	}
 }
 
-// TestReportMarksAnswersDeliveredDirect pins the report's answer-delivery
-// column. A pong handed to us by the answering node over a session we
-// hold no link for did not come back down our uplink with the rest of the
-// mail, and nothing else on the page distinguishes the two.
-func TestReportMarksAnswersDeliveredDirect(t *testing.T) {
+// TestReportMarksUnsecureAnswerReceipts pins the report's answer-receipt
+// column. A pong that reached us over a session we could not authenticate
+// carries a sender address we cannot check, and nothing else on the page
+// distinguishes it from one a password-protected link relayed to us.
+func TestReportMarksUnsecureAnswerReceipts(t *testing.T) {
 	direct, routed := samplePing(), samplePing()
 	direct.ReplyInboundAuth, direct.ReplyInboundTier = pingtrace.AuthUnsecure, 2
 	routed.Address, routed.Zone, routed.Net, routed.Node = "2:221/1", 2, 221, 1
@@ -250,30 +250,43 @@ func TestReportMarksAnswersDeliveredDirect(t *testing.T) {
 			{Domain: "fidonet", Zone: 2, Net: 280, Node: 5555, Address: "2:280/5555", HasPing: true, Latest: &direct},
 			{Domain: "fidonet", Zone: 2, Net: 221, Node: 1, Address: "2:221/1", HasPing: true, Latest: &routed},
 		},
-		PingNodes: 2, Answered: 2, AnsweredDirect: 1,
+		PingNodes: 2, Answered: 2, AnsweredUnsecure: 1,
 	}
 	rows := make([]pingNodeRow, 0, len(summary.Nodes))
 	for _, n := range summary.Nodes {
 		rows = append(rows, newPingNodeRow(n))
 	}
-	if !rows[0].AnsweredDirect || rows[1].AnsweredDirect {
-		t.Fatalf("only the unauthenticated receipt is direct: %v / %v", rows[0].AnsweredDirect, rows[1].AnsweredDirect)
+	if !rows[0].AnsweredUnsecure || rows[1].AnsweredUnsecure {
+		t.Fatalf("only the unauthenticated receipt is badged unsecure: %v / %v", rows[0].AnsweredUnsecure, rows[1].AnsweredUnsecure)
 	}
 	html := renderPingTemplate(t, "pingtrace_analytics", pingtraceAnalyticsPage{
 		Title: "x", ActivePage: "analytics", Version: "test", Summary: summary, Rows: rows, Days: 90,
 	})
-	if !strings.Contains(html, ">direct</small>") {
-		t.Error("a directly delivered answer must be marked in its row")
+	if !strings.Contains(html, ">unsecure</small>") {
+		t.Error("an unauthenticated answer receipt must be marked in its row")
 	}
-	if !strings.Contains(html, "Answered direct") {
+	if !strings.Contains(html, "Unsecure receipts") {
 		t.Error("the summary must count them")
 	}
-	if strings.Count(html, ">direct</small>") != 1 {
-		t.Errorf("only the direct answer carries the mark, got %d", strings.Count(html, ">direct</small>"))
+	if strings.Count(html, ">unsecure</small>") != 1 {
+		t.Errorf("only the unauthenticated receipt carries the mark, got %d", strings.Count(html, ">unsecure</small>"))
 	}
-	// The tooltip must say what it means, since the word alone reads like
-	// the separate direct-DIAL ping mode.
-	if !strings.Contains(html, "not relayed back down our uplink") {
-		t.Error("the PING badge tooltip must explain the delivery")
+	// The badge must not name a deliverer: the session verdict cannot tell
+	// the answering node from its uplink, and a sysop reading "the node
+	// dialled us" about mail his own uplink handed over would be told
+	// something we never measured.
+	for _, claim := range []string{
+		"handed the answer over itself",
+		"not relayed back down our uplink",
+		"the node itself, not routed back",
+	} {
+		if strings.Contains(html, claim) {
+			t.Errorf("the page must not claim who delivered the answer: %q", claim)
+		}
+	}
+	// It must still say what the badge does mean, since the word alone
+	// reads like the separate direct-DIAL ping mode.
+	if !strings.Contains(html, "could not authenticate") {
+		t.Error("the PING badge tooltip must explain the receipt")
 	}
 }

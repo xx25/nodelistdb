@@ -79,10 +79,13 @@ type Ping struct {
 	RobotTearline     string
 	// ReplyInboundAuth / ReplyInboundTier record how the ANSWER reached
 	// us, copied from the reply that set this verdict. An answer on an
-	// unauthenticated session was handed to us by a peer we have no link
-	// with -- in practice the answering node dialing us directly -- rather
-	// than relayed back down our uplink, which is a different thing from
-	// the path the ping took getting there.
+	// unauthenticated session was not relayed to us by a password-protected
+	// link, which is a different thing from the path the ping took getting
+	// there -- and says nothing about WHO handed it over: the answering
+	// node, one of its uplinks, a configured link we kept passwordless, and
+	// a link-less session either side placed all land here alike. Only the
+	// mailer's own session log can name the peer; fidomail's inbox API does
+	// not report it, so no reader may present this as "the node dialled us".
 	ReplyInboundAuth string
 	ReplyInboundTier uint8
 	OutHops          []Hop

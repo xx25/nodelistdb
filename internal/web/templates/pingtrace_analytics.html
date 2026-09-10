@@ -55,8 +55,8 @@
         <p>Not tested</p>
     </div>
     <div class="stats-box">
-        <h3>{{.Summary.AnsweredDirect}}</h3>
-        <p>Answered direct</p>
+        <h3>{{.Summary.AnsweredUnsecure}}</h3>
+        <p>Unsecure receipts</p>
     </div>
     <div class="stats-box">
         <h3>{{if .Summary.MedianRTTSeconds}}{{.Summary.MedianRTTSeconds | secondsShort}}{{else}}&ndash;{{end}}</h3>
@@ -82,13 +82,13 @@
         <dt><span class="badge badge-warning">PING</span></dt><dd>no answer yet</dd>
         <dt><span class="badge badge-danger">PING</span></dt><dd>bounced, refused, or never left this node</dd>
         <dt><span class="badge badge-secondary">PING</span></dt><dd>not pinged yet, or not tested at all &mdash; the row says which</dd>
-        <dt><span class="badge badge-warning">direct</span></dt><dd>the answer was handed to us by the node itself, not routed back</dd>
+        <dt><span class="badge badge-warning">unsecure</span></dt><dd>the answer reached us over a session we could not authenticate</dd>
         <dt><span class="badge badge-success">TRACE</span></dt><dd>notified us while a ping passed <em>through</em> it</dd>
         <dt><span class="badge badge-warning">TRACE</span></dt><dd>pings passed through and it stayed silent</dd>
         <dt><span class="badge badge-secondary">TRACE</span></dt><dd>nothing of ours has passed through it</dd>
     </dl>
     <details class="method">
-        <summary>Why a TRACE node can be untested, and what <em>refused</em> and <em>direct</em> mean</summary>
+        <summary>Why a TRACE node can be untested, and what <em>refused</em> and <em>unsecure</em> mean</summary>
         <p class="text-muted">
             <strong>TRACE is about transit only.</strong> It is never about a node answering its own
             ping &mdash; a node can answer in a minute and still read <em>nothing of ours has passed
@@ -113,10 +113,17 @@
             per-address, so the row names the address that answers on their behalf.
         </p>
         <p class="text-muted">
-            <strong>Direct</strong> describes how the ANSWER arrived, not which way the ping went
-            out: the answering system connected to 2:5001/100 itself over a session we hold no link
-            for and cannot authenticate. Such a reply's sender address is a claim rather than proof,
-            so it is never credited on the strength of that address alone.
+            <strong>Unsecure</strong> describes how the ANSWER reached us, not which way the ping
+            went out and not whether the ping itself was direct-dialled (that is labelled on each
+            node's own page). It means the session that delivered the answer was not a
+            password-protected link of ours, so nothing on the wire tells us which system handed
+            the mail over: the answering node may have connected to 2:5001/100 itself, or one of
+            its uplinks may have, or it may have come back on a link-less session either side
+            placed. What it does mean is that such a reply's sender address is a claim rather than
+            proof, so an answer is never credited on the strength of that address alone. The
+            <code>^AVia</code> chain on the node's page shows the route the answer took, but that
+            chain is written by the relays themselves, so it is read as their account of the trip,
+            not as proof of the last hop.
         </p>
     </details>
 </div>
@@ -143,7 +150,7 @@
             <td>{{replaceUnderscores .N.SystemName}}<br><small class="text-muted">{{replaceUnderscores .N.SysopName}}</small></td>
             <td class="nowrap" data-value="{{.StatusLabel}}">{{if .N.HasPing}}<span class="badge {{.StatusClass}}" title="{{.PingTitle}}">PING</span>{{end}} {{if .N.HasTrace}}<span class="badge {{.TraceClass}}" title="{{.TraceTitle}}">TRACE</span>{{end}}{{if .NotTested}}<br><small class="text-muted">not tested</small>{{end}}</td>
             <td class="nowrap" {{if .Latest}}data-value="{{.Latest.P.SentTime.Unix}}"{{else}}data-value="0"{{end}}>{{if and .Latest (not .NotTested)}}<span class="text-muted">{{.Latest.Sent}}</span>{{end}}</td>
-            <td class="num" {{if .Latest}}data-value="{{.Latest.P.RTTSeconds}}"{{else}}data-value="0"{{end}}>{{if .Latest}}{{.Latest.RTT}}{{end}}{{if .AnsweredDirect}}<br><small class="badge badge-warning" title="Delivered straight to us over a session we did not authenticate &mdash; the node handed the answer over itself instead of routing it back">direct</small>{{end}}</td>
+            <td class="num" {{if .Latest}}data-value="{{.Latest.P.RTTSeconds}}"{{else}}data-value="0"{{end}}>{{if .Latest}}{{.Latest.RTT}}{{end}}{{if .AnsweredUnsecure}}<br><small class="badge badge-warning" title="The answer reached us over a session we could not authenticate: no password-protected link of ours relayed it, and nothing on the wire says which system handed it over &mdash; the node itself, one of its uplinks, or a link-less session. Its sender address is a claim rather than proof.">unsecure</small>{{end}}</td>
             <td class="num" {{if .Latest}}data-value="{{.Latest.OutCount}}"{{else}}data-value="0"{{end}}>{{if .Latest}}{{if .Latest.OutCount}}{{.Latest.OutCount}}{{end}}{{end}}</td>
             <td class="nowrap" data-value="{{.TraceLabel}}">{{if .N.HasTrace}}<span class="badge {{.TraceClass}}" title="{{.TraceTitle}}">{{.TraceLabel}}</span>
                 {{if .N.TraceSeen}}<small class="text-muted">{{.N.TraceNotices}}/{{.N.TraceSeen}}</small>{{end}}{{end}}</td>

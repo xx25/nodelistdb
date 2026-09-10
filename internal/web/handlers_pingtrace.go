@@ -73,12 +73,17 @@ type replyView struct {
 // replyAuth renders the receipt provenance of one reply. Only the
 // unauthenticated case is shown: badging the other 85% "secure" would
 // overstate it, since tier A authenticates the link that relayed the mail
-// to us, never the node the From line claims.
+// to us, never the node the From line claims. The wording says nothing
+// about a configured link, because fidomail's tier A needs a session
+// PASSWORD as well: a link we have configured without one is reported
+// unsecure too, and so is a session placed by either side with no link at
+// all -- which is why this badge cannot name who handed the mail over.
 func replyAuth(auth string) (unsecure bool, title string) {
 	switch auth {
 	case pingtrace.AuthUnsecure:
-		return true, "Delivered over a session fidomail did not authenticate " +
-			"(no configured link): the sender address on this reply is an unverified claim"
+		return true, "Delivered over a session fidomail could not authenticate: " +
+			"no password-protected link of ours relayed it, so the sender " +
+			"address on this reply is an unverified claim"
 	case pingtrace.AuthSecure:
 		return false, "Relayed to us by an authenticated link (which vouches for the transport, not for the sender address)"
 	}
@@ -251,10 +256,12 @@ type pingNodeRow struct {
 	StatusLabel  string
 	StatusClass  string
 	PingTitle    string
-	// AnsweredDirect: the answer came in over a session we did not
-	// authenticate -- the node handing it to us itself -- rather than
-	// relayed back with the rest of our mail.
-	AnsweredDirect bool
+	// AnsweredUnsecure: the answer came in over a session we could not
+	// authenticate, i.e. not relayed to us by a password-protected link.
+	// Who handed it over is NOT known from that -- the answering node, one
+	// of its uplinks, and a link-less session are indistinguishable here --
+	// so nothing on the page may name a deliverer.
+	AnsweredUnsecure bool
 	// NotTested: a declared AKA of a system that answers through another
 	// address. No ping was sent, so the row shows no send time.
 	NotTested  bool
@@ -282,7 +289,7 @@ func newPingNodeRow(n storage.PingNodeSummary) pingNodeRow {
 		row.LatestDirect = newPingView(*n.LatestDirect)
 	}
 	row.NotTested = n.Latest != nil && n.Latest.Status == pingtrace.StatusSkipped
-	row.AnsweredDirect = n.Latest != nil &&
+	row.AnsweredUnsecure = n.Latest != nil &&
 		n.Latest.Status == pingtrace.StatusPong &&
 		n.Latest.ReplyInboundAuth == pingtrace.AuthUnsecure
 	row.PingTitle = pingBadgeTitle(&row)
@@ -291,8 +298,9 @@ func newPingNodeRow(n storage.PingNodeSummary) pingNodeRow {
 
 // pingBadgeTitle spells out everything the dropped "Last ping" and "Robot"
 // columns used to print as text: the routed result, the software that answered,
-// the error behind a failure, and the direct-dial ping, which is a separate
-// measurement rather than a retry.
+// the error behind a failure, and the direct-dial ping (FSC-0053 DIR), which is
+// a separate measurement rather than a retry -- and is unrelated to the
+// "unsecure" badge, which is about how an ANSWER arrived.
 func pingBadgeTitle(row *pingNodeRow) string {
 	if !row.N.HasPing {
 		return ""
@@ -307,8 +315,8 @@ func pingBadgeTitle(row *pingNodeRow) string {
 		head += " in " + row.Latest.RTT
 	}
 	parts := []string{head}
-	if row.AnsweredDirect {
-		parts = append(parts, "the answer was delivered straight to us over an unauthenticated session, not relayed back down our uplink")
+	if row.AnsweredUnsecure {
+		parts = append(parts, "the answer arrived over a session we could not authenticate, so its sender address is a claim rather than proof")
 	}
 	if row.Latest != nil && row.Latest.P.RobotPID != "" {
 		parts = append(parts, "robot: "+row.Latest.P.RobotPID)
@@ -317,7 +325,7 @@ func pingBadgeTitle(row *pingNodeRow) string {
 		parts = append(parts, row.Latest.P.Error)
 	}
 	if row.LatestDirect != nil {
-		direct := "direct dial: " + row.LatestDirect.StatusLabel
+		direct := "direct dial (FSC-0053 DIR): " + row.LatestDirect.StatusLabel
 		if row.LatestDirect.RTT != "" {
 			direct += " in " + row.LatestDirect.RTT
 		}
