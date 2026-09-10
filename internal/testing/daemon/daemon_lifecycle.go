@@ -28,6 +28,7 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 	d.config.Daemon.TestInterval = newCfg.Daemon.TestInterval
 	d.config.Daemon.BatchSize = newCfg.Daemon.BatchSize
 	d.config.Daemon.DryRun = newCfg.Daemon.DryRun
+	d.config.Daemon.ConnectDelay = newCfg.Daemon.ConnectDelay
 
 	// Update protocol settings
 	d.config.Protocols = newCfg.Protocols
@@ -84,8 +85,12 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 	}
 
 	if newCfg.Protocols.Telnet.Enabled {
-		d.telnetTester = protocols.NewTelnetTester(
+		d.telnetTester = protocols.NewTelnetTesterWithInfo(
 			newCfg.Protocols.Telnet.Timeout,
+			firstNonEmpty(newCfg.Protocols.Telnet.OurAddress, newCfg.Protocols.Ifcico.OurAddress),
+			firstNonEmpty(newCfg.Protocols.Telnet.SystemName, newCfg.Protocols.Ifcico.SystemName),
+			firstNonEmpty(newCfg.Protocols.Telnet.Sysop, newCfg.Protocols.Ifcico.Sysop),
+			firstNonEmpty(newCfg.Protocols.Telnet.Location, newCfg.Protocols.Ifcico.Location),
 		)
 	} else {
 		d.telnetTester = nil
@@ -136,10 +141,10 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 		}
 		logging.Infof("Reloaded EMSI ConfigManager with %d per-node overrides", len(newCfg.Testing.EMSI.Overrides))
 
-		// Wire ConfigManager to testers that support it (IFCICO and VModem's
-		// EMSI fall-through).
-		if d.ifcicoTester != nil {
-			if setter, ok := d.ifcicoTester.(protocols.EMSIConfigSetter); ok {
+		// Wire ConfigManager to testers that support it (IFCICO, Telnet and
+		// VModem's EMSI fall-through).
+		for _, tester := range []protocols.Tester{d.ifcicoTester, d.telnetTester} {
+			if setter, ok := tester.(protocols.EMSIConfigSetter); ok && tester != nil {
 				setter.SetEMSIConfigManager(d.emsiConfigManager)
 			}
 		}
@@ -149,8 +154,8 @@ func (d *Daemon) ReloadConfig(configPath string) error {
 	} else {
 		// No EMSI config provided - clear ConfigManager to use legacy timeout behavior
 		d.emsiConfigManager = nil
-		if d.ifcicoTester != nil {
-			if setter, ok := d.ifcicoTester.(protocols.EMSIConfigSetter); ok {
+		for _, tester := range []protocols.Tester{d.ifcicoTester, d.telnetTester} {
+			if setter, ok := tester.(protocols.EMSIConfigSetter); ok && tester != nil {
 				setter.SetEMSIConfigManager(nil)
 			}
 		}

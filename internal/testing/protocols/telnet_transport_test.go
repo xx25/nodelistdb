@@ -1,8 +1,11 @@
 package protocols
 
 import (
+	"errors"
+	"io"
 	"net"
 	"testing"
+	"time"
 )
 
 func TestTelnetProcess(t *testing.T) {
@@ -92,5 +95,43 @@ func TestTelnetWriteEscapesIAC(t *testing.T) {
 	want := []byte{'a', tnIAC, tnIAC, 'b'}
 	if string(cc.written) != string(want) {
 		t.Fatalf("wire bytes = % x, want % x", cc.written, want)
+	}
+}
+
+// failingWriteConn delivers one read and refuses every write.
+type failingWriteConn struct {
+	net.Conn
+	data []byte
+}
+
+func (c *failingWriteConn) Read(p []byte) (int, error) {
+	if len(c.data) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, c.data)
+	c.data = c.data[n:]
+	return n, nil
+}
+func (c *failingWriteConn) Write([]byte) (int, error)        { return 0, errors.New("write refused") }
+func (c *failingWriteConn) SetWriteDeadline(time.Time) error { return nil }
+
+// A mailer's greeting shares a segment with its option requests. If our
+// reply to those cannot be written, the greeting must still be delivered;
+// the write failure is reported on the read after it.
+func TestTelnetBinaryConnKeepsDecodedBytesWhenReplyWriteFails(t *testing.T) {
+	greeting := "**EMSI_REQA77E\r"
+	c := &failingWriteConn{data: append([]byte{tnIAC, tnWILL, tnOptBinary}, greeting...)}
+	tn := newTelnetBinaryConn(c)
+
+	buf := make([]byte, 64)
+	n, err := tn.Read(buf)
+	if err != nil {
+		t.Fatalf("first read returned %v; the decoded greeting should come first", err)
+	}
+	if string(buf[:n]) != greeting {
+		t.Fatalf("read %q, want the greeting", buf[:n])
+	}
+	if _, err := tn.Read(buf); err == nil || err.Error() != "write refused" {
+		t.Fatalf("second read err = %v, want the deferred write failure", err)
 	}
 }

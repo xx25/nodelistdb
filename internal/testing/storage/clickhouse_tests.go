@@ -75,6 +75,7 @@ func (s *ClickHouseStorage) flushBatchLocked(ctx context.Context) error {
 		ifcico_mailer_info, ifcico_system_name, ifcico_addresses,
 		ifcico_response_type, ifcico_error,
 		telnet_tested, telnet_success, telnet_response_ms, telnet_error,
+		telnet_mailer_info, telnet_system_name, telnet_addresses, telnet_banner,
 		ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 		vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
 		vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
@@ -139,6 +140,7 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 			ifcico_mailer_info, ifcico_system_name, ifcico_addresses,
 			ifcico_response_type, ifcico_error,
 			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
+		telnet_mailer_info, telnet_system_name, telnet_addresses, telnet_banner,
 			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
 			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
@@ -164,6 +166,8 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 		var dnsError, binkpError, ifcicoError, telnetError, ftpError, vmodemError string
 		var binkpTested, binkpSuccess, ifcicoTested, ifcicoSuccess bool
 		var telnetTested, telnetSuccess, ftpTested, ftpSuccess bool
+		var telnetMailerInfo, telnetSystemName, telnetBanner string
+		var telnetAddresses []string
 		var vmodemTested, vmodemSuccess bool
 		var vmodemConformant bool
 		var vmodemVariant, vmodemSoftware, vmodemSystemName string
@@ -190,6 +194,7 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 			&ifcicoMailerInfo, &ifcicoSystemName, &ifcicoAddresses,
 			&ifcicoResponseType, &ifcicoError,
 			&telnetTested, &telnetSuccess, &telnetResponseMs, &telnetError,
+			&telnetMailerInfo, &telnetSystemName, &telnetAddresses, &telnetBanner,
 			&ftpTested, &ftpSuccess, &ftpResponseMs, &ftpError,
 			&vmodemTested, &vmodemSuccess, &vmodemResponseMs, &vmodemError,
 			&vmodemVariant, &vmodemConformant, &vmodemSoftware, &vmodemSystemName,
@@ -254,6 +259,19 @@ func (s *ClickHouseStorage) GetLatestTestResults(ctx context.Context, limit int)
 				ResponseMs: telnetResponseMs,
 				Error:      telnetError,
 				Details:    make(map[string]interface{}),
+			}
+			// Flat detail values, mirroring binkp/ifcico read-back.
+			if telnetMailerInfo != "" {
+				r.TelnetResult.Details["mailer_info"] = telnetMailerInfo
+			}
+			if telnetSystemName != "" {
+				r.TelnetResult.Details["system_name"] = telnetSystemName
+			}
+			if len(telnetAddresses) > 0 {
+				r.TelnetResult.Details["addresses"] = telnetAddresses
+			}
+			if telnetBanner != "" {
+				r.TelnetResult.Details["banner"] = telnetBanner
 			}
 		}
 
@@ -338,6 +356,7 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 			ifcico_mailer_info, ifcico_system_name, ifcico_addresses,
 			ifcico_response_type, ifcico_error,
 			telnet_tested, telnet_success, telnet_response_ms, telnet_error,
+		telnet_mailer_info, telnet_system_name, telnet_addresses, telnet_banner,
 			ftp_tested, ftp_success, ftp_response_ms, ftp_error,
 			vmodem_tested, vmodem_success, vmodem_response_ms, vmodem_error,
 			vmodem_variant, vmodem_conformant, vmodem_software, vmodem_system_name,
@@ -371,6 +390,8 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 		var dnsError, binkpError, ifcicoError, telnetError, ftpError, vmodemError string
 		var binkpTested, binkpSuccess, ifcicoTested, ifcicoSuccess bool
 		var telnetTested, telnetSuccess, ftpTested, ftpSuccess bool
+		var telnetMailerInfo, telnetSystemName, telnetBanner string
+		var telnetAddresses []string
 		var vmodemTested, vmodemSuccess bool
 		var vmodemConformant bool
 		var vmodemVariant, vmodemSoftware, vmodemSystemName string
@@ -397,6 +418,7 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 			&ifcicoMailerInfo, &ifcicoSystemName, &ifcicoAddresses,
 			&ifcicoResponseType, &ifcicoError,
 			&telnetTested, &telnetSuccess, &telnetResponseMs, &telnetError,
+			&telnetMailerInfo, &telnetSystemName, &telnetAddresses, &telnetBanner,
 			&ftpTested, &ftpSuccess, &ftpResponseMs, &ftpError,
 			&vmodemTested, &vmodemSuccess, &vmodemResponseMs, &vmodemError,
 			&vmodemVariant, &vmodemConformant, &vmodemSoftware, &vmodemSystemName,
@@ -462,6 +484,19 @@ func (s *ClickHouseStorage) GetNodeTestHistory(ctx context.Context, zone, net, n
 				ResponseMs: telnetResponseMs,
 				Error:      telnetError,
 				Details:    make(map[string]interface{}),
+			}
+			// Flat detail values, mirroring binkp/ifcico read-back.
+			if telnetMailerInfo != "" {
+				r.TelnetResult.Details["mailer_info"] = telnetMailerInfo
+			}
+			if telnetSystemName != "" {
+				r.TelnetResult.Details["system_name"] = telnetSystemName
+			}
+			if len(telnetAddresses) > 0 {
+				r.TelnetResult.Details["addresses"] = telnetAddresses
+			}
+			if telnetBanner != "" {
+				r.TelnetResult.Details["banner"] = telnetBanner
 			}
 		}
 
@@ -680,11 +715,19 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 	var vmodemAddresses []string
 	var vmodemDetail, vmodemCallOutcome, vmodemBanner string
 
+	var telnetMailerInfo, telnetSystemName, telnetBanner string
+	var telnetAddresses []string
 	if r.TelnetResult != nil {
 		telnetTested = r.TelnetResult.Tested
 		telnetSuccess = r.TelnetResult.Success
 		telnetResponseMs = r.TelnetResult.ResponseMs
 		telnetError = r.TelnetResult.Error
+		if d := r.TelnetResult.TelnetDetails(); d != nil {
+			telnetMailerInfo = d.MailerInfo
+			telnetSystemName = d.SystemName
+			telnetAddresses = d.Addresses
+			telnetBanner = d.Banner
+		}
 	}
 
 	if r.FTPResult != nil {
@@ -878,6 +921,7 @@ func (s *ClickHouseStorage) resultToValues(r *models.TestResult) []interface{} {
 		ifcicoTested, ifcicoSuccess, ifcicoResponseMs, ifcicoMailerInfo,
 		ifcicoSystemName, ifcicoAddresses, ifcicoResponseType, ifcicoError,
 		telnetTested, telnetSuccess, telnetResponseMs, telnetError,
+		telnetMailerInfo, telnetSystemName, telnetAddresses, telnetBanner,
 		ftpTested, ftpSuccess, ftpResponseMs, ftpError,
 		vmodemTested, vmodemSuccess, vmodemResponseMs, vmodemError,
 		vmodemVariant, vmodemConformant, vmodemSoftware, vmodemSystemName,

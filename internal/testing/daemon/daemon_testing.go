@@ -11,6 +11,7 @@ import (
 
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
+	"github.com/nodelistdb/internal/testing/protocols"
 )
 
 // protocolFlags maps a -test-proto value to the nodelist flag announcing it —
@@ -225,6 +226,7 @@ func (d *Daemon) TestSingleNode(ctx context.Context, nodeSpec, protocol string) 
 	if d.config.Logging.Level == "debug" {
 		_ = d.SetDebugMode(true)
 	}
+	ctx = protocols.WithPacer(ctx, d.config.Daemon.EffectiveConnectDelay())
 
 	// Parse the node specification
 	var zone, net, node uint16

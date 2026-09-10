@@ -35,6 +35,18 @@ func (t *FTPTester) Test(ctx context.Context, host string, port int, expectedAdd
 		port = 21
 	}
 
+	if err := Pace(ctx); err != nil {
+		return &FTPTestResult{
+			BaseTestResult: BaseTestResult{
+				Success:    false,
+				Error:      fmt.Sprintf("cancelled: %v", err),
+				ResponseMs: uint32(time.Since(startTime).Milliseconds()),
+				TestTime:   startTime,
+			},
+		}
+	}
+	startTime = time.Now() // response time measures the session, not the pacing wait
+
 	// Create connection with timeout
 	dialer := net.Dialer{
 		Timeout: t.timeout,

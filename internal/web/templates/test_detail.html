@@ -330,6 +330,28 @@
                         <span class="response-time">({{.TestResult.TelnetResponseMs}}ms)</span>
                         {{end}}
                     </span>
+                    {{if .TestResult.TelnetMailerInfo}}
+                    <span class="detail-label">Mailer Info:</span>
+                    <span class="detail-value">{{.TestResult.TelnetMailerInfo}}</span>
+                    {{end}}
+                    {{if .TestResult.TelnetSystemName}}
+                    <span class="detail-label">System Name:</span>
+                    <span class="detail-value">{{.TestResult.TelnetSystemName}}</span>
+                    {{end}}
+                    {{if .TestResult.TelnetAddresses}}
+                    <span class="detail-label">Addresses:</span>
+                    <span class="detail-value">
+                        <div class="array-list">
+                            {{range .TestResult.TelnetAddresses}}
+                            <span class="array-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </span>
+                    {{end}}
+                    {{if .TestResult.TelnetBanner}}
+                    <span class="detail-label">Greeting:</span>
+                    <span class="detail-value">{{.TestResult.TelnetBanner}}</span>
+                    {{end}}
                     {{if .TestResult.TelnetError}}
                     <span class="detail-label">Error:</span>
                     <span class="detail-value">

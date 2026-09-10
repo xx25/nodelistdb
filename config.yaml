@@ -227,6 +227,10 @@ daemon:
   failed_retry_interval: 24h   # Retry failed nodes after this duration
   workers: 10                  # Number of concurrent test workers
   batch_size: 100              # Batch size for processing nodes
+  connect_delay: 3s            # Gap between two connections to the same node (protocols, address
+                               # families, hostnames): mbcico keeps its node lock for 2s after a
+                               # session, and a connection inside that is refused as busy.
+                               # 0s disables; unset = 3s.
 
   # Command-line only flags (not in config):
   # -run-once     : Run one test cycle and exit
@@ -261,7 +265,9 @@ protocols:
   telnet:
     enabled: false
     port: 23                   # Standard telnet port
-    timeout: 5s
+    timeout: 30s               # An ITN test is an EMSI mail session over telnet: give it the IFCICO budget
+    # our_address / system_name / sysop / location: announced in EMSI_DAT;
+    # fall back to the ifcico values when unset.
 
   # FTP (IFT flag) - File transfer
   ftp:

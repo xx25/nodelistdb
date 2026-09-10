@@ -123,6 +123,14 @@ func (t *VModemTester) test(ctx context.Context, host string, port int, expected
 		BaseTestResult: BaseTestResult{TestTime: start},
 	}
 
+	if err := Pace(ctx); err != nil {
+		res.Success = false
+		res.Variant = "down"
+		res.Error = fmt.Sprintf("cancelled: %v", err)
+		res.ResponseMs = uint32(time.Since(start).Milliseconds())
+		return res
+	}
+	start = time.Now() // response time measures the session, not the pacing wait
 	dialer := net.Dialer{Timeout: t.timeout}
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 	if err != nil {
@@ -161,6 +169,15 @@ func (t *VModemTester) test(ctx context.Context, host string, port int, expected
 			// Not VMODEM after all. Classify on a fresh connection, since this
 			// one has our handshake bytes buffered, and let sniff spend the full
 			// classification window on a peer that may just be slow to greet.
+			_ = conn.Close()
+			if err := Pace(ctx); err != nil {
+				res.Success = false
+				res.Variant = "down"
+				res.Error = fmt.Sprintf("cancelled: %v", err)
+				res.ResponseMs = uint32(time.Since(start).Milliseconds())
+				return res
+			}
+			start = time.Now() // the pacing wait is not the peer's response time
 			conn, err = dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 			if err != nil {
 				res.Success = false
@@ -283,7 +300,7 @@ func (t *VModemTester) placeVMPCall(ctx context.Context, conn net.Conn, expected
 
 	res.Success = true
 	res.Detail = "VMP call established, mailer answered"
-	if why := t.emsiOver(call.Data, expectedAddress, res); why != "" {
+	if why := t.emsiOver(ctx, call.Data, expectedAddress, res); why != "" {
 		res.Detail += ": " + why
 	}
 	return true, false
@@ -422,6 +439,9 @@ func (t *VModemTester) classify(ctx context.Context, host string, port int, expe
 // the remote's system name, software and addresses. Failure leaves the variant
 // intact (the protocol was already recognized during sniff) with identity blank.
 func (t *VModemTester) emsiIdentity(ctx context.Context, host string, port int, sawTelnet bool, expectedAddress string, res *VModemTestResult) {
+	if err := Pace(ctx); err != nil {
+		return
+	}
 	dialer := net.Dialer{Timeout: t.timeout}
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 	if err != nil {
@@ -433,7 +453,7 @@ func (t *VModemTester) emsiIdentity(ctx context.Context, host string, port int, 
 	if sawTelnet {
 		c = newTelnetBinaryConn(conn)
 	}
-	_ = t.emsiOver(c, expectedAddress, res)
+	_ = t.emsiOver(ctx, c, expectedAddress, res)
 }
 
 // emsiOver runs an EMSI handshake as the calling side over an already-open
@@ -443,7 +463,7 @@ func (t *VModemTester) emsiIdentity(ctx context.Context, host string, port int, 
 // same thing: a handshake that never completed, one that completed while the
 // peer supplied nothing usable, and one that produced only a product name
 // guessed from the mailer's banner are three different states of the far side.
-func (t *VModemTester) emsiOver(c net.Conn, expectedAddress string, res *VModemTestResult) string {
+func (t *VModemTester) emsiOver(ctx context.Context, c net.Conn, expectedAddress string, res *VModemTestResult) string {
 	var cfg *emsi.Config
 	if t.configMgr != nil {
 		cfg = t.configMgr.GetConfigForNode(expectedAddress)
@@ -466,6 +486,13 @@ func (t *VModemTester) emsiOver(c net.Conn, expectedAddress string, res *VModemT
 	// EMSI_INQ before our EMSI_DAT, which is what a strict answerer waits for.
 	err := session.HandshakeCaller()
 	defer session.Close()
+	if err == nil {
+		// The mailer is now waiting for our batch; give it the empty one it
+		// expects instead of a closed socket.
+		if ferr := finishEMSISession(ctx, session, expectedAddress); ferr != nil && t.debug {
+			logging.Debugf("VModem EMSI: session with %s ended untidily: %v", expectedAddress, ferr)
+		}
+	}
 
 	info := session.GetRemoteInfo()
 	reason := session.GetCompletionReason()
@@ -645,7 +672,7 @@ func cleanBanner(s string) string {
 func containsEMSIReply(text string) bool {
 	return strings.Contains(text, "EMSI_REQ") || strings.Contains(text, "EMSI_DAT") ||
 		strings.Contains(text, "EMSI_ACK") || strings.Contains(text, "EMSI_NAK") ||
-		strings.Contains(text, "EMSI_MD5")
+		strings.Contains(text, "EMSI_MD5") || strings.Contains(text, "EMSI_HBT")
 }
 
 // readChunk does one bounded read. done is true on EOF/hard error (not timeout).

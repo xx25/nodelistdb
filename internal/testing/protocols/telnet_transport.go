@@ -3,7 +3,11 @@ package protocols
 import (
 	"bytes"
 	"net"
+	"time"
 )
+
+// telnetReplyWriteTimeout bounds each negotiation reply write.
+const telnetReplyWriteTimeout = 5 * time.Second
 
 // Telnet command/option bytes (RFC 854 / RFC 856) used by the IVM
 // telnet-binary transport that some FidoNet "vmodem" endpoints run in front of
@@ -31,9 +35,10 @@ const (
 // boundary, so an incomplete tail is carried in `pending` between calls.
 type telnetBinaryConn struct {
 	net.Conn
-	pending []byte // incomplete IAC sequence carried from a prior Read
-	outbuf  []byte // decoded application bytes not yet returned to the caller
-	sawIAC  bool   // true once any IAC byte has been seen (i.e. peer speaks telnet)
+	pending  []byte // incomplete IAC sequence carried from a prior Read
+	outbuf   []byte // decoded application bytes not yet returned to the caller
+	sawIAC   bool   // true once any IAC byte has been seen (i.e. peer speaks telnet)
+	writeErr error  // a failed negotiation reply, surfaced once the decoded bytes are out
 }
 
 func newTelnetBinaryConn(c net.Conn) *telnetBinaryConn {
@@ -46,6 +51,9 @@ func (t *telnetBinaryConn) Read(p []byte) (int, error) {
 		t.outbuf = t.outbuf[n:]
 		return n, nil
 	}
+	if t.writeErr != nil {
+		return 0, t.writeErr
+	}
 	for {
 		buf := make([]byte, 4096)
 		n, err := t.Conn.Read(buf)
@@ -55,7 +63,19 @@ func (t *telnetBinaryConn) Read(p []byte) (int, error) {
 			decoded, replies, leftover := t.process(data)
 			t.pending = leftover
 			if len(replies) > 0 {
-				_, _ = t.Conn.Write(replies) // best-effort negotiation reply
+				// A peer that floods option requests while never reading
+				// would otherwise block this write for good, past every
+				// read deadline the caller set. A failed reply is reported
+				// only after the application bytes decoded alongside it
+				// have been handed over: a mailer's greeting often shares
+				// a segment with its option requests.
+				_ = t.Conn.SetWriteDeadline(time.Now().Add(telnetReplyWriteTimeout))
+				if _, werr := t.Conn.Write(replies); werr != nil {
+					t.writeErr = werr
+					if len(decoded) == 0 {
+						return 0, werr
+					}
+				}
 			}
 			if len(decoded) > 0 {
 				m := copy(p, decoded)

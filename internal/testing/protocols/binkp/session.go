@@ -34,8 +34,19 @@ type Session struct {
 	remoteInfo     NodeInfo
 	timeout        time.Duration
 	debug          bool
-	localEOBSent   bool // Track if we sent M_EOB
-	remoteEOBRecvd bool // Track if we received M_EOB from remote
+	localEOBSent   bool      // Track if we sent M_EOB
+	remoteEOBRecvd bool      // Track if we received M_EOB from remote
+	closeBy        time.Time // wall-clock bound on the whole close-out, once endSession runs
+}
+
+// writeDeadline is the session timeout, cut to the close-out bound when one
+// is in force, so no write can outlive the budget endSession set.
+func (s *Session) writeDeadline() time.Time {
+	d := time.Now().Add(s.timeout)
+	if !s.closeBy.IsZero() && s.closeBy.Before(d) {
+		return s.closeBy
+	}
+	return d
 }
 
 // NewSession creates a new BinkP session
@@ -293,18 +304,137 @@ func (s *Session) GetNodeInfo() NodeInfo {
 	return s.remoteInfo
 }
 
-// sendEOB sends M_EOB frame and tracks that we sent it
+// sendEOB sends M_EOB once; later calls are no-ops.
 func (s *Session) sendEOB() error {
 	if s.localEOBSent {
 		return nil // Already sent
 	}
-	// Set write deadline for M_EOB
-	_ = s.conn.SetWriteDeadline(time.Now().Add(s.timeout))
-	err := WriteFrame(s.conn, &Frame{
-		Type:    M_EOB,
-		Command: true,
-		Data:    nil,
-	})
+	return s.writeEOB()
+}
+
+// endOfSessionRounds bounds how many empty batches we will close out. A
+// binkp/1.1 peer that keeps opening batches after nothing was sent is broken;
+// two rounds is what a correct one needs (see endSession).
+const endOfSessionRounds = 4
+
+// eobIdleWindow is how long we wait, after both sides have sent M_EOB, for
+// the remote to either close the connection or open another batch.
+const eobIdleWindow = 2 * time.Second
+
+// endOfSessionFrames caps the frames absorbed while closing out, so a peer
+// that chatters without ever sending M_EOB cannot hold a worker here.
+const endOfSessionFrames = 200
+
+// endSession runs the end of an empty session the way the remote expects it.
+//
+// After the handshake nothing is transferred, so both sides send M_EOB and
+// the session is over — in binkp/1.0. binkp/1.1 (which we announce) allows
+// several batches per session, and a peer decides whether a batch "did
+// anything" by its own count of frames: MBSE's mbcico counts its M_NUL TRF,
+// its M_EOB and our M_EOB, reaches its threshold of three, and opens a second
+// batch by sending M_EOB again. Closing after the first exchange left it
+// reading a dead socket ("tty_read: error flag", rc=108) and logging the
+// session as failed to its sysop. So: answer every batch the remote opens
+// with an M_EOB of our own, and only leave once the remote has closed or has
+// said nothing for eobIdleWindow. A file offered to us in the meantime is
+// declined with M_SKIP; the remote then carries on to its own M_EOB.
+func (s *Session) endSession() {
+	localEOB := s.localEOBSent
+	remoteEOB := s.remoteEOBRecvd
+	// The whole close-out is bounded by frames read and by wall clock, on top
+	// of the per-batch round bound; none of the three depends on the peer
+	// behaving.
+	frames := 0
+	deadline := time.Now().Add(s.timeout + time.Duration(endOfSessionRounds)*eobIdleWindow)
+	s.closeBy = deadline
+	read := func(within time.Duration) (*Frame, error) {
+		frames++
+		if frames > endOfSessionFrames || time.Now().After(deadline) {
+			return nil, fmt.Errorf("end of session budget exhausted")
+		}
+		if remaining := time.Until(deadline); remaining < within {
+			within = remaining
+		}
+		return s.readFrameWithin(within)
+	}
+	for round := 0; round < endOfSessionRounds; round++ {
+		if !localEOB {
+			if err := s.writeEOB(); err != nil {
+				return
+			}
+			localEOB = true
+		}
+		for !remoteEOB {
+			frame, err := read(s.timeout)
+			if err != nil {
+				return
+			}
+			switch s.absorbFrame(frame) {
+			case M_EOB:
+				remoteEOB = true
+			case M_ERR, M_BSY:
+				return
+			}
+		}
+		// Both sides are in EOB state. A binkp/1.1 peer that considers the
+		// batch non-empty opens the next one by sending M_EOB again; a peer
+		// that is done closes the connection, which reads as an error here.
+		// Anything else it sends in the meantime (M_NUL chatter) is absorbed
+		// without counting as a batch.
+		reopened := false
+		for !reopened {
+			frame, err := read(eobIdleWindow)
+			if err != nil {
+				return
+			}
+			switch s.absorbFrame(frame) {
+			case M_EOB:
+				reopened = true
+			case M_ERR, M_BSY:
+				return
+			}
+		}
+		localEOB, remoteEOB = false, true
+	}
+}
+
+// absorbFrame handles a frame read after the handshake and returns its type
+// for the caller to act on (0 for data frames and anything not a command).
+// M_FILE is answered with M_SKIP so that a remote with mail for us finishes
+// its batch instead of waiting for a receiver that is not there.
+func (s *Session) absorbFrame(frame *Frame) uint8 {
+	if !frame.Command {
+		return 0
+	}
+	switch frame.Type {
+	case M_EOB:
+		s.remoteEOBRecvd = true
+		if s.debug {
+			logging.Debugf("BinkP: Received remote M_EOB")
+		}
+	case M_FILE:
+		if s.debug {
+			logging.Debugf("BinkP: Remote offered %q; declining with M_SKIP", frame.Data)
+		}
+		_ = s.conn.SetWriteDeadline(s.writeDeadline())
+		_ = WriteFrame(s.conn, &Frame{Type: M_SKIP, Command: true, Data: frame.Data})
+	case M_NUL:
+		key, value := ParseM_NUL(frame.Data)
+		s.parseM_NUL(key, value)
+	}
+	return frame.Type
+}
+
+func (s *Session) readFrameWithin(d time.Duration) (*Frame, error) {
+	_ = s.conn.SetReadDeadline(time.Now().Add(d))
+	return ReadFrame(s.conn)
+}
+
+// writeEOB sends an M_EOB unconditionally; sendEOB is the once-only form the
+// handshake uses.
+func (s *Session) writeEOB() error {
+	_ = s.conn.SetWriteDeadline(s.writeDeadline())
+	err := WriteFrame(s.conn, &Frame{Type: M_EOB, Command: true})
 	if err == nil {
 		s.localEOBSent = true
 		if s.debug {
@@ -314,38 +444,18 @@ func (s *Session) sendEOB() error {
 	return err
 }
 
-// Close closes the session gracefully
-// This performs a proper BinkP shutdown sequence that MBSE and other mailers expect:
-// 1. Ensure M_EOB exchange is complete (both sides sent M_EOB)
-// 2. Use graceful TCP shutdown (shutdown() syscall) instead of abrupt RST
+// Close ends the session and closes the connection.
+//
+// The end of session is played out in full first (endSession), then the
+// socket is shut down with FIN rather than RST, as MBSE's closetcp() does, so
+// the remote never takes a SIGPIPE from us.
 func (s *Session) Close() error {
 	if s.conn == nil {
 		return nil
 	}
 
-	// Send M_EOB if we haven't already
-	if !s.localEOBSent {
-		if err := s.sendEOB(); err != nil {
-			if s.debug {
-				logging.Debugf("BinkP: Failed to send M_EOB during close: %v", err)
-			}
-		}
-	}
+	s.endSession()
 
-	// Wait for remote M_EOB if we haven't received it yet
-	if !s.remoteEOBRecvd {
-		_ = s.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-		frame, err := ReadFrame(s.conn)
-		if err == nil && frame.Type == M_EOB {
-			s.remoteEOBRecvd = true
-			if s.debug {
-				logging.Debugf("BinkP: Received remote M_EOB during close")
-			}
-		}
-	}
-
-	// Perform graceful TCP shutdown like MBSE's closetcp() does
-	// This sends FIN instead of RST, preventing SIGPIPE on the remote side
 	if tcpConn, ok := s.conn.(*net.TCPConn); ok {
 		// First, close the write side (sends TCP FIN)
 		if err := tcpConn.CloseWrite(); err != nil {

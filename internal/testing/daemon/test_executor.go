@@ -7,6 +7,7 @@ import (
 	"github.com/nodelistdb/internal/domain"
 	"github.com/nodelistdb/internal/testing/logging"
 	"github.com/nodelistdb/internal/testing/models"
+	"github.com/nodelistdb/internal/testing/protocols"
 )
 
 // TestExecutor handles test orchestration and execution
@@ -36,6 +37,11 @@ func (te *TestExecutor) TestNode(ctx context.Context, node *models.Node) *models
 // announced address lists.
 func (te *TestExecutor) TestNodeWithPartials(ctx context.Context, node *models.Node) (*models.TestResult, []*models.TestResult) {
 	// Note: Scheduling logic should be handled by the daemon before calling this method
+
+	// Every connection this node's test makes — each protocol, each address
+	// family, each hostname — is spaced by the configured delay, so the
+	// remote mailer has released its node lock before the next one arrives.
+	ctx = protocols.WithPacer(ctx, te.daemon.config.Daemon.EffectiveConnectDelay())
 
 	// If node has no hostnames but has a valid system name that can be used as hostname,
 	// add it to the InternetHostnames temporarily for testing
@@ -98,11 +104,10 @@ func (te *TestExecutor) testMultipleHostnameNode(ctx context.Context, node *mode
 			results = append(results, result)
 		}
 
-		// Add a small delay between hostname tests to avoid overwhelming the node
-		select {
-		case <-ctx.Done():
+		// The gap before the next hostname's first connection is the pacer's
+		// (see TestNodeWithPartials); only cancellation is checked here.
+		if ctx.Err() != nil {
 			return nil, nil
-		case <-time.After(100 * time.Millisecond):
 		}
 	}
 

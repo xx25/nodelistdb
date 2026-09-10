@@ -91,6 +91,18 @@ func (t *BinkPTester) Test(ctx context.Context, host string, port int, expectedA
 		logging.Debugf("BinkP: Testing %s (expected address: %s)", address, expectedAddress)
 	}
 
+	if err := Pace(ctx); err != nil {
+		return &BinkPTestResult{
+			BaseTestResult: BaseTestResult{
+				Success:    false,
+				Error:      fmt.Sprintf("cancelled: %v", err),
+				ResponseMs: uint32(time.Since(startTime).Milliseconds()),
+				TestTime:   startTime,
+			},
+		}
+	}
+	startTime = time.Now() // response time measures the session, not the pacing wait
+
 	// Create connection with timeout
 	dialer := net.Dialer{
 		Timeout: t.timeout,

@@ -26,6 +26,8 @@ require (
 
 replace github.com/mfkenney/go-serial/v2 => github.com/xx25/go-serial/v2 v2.0.0-20260621135723-af8dce8aa671
 
+replace github.com/pstroka/zmodem => github.com/xx25/go-zmodem v0.0.0-20260622223512-3abc1a5e9fbd
+
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/ClickHouse/ch-go v0.67.0 // indirect
@@ -45,6 +47,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/pstroka/zmodem v0.0.0-00010101000000-000000000000 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect

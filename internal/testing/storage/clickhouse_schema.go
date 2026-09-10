@@ -58,6 +58,10 @@ func (s *ClickHouseStorage) initSchema(ctx context.Context) error {
 			telnet_success Bool,
 			telnet_response_ms UInt32,
 			telnet_error String,
+			telnet_mailer_info String DEFAULT '',
+			telnet_system_name String DEFAULT '',
+			telnet_addresses Array(String) DEFAULT [],
+			telnet_banner String DEFAULT '',
 
 			ftp_tested Bool,
 			ftp_success Bool,

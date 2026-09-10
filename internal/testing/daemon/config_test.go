@@ -391,8 +391,22 @@ func TestConfigValidate(t *testing.T) {
 			wantError: false,
 		},
 		{
-			// Neither protocol handshakes, so neither needs an identity.
-			name: "telnet and ftp need no address",
+			// FTP never handshakes, so it needs no identity.
+			name: "ftp needs no address",
+			config: &Config{
+				ClickHouse: &ClickHouseConfig{
+					Host:     "localhost",
+					Database: "testdb",
+				},
+				Protocols: ProtocolsConfig{
+					FTP: ProtocolConfig{Enabled: true},
+				},
+			},
+			wantError: false,
+		},
+		{
+			// Telnet is an EMSI session over telnet: it announces an address.
+			name: "telnet without any address",
 			config: &Config{
 				ClickHouse: &ClickHouseConfig{
 					Host:     "localhost",
@@ -400,7 +414,20 @@ func TestConfigValidate(t *testing.T) {
 				},
 				Protocols: ProtocolsConfig{
 					Telnet: ProtocolConfig{Enabled: true},
-					FTP:    ProtocolConfig{Enabled: true},
+				},
+			},
+			wantError: true,
+		},
+		{
+			name: "telnet falls back to the ifcico address",
+			config: &Config{
+				ClickHouse: &ClickHouseConfig{
+					Host:     "localhost",
+					Database: "testdb",
+				},
+				Protocols: ProtocolsConfig{
+					Ifcico: ProtocolConfig{Enabled: true, OurAddress: "2:5001/100"},
+					Telnet: ProtocolConfig{Enabled: true},
 				},
 			},
 			wantError: false,
@@ -478,5 +505,22 @@ cli:
 	}
 	if cfg.CLI.Timeout != 900*time.Second {
 		t.Errorf("Expected CLI timeout 900s, got %v", cfg.CLI.Timeout)
+	}
+}
+
+func TestEffectiveConnectDelay(t *testing.T) {
+	var unset DaemonConfig
+	if got := unset.EffectiveConnectDelay(); got != DefaultConnectDelay {
+		t.Errorf("unset connect_delay = %v, want the default %v", got, DefaultConnectDelay)
+	}
+	zero := time.Duration(0)
+	off := DaemonConfig{ConnectDelay: &zero}
+	if got := off.EffectiveConnectDelay(); got != 0 {
+		t.Errorf("explicit 0s connect_delay = %v, want 0 (disabled)", got)
+	}
+	five := 5 * time.Second
+	set := DaemonConfig{ConnectDelay: &five}
+	if got := set.EffectiveConnectDelay(); got != five {
+		t.Errorf("connect_delay 5s = %v", got)
 	}
 }

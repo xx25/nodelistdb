@@ -50,10 +50,32 @@ type DaemonConfig struct {
 	BatchSize           int           `yaml:"batch_size"`
 	StaleTestThreshold  time.Duration `yaml:"stale_test_threshold"`  // Consider test stale after this duration (default: same as test_interval)
 	FailedRetryInterval time.Duration `yaml:"failed_retry_interval"` // Retry failed nodes after this duration (default: 24h)
-	RunOnce             bool          `yaml:"-"`                     // Set from command line
-	DryRun              bool          `yaml:"-"`                     // Set from command line
-	CLIOnly             bool          `yaml:"-"`                     // Set from command line - disable automatic testing
-	TestLimit           string        `yaml:"-"`                     // Set from command line - limit to specific node(s)
+	// ConnectDelay is the minimum gap between two connections to the same
+	// node — across protocols, address families and hostnames. A mailer
+	// holds its node lock for a moment after a session ends, so back-to-back
+	// connections are refused as busy and recorded here as failures. nil
+	// means the default (DefaultConnectDelay); an explicit 0 disables it.
+	ConnectDelay *time.Duration `yaml:"connect_delay"`
+	RunOnce      bool           `yaml:"-"` // Set from command line
+	DryRun       bool           `yaml:"-"` // Set from command line
+	CLIOnly      bool           `yaml:"-"` // Set from command line - disable automatic testing
+	TestLimit    string         `yaml:"-"` // Set from command line - limit to specific node(s)
+}
+
+// DefaultConnectDelay is the gap between connections to one node when
+// daemon.connect_delay is not set. mbcico keeps the node lock for a fixed
+// two seconds after a session ends (session.c: sleep(2), then nodeulock),
+// so a two-second gap lands exactly on the release and can still be refused
+// as busy; three clears it. The sysop who reported the busy failures asked
+// for "at least 1-2 seconds".
+const DefaultConnectDelay = 3 * time.Second
+
+// EffectiveConnectDelay resolves daemon.connect_delay with its default.
+func (d *DaemonConfig) EffectiveConnectDelay() time.Duration {
+	if d.ConnectDelay == nil {
+		return DefaultConnectDelay
+	}
+	return *d.ConnectDelay
 }
 
 // ClickHouseConfig for ClickHouse database
@@ -630,6 +652,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Protocols.Ifcico.Enabled && c.Protocols.Ifcico.OurAddress == "" {
 		return fmt.Errorf("protocols.ifcico.our_address is required when ifcico is enabled")
+	}
+	// Telnet is an EMSI handshake over a telnet transport and reuses the
+	// IFCICO identity when it has none of its own, so either one satisfies it.
+	if c.Protocols.Telnet.Enabled &&
+		firstNonEmpty(c.Protocols.Telnet.OurAddress, c.Protocols.Ifcico.OurAddress) == "" {
+		return fmt.Errorf("protocols.telnet.our_address is required when telnet is enabled (or set protocols.ifcico.our_address, which telnet falls back to)")
 	}
 	// VModem falls through to an EMSI handshake and reuses the IFCICO identity
 	// when it has none of its own, so either one satisfies it.

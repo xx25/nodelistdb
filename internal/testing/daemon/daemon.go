@@ -286,9 +286,20 @@ func New(cfg *Config) (*Daemon, error) {
 	}
 
 	if cfg.Protocols.Telnet.Enabled {
-		d.telnetTester = protocols.NewTelnetTester(
+		// ITN is a mail session over telnet, so the tester announces the same
+		// identity as the IFCICO one unless given its own.
+		telnet := protocols.NewTelnetTesterWithInfo(
 			cfg.Protocols.Telnet.Timeout,
+			firstNonEmpty(cfg.Protocols.Telnet.OurAddress, cfg.Protocols.Ifcico.OurAddress),
+			firstNonEmpty(cfg.Protocols.Telnet.SystemName, cfg.Protocols.Ifcico.SystemName),
+			firstNonEmpty(cfg.Protocols.Telnet.Sysop, cfg.Protocols.Ifcico.Sysop),
+			firstNonEmpty(cfg.Protocols.Telnet.Location, cfg.Protocols.Ifcico.Location),
 		)
+		if d.emsiConfigManager != nil {
+			telnet.SetEMSIConfigManager(d.emsiConfigManager)
+		}
+		telnet.SetDebug(debugMode)
+		d.telnetTester = telnet
 	}
 
 	if cfg.Protocols.FTP.Enabled {

@@ -139,6 +139,35 @@ type BinkPTestDetails struct {
 	Capabilities []string
 }
 
+// TelnetTestDetails is what an ITN mailer announced over its EMSI session.
+type TelnetTestDetails struct {
+	SystemName string
+	MailerInfo string
+	Addresses  []string
+	Banner     string // what the port said before EMSI began
+}
+
+// TelnetDetails picks the address family whose telnet identity represents
+// this result, on the same rule as VModemDetails: the family that succeeded,
+// IPv6 first, else whichever has anything to say.
+func (pr *ProtocolTestResult) TelnetDetails() *TelnetTestDetails {
+	if pr == nil {
+		return nil
+	}
+	ipv6, _ := pr.Details["ipv6"].(*TelnetTestDetails)
+	ipv4, _ := pr.Details["ipv4"].(*TelnetTestDetails)
+	switch {
+	case pr.IPv6Success && ipv6 != nil:
+		return ipv6
+	case pr.IPv4Success && ipv4 != nil:
+		return ipv4
+	case ipv6 != nil:
+		return ipv6
+	default:
+		return ipv4
+	}
+}
+
 // IfcicoTestDetails contains IFCICO-specific test details
 type IfcicoTestDetails struct {
 	MailerInfo   string

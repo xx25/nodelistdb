@@ -84,6 +84,18 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		logging.Debugf("IFCICO: Connection timeout: %v", t.timeout)
 	}
 
+	if err := Pace(ctx); err != nil {
+		return &IfcicoTestResult{
+			BaseTestResult: BaseTestResult{
+				Success:    false,
+				Error:      fmt.Sprintf("cancelled: %v", err),
+				ResponseMs: uint32(time.Since(startTime).Milliseconds()),
+				TestTime:   startTime,
+			},
+		}
+	}
+	startTime = time.Now() // response time measures the session, not the pacing wait
+
 	// Create connection with timeout
 	dialer := net.Dialer{
 		Timeout: t.timeout,
@@ -241,9 +253,14 @@ func (t *IfcicoTester) Test(ctx context.Context, host string, port int, expected
 		result.MailerInfo = "[Unknown]"
 	}
 
-	// Close session gracefully
+	// Play out the empty transfer phase the answerer is now waiting for, so
+	// its log shows a completed session rather than a caller that hung up
+	// mid-session. What it makes of the ending is not held against the node.
+	if err := finishEMSISession(ctx, session, expectedAddress); err != nil {
+		logging.Debugf("IFCICO: %s session with %s:%d ended untidily: %v", expectedAddress, host, port, err)
+	}
 	if t.debug {
-		logging.Debugf("IFCICO: Closing session gracefully...")
+		logging.Debugf("IFCICO: Closing session...")
 	}
 	session.Close()
 

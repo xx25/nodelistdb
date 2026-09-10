@@ -22,6 +22,7 @@ var testResultColumnGroups = [][]string{
 	{"ifcico_tested", "ifcico_success", "ifcico_response_ms", "ifcico_mailer_info", "ifcico_system_name"},
 	{"ifcico_addresses", "ifcico_response_type", "ifcico_error"},
 	{"telnet_tested", "telnet_success", "telnet_response_ms", "telnet_error"},
+	{"telnet_mailer_info", "telnet_system_name", "telnet_addresses", "telnet_banner"},
 	{"ftp_tested", "ftp_success", "ftp_response_ms", "ftp_error"},
 	{"vmodem_tested", "vmodem_success", "vmodem_response_ms", "vmodem_error"},
 	{"vmodem_variant", "vmodem_conformant", "vmodem_software", "vmodem_system_name"},

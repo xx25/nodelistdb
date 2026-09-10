@@ -81,7 +81,11 @@ type IfcicoTestResult struct {
 // TelnetTestResult contains Telnet-specific test results
 type TelnetTestResult struct {
 	BaseTestResult
-	Banner string
+	Banner       string   // what the port said before EMSI, cleaned
+	SystemName   string   // from EMSI_DAT
+	MailerInfo   string   // mailer name and version from EMSI_DAT
+	Addresses    []string // addresses the mailer announced
+	AddressValid bool     // the expected address was among them
 }
 
 // FTPTestResult contains FTP-specific test results

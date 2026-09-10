@@ -57,6 +57,12 @@ type NodeTestResult struct {
 	TelnetSuccess    bool   `json:"telnet_success"`
 	TelnetResponseMs uint32 `json:"telnet_response_ms"`
 	TelnetError      string `json:"telnet_error"`
+	// An ITN test is an EMSI mail session over telnet; these are what the
+	// mailer announced, or (banner) what the port said before EMSI began.
+	TelnetMailerInfo string   `json:"telnet_mailer_info"`
+	TelnetSystemName string   `json:"telnet_system_name"`
+	TelnetAddresses  []string `json:"telnet_addresses"`
+	TelnetBanner     string   `json:"telnet_banner"`
 
 	// FTP Test Results
 	FTPTested      bool   `json:"ftp_tested"`

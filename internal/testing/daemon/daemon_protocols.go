@@ -266,11 +266,25 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 					telnetResult.Error,
 				)
 
-				// Store banner if successful
-				if telnetResult.Success && telnetResult.Banner != "" {
-					result.TelnetResult.Details["ipv6_banner"] = telnetResult.Banner
+				// Recorded for a failure too: the greeting is the evidence of
+				// what answered on the port when no mailer did.
+				if telnetResult.Success || telnetResult.Banner != "" {
+					result.TelnetResult.Details["ipv6"] = &models.TelnetTestDetails{
+						SystemName: telnetResult.SystemName,
+						MailerInfo: telnetResult.MailerInfo,
+						Addresses:  telnetResult.Addresses,
+						Banner:     telnetResult.Banner,
+					}
+				}
+				if telnetResult.Success {
+					logging.Debugf("[%s]     Telnet IPv6 success: %s (%s, %dms)", node.Address(), telnetResult.SystemName, telnetResult.MailerInfo, telnetResult.ResponseMs)
+					if telnetResult.AddressValid {
+						result.AddressValidated = true
+					}
+					result.AddressValidatedIPv6 = result.AddressValidatedIPv6 || telnetResult.AddressValid
 					break // First successful IPv6 is enough
 				}
+				logging.Debugf("[%s]     Telnet IPv6 failed: %s", node.Address(), telnetResult.Error)
 			}
 		}
 	}
@@ -288,11 +302,25 @@ func (d *Daemon) testTelnet(ctx context.Context, node *models.Node, result *mode
 					telnetResult.Error,
 				)
 
-				// Store banner if successful
-				if telnetResult.Success && telnetResult.Banner != "" {
-					result.TelnetResult.Details["ipv4_banner"] = telnetResult.Banner
+				// Recorded for a failure too: the greeting is the evidence of
+				// what answered on the port when no mailer did.
+				if telnetResult.Success || telnetResult.Banner != "" {
+					result.TelnetResult.Details["ipv4"] = &models.TelnetTestDetails{
+						SystemName: telnetResult.SystemName,
+						MailerInfo: telnetResult.MailerInfo,
+						Addresses:  telnetResult.Addresses,
+						Banner:     telnetResult.Banner,
+					}
+				}
+				if telnetResult.Success {
+					logging.Debugf("[%s]     Telnet IPv4 success: %s (%s, %dms)", node.Address(), telnetResult.SystemName, telnetResult.MailerInfo, telnetResult.ResponseMs)
+					if telnetResult.AddressValid {
+						result.AddressValidated = true
+					}
+					result.AddressValidatedIPv4 = result.AddressValidatedIPv4 || telnetResult.AddressValid
 					break // First successful IPv4 is enough
 				}
+				logging.Debugf("[%s]     Telnet IPv4 failed: %s", node.Address(), telnetResult.Error)
 			}
 		}
 	} else if len(result.ResolvedIPv4) > 0 && !node.ShouldTestIPv4() {
