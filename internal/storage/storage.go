@@ -311,8 +311,8 @@ func (s *Storage) GetReachabilityTrends(ctx context.Context, days int, domain st
 	return s.reachabilityOperations.GetReachabilityTrends(ctx, days, domain)
 }
 
-func (s *Storage) SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
-	return s.reachabilityOperations.SearchNodesByReachability(ctx, operational, limit, days, domain)
+func (s *Storage) SearchNodesByReachability(ctx context.Context, f ReachabilityFilter) ([]NodeTestResult, error) {
+	return s.reachabilityOperations.SearchNodesByReachability(ctx, f)
 }
 
 func (s *Storage) GetIPv6EnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error) {

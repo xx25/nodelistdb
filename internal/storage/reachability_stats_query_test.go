@@ -25,7 +25,7 @@ func TestReachabilityStatsQueryCountsCycles(t *testing.T) {
 		") as partially_failed_tests",
 		"countIf(rn = 1 AND NOT cyc_operational) as failed_tests",
 		"countIf(rn = 1 AND cyc_operational) as successful_tests",
-		"avgIf(cyc_operational, rn = 1) * 100 as success_rate",
+		"ifNotFinite(avgIf(cyc_operational, rn = 1) * 100, 0) as success_rate",
 		"argMaxIf(cyc_operational, test_time, rn = 1) as last_status",
 	}
 	for _, want := range perCycle {
@@ -108,7 +108,7 @@ func TestReachabilityStatsQueryCountsCycles(t *testing.T) {
 	if strings.Contains(query, "avgIf(binkp_success, rn = 1") {
 		t.Error("per-protocol rates were changed to per-cycle; update the query comment and this test together")
 	}
-	if !strings.Contains(query, "avgIf(binkp_success, binkp_tested) * 100 as binkp_success_rate") {
+	if !strings.Contains(query, "ifNotFinite(avgIf(binkp_success, binkp_tested) * 100, 0) as binkp_success_rate") {
 		t.Error("per-hostname protocol rate lost its original meaning")
 	}
 }

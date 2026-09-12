@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/storage"
 )
 
 // resolveNodeDomain picks the FTN network for a node endpoint, along with the
@@ -41,27 +43,67 @@ func (s *Server) SearchNodesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prepare response
-	response := map[string]interface{}{
-		"nodes": nodes,
-		"count": len(nodes),
-		"filter": map[string]interface{}{
-			"zone":        filter.Zone,
-			"net":         filter.Net,
-			"node":        filter.Node,
-			"system_name": filter.SystemName,
-			"location":    filter.Location,
-			"node_type":   filter.NodeType,
-			"is_cm":       filter.IsCM,
-			"date_from":   filter.DateFrom,
-			"date_to":     filter.DateTo,
-			"latest_only": filter.LatestOnly,
-			"limit":       filter.Limit,
-			"offset":      filter.Offset,
-		},
+	if nodes == nil {
+		nodes = []database.Node{}
 	}
+	WriteJSONSuccess(w, nodeSearchResponse{
+		Nodes:  nodes,
+		Count:  len(nodes),
+		Filter: echoNodeFilter(filter),
+	})
+}
 
-	WriteJSONSuccess(w, response)
+// nodeSearchResponse is the GET /api/nodes body.
+type nodeSearchResponse struct {
+	Nodes  []database.Node `json:"nodes"`
+	Count  int             `json:"count"`
+	Filter nodeFilterEcho  `json:"filter"`
+}
+
+// nodeFilterEcho is the search's own reading of its parameters, returned so
+// a caller can see what was applied. It is a separate type from
+// database.NodeFilter on purpose: that struct also carries active_only, which
+// GetNodes never applies, and echoing it would document a filter that does
+// nothing.
+type nodeFilterEcho struct {
+	Domain     *string    `json:"domain"`
+	Zone       *int       `json:"zone"`
+	Net        *int       `json:"net"`
+	Node       *int       `json:"node"`
+	SystemName *string    `json:"system_name"`
+	Location   *string    `json:"location"`
+	SysopName  *string    `json:"sysop_name"`
+	NodeType   *string    `json:"node_type"`
+	IsCM       *bool      `json:"is_cm"`
+	IsMO       *bool      `json:"is_mo"`
+	HasInet    *bool      `json:"has_inet"`
+	HasBinkp   *bool      `json:"has_binkp"`
+	DateFrom   *time.Time `json:"date_from"`
+	DateTo     *time.Time `json:"date_to"`
+	LatestOnly *bool      `json:"latest_only"`
+	Limit      int        `json:"limit"`
+	Offset     int        `json:"offset"`
+}
+
+func echoNodeFilter(f database.NodeFilter) nodeFilterEcho {
+	return nodeFilterEcho{
+		Domain: f.Domain, Zone: f.Zone, Net: f.Net, Node: f.Node,
+		SystemName: f.SystemName, Location: f.Location, SysopName: f.SysopName,
+		NodeType: f.NodeType, IsCM: f.IsCM, IsMO: f.IsMO, HasInet: f.HasInet, HasBinkp: f.HasBinkp,
+		DateFrom: f.DateFrom, DateTo: f.DateTo, LatestOnly: f.LatestOnly,
+		Limit: f.Limit, Offset: f.Offset,
+	}
+}
+
+// timelineEvent is one entry of GET /api/nodes/{z}/{n}/{n}/timeline: an
+// "active" event carries the nodelist entry, a "removed" event the length of
+// the gap that followed it, in nanoseconds.
+type timelineEvent struct {
+	Date      time.Time      `json:"date"`
+	DayNumber int            `json:"day_number"`
+	Type      string         `json:"type"`
+	Data      *database.Node `json:"data,omitempty"`
+	Duration  *time.Duration `json:"duration,omitempty"`
 }
 
 // GetNodeHandler handles individual node lookups.
@@ -154,6 +196,9 @@ func (s *Server) GetNodeChangesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if changes == nil {
+		changes = []database.NodeChange{}
+	}
 	response := addressEnvelope(zone, net, node, -1, domain, availableDomains)
 	response["changes"] = changes
 	response["count"] = len(changes)
@@ -183,26 +228,24 @@ func (s *Server) GetNodeTimelineHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Build timeline data
-	var timeline []map[string]interface{}
-	for i, node := range history {
-		event := map[string]interface{}{
-			"date":       node.NodelistDate,
-			"day_number": node.DayNumber,
-			"type":       "active",
-			"data":       node,
+	timeline := make([]timelineEvent, 0, len(history))
+	for i := range history {
+		node := history[i]
+		event := timelineEvent{
+			Date:      node.NodelistDate,
+			DayNumber: node.DayNumber,
+			Type:      "active",
+			Data:      &node,
 		}
-
-		// Check for gaps to detect removal periods
 		if i < len(history)-1 {
 			nextNode := history[i+1]
 			if !node.NodelistDate.AddDate(0, 0, 14).After(nextNode.NodelistDate) {
-				// Gap detected - node was removed
-				timeline = append(timeline, event)
-				timeline = append(timeline, map[string]interface{}{
-					"date":       node.NodelistDate.AddDate(0, 0, 7),
-					"day_number": node.DayNumber + 7,
-					"type":       "removed",
-					"duration":   nextNode.NodelistDate.Sub(node.NodelistDate),
+				gap := nextNode.NodelistDate.Sub(node.NodelistDate)
+				timeline = append(timeline, event, timelineEvent{
+					Date:      node.NodelistDate.AddDate(0, 0, 7),
+					DayNumber: node.DayNumber + 7,
+					Type:      "removed",
+					Duration:  &gap,
 				})
 				continue
 			}
@@ -255,6 +298,9 @@ func (s *Server) GetPSTNNodesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if nodes == nil {
+		nodes = []storage.PSTNNode{}
+	}
 	response := map[string]interface{}{
 		"nodes": nodes,
 		"count": len(nodes),

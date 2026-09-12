@@ -2,69 +2,123 @@ openapi: 3.0.3
 info:
   title: NodelistDB API
   description: |
-    NodelistDB is a comprehensive API for accessing historical FidoNet nodelist data.
-    
-    This API provides access to millions of FidoNet node records spanning multiple years,
-    with powerful search and filtering capabilities. All nodelist data is preserved with
-    full historical context, including conflict resolution for duplicate entries.
-    
+    NodelistDB is a comprehensive API for accessing historical FTN nodelist
+    data: every FidoNet nodelist since 1986, other FTN networks (fsxNet, ...),
+    pointlists (FTS-5002), and what the testing daemon found when it called
+    each node.
+
     ## Features
-    - **Node Search**: Find nodes by zone, net, node number, system name, location, or sysop
-    - **Historical Data**: Access complete history for any node
-    - **Statistics**: Network statistics and trends over time
-    - **Flag Documentation**: Complete reference for FidoNet node flags
-    - **Database Export**: Download the complete database for offline analysis
-    
-    ## Data Sources
-    Data is sourced from official FidoNet nodelist distribution points and updated regularly.
-    
-    ## Rate Limiting
-    This API currently has no rate limiting, but please be respectful with your requests.
-    
-  version: 1.0.0
+    - **Node search**: find nodes by zone, net, node number, system name,
+      location, sysop, capability flags or date range, in any network
+    - **Historical data**: the complete history, change log and timeline of
+      any node
+    - **Multi-network**: `GET /api/networks` lists the imported FTN networks;
+      most endpoints take `?domain=`
+    - **Points**: pointlist snapshots under a boss, point history, imported
+      pointlist issues
+    - **Statistics**: per-date network statistics and the list of nodelist dates
+    - **Reachability**: the testing daemon's results per node (BinkP, IFCICO,
+      Telnet, FTP, VModem, over IPv4 and IPv6), trends and searches
+    - **Software, hosting, PING/TRACE analytics**: distributions computed from
+      those tests, and the netmail PING measurements
+    - **Flag documentation**: a reference for FidoNet node flags
+
+    ## Multi-network conventions
+    A node address is only unique within one FTN network. Endpoints about one
+    address resolve the network in this order: an explicit `?domain=`; the
+    only network the address exists in; `fidonet` when it exists in several.
+    Responses that describe one address say which network answered
+    (`domain`) and which ones it exists in (`available_domains`, or the
+    `X-Available-Domains` header where the body is the record itself).
+    Listing and analytics endpoints default to `fidonet` or to every network
+    as their descriptions say.
+
+    ## Errors and limits
+    Errors are JSON `{error, status, time}`. Search endpoints require at
+    least one constraint and answer `400` without one. Every `limit`
+    parameter has a ceiling; values above it are capped silently on the
+    search endpoints and rejected on the reachability endpoints, as each
+    parameter's description says.
+
+    Requests are rate limited per client IP with token buckets: the endpoints
+    tagged as expensive (node, point, stats, sysop, analytics, software and
+    reachability reads, and `/api/networks`) share a small allowance, the
+    rest a larger one. A rejected request gets `429` with a plain-text body
+    and a `Retry-After` header. A query that outruns its time budget gets
+    `503`. Either can happen on any endpoint that reads the database.
+  version: 1.1.0
   contact:
-    name: NodelistDB Support
+    name: NodelistDB
     url: https://github.com/nodelistdb/nodelistdb
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
 
+# Every path below already carries its /api prefix, so the server root is
+# the site root. A server URL of /api here would make Swagger UI request
+# /api/api/... - that is exactly what an earlier revision did.
 servers:
-  - url: /api
-    description: NodelistDB API Server
+  - url: /
+    description: This server
 
 paths:
   /api/health:
     get:
       summary: Health Check
-      description: Returns the health status of the API server
+      description: |
+        Server health. With the health checker installed (the normal
+        deployment) this reports uptime, build, database and cache state and
+        the latest nodelist; a bare server answers `{status, time}` only.
       operationId: getHealth
       tags:
         - System
       responses:
         '200':
-          description: Server is healthy
+          description: Health report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /api/networks:
+    get:
+      summary: List FTN Networks
+      description: >
+        The FTN networks (domains) present in the database, each with its
+        latest nodelist date and node count on that date.
+      operationId: getNetworks
+      tags:
+        - Statistics
+      responses:
+        '200':
+          description: Networks present in the database
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: string
-                    example: ok
-                  time:
-                    type: string
-                    format: date-time
-                    example: "2025-07-29T14:30:00Z"
+                  networks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NetworkInfo'
+                  count:
+                    type: integer
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/nodes:
     get:
       summary: Search Nodes
       description: |
-        Search for FidoNet nodes using various filter criteria.
-        
-        Returns paginated results with detailed node information including
-        flags, internet connectivity, and historical metadata.
+        Search nodelist entries. At least one constraint is required (zone,
+        net, node, system_name, location, sysop_name, node_type, is_cm, is_mo,
+        has_inet, has_binkp or a date bound); a search with none is refused
+        with 400. Without `latest_only`, every historical entry that matches
+        is returned, newest first.
       operationId: searchNodes
       tags:
         - Nodes
@@ -100,19 +154,19 @@ paths:
             example: 100
         - name: system_name
           in: query
-          description: System name (partial match, case-insensitive)
+          description: System name (substring, case-insensitive, at least 2 characters)
           schema:
             type: string
             example: "Linux BBS"
         - name: location
           in: query
-          description: Location (partial match, case-insensitive)
+          description: Location (substring, case-insensitive, at least 2 characters)
           schema:
             type: string
             example: "Moscow"
         - name: sysop_name
           in: query
-          description: Sysop name (partial match, case-insensitive)
+          description: Sysop name (substring, case-insensitive, at least 2 characters)
           schema:
             type: string
             example: "John Doe"
@@ -124,10 +178,24 @@ paths:
             example: "Hub"
         - name: is_cm
           in: query
-          description: Filter by CM (Continuous Mail) flag
+          description: Filter by the CM (Continuous Mail) flag
           schema:
             type: boolean
-            example: true
+        - name: is_mo
+          in: query
+          description: Filter by the MO (Mail Only) flag
+          schema:
+            type: boolean
+        - name: has_inet
+          in: query
+          description: Filter by the presence of any internet connectivity flag
+          schema:
+            type: boolean
+        - name: has_binkp
+          in: query
+          description: Filter by BinkP capability (IBN)
+          schema:
+            type: boolean
         # is_active is intentionally absent: it was documented here but never
         # implemented, so passing it silently returned unfiltered results. Use
         # latest_only for "one entry per node". A real "still listed in the
@@ -135,34 +203,35 @@ paths:
         # as a row predicate, false is not, so it needs its own query shape.
         - name: date_from
           in: query
-          description: Start date for historical data (YYYY-MM-DD)
+          description: Earliest nodelist date to include (YYYY-MM-DD)
           schema:
             type: string
             format: date
             example: "2024-01-01"
         - name: date_to
           in: query
-          description: End date for historical data (YYYY-MM-DD)
+          description: Latest nodelist date to include (YYYY-MM-DD)
           schema:
             type: string
             format: date
             example: "2024-12-31"
         - name: latest_only
           in: query
-          description: Return only the most recent entry for each node
+          description: >
+            Return only the most recent entry for each node. This is per
+            node, not "still listed": a node that left the nodelist years ago
+            still returns its final entry.
           schema:
             type: boolean
             default: false
-            example: true
         - name: limit
           in: query
-          description: Maximum number of results to return
+          description: Maximum number of results (default 100; values above 500 are capped to 500)
           schema:
             type: integer
             minimum: 1
-            maximum: 1000
+            maximum: 500
             default: 100
-            example: 50
         - name: offset
           in: query
           description: Number of results to skip (for pagination)
@@ -170,10 +239,9 @@ paths:
             type: integer
             minimum: 0
             default: 0
-            example: 0
       responses:
         '200':
-          description: Successful response
+          description: Search results
           content:
             application/json:
               schema:
@@ -186,15 +254,14 @@ paths:
                   count:
                     type: integer
                     description: Number of nodes returned
-                    example: 25
-                  total:
-                    type: integer
-                    description: Total number of matching nodes
-                    example: 1250
                   filter:
-                    $ref: '#/components/schemas/NodeFilter'
+                    $ref: '#/components/schemas/NodeSearchFilter'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -209,12 +276,7 @@ paths:
       tags:
         - Nodes
       parameters:
-        - name: domain
-          in: query
-          description: FTN network (defaults to fidonet)
-          schema:
-            type: string
-            default: fidonet
+        - $ref: '#/components/parameters/DomainDefaultFidonet'
         - name: zone
           in: query
           description: Restrict to one zone
@@ -222,7 +284,7 @@ paths:
             type: integer
         - name: limit
           in: query
-          description: Maximum nodes to return (default 5000, capped at 10000)
+          description: Maximum nodes to return (default 5000; values above 10000 are capped)
           schema:
             type: integer
             default: 5000
@@ -234,8 +296,19 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PSTNNode'
+                  count:
+                    type: integer
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -253,6 +326,17 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PSTNDeadNode'
+                  count:
+                    type: integer
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -281,211 +365,46 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  phones:
+                    type: array
+                    items:
+                      type: string
+                  count:
+                    type: integer
         '400':
           $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /api/cache/stats:
-    get:
-      summary: Cache Statistics
-      description: |
-        Hit/miss counters and size for the server's response cache. Registered
-        only when caching is enabled in the server configuration.
-      operationId: getCacheStats
-      tags:
-        - Operations
-      responses:
-        '200':
-          description: Cache counters
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /api/ratelimit/stats:
-    get:
-      summary: Rate Limiter Statistics
-      description: |
-        Allowed and rejected request counts and the number of client buckets
-        currently tracked. Registered only when rate limiting is enabled in the
-        server configuration.
-      operationId: getRateLimitStats
-      tags:
-        - Operations
-      responses:
-        '200':
-          description: Rate limiter counters
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /api/ftp/stats:
-    get:
-      summary: FTP Server Statistics
-      description: |
-        Connection counters for the built-in FTP server. Registered only when
-        the FTP server is enabled in the server configuration.
-      operationId: getFTPStats
-      tags:
-        - Operations
-      responses:
-        '200':
-          description: FTP server counters
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /api/modem/results/direct:
-    post:
-      summary: Submit Modem Test Results
-      description: |
-        Submit results from a modem test run. Authenticated with an API key
-        (Authorization header); registered only when modem_api is enabled.
-      operationId: submitModemResultsDirect
-      tags:
-        - Modem Testing
-      security:
-        - apiKey: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Results accepted
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          description: Missing or invalid API key
-
-  /api/modem/pstn-dead:
-    post:
-      summary: Mark a PSTN Node Dead
-      description: |
-        Record that a node's phone number does not answer, so later callers
-        skip it. Authenticated; registered only when modem_api is enabled.
-      operationId: markPSTNDead
-      tags:
-        - Modem Testing
-      security:
-        - apiKey: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [zone, net, node]
-              properties:
-                zone:
-                  type: integer
-                net:
-                  type: integer
-                node:
-                  type: integer
-                reason:
-                  type: string
-      responses:
-        '200':
-          description: Node marked dead
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          description: Missing or invalid API key
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-    delete:
-      summary: Revive a PSTN Node
-      description: |
-        Clear a node's dead mark so it is dialled again. Authenticated;
-        registered only when modem_api is enabled.
-      operationId: unmarkPSTNDead
-      tags:
-        - Modem Testing
-      security:
-        - apiKey: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [zone, net, node]
-              properties:
-                zone:
-                  type: integer
-                net:
-                  type: integer
-                node:
-                  type: integer
-      responses:
-        '200':
-          description: Node revived
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          description: Missing or invalid API key
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
   /api/nodes/{zone}/{net}/{node}:
     get:
-      summary: Get Specific Node
-      description: Get detailed information for a specific node by its address
+      summary: Get Node
+      description: |
+        The most recent nodelist entry of one address. When the address exists
+        in several FTN networks, the `X-Available-Domains` response header
+        lists them (comma-separated); select one with `?domain=`.
       operationId: getNode
       tags:
         - Nodes
       parameters:
-        - name: zone
-          in: path
-          required: true
-          description: FidoNet zone number
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 6
-        - name: net
-          in: path
-          required: true
-          description: Network number
-          schema:
-            type: integer
-            minimum: 0
-            maximum: 65535
-        - name: node
-          in: path
-          required: true
-          description: Node number
-          schema:
-            type: integer
-            minimum: 0
-            maximum: 65535
-        - name: latest_only
-          in: query
-          description: Return only the most recent entry
-          schema:
-            type: boolean
-            default: true
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/DomainResolved'
       responses:
         '200':
           description: Node found
+          headers:
+            X-Available-Domains:
+              description: Present when the address exists in more than one network
+              schema:
+                type: string
+                example: fidonet,fsxnet
           content:
             application/json:
               schema:
@@ -494,60 +413,55 @@ paths:
           $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
   /api/nodes/{zone}/{net}/{node}/history:
     get:
       summary: Get Node History
-      description: Get complete historical timeline for a specific node
+      description: Every nodelist entry of one address, oldest first, with the span it covers.
       operationId: getNodeHistory
       tags:
         - Nodes
       parameters:
-        - name: zone
-          in: path
-          required: true
-          description: FidoNet zone number
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 6
-        - name: net
-          in: path
-          required: true
-          description: Network number
-          schema:
-            type: integer
-            minimum: 0
-            maximum: 65535
-        - name: node
-          in: path
-          required: true
-          description: Node number
-          schema:
-            type: integer
-            minimum: 0
-            maximum: 65535
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/DomainResolved'
       responses:
         '200':
-          description: Node history retrieved successfully
+          description: Node history
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  history:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Node'
-                  count:
-                    type: integer
-                    example: 52
+                allOf:
+                  - $ref: '#/components/schemas/AddressEnvelope'
+                  - type: object
+                    properties:
+                      history:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Node'
+                      count:
+                        type: integer
+                      first_date:
+                        type: string
+                        format: date-time
+                      last_date:
+                        type: string
+                        format: date-time
         '404':
           $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -555,152 +469,402 @@ paths:
     get:
       summary: Get Node Changes
       description: |
-        Get a summary of all changes to a node over time.
+        The change log of one address: one entry per nodelist date on which
+        the node was added, removed or modified, with the fields that changed.
+        An address with no history answers an empty list.
       operationId: getNodeChanges
       tags:
         - Nodes
       parameters:
-        - name: zone
-          in: path
-          required: true
-          description: FidoNet zone number
-          schema:
-            type: integer
-        - name: net
-          in: path
-          required: true
-          description: Network number
-          schema:
-            type: integer
-        - name: node
-          in: path
-          required: true
-          description: Node number
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/DomainResolved'
       responses:
         '200':
-          description: Node changes retrieved successfully
+          description: Node changes
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  changes:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/NodeChange'
-        '404':
-          $ref: '#/components/responses/NotFound'
+                allOf:
+                  - $ref: '#/components/schemas/AddressEnvelope'
+                  - type: object
+                    properties:
+                      changes:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NodeChange'
+                      count:
+                        type: integer
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/nodes/{zone}/{net}/{node}/timeline:
     get:
       summary: Get Node Timeline
-      description: Get a visual timeline representation of node changes
+      description: |
+        The node's history as a sequence of events for a timeline chart: an
+        `active` event per nodelist entry, and a `removed` event wherever
+        more than two weeks passed before the next entry.
       operationId: getNodeTimeline
       tags:
         - Nodes
       parameters:
-        - name: zone
-          in: path
-          required: true
-          description: FidoNet zone number
-          schema:
-            type: integer
-        - name: net
-          in: path
-          required: true
-          description: Network number
-          schema:
-            type: integer
-        - name: node
-          in: path
-          required: true
-          description: Node number
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/DomainResolved'
       responses:
         '200':
-          description: Node timeline retrieved successfully
+          description: Node timeline
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  timeline:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/TimelineEvent'
+                allOf:
+                  - $ref: '#/components/schemas/AddressEnvelope'
+                  - type: object
+                    properties:
+                      timeline:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TimelineEvent'
+                      count:
+                        type: integer
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/nodes/{zone}/{net}/{node}/points:
     get:
       summary: Get Points Under a Boss Node
       description: |
-        Returns the pointlist snapshot under a boss node: per pointlist series
-        the latest issue at or before the as-of date (within a 60-day staleness
+        The pointlist snapshot under a boss node: per pointlist series the
+        latest issue at or before the as-of date (within a 60-day staleness
         window), with overlapping entries resolved to the most authoritative
         series (net-level < regional < zone rollup).
       operationId: getNodePoints
       tags:
         - Points
       parameters:
-        - name: zone
-          in: path
-          required: true
-          description: FidoNet zone number
-          schema:
-            type: integer
-        - name: net
-          in: path
-          required: true
-          description: Network number
-          schema:
-            type: integer
-        - name: node
-          in: path
-          required: true
-          description: Boss node number
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
         - name: date
           in: query
-          required: false
           description: As-of date (YYYY-MM-DD); defaults to the newest imported issue
           schema:
             type: string
             format: date
         - name: domain
           in: query
-          required: false
           description: FTN network (defaults to the network the boss's points exist in)
           schema:
             type: string
       responses:
         '200':
-          description: Points retrieved successfully
+          description: Points under the boss
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/AddressEnvelope'
+                  - type: object
+                    properties:
+                      points:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Point'
+                      count:
+                        type: integer
+                      as_of:
+                        type: string
+                        format: date
+                        description: Present only when ?date= was given
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/nodes/{zone}/{net}/{node}/ping:
+    get:
+      summary: Get Node Netmail PING History
+      description: |
+        Every FTS-4010 netmail PING sent to the node by the testdaemon, with the
+        outbound path the robot quoted back (hop by hop, from the ^AVia chain),
+        the answer's own return path, round-trip time and robot software, plus
+        the replies behind them (pongs, transit TRACE notices, bounces). Reply
+        bodies are never published.
+      operationId: getNodePing
+      tags:
+        - Reachability
+      parameters:
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/DomainResolved'
+        - name: limit
+          in: query
+          description: Maximum pings to return, newest first (1-500; other values fall back to 50)
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+      responses:
+        '200':
+          description: Ping history and replies
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/AddressEnvelope'
+                  - type: object
+                    properties:
+                      pings:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Ping'
+                      replies:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PingReply'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/nodes/{zone}/{net}/{node}/tests:
+    get:
+      summary: Get Node Test History
+      description: |
+        The testing daemon's results for one node within the window, oldest
+        first, with aggregate statistics over the same window. A node that was
+        never tested answers an empty list and null statistics, not 404.
+        Multi-hostname nodes contribute one row per hostname plus one
+        aggregated row (`is_aggregated`).
+      operationId: getNodeTests
+      tags:
+        - Reachability
+      parameters:
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/DomainResolved'
+        - name: days
+          in: query
+          description: Look-back window in days (1-365; values outside are rejected)
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 365
+      responses:
+        '200':
+          description: Test history
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/AddressEnvelope'
+                  - type: object
+                    properties:
+                      days:
+                        type: integer
+                      tests:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NodeTestResult'
+                      count:
+                        type: integer
+                      stats:
+                        allOf:
+                          - $ref: '#/components/schemas/NodeReachabilityStats'
+                        nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/nodes/{zone}/{net}/{node}/tests/detail:
+    get:
+      summary: Get One Test Result
+      description: |
+        One test result in full, identified by its `test_time` exactly as
+        reported in the node's test history. The timestamp is a query
+        parameter rather than a path segment so that percent-encoded zone
+        offsets survive routing.
+      operationId: getNodeTestDetail
+      tags:
+        - Reachability
+      parameters:
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/DomainResolved'
+        - name: time
+          in: query
+          required: true
+          description: The result's test_time, RFC 3339
+          schema:
+            type: string
+            format: date-time
+            example: "2026-09-10T12:00:00Z"
+      responses:
+        '200':
+          description: The test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeTestResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/reachability/trends:
+    get:
+      summary: Get Reachability Trends
+      description: |
+        Per day, how many nodes the daemon tested and how many were
+        operational, with the average response time: the series behind the
+        /reachability chart.
+      operationId: getReachabilityTrends
+      tags:
+        - Reachability
+      parameters:
+        - $ref: '#/components/parameters/DomainDefaultAll'
+        - name: days
+          in: query
+          description: Window in days; omitted or 0 means the whole history (values above 3650 are rejected)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+            maximum: 3650
+      responses:
+        '200':
+          description: Daily trend
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  address:
-                    type: string
-                    example: "2:5001/100"
                   domain:
                     type: string
-                    example: fidonet
-                  available_domains:
+                  days:
+                    type: integer
+                  trends:
                     type: array
                     items:
-                      type: string
-                  points:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Point'
+                      $ref: '#/components/schemas/ReachabilityTrend'
                   count:
                     type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/reachability/nodes:
+    get:
+      summary: Search Test Results
+      description: |
+        Each node's newest test result within the window, newest first,
+        narrowed by outcome and by which protocol succeeded. Both filters are
+        applied before the limit, so a rarely successful protocol is found
+        wherever it sits.
+      operationId: searchReachability
+      tags:
+        - Reachability
+      parameters:
+        - $ref: '#/components/parameters/DomainDefaultAll'
+        - name: status
+          in: query
+          description: operational, failed, or omitted/all for both
+          schema:
+            type: string
+            enum: [operational, failed, all]
+        - name: protocol
+          in: query
+          description: >
+            Keep only nodes whose newest test succeeded over this protocol
+            (vmodem means a confirmed VMP responder); omitted/any for all
+          schema:
+            type: string
+            enum: [binkp, ifcico, telnet, ftp, vmodem, any]
+        - name: days
+          in: query
+          description: Look-back window in days (1-365; values outside are rejected)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+            maximum: 365
+        - name: limit
+          in: query
+          description: Maximum nodes to return (1-1000; values outside are rejected)
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 1000
+      responses:
+        '200':
+          description: Matching test results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NodeTestResult'
+                  count:
+                    type: integer
+                  filter:
+                    $ref: '#/components/schemas/ReachabilitySearchFilter'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/points:
     get:
@@ -745,17 +909,17 @@ paths:
             type: string
         - name: system_name
           in: query
-          description: System name (substring, case-insensitive, min 2 chars)
+          description: System name (substring, case-insensitive, at least 2 characters)
           schema:
             type: string
         - name: location
           in: query
-          description: Location (substring, case-insensitive, min 2 chars)
+          description: Location (substring, case-insensitive, at least 2 characters)
           schema:
             type: string
         - name: sysop_name
           in: query
-          description: Sysop name (substring, case-insensitive, min 2 chars)
+          description: Sysop name (substring, case-insensitive, at least 2 characters)
           schema:
             type: string
         - name: date_from
@@ -776,6 +940,7 @@ paths:
             type: boolean
         - name: limit
           in: query
+          description: Maximum number of results (default 100; values above 500 are capped to 500)
           schema:
             type: integer
             default: 100
@@ -799,134 +964,108 @@ paths:
                       $ref: '#/components/schemas/Point'
                   count:
                     type: integer
+                  filter:
+                    $ref: '#/components/schemas/PointSearchFilter'
         '400':
-          description: Missing constraint or invalid parameter
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/points/{zone}/{net}/{node}/{point}:
     get:
       summary: Get Point
       description: |
-        Returns the current snapshot entry of one 4-D point address. When the
+        The current snapshot entry of one 4-D point address. When the
         address exists in several FTN networks, the X-Available-Domains
         response header lists them; select one with ?domain=.
       operationId: getPoint
       tags:
         - Points
       parameters:
-        - name: zone
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: net
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: node
-          in: path
-          required: true
-          description: Boss node number
-          schema:
-            type: integer
-        - name: point
-          in: path
-          required: true
-          description: Point number
-          schema:
-            type: integer
-        - name: domain
-          in: query
-          required: false
-          schema:
-            type: string
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/PointNumber'
+        - $ref: '#/components/parameters/DomainResolved'
       responses:
         '200':
           description: Point retrieved successfully
+          headers:
+            X-Available-Domains:
+              description: Present when the address exists in more than one network
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Point'
         '404':
-          description: Point not found
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/points/{zone}/{net}/{node}/{point}/history:
     get:
       summary: Get Point History
       description: |
-        Returns every stored entry of one 4-D point address across all
-        pointlist series and issue dates. Rows are labeled with list_source;
+        Every stored entry of one 4-D point address across all pointlist
+        series and issue dates. Rows are labeled with list_source;
         overlapping series are not collapsed.
       operationId: getPointHistory
       tags:
         - Points
       parameters:
-        - name: zone
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: net
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: node
-          in: path
-          required: true
-          description: Boss node number
-          schema:
-            type: integer
-        - name: point
-          in: path
-          required: true
-          description: Point number
-          schema:
-            type: integer
-        - name: domain
-          in: query
-          required: false
-          schema:
-            type: string
+        - $ref: '#/components/parameters/Zone'
+        - $ref: '#/components/parameters/Net'
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/PointNumber'
+        - $ref: '#/components/parameters/DomainResolved'
       responses:
         '200':
-          description: Point history retrieved successfully
+          description: Point history
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  address:
-                    type: string
-                    example: "2:5001/100.1"
-                  domain:
-                    type: string
-                  available_domains:
-                    type: array
-                    items:
-                      type: string
-                  history:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Point'
-                  count:
-                    type: integer
+                allOf:
+                  - $ref: '#/components/schemas/AddressEnvelope'
+                  - type: object
+                    properties:
+                      history:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Point'
+                      count:
+                        type: integer
         '404':
-          description: Point not found
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/pointlists/dates:
     get:
       summary: List Imported Pointlist Files
-      description: Lists imported pointlist issues (per series), newest first.
+      description: Imported pointlist issues (per series), newest first.
       operationId: getPointlistDates
       tags:
         - Points
       parameters:
-        - name: domain
-          in: query
-          description: FTN network (default fidonet)
-          schema:
-            type: string
+        - $ref: '#/components/parameters/DomainDefaultFidonet'
         - name: source
           in: query
           description: Restrict to one pointlist series (r24, z2, ...)
@@ -934,7 +1073,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Pointlist files retrieved successfully
+          description: Pointlist files
           content:
             application/json:
               schema:
@@ -946,23 +1085,25 @@ paths:
                       $ref: '#/components/schemas/PointlistFile'
                   count:
                     type: integer
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/pointlists/sources:
     get:
       summary: List Pointlist Sources
-      description: Summarizes the imported pointlist series (coverage, file and point counts).
+      description: The imported pointlist series with their coverage, file and point counts.
       operationId: getPointlistSources
       tags:
         - Points
       parameters:
-        - name: domain
-          in: query
-          description: FTN network (default fidonet)
-          schema:
-            type: string
+        - $ref: '#/components/parameters/DomainDefaultFidonet'
       responses:
         '200':
-          description: Pointlist sources retrieved successfully
+          description: Pointlist sources
           content:
             application/json:
               schema:
@@ -974,27 +1115,32 @@ paths:
                       $ref: '#/components/schemas/PointlistSource'
                   count:
                     type: integer
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/sysops:
     get:
       summary: List Sysops
       description: |
-        Get a list of unique sysops with their node counts and activity statistics.
-
-        Results can be filtered by name and paginated for large datasets.
+        Unique sysops with their node counts and activity statistics, filtered
+        by name and paginated.
       operationId: listSysops
       tags:
         - Sysops
       parameters:
         - name: name
           in: query
-          description: Filter by sysop name (partial match, case-insensitive)
+          description: Filter by sysop name (substring, case-insensitive)
           schema:
             type: string
             example: "John"
         - name: limit
           in: query
-          description: Maximum number of results
+          description: Maximum number of results (default 50; values above 200 are capped to 200)
           schema:
             type: integer
             minimum: 1
@@ -1009,7 +1155,7 @@ paths:
             default: 0
       responses:
         '200':
-          description: Successful response
+          description: Sysops
           content:
             application/json:
               schema:
@@ -1021,18 +1167,19 @@ paths:
                       $ref: '#/components/schemas/SysopInfo'
                   count:
                     type: integer
-                    description: Number of sysops returned
-                    example: 50
                   filter:
                     type: object
                     properties:
                       name:
                         type: string
-                        nullable: true
                       limit:
                         type: integer
                       offset:
                         type: integer
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1040,9 +1187,8 @@ paths:
     get:
       summary: Get Nodes by Sysop
       description: |
-        Get all nodes operated by a specific sysop.
-        
-        The sysop name must be URL-encoded if it contains special characters.
+        All nodes operated by one sysop (exact name, URL-encoded), newest
+        entry per node.
       operationId: getNodesBySysop
       tags:
         - Sysops
@@ -1056,7 +1202,7 @@ paths:
             example: "John_Doe"
         - name: limit
           in: query
-          description: Maximum number of results
+          description: Maximum number of results (default 100; values above 1000 are capped to 1000)
           schema:
             type: integer
             minimum: 1
@@ -1064,7 +1210,7 @@ paths:
             default: 100
       responses:
         '200':
-          description: Successful response
+          description: The sysop's nodes
           content:
             application/json:
               schema:
@@ -1072,77 +1218,39 @@ paths:
                 properties:
                   sysop_name:
                     type: string
-                    description: The sysop name
-                    example: "John_Doe"
                   nodes:
                     type: array
                     items:
                       $ref: '#/components/schemas/Node'
                   count:
                     type: integer
-                    description: Number of nodes returned
-                    example: 25
                   limit:
                     type: integer
-                    description: The limit applied
-                    example: 100
         '400':
           $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /api/networks:
-    get:
-      summary: List FTN Networks
-      description: >
-        List the FTN networks (domains) present in the database with each
-        network's latest nodelist date and node count on that date.
-      operationId: getNetworks
-      tags:
-        - Statistics
-      responses:
-        '200':
-          description: Networks present in the database
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  networks:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        domain:
-                          type: string
-                          example: fsxnet
-                        latest_date:
-                          type: string
-                          format: date-time
-                        node_count:
-                          type: integer
-                  count:
-                    type: integer
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
   /api/stats:
     get:
       summary: Get Network Statistics
-      description: Get comprehensive FTN network statistics
+      description: |
+        Node counts by type and capability, the zone distribution and the
+        largest regions and nets, for one nodelist date. When `date` names a
+        date with no nodelist, the nearest available date is used and
+        `date_adjusted` says so.
       operationId: getStats
       tags:
         - Statistics
       parameters:
-        - name: domain
-          in: query
-          description: FTN network to report on (defaults to fidonet)
-          schema:
-            type: string
-            default: fidonet
+        - $ref: '#/components/parameters/DomainDefaultFidonet'
         - name: date
           in: query
-          description: Nodelist date (YYYY-MM-DD); nearest available date is used
+          description: Nodelist date (YYYY-MM-DD); defaults to the latest
           schema:
             type: string
             format: date
@@ -1152,24 +1260,38 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NetworkStats'
+                type: object
+                properties:
+                  stats:
+                    $ref: '#/components/schemas/NetworkStats'
+                  domain:
+                    type: string
+                  requested_date:
+                    type: string
+                    description: The date parameter as given ("" when omitted)
+                  actual_date:
+                    type: string
+                    format: date
+                  date_adjusted:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
   /api/stats/dates:
     get:
       summary: Get Available Dates
-      description: Get list of all dates for which nodelist data is available
+      description: Every nodelist date in the database for one network.
       operationId: getAvailableDates
       tags:
         - Statistics
       parameters:
-        - name: domain
-          in: query
-          description: FTN network whose dates to list (defaults to fidonet)
-          schema:
-            type: string
-            default: fidonet
+        - $ref: '#/components/parameters/DomainDefaultFidonet'
       responses:
         '200':
           description: Available dates
@@ -1183,18 +1305,38 @@ paths:
                     items:
                       type: string
                       format: date
-                    example: ["2024-01-01", "2024-01-08", "2024-01-15"]
                   count:
                     type: integer
-                    example: 52
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/flags:
     get:
       summary: Get Flags Documentation
-      description: Get comprehensive documentation for all FidoNet node flags
+      description: |
+        The FidoNet nodelist flags with their category and description, both
+        as a map by flag and grouped by category.
       operationId: getFlagsDocumentation
       tags:
         - Reference
+      parameters:
+        - name: category
+          in: query
+          description: Only flags of this category (modem, internet, capability, filerequest, schedule, user)
+          schema:
+            type: string
+        - name: flag
+          in: query
+          description: >
+            A flag to make sure is described; a T-flag (Txy) absent from the
+            table is described from its letters
+          schema:
+            type: string
+            example: TAB
       responses:
         '200':
           description: Flags documentation
@@ -1206,143 +1348,131 @@ paths:
                   flags:
                     type: object
                     additionalProperties:
-                      $ref: '#/components/schemas/FlagDefinition'
+                      $ref: '#/components/schemas/FlagInfo'
+                  categories:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          flag:
+                            type: string
+                          has_value:
+                            type: boolean
+                          description:
+                            type: string
+                  count:
+                    type: integer
+                  filter:
+                    type: object
+                    properties:
+                      category:
+                        type: string
 
   /api/software/binkp:
     get:
       summary: Get BinkP Software Distribution
       description: |
-        Get statistical distribution of BinkP software implementations detected across the network.
-
-        Returns aggregated data showing which BinkP software versions are in use.
+        Which mailer software answered BinkP handshakes, by software, by
+        version and by operating system, over the window.
       operationId: getBinkPSoftwareStats
       tags:
         - Software Analytics
       parameters:
-        - name: days
-          in: query
-          description: Number of days to include in analysis
-          schema:
-            type: integer
-            minimum: 1
-            default: 365
-            example: 365
+        - $ref: '#/components/parameters/DomainDefaultAll'
+        - $ref: '#/components/parameters/AnalyticsDays'
       responses:
         '200':
-          description: BinkP software distribution statistics
+          description: BinkP software distribution
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SoftwareDistribution'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
   /api/software/ifcico:
     get:
-      summary: Get IFCico Software Distribution
+      summary: Get IFCICO Software Distribution
       description: |
-        Get statistical distribution of IFCico/Telnet software implementations detected across the network.
-
-        Returns aggregated data showing which IFCico software versions are in use.
+        Which mailer software answered EMSI (IFCICO) handshakes, by software,
+        by version and by operating system, over the window.
       operationId: getIFCICOSoftwareStats
       tags:
         - Software Analytics
       parameters:
-        - name: days
-          in: query
-          description: Number of days to include in analysis
-          schema:
-            type: integer
-            minimum: 1
-            default: 365
-            example: 365
+        - $ref: '#/components/parameters/DomainDefaultAll'
+        - $ref: '#/components/parameters/AnalyticsDays'
       responses:
         '200':
-          description: IFCico software distribution statistics
+          description: IFCICO software distribution
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SoftwareDistribution'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
   /api/software/binkd:
     get:
-      summary: Get Binkd Detailed Statistics
+      summary: Get Binkd Version Breakdown
       description: |
-        Get detailed statistics for Binkd software implementations, including version breakdowns and trends.
+        The BinkP distribution restricted to binkd, so version_breakdown is
+        per binkd release.
       operationId: getBinkdDetailedStats
       tags:
         - Software Analytics
       parameters:
-        - name: days
-          in: query
-          description: Number of days to include in analysis
-          schema:
-            type: integer
-            minimum: 1
-            default: 365
-            example: 365
+        - $ref: '#/components/parameters/DomainDefaultAll'
+        - $ref: '#/components/parameters/AnalyticsDays'
       responses:
         '200':
-          description: Detailed Binkd statistics
+          description: Binkd statistics
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BinkdDetailedStats'
+                $ref: '#/components/schemas/SoftwareDistribution'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/nodes/{zone}/{net}/{node}/ping:
+  /api/analytics/geo-hosting:
     get:
-      summary: Get Node Netmail PING History
+      summary: Get Geographic Hosting Distribution
       description: |
-        Every FTS-4010 netmail PING sent to the node by the testdaemon, with the
-        outbound path the robot quoted back (hop by hop, from the ^AVia chain),
-        the answer's own return path, round-trip time and robot software, plus
-        the replies behind them (pongs, transit TRACE notices, bounces).
-      operationId: getNodePing
+        Where tested nodes are hosted, by country and by hosting provider,
+        from IP geolocation of the addresses their hostnames resolved to.
+      operationId: getGeoHostingStats
       tags:
-        - Nodes
+        - Geographic Analytics
       parameters:
-        - name: zone
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: net
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: node
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: domain
-          in: query
-          description: FTN network (resolved from the address when omitted)
-          schema:
-            type: string
-        - name: limit
-          in: query
-          description: Maximum pings to return (newest first)
-          schema:
-            type: integer
-            default: 50
-            maximum: 500
+        - $ref: '#/components/parameters/DomainDefaultAll'
+        - $ref: '#/components/parameters/AnalyticsDays'
       responses:
         '200':
-          description: Ping history and replies
+          description: Geographic hosting distribution
           content:
             application/json:
               schema:
-                type: object
-        '400':
-          description: Invalid address
+                $ref: '#/components/schemas/GeoHostingDistribution'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
-          description: Internal server error
+          $ref: '#/components/responses/InternalServerError'
 
   /api/analytics/pingtrace:
     get:
@@ -1354,16 +1484,12 @@ paths:
         (never on a measured path), and the PING robot software seen.
       operationId: getPingTraceStats
       tags:
-        - Geographic Analytics
+        - Reachability
       parameters:
-        - name: domain
-          in: query
-          description: FTN network to report on (empty = all)
-          schema:
-            type: string
+        - $ref: '#/components/parameters/DomainDefaultAll'
         - name: days
           in: query
-          description: Window in days
+          description: Window in days (values above 3650 are capped)
           schema:
             type: integer
             default: 90
@@ -1373,36 +1499,11 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-        '500':
-          description: Internal server error
-
-  /api/analytics/geo-hosting:
-    get:
-      summary: Get Geographic Hosting Distribution
-      description: |
-        Get geographic distribution statistics of node hosting by country and region.
-
-        Returns data showing where FidoNet nodes are physically hosted based on IP geolocation.
-      operationId: getGeoHostingStats
-      tags:
-        - Geographic Analytics
-      parameters:
-        - name: days
-          in: query
-          description: Number of days to include in analysis
-          schema:
-            type: integer
-            minimum: 1
-            default: 365
-            example: 365
-      responses:
-        '200':
-          description: Geographic hosting distribution statistics
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GeoDistribution'
+                $ref: '#/components/schemas/PingTraceSummary'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/BudgetExceeded'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1410,22 +1511,15 @@ paths:
     get:
       summary: Get Latest Nodelist
       description: |
-        Get information about the newest nodelist of one FTN network.
-
-        The archive stores nodelists gzipped, and a compressed file is
-        described rather than served: the response carries its metadata and a
-        download_url. An uncompressed file is returned as text/plain instead.
+        The newest nodelist file of one FTN network. The archive stores
+        nodelists gzipped, and a compressed file is described rather than
+        served: the response carries its metadata and a download_url. An
+        uncompressed file is returned as text/plain instead.
       operationId: getLatestNodelist
       tags:
         - Nodelists
       parameters:
-        - name: domain
-          in: query
-          description: FTN network (defaults to fidonet)
-          schema:
-            type: string
-            default: fidonet
-            example: fsxnet
+        - $ref: '#/components/parameters/DomainDefaultFidonet'
       responses:
         '200':
           description: Latest nodelist information
@@ -1442,10 +1536,196 @@ paths:
         '404':
           description: That network has no nodelist files
 
+  /api/cache/stats:
+    get:
+      summary: Cache Statistics
+      description: |
+        Hit/miss counters and size for the server's response cache. Registered
+        only when caching is enabled in the server configuration.
+      operationId: getCacheStats
+      tags:
+        - Operations
+      responses:
+        '200':
+          description: Cache counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheStats'
+
+  /api/ratelimit/stats:
+    get:
+      summary: Rate Limiter Statistics
+      description: |
+        Allowed and rejected request counts and the number of client buckets
+        currently tracked. Registered only when rate limiting is enabled
+        (it is unless the configuration turns it off).
+      operationId: getRateLimitStats
+      tags:
+        - Operations
+      responses:
+        '200':
+          description: Rate limiter counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitStats'
+
+  /api/ftp/stats:
+    get:
+      summary: FTP Server Statistics
+      description: |
+        Listener settings of the built-in FTP server. Registered only when
+        the FTP server is enabled in the server configuration.
+      operationId: getFTPStats
+      tags:
+        - Operations
+      responses:
+        '200':
+          description: FTP server settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FTPStats'
+
+  /api/modem/results/direct:
+    post:
+      summary: Submit Modem Test Results
+      description: |
+        Submit results from a modem test run. Authenticated with a bearer API
+        key; registered only when modem_api is enabled. A body whose
+        Content-Length exceeds the configured size limit is refused with 413;
+        a chunked body that grows past it is cut off and fails decoding
+        (400). More results than the configured batch size is 400.
+      operationId: submitModemResultsDirect
+      tags:
+        - Modem Testing
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [results]
+              properties:
+                results:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ModemTestResultRequest'
+      responses:
+        '200':
+          description: Results accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: integer
+                  stored:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: Content-Length larger than the configured limit
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/modem/pstn-dead:
+    post:
+      summary: Mark a PSTN Node Dead
+      description: |
+        Record that a node's phone number does not answer, so later callers
+        skip it. Authenticated; registered only when modem_api is enabled.
+        A body whose Content-Length exceeds the configured size limit is
+        refused with 413; a chunked body that grows past it fails decoding
+        (400).
+      operationId: markPSTNDead
+      tags:
+        - Modem Testing
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zone, net, node]
+              properties:
+                zone:
+                  type: integer
+                net:
+                  type: integer
+                node:
+                  type: integer
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Node marked dead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: Content-Length larger than the configured limit
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Revive a PSTN Node
+      description: |
+        Clear a node's dead mark so it is dialled again. Authenticated;
+        registered only when modem_api is enabled. A body whose
+        Content-Length exceeds the configured size limit is refused with
+        413; a chunked body that grows past it fails decoding (400).
+      operationId: unmarkPSTNDead
+      tags:
+        - Modem Testing
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zone, net, node]
+              properties:
+                zone:
+                  type: integer
+                net:
+                  type: integer
+                node:
+                  type: integer
+      responses:
+        '200':
+          description: Node revived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: Content-Length larger than the configured limit
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/openapi.yaml:
     get:
       summary: OpenAPI Specification
-      description: Get the OpenAPI specification for this API
+      description: This document
       operationId: getOpenAPISpec
       tags:
         - Documentation
@@ -1460,7 +1740,7 @@ paths:
   /api/docs:
     get:
       summary: API Documentation
-      description: Interactive Swagger UI documentation for this API
+      description: Interactive Swagger UI for this API
       operationId: getAPIDocs
       tags:
         - Documentation
@@ -1474,393 +1754,71 @@ paths:
 
 components:
   schemas:
-    Node:
+    # --- Envelopes and echoes built by the handlers themselves -------------
+    AddressEnvelope:
       type: object
-      description: Complete FidoNet node information
+      description: >
+        The preamble of every response about one 3-D or 4-D address: which
+        network answered and which networks the address exists in.
       properties:
+        address:
+          type: string
+          example: "2:5001/100"
+        domain:
+          type: string
+          example: fidonet
+        available_domains:
+          type: array
+          items:
+            type: string
+          description: Always an array, possibly empty
+    NodeSearchFilter:
+      type: object
+      description: The node search's reading of its parameters (null = not applied)
+      properties:
+        domain:
+          type: string
+          nullable: true
         zone:
           type: integer
-          description: FidoNet zone number (1-6)
-          example: 2
+          nullable: true
         net:
           type: integer
-          description: Network number within the zone
-          example: 5001
+          nullable: true
         node:
           type: integer
-          description: Node number within the network
-          example: 100
-        nodelist_date:
-          type: string
-          format: date-time
-          description: Date this nodelist entry was published
-          example: "2024-07-29T00:00:00Z"
-        day_number:
-          type: integer
-          description: Day number of the year (1-366)
-          example: 211
+          nullable: true
         system_name:
           type: string
-          description: Name of the BBS/system
-          example: "Linux Node"
+          nullable: true
         location:
           type: string
-          description: Geographic location
-          example: "Moscow, Russia"
+          nullable: true
         sysop_name:
           type: string
-          description: System operator name
-          example: "John Doe"
-        phone:
-          type: string
-          description: Phone number or connection method
-          example: "000-000-0000"
+          nullable: true
         node_type:
           type: string
-          description: Type of node (Zone, Region, Host, Hub, Pvt, Down, Hold)
-          example: "Pvt"
-        region:
-          type: integer
           nullable: true
-          description: Region number (if applicable)
-          example: 50
-        max_speed:
-          type: string
-          description: Maximum connection speed
-          example: "33600"
         is_cm:
           type: boolean
-          description: Continuous Mail capability
-          example: true
+          nullable: true
         is_mo:
           type: boolean
-          description: Mail Only node
-          example: false
-        has_binkp:
-          type: boolean
-          description: Supports Binkp protocol
-          example: true
+          nullable: true
         has_inet:
           type: boolean
-          description: Has internet connectivity
-          example: true
-        has_telnet:
-          type: boolean
-          description: Supports Telnet connections
-          example: true
-        is_down:
-          type: boolean
-          description: Node is currently down
-          example: false
-        is_hold:
-          type: boolean
-          description: Node is on hold
-          example: false
-        is_pvt:
-          type: boolean
-          description: Private node
-          example: true
-        is_active:
-          type: boolean
-          description: Node is currently active
-          example: true
-        flags:
-          type: array
-          items:
-            type: string
-          description: Raw nodelist flags
-          example: ["CM", "IBN", "INA:fidonet.example.com"]
-        modem_flags:
-          type: array
-          items:
-            type: string
-          description: Modem-related flags
-          example: ["V32B", "V42B"]
-        # Internet array fields have been removed - data is now in internet_config JSON field
-        internet_config:
-          type: object
-          description: >-
-            Parsed internet configuration. Under `defaults`, INA and IEM are
-            lists of strings ("INA": ["a.example.org", "b.example.org"]) because
-            a nodelist line may carry the flag more than once. Rows imported
-            before that change hold a bare string instead, so clients should
-            accept either shape.
-          additionalProperties: true
-        conflict_sequence:
-          type: integer
-          description: Sequence number for duplicate entries (0 = original)
-          example: 0
-        has_conflict:
-          type: boolean
-          description: Whether this node has duplicate entries
-          example: false
-
-    Point:
-      type: object
-      description: One FTN pointlist entry (FTS-5002)
-      properties:
-        zone:
-          type: integer
-          description: FidoNet zone number
-          example: 2
-        net:
-          type: integer
-          description: Network number within the zone
-          example: 5001
-        node:
-          type: integer
-          description: Boss node number
-          example: 100
-        point:
-          type: integer
-          description: Point number under the boss
-          example: 1
-        domain:
-          type: string
-          description: FTN network this entry belongs to
-          example: fidonet
-        pointlist_date:
-          type: string
-          format: date-time
-          description: Issue date of the pointlist this entry came from
-          example: "2024-01-05T00:00:00Z"
-        day_number:
-          type: integer
-          description: Day number of the year (1-366)
-          example: 5
-        list_source:
-          type: string
-          description: Pointlist series this entry came from (r24, z2, ...)
-          example: r50
-        source_priority:
-          type: integer
-          description: Series authority (0 net-level, 10 regional, 20 zone rollup)
-          example: 10
-        source_format:
-          type: string
-          description: Source file format (boss, poss, pvt, point, fakenet)
-          example: boss
-        system_name:
-          type: string
-          example: "Point System"
-        location:
-          type: string
-          example: "Moscow, Russia"
-        sysop_name:
-          type: string
-          example: "John Doe"
-        phone:
-          type: string
-          example: "-Unpublished-"
-        max_speed:
-          type: integer
-          example: 33600
-        is_cm:
-          type: boolean
-          description: Continuous Mail capability
-        is_mo:
-          type: boolean
-          description: Mail Only
-        has_inet:
-          type: boolean
-          description: Has internet connectivity flags
-        flags:
-          type: array
-          items:
-            type: string
-          example: ["CM", "IBN"]
-        modem_flags:
-          type: array
-          items:
-            type: string
-          example: ["V34"]
-        internet_config:
-          type: object
-          description: >-
-            Parsed internet configuration. Under `defaults`, INA and IEM are
-            lists of strings ("INA": ["a.example.org", "b.example.org"]) because
-            a nodelist line may carry the flag more than once. Rows imported
-            before that change hold a bare string instead, so clients should
-            accept either shape.
-          additionalProperties: true
-        conflict_sequence:
-          type: integer
-          description: Sequence number for duplicate entries within one file (0 = original)
-        has_conflict:
-          type: boolean
-          description: Whether this 4-D address appeared more than once in one file
-        fts_id:
-          type: string
-          description: Full-text search identifier
-          example: "2:5001/100.1@2024-01-05#0"
-
-    PointlistFile:
-      type: object
-      description: One imported pointlist file (import gate row)
-      properties:
-        domain:
-          type: string
-          example: fidonet
-        list_source:
-          type: string
-          example: z2
-        pointlist_date:
-          type: string
-          format: date-time
-          example: "2024-01-05T00:00:00Z"
-        day_number:
-          type: integer
-          example: 5
-        filename:
-          type: string
-          example: "Z2PNT.005"
-        source_format:
-          type: string
-          example: boss
-        points_count:
-          type: integer
-          example: 2848
-        bosses_count:
-          type: integer
-          example: 161
-        imported_at:
-          type: string
-          format: date-time
-
-    PointlistSource:
-      type: object
-      description: Summary of one imported pointlist series
-      properties:
-        domain:
-          type: string
-          example: fidonet
-        list_source:
-          type: string
-          example: r24
-        first_date:
-          type: string
-          format: date-time
-        last_date:
-          type: string
-          format: date-time
-        file_count:
-          type: integer
-          example: 1250
-        total_points:
-          type: integer
-          example: 8000000
-
-    NodeSummary:
-      type: object
-      description: Simplified node information for search results
-      properties:
-        zone:
-          type: integer
-          example: 2
-        net:
-          type: integer
-          example: 5001
-        node:
-          type: integer
-          example: 100
-        system_name:
-          type: string
-          example: "Linux Node"
-        location:
-          type: string
-          example: "Moscow, Russia"
-        sysop_name:
-          type: string
-          example: "John Doe"
-        first_date:
-          type: string
-          format: date-time
-          example: "2024-01-01T00:00:00Z"
-        last_date:
-          type: string
-          format: date-time
-          example: "2024-07-29T00:00:00Z"
-        currently_active:
-          type: boolean
-          example: true
-
-    SysopInfo:
-      type: object
-      description: Information about a sysop
-      properties:
-        name:
-          type: string
-          description: Sysop name
-          example: "John_Doe"
-        node_count:
-          type: integer
-          description: Total number of unique nodes operated
-          example: 15
-        active_nodes:
-          type: integer
-          description: Number of currently active nodes
-          example: 12
-        first_seen:
-          type: string
-          format: date-time
-          description: First appearance in nodelist
-          example: "2020-01-15T00:00:00Z"
-        last_seen:
-          type: string
-          format: date-time
-          description: Most recent appearance in nodelist
-          example: "2024-07-29T00:00:00Z"
-        zones:
-          type: array
-          items:
-            type: integer
-          description: List of zones where sysop has nodes
-          example: [1, 2, 3]
-
-    NodeFilter:
-      type: object
-      description: Applied search filters
-      properties:
-        zone:
-          type: integer
-          nullable: true
-        net:
-          type: integer
-          nullable: true
-        node:
-          type: integer
-          nullable: true
-        system_name:
-          type: string
-          nullable: true
-        location:
-          type: string
-          nullable: true
-        sysop_name:
-          type: string
           nullable: true
         has_binkp:
-          type: boolean
-          nullable: true
-        has_telnet:
-          type: boolean
-          nullable: true
-        has_inet:
-          type: boolean
-          nullable: true
-        is_cm:
-          type: boolean
-          nullable: true
-        is_active:
           type: boolean
           nullable: true
         date_from:
           type: string
-          format: date
+          format: date-time
           nullable: true
         date_to:
           type: string
-          format: date
+          format: date-time
           nullable: true
         latest_only:
           type: boolean
@@ -1869,278 +1827,1467 @@ components:
           type: integer
         offset:
           type: integer
-
-    NodeChange:
+    PointSearchFilter:
       type: object
-      description: A change to a node over time
-      properties:
-        date:
-          type: string
-          format: date-time
-        field:
-          type: string
-          description: Field that changed
-          example: "location"
-        old_value:
-          type: string
-          nullable: true
-          example: "Old Location"
-        new_value:
-          type: string
-          nullable: true
-          example: "New Location"
-        change_type:
-          type: string
-          enum: [added, modified, removed]
-          example: "modified"
-
-    TimelineEvent:
-      type: object
-      description: A timeline event for a node
-      properties:
-        date:
-          type: string
-          format: date-time
-        event_type:
-          type: string
-          enum: [first_seen, last_seen, major_change, flag_change]
-        description:
-          type: string
-          example: "Node first appeared in nodelist"
-        details:
-          type: object
-          additionalProperties: true
-
-    NetworkStats:
-      type: object
-      description: FidoNet network statistics
-      properties:
-        total_nodes:
-          type: integer
-          description: Total number of nodes in database
-          example: 30933920
-        active_nodes:
-          type: integer
-          description: Currently active nodes
-          example: 2547
-        zones:
-          type: array
-          items:
-            $ref: '#/components/schemas/ZoneStats'
-        date_range:
-          type: object
-          properties:
-            first_date:
-              type: string
-              format: date
-            last_date:
-              type: string
-              format: date
-        update_frequency:
-          type: string
-          example: "Weekly"
-
-    ZoneStats:
-      type: object
-      description: Statistics for a specific zone
+      description: The point search's reading of its parameters (null = not applied)
       properties:
         zone:
           type: integer
-          example: 2
-        name:
-          type: string
-          example: "Europe, former Soviet Union, and Africa"
-        total_nodes:
+          nullable: true
+        net:
           type: integer
-          example: 1250
-        active_nodes:
+          nullable: true
+        node:
           type: integer
-          example: 945
-        regions:
-          type: array
-          items:
-            $ref: '#/components/schemas/RegionStats'
-
-    RegionStats:
-      type: object
-      description: Statistics for a region within a zone
-      properties:
-        region:
+          nullable: true
+        point:
           type: integer
-          example: 50
-        name:
-          type: string
-          example: "Moscow"
-        node_count:
-          type: integer
-          example: 125
-
-    FlagDefinition:
-      type: object
-      description: Definition of a FidoNet flag
-      properties:
-        name:
-          type: string
-          example: "CM"
-        description:
-          type: string
-          example: "Continuous Mail - accepts mail 24 hours a day"
-        category:
-          type: string
-          example: "Operation"
-        deprecated:
-          type: boolean
-          example: false
-        syntax:
+          nullable: true
+        domain:
           type: string
           nullable: true
-          example: "CM"
-
-    NodelistInfo:
-      type: object
-      description: Information about a nodelist file
-      properties:
-        network:
+        list_source:
           type: string
-          description: The FTN network this nodelist belongs to
-          example: "fidonet"
-        filename:
+          nullable: true
+        system_name:
           type: string
-          example: "nodelist.211"
-        date:
+          nullable: true
+        location:
           type: string
-          format: date
-          example: "2024-07-29"
-        day_number:
-          type: integer
-          example: 211
-        year:
+          nullable: true
+        sysop_name:
           type: string
-          example: "2024"
-        compressed:
+          nullable: true
+        date_from:
+          type: string
+          format: date-time
+          nullable: true
+        date_to:
+          type: string
+          format: date-time
+          nullable: true
+        latest_only:
           type: boolean
-          description: Always true here; an uncompressed nodelist is served as text/plain
-          example: true
-        download_url:
-          type: string
-          example: "/download/nodelist/2024/nodelist.211"
-
-    SoftwareDistribution:
+          nullable: true
+        limit:
+          type: integer
+        offset:
+          type: integer
+    ReachabilitySearchFilter:
       type: object
-      description: Software distribution statistics
+      description: The test-result search's reading of its parameters ("" = any)
       properties:
+        status:
+          type: string
         protocol:
           type: string
-          description: Protocol type (binkp, ifcico, telnet)
-          example: "binkp"
-        total_nodes:
+        days:
           type: integer
-          description: Total number of nodes tested
-          example: 1250
-        software_counts:
-          type: array
-          items:
-            type: object
-            properties:
-              software:
-                type: string
-                description: Software name and version
-                example: "binkd/1.1a-111"
-              count:
-                type: integer
-                description: Number of nodes using this software
-                example: 450
-              percentage:
-                type: number
-                format: float
-                description: Percentage of total
-                example: 36.0
-        period_days:
+        limit:
           type: integer
-          description: Number of days included in the analysis
-          example: 365
-
-    BinkdDetailedStats:
+        domain:
+          type: string
+    TimelineEvent:
       type: object
-      description: Detailed Binkd software statistics
+      description: >
+        One timeline entry. type "active" carries the nodelist entry in data;
+        type "removed" marks a gap and carries its length in duration
+        (nanoseconds).
       properties:
-        total_binkd_nodes:
+        date:
+          type: string
+          format: date-time
+        day_number:
           type: integer
-          description: Total number of nodes running Binkd
-          example: 850
-        versions:
-          type: array
-          items:
-            type: object
-            properties:
-              version:
-                type: string
-                description: Binkd version
-                example: "1.1a-111"
-              count:
-                type: integer
-                description: Number of nodes
-                example: 450
-              percentage:
-                type: number
-                format: float
-                example: 52.9
-        period_days:
+        type:
+          type: string
+          enum: [active, removed]
+        data:
+          allOf:
+            - $ref: '#/components/schemas/Node'
+          description: Omitted on removed events.
+        duration:
           type: integer
-          description: Number of days included in the analysis
-          example: 365
-
-    GeoDistribution:
+          description: Gap length in nanoseconds. Omitted on active events.
+    FlagInfo:
       type: object
-      description: Geographic distribution statistics
       properties:
-        total_nodes:
-          type: integer
-          description: Total number of nodes with geolocation data
-          example: 2450
-        countries:
-          type: array
-          items:
-            type: object
-            properties:
-              country_code:
-                type: string
-                description: ISO 3166-1 alpha-2 country code
-                example: "US"
-              country_name:
-                type: string
-                description: Country name
-                example: "United States"
-              node_count:
-                type: integer
-                description: Number of nodes hosted in this country
-                example: 450
-              percentage:
-                type: number
-                format: float
-                description: Percentage of total
-                example: 18.4
-        period_days:
-          type: integer
-          description: Number of days included in the analysis
-          example: 365
-
+        category:
+          type: string
+        has_value:
+          type: boolean
+          description: Whether the flag takes a parameter (IBN:port, ...)
+        description:
+          type: string
+    StatusMessage:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        message:
+          type: string
     Error:
       type: object
-      description: Standard error response
+      description: Every JSON error body
       properties:
         error:
           type: string
-          description: Error message
-          example: "Invalid zone number"
-        code:
+          description: What went wrong
+        status:
+          type: integer
+          description: The HTTP status, repeated
+        time:
           type: string
-          description: Error code
-          example: "INVALID_PARAMETER"
-        details:
+          format: date-time
+    NodelistInfo:
+      type: object
+      description: Metadata of a nodelist file in the archive
+      properties:
+        network:
+          type: string
+        filename:
+          type: string
+        year:
+          type: string
+        day_number:
+          type: integer
+        date:
+          type: string
+          format: date
+        compressed:
+          type: boolean
+          description: Always true here; an uncompressed nodelist is served as text/plain
+        download_url:
+          type: string
+
+    # --- Records, generated from the Go types (internal/api/schema_spec_test.go
+    # holds every one of these against its struct) -------------------------
+    Node:
+      type: object
+      properties:
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        domain:
+          type: string
+          description: Omitted when empty.
+        nodelist_date:
+          type: string
+          format: date-time
+        day_number:
+          type: integer
+        system_name:
+          type: string
+        location:
+          type: string
+        sysop_name:
+          type: string
+        phone:
+          type: string
+        node_type:
+          type: string
+        region:
+          type: integer
+          nullable: true
+          description: Omitted when empty.
+        max_speed:
+          type: integer
+        is_cm:
+          type: boolean
+        is_mo:
+          type: boolean
+        has_inet:
+          type: boolean
+        flags:
+          type: array
+          items:
+            type: string
+        modem_flags:
+          type: array
+          items:
+            type: string
+        internet_config:
           type: object
           additionalProperties: true
-          description: Additional error details
+          description: Omitted when empty.
+        conflict_sequence:
+          type: integer
+        has_conflict:
+          type: boolean
+        fts_id:
+          type: string
+        raw_line:
+          type: string
+          description: Omitted when empty.
+    NodeChange:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        day_number:
+          type: integer
+        change_type:
+          type: string
+        changes:
+          type: object
+          additionalProperties:
+            type: string
+        old_node:
+          $ref: '#/components/schemas/Node'
+          description: Omitted when empty.
+        new_node:
+          $ref: '#/components/schemas/Node'
+          description: Omitted when empty.
+    NetworkStats:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        total_nodes:
+          type: integer
+        active_nodes:
+          type: integer
+        cm_nodes:
+          type: integer
+        mo_nodes:
+          type: integer
+        binkp_nodes:
+          type: integer
+        telnet_nodes:
+          type: integer
+        pvt_nodes:
+          type: integer
+        down_nodes:
+          type: integer
+        hold_nodes:
+          type: integer
+        hub_nodes:
+          type: integer
+        zone_nodes:
+          type: integer
+        region_nodes:
+          type: integer
+        host_nodes:
+          type: integer
+        internet_nodes:
+          type: integer
+        zone_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+        largest_regions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegionInfo'
+        largest_nets:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetInfo'
+    Point:
+      type: object
+      properties:
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        point:
+          type: integer
+        domain:
+          type: string
+          description: Omitted when empty.
+        pointlist_date:
+          type: string
+          format: date-time
+        day_number:
+          type: integer
+        list_source:
+          type: string
+        source_priority:
+          type: integer
+        source_format:
+          type: string
+        system_name:
+          type: string
+        location:
+          type: string
+        sysop_name:
+          type: string
+        phone:
+          type: string
+        max_speed:
+          type: integer
+        is_cm:
+          type: boolean
+        is_mo:
+          type: boolean
+        has_inet:
+          type: boolean
+        flags:
+          type: array
+          items:
+            type: string
+        modem_flags:
+          type: array
+          items:
+            type: string
+        internet_config:
+          type: object
+          additionalProperties: true
+          description: Omitted when empty.
+        conflict_sequence:
+          type: integer
+        has_conflict:
+          type: boolean
+        fts_id:
+          type: string
+        raw_line:
+          type: string
+          description: Omitted when empty.
+    PointlistFile:
+      type: object
+      properties:
+        domain:
+          type: string
+        list_source:
+          type: string
+        pointlist_date:
+          type: string
+          format: date-time
+        day_number:
+          type: integer
+        filename:
+          type: string
+        source_format:
+          type: string
+        points_count:
+          type: integer
+        bosses_count:
+          type: integer
+        imported_at:
+          type: string
+          format: date-time
+    PointlistSource:
+      type: object
+      properties:
+        domain:
+          type: string
+        list_source:
+          type: string
+        first_date:
+          type: string
+          format: date-time
+        last_date:
+          type: string
+          format: date-time
+        file_count:
+          type: integer
+        total_points:
+          type: integer
+    SysopInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        node_count:
+          type: integer
+        active_nodes:
+          type: integer
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        zones:
+          type: array
+          items:
+            type: integer
+    NetworkInfo:
+      type: object
+      properties:
+        domain:
+          type: string
+        latest_date:
+          type: string
+          format: date-time
+        node_count:
+          type: integer
+    SoftwareDistribution:
+      type: object
+      properties:
+        protocol:
+          type: string
+        total_nodes:
+          type: integer
+        software_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/SoftwareTypeStats'
+        version_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/SoftwareVersionStats'
+        os_distribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/OSStats'
+        last_updated:
+          type: string
+          format: date-time
+    GeoHostingDistribution:
+      type: object
+      properties:
+        total_nodes:
+          type: integer
+        country_distribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/CountryStats'
+        provider_distribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderStats'
+        top_countries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CountryStats'
+        top_providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderStats'
+        last_updated:
+          type: string
+          format: date-time
+    PingTraceSummary:
+      type: object
+      properties:
+        domain:
+          type: string
+        days:
+          type: integer
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PingNodeSummary'
+        ping_nodes:
+          type: integer
+        answered:
+          type: integer
+        pending:
+          type: integer
+        timeouts:
+          type: integer
+        failed:
+          type: integer
+        bounced:
+          type: integer
+        refused:
+          type: integer
+        not_tested:
+          type: integer
+        never_pinged:
+          type: integer
+        answered_unsecure:
+          type: integer
+        median_rtt_seconds:
+          type: integer
+        median_hops:
+          type: integer
+        trace_nodes:
+          type: integer
+        trace_confirmed:
+          type: integer
+        trace_silent:
+          type: integer
+        trace_unobserved:
+          type: integer
+        tracers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TracerStat'
+        robots:
+          type: array
+          items:
+            $ref: '#/components/schemas/RobotStat'
+    Ping:
+      type: object
+      properties:
+        domain:
+          type: string
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        address:
+          type: string
+        mode:
+          type: string
+        sent_time:
+          type: string
+          format: date-time
+        token:
+          type: string
+        msgid:
+          type: string
+        fidomail_message_id:
+          type: integer
+        first_hop:
+          type: string
+        route_source:
+          type: string
+        status:
+          type: string
+        dispatched_time:
+          type: string
+          format: date-time
+        reply_time:
+          type: string
+          format: date-time
+        rtt_seconds:
+          type: integer
+        reply_message_id:
+          type: integer
+        reply_msgid:
+          type: string
+        reply_from_name:
+          type: string
+        reply_from_addr:
+          type: string
+        robot_pid:
+          type: string
+        robot_tearline:
+          type: string
+        reply_inbound_auth:
+          type: string
+        reply_inbound_tier:
+          type: integer
+        out_hops:
+          type: array
+          items:
+            $ref: '#/components/schemas/Hop'
+        back_hops:
+          type: array
+          items:
+            $ref: '#/components/schemas/Hop'
+        trace_count:
+          type: integer
+        error:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    PingReply:
+      type: object
+      properties:
+        fidomail_message_id:
+          type: integer
+        kind:
+          type: string
+        ping_domain:
+          type: string
+        ping_zone:
+          type: integer
+        ping_net:
+          type: integer
+        ping_node:
+          type: integer
+        ping_sent_time:
+          type: string
+          format: date-time
+        ping_msgid:
+          type: string
+        msgid:
+          type: string
+        reply_id:
+          type: string
+        from_name:
+          type: string
+        from_addr:
+          type: string
+        to_name:
+          type: string
+        subject:
+          type: string
+        date:
+          type: string
+          format: date-time
+        received_at:
+          type: string
+          format: date-time
+        pid:
+          type: string
+        tearline:
+          type: string
+        vias:
+          type: array
+          items:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
+        inbound_tier:
+          type: integer
+        inbound_auth:
+          type: string
+        hops:
+          type: array
+          items:
+            $ref: '#/components/schemas/Hop'
+    PSTNNode:
+      type: object
+      properties:
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        system_name:
+          type: string
+        location:
+          type: string
+        sysop_name:
+          type: string
+        phone:
+          type: string
+        phone_normalized:
+          type: string
+        is_cm:
+          type: boolean
+        nodelist_date:
+          type: string
+          format: date-time
+        node_type:
+          type: string
+        max_speed:
+          type: integer
+        flags:
+          type: array
+          items:
+            type: string
+        modem_flags:
+          type: array
+          items:
+            type: string
+        is_pstn_dead:
+          type: boolean
+        pstn_dead_reason:
+          type: string
+          description: Omitted when empty.
+    PSTNDeadNode:
+      type: object
+      properties:
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        reason:
+          type: string
+        marked_by:
+          type: string
+        marked_at:
+          type: string
+          format: date-time
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        time:
+          type: string
+          format: date-time
+        uptime:
+          type: string
+        uptime_seconds:
+          type: number
+        version:
+          $ref: '#/components/schemas/VersionInfo'
+        database:
+          $ref: '#/components/schemas/DatabaseHealth'
+        cache:
+          $ref: '#/components/schemas/CacheHealth'
+          description: Omitted when empty.
+        ftp:
+          $ref: '#/components/schemas/FTPHealth'
+          description: Omitted when empty.
+        nodes:
+          $ref: '#/components/schemas/NodeCountInfo'
+    ModemTestResultRequest:
+      type: object
+      properties:
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        conflict_sequence:
+          type: integer
+        test_time:
+          type: string
+        success:
+          type: boolean
+        response_ms:
+          type: integer
+        system_name:
+          type: string
+          description: Omitted when empty.
+        mailer_info:
+          type: string
+          description: Omitted when empty.
+        addresses:
+          type: array
+          items:
+            type: string
+          description: Omitted when empty.
+        address_valid:
+          type: boolean
+        response_type:
+          type: string
+          description: Omitted when empty.
+        software_source:
+          type: string
+          description: Omitted when empty.
+        error:
+          type: string
+          description: Omitted when empty.
+        connect_speed:
+          type: integer
+          description: Omitted when empty.
+        modem_protocol:
+          type: string
+          description: Omitted when empty.
+        phone_dialed:
+          type: string
+          description: Omitted when empty.
+        ring_count:
+          type: integer
+          description: Omitted when empty.
+        carrier_time_ms:
+          type: integer
+          description: Omitted when empty.
+        modem_used:
+          type: string
+          description: Omitted when empty.
+        match_reason:
+          type: string
+          description: Omitted when empty.
+        modem_line_stats:
+          type: string
+          description: Omitted when empty.
+        line_stats:
+          $ref: '#/components/schemas/LineStatsRequest'
+          description: Omitted when empty.
+        audiocodes_cdr:
+          $ref: '#/components/schemas/AudioCodesCDRRequest'
+          description: Omitted when empty.
+        asterisk_cdr:
+          $ref: '#/components/schemas/AsteriskCDRRequest'
+          description: Omitted when empty.
+        operator_name:
+          type: string
+          description: Omitted when empty.
+        operator_prefix:
+          type: string
+          description: Omitted when empty.
+        dial_time_ms:
+          type: integer
+          description: Omitted when empty.
+        emsi_time_ms:
+          type: integer
+          description: Omitted when empty.
+        connect_string:
+          type: string
+          description: Omitted when empty.
+        remote_location:
+          type: string
+          description: Omitted when empty.
+        remote_sysop:
+          type: string
+          description: Omitted when empty.
+    NodeTestResult:
+      type: object
+      properties:
+        test_time:
+          type: string
+          format: date-time
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        address:
+          type: string
+        hostname:
+          type: string
+        resolved_ipv4:
+          type: array
+          items:
+            type: string
+        resolved_ipv6:
+          type: array
+          items:
+            type: string
+        dns_error:
+          type: string
+        country:
+          type: string
+        country_code:
+          type: string
+        city:
+          type: string
+        region:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        isp:
+          type: string
+        org:
+          type: string
+        asn:
+          type: integer
+        binkp_tested:
+          type: boolean
+        binkp_success:
+          type: boolean
+        binkp_response_ms:
+          type: integer
+        binkp_system_name:
+          type: string
+        binkp_sysop:
+          type: string
+        binkp_location:
+          type: string
+        binkp_version:
+          type: string
+        binkp_addresses:
+          type: array
+          items:
+            type: string
+        binkp_capabilities:
+          type: array
+          items:
+            type: string
+        binkp_error:
+          type: string
+        ifcico_tested:
+          type: boolean
+        ifcico_success:
+          type: boolean
+        ifcico_response_ms:
+          type: integer
+        ifcico_mailer_info:
+          type: string
+        ifcico_system_name:
+          type: string
+        ifcico_addresses:
+          type: array
+          items:
+            type: string
+        ifcico_response_type:
+          type: string
+        ifcico_error:
+          type: string
+        telnet_tested:
+          type: boolean
+        telnet_success:
+          type: boolean
+        telnet_response_ms:
+          type: integer
+        telnet_error:
+          type: string
+        telnet_mailer_info:
+          type: string
+        telnet_system_name:
+          type: string
+        telnet_addresses:
+          type: array
+          items:
+            type: string
+        telnet_banner:
+          type: string
+        ftp_tested:
+          type: boolean
+        ftp_success:
+          type: boolean
+        ftp_response_ms:
+          type: integer
+        ftp_error:
+          type: string
+        ftp_anon_success:
+          type: boolean
+          nullable: true
+        vmodem_tested:
+          type: boolean
+        vmodem_success:
+          type: boolean
+        vmodem_response_ms:
+          type: integer
+        vmodem_error:
+          type: string
+        vmodem_variant:
+          type: string
+        vmodem_conformant:
+          type: boolean
+        vmodem_software:
+          type: string
+        vmodem_system_name:
+          type: string
+        vmodem_sysop:
+          type: string
+        vmodem_location:
+          type: string
+        vmodem_addresses:
+          type: array
+          items:
+            type: string
+        vmodem_detail:
+          type: string
+        vmodem_call_outcome:
+          type: string
+        vmodem_banner:
+          type: string
+        binkp_ipv4_tested:
+          type: boolean
+        binkp_ipv4_success:
+          type: boolean
+        binkp_ipv4_response_ms:
+          type: integer
+        binkp_ipv4_address:
+          type: string
+        binkp_ipv4_error:
+          type: string
+        ifcico_ipv4_tested:
+          type: boolean
+        ifcico_ipv4_success:
+          type: boolean
+        ifcico_ipv4_response_ms:
+          type: integer
+        ifcico_ipv4_address:
+          type: string
+        ifcico_ipv4_error:
+          type: string
+        telnet_ipv4_tested:
+          type: boolean
+        telnet_ipv4_success:
+          type: boolean
+        telnet_ipv4_response_ms:
+          type: integer
+        telnet_ipv4_address:
+          type: string
+        telnet_ipv4_error:
+          type: string
+        ftp_ipv4_tested:
+          type: boolean
+        ftp_ipv4_success:
+          type: boolean
+        ftp_ipv4_response_ms:
+          type: integer
+        ftp_ipv4_address:
+          type: string
+        ftp_ipv4_error:
+          type: string
+        vmodem_ipv4_tested:
+          type: boolean
+        vmodem_ipv4_success:
+          type: boolean
+        vmodem_ipv4_response_ms:
+          type: integer
+        vmodem_ipv4_address:
+          type: string
+        vmodem_ipv4_error:
+          type: string
+        binkp_ipv6_tested:
+          type: boolean
+        binkp_ipv6_success:
+          type: boolean
+        binkp_ipv6_response_ms:
+          type: integer
+        binkp_ipv6_address:
+          type: string
+        binkp_ipv6_error:
+          type: string
+        ifcico_ipv6_tested:
+          type: boolean
+        ifcico_ipv6_success:
+          type: boolean
+        ifcico_ipv6_response_ms:
+          type: integer
+        ifcico_ipv6_address:
+          type: string
+        ifcico_ipv6_error:
+          type: string
+        telnet_ipv6_tested:
+          type: boolean
+        telnet_ipv6_success:
+          type: boolean
+        telnet_ipv6_response_ms:
+          type: integer
+        telnet_ipv6_address:
+          type: string
+        telnet_ipv6_error:
+          type: string
+        ftp_ipv6_tested:
+          type: boolean
+        ftp_ipv6_success:
+          type: boolean
+        ftp_ipv6_response_ms:
+          type: integer
+        ftp_ipv6_address:
+          type: string
+        ftp_ipv6_error:
+          type: string
+        vmodem_ipv6_tested:
+          type: boolean
+        vmodem_ipv6_success:
+          type: boolean
+        vmodem_ipv6_response_ms:
+          type: integer
+        vmodem_ipv6_address:
+          type: string
+        vmodem_ipv6_error:
+          type: string
+        is_operational:
+          type: boolean
+        has_connectivity_issues:
+          type: boolean
+        address_validated:
+          type: boolean
+        domain:
+          type: string
+          description: Omitted when empty.
+        derived_from_address:
+          type: string
+          description: Omitted when empty.
+        tested_hostname:
+          type: string
+        hostname_index:
+          type: integer
+        is_aggregated:
+          type: boolean
+        total_hostnames:
+          type: integer
+        hostnames_tested:
+          type: integer
+        hostnames_operational:
+          type: integer
+        all_hostnames:
+          type: array
+          items:
+            type: string
+    NodeReachabilityStats:
+      type: object
+      properties:
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        total_tests:
+          type: integer
+        fully_successful_tests:
+          type: integer
+        partially_failed_tests:
+          type: integer
+        failed_tests:
+          type: integer
+        successful_tests:
+          type: integer
+        success_rate:
+          type: number
+        average_response_ms:
+          type: number
+        last_test_time:
+          type: string
+          format: date-time
+        last_status:
+          type: string
+        binkp_success_rate:
+          type: number
+        ifcico_success_rate:
+          type: number
+        telnet_success_rate:
+          type: number
+        binkp_ipv4_success_rate:
+          type: number
+        ifcico_ipv4_success_rate:
+          type: number
+        telnet_ipv4_success_rate:
+          type: number
+        binkp_ipv6_success_rate:
+          type: number
+        ifcico_ipv6_success_rate:
+          type: number
+        telnet_ipv6_success_rate:
+          type: number
+    ReachabilityTrend:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        total_nodes:
+          type: integer
+        operational_nodes:
+          type: integer
+        failed_nodes:
+          type: integer
+        success_rate:
+          type: number
+        avg_response_ms:
+          type: number
+    CacheStats:
+      type: object
+      properties:
+        hits:
+          type: integer
+        misses:
+          type: integer
+        sets:
+          type: integer
+        deletes:
+          type: integer
+        size:
+          type: integer
+        keys:
+          type: integer
+        hit_rate:
+          type: number
+    FTPStats:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        host:
+          type: string
+        port:
+          type: integer
+        max_connections:
+          type: integer
+    RateLimitStats:
+      type: object
+      properties:
+        allowed:
+          type: integer
+        rejected:
+          type: integer
+        keys:
+          type: integer
+    RegionInfo:
+      type: object
+      properties:
+        zone:
+          type: integer
+        region:
+          type: integer
+        node_count:
+          type: integer
+        name:
+          type: string
+          description: Omitted when empty.
+    NetInfo:
+      type: object
+      properties:
+        zone:
+          type: integer
+        net:
+          type: integer
+        node_count:
+          type: integer
+        name:
+          type: string
+          description: Omitted when empty.
+    SoftwareTypeStats:
+      type: object
+      properties:
+        software:
+          type: string
+        count:
+          type: integer
+        percentage:
+          type: number
+    SoftwareVersionStats:
+      type: object
+      properties:
+        software:
+          type: string
+        version:
+          type: string
+        count:
+          type: integer
+        percentage:
+          type: number
+    OSStats:
+      type: object
+      properties:
+        os:
+          type: string
+        count:
+          type: integer
+        percentage:
+          type: number
+    CountryStats:
+      type: object
+      properties:
+        country:
+          type: string
+        country_code:
+          type: string
+        node_count:
+          type: integer
+        percentage:
+          type: number
+    ProviderStats:
+      type: object
+      properties:
+        provider:
+          type: string
+        organization:
+          type: string
+        asn:
+          type: integer
+        node_count:
+          type: integer
+        percentage:
+          type: number
+        countries:
+          type: array
+          items:
+            type: string
+    PingNodeSummary:
+      type: object
+      properties:
+        domain:
+          type: string
+        zone:
+          type: integer
+        net:
+          type: integer
+        node:
+          type: integer
+        address:
+          type: string
+        system_name:
+          type: string
+        sysop_name:
+          type: string
+        has_ping:
+          type: boolean
+        has_trace:
+          type: boolean
+        latest:
+          $ref: '#/components/schemas/Ping'
+          description: Omitted when empty.
+        latest_direct:
+          $ref: '#/components/schemas/Ping'
+          description: Omitted when empty.
+        pings:
+          type: integer
+        pongs:
+          type: integer
+        trace_verdict:
+          type: string
+          description: Omitted when empty.
+        trace_seen:
+          type: integer
+        trace_notices:
+          type: integer
+    TracerStat:
+      type: object
+      properties:
+        address:
+          type: string
+        domain:
+          type: string
+          description: Omitted when empty.
+        notices:
+          type: integer
+        flagged:
+          type: boolean
+    RobotStat:
+      type: object
+      properties:
+        software:
+          type: string
+        nodes:
+          type: integer
+    Hop:
+      type: object
+      properties:
+        address:
+          type: string
+        time:
+          type: string
+          format: date-time
+        time_is_utc:
+          type: boolean
+        software:
+          type: string
+        raw:
+          type: string
+    VersionInfo:
+      type: object
+      properties:
+        version:
+          type: string
+        git_commit:
+          type: string
+        build_time:
+          type: string
+    DatabaseHealth:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        response_ms:
+          type: integer
+        error:
+          type: string
+          description: Omitted when empty.
+    CacheHealth:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        keys:
+          type: integer
+        hit_rate:
+          type: number
+    FTPHealth:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        port:
+          type: integer
+    NodeCountInfo:
+      type: object
+      properties:
+        latest_date:
+          type: string
+        count:
+          type: integer
+    LineStatsRequest:
+      type: object
+      properties:
+        tx_speed:
+          type: integer
+          description: Omitted when empty.
+        rx_speed:
+          type: integer
+          description: Omitted when empty.
+        compression:
+          type: string
+          description: Omitted when empty.
+        modulation:
+          type: string
+          description: Omitted when empty.
+        line_quality:
+          type: integer
+          description: Omitted when empty.
+        snr:
+          type: number
+          description: Omitted when empty.
+        rx_level:
+          type: integer
+          description: Omitted when empty.
+        tx_power:
+          type: integer
+          description: Omitted when empty.
+        round_trip_delay:
+          type: integer
+          description: Omitted when empty.
+        local_retrains:
+          type: integer
+          description: Omitted when empty.
+        remote_retrains:
+          type: integer
+          description: Omitted when empty.
+        termination_reason:
+          type: string
+          description: Omitted when empty.
+        stats_notes:
+          type: string
+          description: Omitted when empty.
+    AudioCodesCDRRequest:
+      type: object
+      properties:
+        session_id:
+          type: string
+          description: Omitted when empty.
+        codec:
+          type: string
+          description: Omitted when empty.
+        rtp_jitter_ms:
+          type: integer
+          description: Omitted when empty.
+        rtp_delay_ms:
+          type: integer
+          description: Omitted when empty.
+        packet_loss:
+          type: integer
+          description: Omitted when empty.
+        remote_packet_loss:
+          type: integer
+          description: Omitted when empty.
+        local_mos:
+          type: integer
+          description: Omitted when empty.
+        remote_mos:
+          type: integer
+          description: Omitted when empty.
+        local_r_factor:
+          type: integer
+          description: Omitted when empty.
+        remote_r_factor:
+          type: integer
+          description: Omitted when empty.
+        term_reason:
+          type: string
+          description: Omitted when empty.
+        term_category:
+          type: string
+          description: Omitted when empty.
+    AsteriskCDRRequest:
+      type: object
+      properties:
+        disposition:
+          type: string
+          description: Omitted when empty.
+        peer:
+          type: string
+          description: Omitted when empty.
+        duration:
+          type: integer
+          description: Omitted when empty.
+        billsec:
+          type: integer
+          description: Omitted when empty.
+        hangup_cause:
+          type: integer
+          description: Omitted when empty.
+        hangup_source:
+          type: string
+          description: Omitted when empty.
+        early_media:
+          type: boolean
+          description: Omitted when empty.
 
   securitySchemes:
     apiKey:
@@ -2152,46 +3299,57 @@ components:
 
   responses:
     BadRequest:
-      description: Bad request - invalid parameters
+      description: Invalid or missing parameter
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-          example:
-            error: "Invalid zone number"
-            code: "INVALID_PARAMETER"
-
     NotFound:
-      description: Resource not found
+      description: No such record
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-          example:
-            error: "Node not found"
-            code: "NOT_FOUND"
-
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: >
+        Rate limited. The body is plain text and Retry-After says how many
+        seconds to wait.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        text/plain:
+          schema:
+            type: string
+    BudgetExceeded:
+      description: The query outran its time budget; narrow it or retry later
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     InternalServerError:
       description: Internal server error
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-          example:
-            error: "Database connection failed"
-            code: "INTERNAL_ERROR"
 
   parameters:
     Zone:
       name: zone
       in: path
       required: true
-      description: FidoNet zone number (1-6)
+      description: FTN zone number (FidoNet uses 1-6; other networks have their own)
       schema:
         type: integer
         minimum: 1
-        maximum: 6
-
     Net:
       name: net
       in: path
@@ -2201,7 +3359,6 @@ components:
         type: integer
         minimum: 0
         maximum: 65535
-
     Node:
       name: node
       in: path
@@ -2211,46 +3368,73 @@ components:
         type: integer
         minimum: 0
         maximum: 65535
-
-    Limit:
-      name: limit
-      in: query
-      description: Maximum number of results to return
-      schema:
-        type: integer
-        minimum: 1
-        maximum: 1000
-        default: 100
-
-    Offset:
-      name: offset
-      in: query
-      description: Number of results to skip (for pagination)
+    PointNumber:
+      name: point
+      in: path
+      required: true
+      description: Point number under the boss
       schema:
         type: integer
         minimum: 0
-        default: 0
+    DomainResolved:
+      name: domain
+      in: query
+      description: >
+        FTN network. Omitted: the only network the address exists in, or
+        fidonet when it exists in several.
+      schema:
+        type: string
+        example: fsxnet
+    DomainDefaultFidonet:
+      name: domain
+      in: query
+      description: FTN network (defaults to fidonet)
+      schema:
+        type: string
+        default: fidonet
+    DomainDefaultAll:
+      name: domain
+      in: query
+      description: FTN network to report on (omitted = every network together)
+      schema:
+        type: string
+    AnalyticsDays:
+      name: days
+      in: query
+      description: Look-back window in days (values above 3650 are capped)
+      schema:
+        type: integer
+        minimum: 1
+        default: 365
 
 tags:
   - name: System
-    description: System health and status endpoints
+    description: Health
   - name: Nodes
-    description: FidoNet node search and information
+    description: Nodelist entries, their history, and the PSTN subset
+  - name: Points
+    description: Pointlist (FTS-5002) entries and imported pointlist issues
   - name: Sysops
-    description: System operator (sysop) information and queries
+    description: System operators
   - name: Statistics
-    description: Network statistics and analytics
+    description: Networks, nodelist dates and per-date statistics
+  - name: Reachability
+    description: What the testing daemon found - per node, as trends, and by netmail PING
   - name: Software Analytics
-    description: Software distribution and usage statistics from node testing
+    description: Mailer software seen in handshakes
   - name: Geographic Analytics
-    description: Geographic distribution and hosting statistics
+    description: Where nodes are hosted
   - name: Reference
-    description: Reference documentation and definitions
+    description: Flag documentation
   - name: Nodelists
-    description: Nodelist file information and metadata
+    description: Nodelist files
+  - name: Modem Testing
+    description: Authenticated endpoints for the modem test caller
+  - name: Operations
+    description: Server counters, registered only when the feature is on
   - name: Documentation
-    description: API documentation and specifications
+    description: This specification and its UI
 
 externalDocs:
-  description: NodelistDB Documentation
-  url: https://github.com/nodelistdb/nodelistdb/wiki
+  description: NodelistDB README
+  url: https://github.com/nodelistdb/nodelistdb#readme

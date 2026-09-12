@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/nodelistdb/internal/storage"
 	"net/http"
 	"time"
 )
@@ -66,6 +67,9 @@ func (s *Server) NetworksHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if networks == nil {
+		networks = []storage.DomainInfo{}
+	}
 	response := map[string]interface{}{
 		"networks": networks,
 		"count":    len(networks),

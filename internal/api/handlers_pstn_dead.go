@@ -6,6 +6,12 @@ import (
 	"net/http"
 )
 
+// statusMessage is the body of a write that has nothing to return but "done".
+type statusMessage struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
 // pstnDeadRequest is the request body for marking/unmarking PSTN dead nodes
 type pstnDeadRequest struct {
 	Zone   int    `json:"zone"`
@@ -34,9 +40,9 @@ func (s *Server) MarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSONSuccess(w, map[string]interface{}{
-		"status":  "ok",
-		"message": fmt.Sprintf("Node %d:%d/%d marked as PSTN dead", req.Zone, req.Net, req.Node),
+	WriteJSONSuccess(w, statusMessage{
+		Status:  "ok",
+		Message: fmt.Sprintf("Node %d:%d/%d marked as PSTN dead", req.Zone, req.Net, req.Node),
 	})
 }
 
@@ -60,9 +66,9 @@ func (s *Server) UnmarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSONSuccess(w, map[string]interface{}{
-		"status":  "ok",
-		"message": fmt.Sprintf("Node %d:%d/%d unmarked as PSTN dead", req.Zone, req.Net, req.Node),
+	WriteJSONSuccess(w, statusMessage{
+		Status:  "ok",
+		Message: fmt.Sprintf("Node %d:%d/%d unmarked as PSTN dead", req.Zone, req.Net, req.Node),
 	})
 }
 

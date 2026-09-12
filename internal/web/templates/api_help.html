@@ -5,7 +5,7 @@
 {{define "page_title"}}{{.Title}}{{end}}
 
 {{define "page_subtitle"}}
-<p class="subtitle">REST API endpoints for programmatic access to nodelist data</p>
+<p class="subtitle">REST API endpoints for programmatic access to nodelist, pointlist and reachability data</p>
 {{end}}
 
 {{define "content"}}
@@ -17,303 +17,188 @@
                 📄 Download OpenAPI Spec
             </a>
         </div>
-        
+
             <div class="card">
                 <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🚀 Getting Started</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 2rem;">
-                    The NodelistDB API provides RESTful access to FidoNet node data with JSON responses. 
-                    All endpoints support standard HTTP methods and return consistent JSON structures.
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Every endpoint answers JSON over plain GET requests; no key is needed except for the modem
+                    test writes. The OpenAPI document linked above is the authoritative contract: it lists every
+                    parameter and every response field, and the server's test suite checks it against the code.
+                    This page is the short tour.
                 </p>
-                
                 <div class="alert alert-success">
                     <strong>Base URL:</strong> <code>{{.BaseURL}}</code>
                 </div>
             </div>
 
             <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🔍 Search Endpoints</h2>
-                
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Search Nodes</h3>
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
-                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes</code>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Search for nodes using various criteria. All parameters are optional.</p>
-                
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📐 Conventions</h2>
                 <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
-                    <strong>Query Parameters:</strong><br>
-                    <code>zone</code> - Zone number (e.g., 1, 2, 3)<br>
-                    <code>net</code> - Net number<br>
-                    <code>node</code> - Node number<br>
-                    <code>system_name</code> - System name (partial match)<br>
-                    <code>location</code> - Location (partial match)<br>
-                    <code>node_type</code> - Node type (Hub, Host, Zone, etc.)<br>
-                    <code>is_active</code> - true/false for active nodes<br>
-                    <code>is_cm</code> - true/false for CM nodes<br>
-                    <code>date_from</code> - Start date (YYYY-MM-DD)<br>
-                    <code>date_to</code> - End date (YYYY-MM-DD)<br>
-                    <code>latest_only</code> - true/false, return only each node's most recent entry rather than every historical entry (default: false). Note this is per node, not "still listed": a node that left the nodelist years ago still returns its final entry.<br>
-                    <code>limit</code> - Results limit (default: 100, max: 200)<br>
-                    <code>offset</code> - Results offset for pagination
+                    <strong>Networks.</strong> The database holds several FTN networks (FidoNet, fsxNet, ...) and a node
+                    address is only unique within one. <code>GET /api/networks</code> lists them. Most endpoints take
+                    <code>?domain=</code>: endpoints about one address resolve it as explicit <code>?domain=</code>, then the
+                    only network the address exists in, then <code>fidonet</code>; listings default to <code>fidonet</code>
+                    or to all networks as each description says. Responses about one address carry
+                    <code>domain</code> and <code>available_domains</code> (or the <code>X-Available-Domains</code>
+                    header when the body is the record itself).<br><br>
+                    <strong>Searches need a constraint.</strong> <code>/api/nodes</code> and <code>/api/points</code>
+                    answer <code>400</code> when no filter is given.<br><br>
+                    <strong>Limits.</strong> Every <code>limit</code> has a ceiling (500 on node and point searches,
+                    200 on sysops, 1000 on reachability searches); the searches cap silently, the reachability
+                    endpoints reject values outside their range.<br><br>
+                    <strong>Errors</strong> are JSON <code>{"error": "...", "status": 400, "time": "..."}</code>.
+                    Requests are rate limited per client IP: an over-budget client gets <code>429</code> with a
+                    <code>Retry-After</code> header, and a query that outruns its time budget gets <code>503</code>.
                 </div>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Examples:</strong><br>
-                    <code>GET /api/nodes?zone=2&limit=10&is_cm=true</code><br>
-                    <code>GET /api/nodes?location=Berlin&latest_only=true</code><br>
-                    <code>GET /api/nodes?system_name=BBS&date_from=2020-01-01</code>
-                </div>
-
             </div>
 
             <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🎯 Node Specific Endpoints</h2>
-                
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Get Node Information</h3>
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
-                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/{zone}/{net}/{node}</code>
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🔍 Nodes</h2>
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <code>GET /api/nodes</code> — search nodelist entries. Filters: <code>domain</code>, <code>zone</code>,
+                    <code>net</code>, <code>node</code>, <code>system_name</code>, <code>location</code>, <code>sysop_name</code>
+                    (substrings, 2+ characters), <code>node_type</code>, <code>is_cm</code>, <code>is_mo</code>,
+                    <code>has_inet</code>, <code>has_binkp</code>, <code>date_from</code>, <code>date_to</code>,
+                    <code>latest_only</code> (one entry per node — its last one, not "still listed"), <code>limit</code>
+                    (default 100, max 500), <code>offset</code>.<br>
+                    <code>GET /api/nodes/{zone}/{net}/{node}</code> — the most recent entry of one address.<br>
+                    <code>GET /api/nodes/{zone}/{net}/{node}/history</code> — every entry, oldest first, with first and last dates.<br>
+                    <code>GET /api/nodes/{zone}/{net}/{node}/changes</code> — what changed on each nodelist date.<br>
+                    <code>GET /api/nodes/{zone}/{net}/{node}/timeline</code> — active/removed events for a chart.<br>
+                    <code>GET /api/sysops</code>, <code>GET /api/sysops/{name}/nodes</code> — operators and their nodes.
                 </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Retrieve information for a specific node, including current and historical versions.</p>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example:</strong><br>
-                    <code>GET /api/nodes/2/5001/100</code>
-                </div>
-
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Get Node History</h3>
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
-                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/{zone}/{net}/{node}/history</code>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get complete historical records for a specific node.</p>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example:</strong><br>
+                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <strong>Examples:</strong><br>
+                    <code>GET /api/nodes?zone=2&amp;is_cm=true&amp;latest_only=true&amp;limit=10</code><br>
+                    <code>GET /api/nodes?location=Berlin&amp;date_from=2020-01-01</code><br>
+                    <code>GET /api/nodes/21/1/100?domain=fsxnet</code><br>
                     <code>GET /api/nodes/2/5001/100/history</code>
                 </div>
-
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Get Node Changes</h3>
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
-                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/{zone}/{net}/{node}/changes</code>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get all detected changes and timeline events for a node.</p>
-
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example:</strong><br>
-                    <code>GET /api/nodes/2/5001/100/changes</code>
-                </div>
-
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Get Node Timeline</h3>
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
-                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/nodes/{zone}/{net}/{node}/timeline</code>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get timeline data optimized for visualization, including activity periods and gaps.</p>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example:</strong><br>
-                    <code>GET /api/nodes/2/5001/100/timeline</code>
-                </div>
             </div>
 
             <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📊 Statistics Endpoints</h2>
-                
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Network Statistics</h3>
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
-                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/stats</code>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get comprehensive network statistics including node counts, zone distribution, and capabilities.</p>
-                
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📍 Points and Pointlists</h2>
                 <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
-                    <strong>Query Parameters:</strong><br>
-                    <code>date</code> - Specific date for statistics (YYYY-MM-DD, defaults to today)
-                </div>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example:</strong><br>
-                    <code>GET /api/stats?date=2023-12-01</code>
-                </div>
-
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Available Dates</h3>
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
-                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/stats/dates</code>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Get a list of all available dates for which statistics data exists in the database.</p>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example:</strong><br>
-                    <code>GET /api/stats/dates</code><br><br>
-                    <strong>Response:</strong><br>
-                    <code>{"dates": ["2023-01-07", "2023-01-14", "..."], "count": 52}</code>
+                    <code>GET /api/nodes/{zone}/{net}/{node}/points</code> — the pointlist snapshot under a boss
+                    (<code>?date=</code> for an as-of date).<br>
+                    <code>GET /api/points</code> — search point entries (same filters as nodes plus <code>point</code>
+                    and <code>list_source</code>; <code>latest_only=true</code> gives snapshot semantics).<br>
+                    <code>GET /api/points/{zone}/{net}/{node}/{point}</code> and <code>.../history</code> — one point, now and over time.<br>
+                    <code>GET /api/pointlists/sources</code>, <code>GET /api/pointlists/dates?source=z2</code> — the imported series and issues.
                 </div>
             </div>
 
             <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🛠️ System Endpoints</h2>
-                
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Health Check</h3>
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: var(--radius); border-left: 4px solid var(--primary-color); margin-bottom: 1rem;">
-                    <code style="color: var(--primary-color); font-weight: 600;">GET /api/health</code>
-                </div>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Check API service status and uptime.</p>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example Response:</strong><br>
-                    <code>{"status": "ok", "time": "2023-12-01T12:00:00Z"}</code>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">🗄️ Database Structure</h2>
-                
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Main Table: nodes</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">The database stores FidoNet nodelist data in ClickHouse with the following schema:</p>
-                
-                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Core Identity Fields:</strong><br>
-                    <code>zone</code> - Zone number (INTEGER)<br>
-                    <code>net</code> - Net number (INTEGER)<br>
-                    <code>node</code> - Node number (INTEGER)<br>
-                    <code>nodelist_date</code> - Date from nodelist (DATE)<br>
-                    <code>day_number</code> - Day of year (INTEGER)<br><br>
-                    
-                    <strong>Node Information:</strong><br>
-                    <code>system_name</code> - BBS system name (TEXT)<br>
-                    <code>location</code> - Geographic location (TEXT)<br>
-                    <code>sysop_name</code> - System operator name (TEXT)<br>
-                    <code>phone</code> - Phone number (TEXT)<br>
-                    <code>node_type</code> - Zone/Region/Host/Hub/Pvt/Down/Hold (TEXT)<br>
-                    <code>region</code> - Region number if applicable (INTEGER)<br>
-                    <code>max_speed</code> - Maximum connection speed (TEXT)<br><br>
-                    
-                    <strong>Boolean Flags (computed):</strong><br>
-                    <code>is_cm</code> - Continuous Mail (BOOLEAN)<br>
-                    <code>is_mo</code> - Mail Only (BOOLEAN)<br>
-                    <code>has_binkp</code> - Supports Binkp protocol (BOOLEAN)<br>
-                    <code>has_inet</code> - Has internet connectivity (BOOLEAN)<br>
-                    <code>has_telnet</code> - Supports Telnet (BOOLEAN)<br>
-                    <code>is_down</code> - Node is down (BOOLEAN)<br>
-                    <code>is_hold</code> - Node is on hold (BOOLEAN)<br>
-                    <code>is_pvt</code> - Private node (BOOLEAN)<br>
-                    <code>is_active</code> - Node is active (BOOLEAN)<br><br>
-                    
-                    <strong>Array Fields:</strong><br>
-                    <code>flags</code> - All flags (TEXT[])<br>
-                    <code>modem_flags</code> - Modem-specific flags (TEXT[])<br>
-                    <code>internet_protocols</code> - Supported protocols (TEXT[])<br>
-                    <code>internet_hostnames</code> - Internet hostnames (TEXT[])<br>
-                    <code>internet_ports</code> - Internet ports (INTEGER[])<br>
-                    <code>internet_emails</code> - Email addresses (TEXT[])<br><br>
-                    
-                    <strong>Internet Configuration:</strong><br>
-                    <code>internet_config</code> - Structured JSON configuration (JSON)<br><br>
-                    
-                    <strong>Conflict Tracking:</strong><br>
-                    <code>conflict_sequence</code> - Sequence for duplicate nodes (INTEGER)<br>
-                    <code>has_conflict</code> - Indicates duplicate entries (BOOLEAN)
-                </div>
-                
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Primary Key:</strong><br>
-                    <code>(zone, net, node, nodelist_date, conflict_sequence)</code><br><br>
-                    
-                    <strong>Note:</strong> The database preserves duplicate node entries that exist in original FidoNet nodelists due to human error. Duplicates are tracked with <code>conflict_sequence</code> (0 for first occurrence, 1+ for duplicates) and marked with <code>has_conflict = true</code>.
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📊 Statistics</h2>
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <code>GET /api/networks</code> — the FTN networks in the database with their latest nodelist date.<br>
+                    <code>GET /api/stats?date=YYYY-MM-DD</code> — node counts by type and capability, zone distribution,
+                    largest regions and nets, for one nodelist date (nearest available; the response says which).
+                    The statistics sit under <code>stats</code> next to <code>domain</code>, <code>requested_date</code>,
+                    <code>actual_date</code> and <code>date_adjusted</code>.<br>
+                    <code>GET /api/stats/dates</code> — every nodelist date for a network.<br>
+                    <code>GET /api/flags?category=internet</code> — flag documentation.<br>
+                    <code>GET /api/nodelist/latest</code> — the newest nodelist file and its download URL.
                 </div>
             </div>
 
             <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📥 Nodelist File Downloads</h2>
-                
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Download Individual Nodelists</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Download individual nodelist files directly. Files are automatically decompressed if stored as .gz:</p>
-                
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📡 Reachability and Testing</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    What the testing daemon found when it called each node over BinkP, IFCICO (EMSI), Telnet, FTP and
+                    VModem, over IPv4 and IPv6 — the data behind the <a href="/reachability">Reachability</a> pages.
+                </p>
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <code>GET /api/nodes/{zone}/{net}/{node}/tests?days=30</code> — one node's test results in the window,
+                    newest first, with success rates per protocol and address family under <code>stats</code>.<br>
+                    <code>GET /api/nodes/{zone}/{net}/{node}/tests/detail?time=2026-09-10T12:00:00Z</code> — one result in
+                    full, by its <code>test_time</code>.<br>
+                    <code>GET /api/reachability/nodes?status=failed&amp;protocol=binkp&amp;days=1&amp;limit=50</code> —
+                    each node's newest result, filtered by outcome and by which protocol succeeded.<br>
+                    <code>GET /api/reachability/trends?days=90</code> — tested and operational node counts per day
+                    (omit <code>days</code> for the whole history).<br>
+                    <code>GET /api/nodes/{zone}/{net}/{node}/ping</code>, <code>GET /api/analytics/pingtrace</code> —
+                    netmail PING/TRACE (FTS-4010) measurements: the paths mail walked and who answered.<br>
+                    <code>GET /api/software/binkp</code>, <code>/ifcico</code>, <code>/binkd</code> — mailer software,
+                    versions and operating systems seen in handshakes.<br>
+                    <code>GET /api/analytics/geo-hosting</code> — where nodes are hosted, by country and provider.<br>
+                    Analytics endpoints take <code>?days=</code> (default 365) and <code>?domain=</code> (default: all networks).
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">☎️ PSTN and Modem Testing</h2>
+                <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
+                    <code>GET /api/nodes/pstn</code> — every node with a dialable phone number in the latest nodelist.<br>
+                    <code>GET /api/nodes/pstn/dead</code>, <code>GET /api/nodes/pstn/recent-success?days=7</code> — numbers
+                    marked dead, and numbers a modem test reached recently.<br>
+                    <code>POST /api/modem/results/direct</code>, <code>POST</code>/<code>DELETE /api/modem/pstn-dead</code> —
+                    writes for the modem test caller; bearer API key required (see the README for issuing one).
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">📥 Nodelist and Pointlist File Downloads</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    The archive itself, per network. Files are stored gzipped and are decompressed on the way out;
+                    every download endpoint supports HTTP range requests. The same tree is served over FTP as
+                    <code>/nodelists</code> and <code>/pointlists</code>.
+                </p>
                 <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
-                    <strong>Endpoint:</strong> <code>GET /download/nodelist/{year}/{filename}</code><br><br>
-                    <strong>Example:</strong><br>
-                    <code>GET /download/nodelist/2024/nodelist.365</code><br>
-                    <code>GET /download/latest</code> (redirects to most recent nodelist)
-                </div>
-                
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Bulk Download Options</h3>
-                
-                <h4 style="color: var(--text-primary); margin-top: 1.5rem; margin-bottom: 0.5rem;">Year Archives</h4>
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
-                    <strong>Endpoint:</strong> <code>GET /download/year/{year}.tar.gz</code><br><br>
-                    <strong>Description:</strong> Download all nodelists from a specific year as a tar.gz archive<br><br>
-                    <strong>Example:</strong><br>
-                    <code>wget {{.SiteURL}}/download/year/2024.tar.gz</code>
-                </div>
-                
-                <h4 style="color: var(--text-primary); margin-top: 1.5rem; margin-bottom: 0.5rem;">URL List for Mirroring</h4>
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
-                    <strong>Endpoint:</strong> <code>GET /download/urls.txt</code><br><br>
-                    <strong>Description:</strong> Text file containing all nodelist download URLs<br><br>
-                    <strong>Usage:</strong><br>
-                    <code># Download all nodelists<br>
-                    wget -i {{.SiteURL}}/download/urls.txt<br><br>
-                    # Skip existing files (incremental sync)<br>
-                    wget -nc -i {{.SiteURL}}/download/urls.txt</code>
-                </div>
-                
-                <div class="alert alert-success">
-                    <strong>Note:</strong> All download endpoints support HTTP range requests for resumable downloads. The server automatically handles .gz decompression transparently.
-                </div>
-            </div>
-
-            <div class="card">
-                <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">💾 Database Access</h2>
-
-                <h3 style="color: var(--text-primary); margin-top: 2rem; margin-bottom: 1rem;">Query via API</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Access the ClickHouse-backed database through the REST API endpoints documented above. The API provides efficient access to all nodelist data with filtering, pagination, and search capabilities.</p>
-
-                <div style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); margin-bottom: 2rem;">
-                    <strong>Example API queries:</strong><br>
-                    <code># Get all nodes in Zone 2<br>
-                    curl "{{.BaseURL}}api/nodes?zone=2&limit=100"<br><br>
-
-                    # Search for nodes with Binkp support<br>
-                    curl "{{.BaseURL}}api/nodes?has_binkp=true&limit=50"<br><br>
-
-                    # Get network statistics<br>
-                    curl "{{.BaseURL}}api/stats"</code>
-                </div>
-
-                <div class="alert alert-success">
-                    <strong>Database Info:</strong> The ClickHouse database is updated weekly with the latest FidoNet nodelist data, providing high-performance analytics and time-series capabilities.
+                    <code>GET /download/nodelist/{network}/{year}/{filename}</code> — one nodelist, e.g.
+                    <code>/download/nodelist/fidonet/2024/nodelist.365</code><br>
+                    <code>GET /download/latest</code> — redirects to the newest FidoNet nodelist<br>
+                    <code>GET /download/year/{network}/{year}.tar.gz</code> — a year of one network, e.g.
+                    <code>/download/year/fidonet/2024.tar.gz</code> (served as <code>fidonet-nodelists-2024.tar.gz</code>)<br>
+                    <code>GET /download/pointlist/{network}/{source}/{year}/{filename}</code> — one pointlist issue, e.g.
+                    <code>/download/pointlist/fidonet/z2/2025/z2pnt.206</code><br>
+                    <code>GET /download/urls.txt</code> — every nodelist URL, for mirroring:
+                    <code>wget -nc -i {{.SiteURL}}/download/urls.txt</code><br><br>
+                    The pre-2026 FidoNet spellings without the network segment
+                    (<code>/download/nodelist/2024/nodelist.365</code>, <code>/download/year/2024.tar.gz</code>) still
+                    resolve but are no longer advertised.
                 </div>
             </div>
 
             <div class="card">
                 <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">💡 Usage Examples</h2>
-                
-                <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Using curl</h3>
                 <div style="background: #1e293b; color: #e2e8f0; padding: 1.5rem; border-radius: var(--radius); margin-bottom: 1rem; font-family: monospace; overflow-x: auto;">
-# Search for nodes in Zone 2<br>
-curl "{{.BaseURL}}api/nodes?zone=2&limit=5"<br><br>
+# The networks in the database<br>
+curl "{{.SiteURL}}/api/networks"<br><br>
 
-# Get specific node information<br>
-curl "{{.BaseURL}}api/nodes/2/5001/100"<br><br>
+# CM nodes in zone 2, one entry per node<br>
+curl "{{.SiteURL}}/api/nodes?zone=2&amp;is_cm=true&amp;latest_only=true&amp;limit=5"<br><br>
 
-# Search by sysop name<br>
-curl "{{.BaseURL}}api/nodes?sysop_name=John_Doe"<br><br>
+# One node, its history, and what the daemon found when it called<br>
+curl "{{.SiteURL}}/api/nodes/2/5001/100"<br>
+curl "{{.SiteURL}}/api/nodes/2/5001/100/history"<br>
+curl "{{.SiteURL}}/api/nodes/2/5001/100/tests?days=7"<br><br>
 
-# Get network statistics<br>
-curl "{{.BaseURL}}api/stats"<br><br>
+# Nodes whose newest test failed today<br>
+curl "{{.SiteURL}}/api/reachability/nodes?status=failed&amp;days=1"<br><br>
 
-# Get available dates for statistics<br>
-curl "{{.BaseURL}}api/stats/dates"
+# Statistics for the nearest nodelist to a date<br>
+curl "{{.SiteURL}}/api/stats?date=2023-12-01"
                 </div>
 
-                <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Response Format</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">All API responses use JSON format with consistent structure:</p>
-                <div style="background: #1e293b; color: #e2e8f0; padding: 1.5rem; border-radius: var(--radius); margin-bottom: 2rem; font-family: monospace; overflow-x: auto;">
+                <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Response Shapes</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                    Listings return the items under a named key with a <code>count</code>, and searches echo the
+                    filter they applied. Endpoints about one address add the address envelope:
+                </p>
+                <div style="background: #1e293b; color: #e2e8f0; padding: 1.5rem; border-radius: var(--radius); margin-bottom: 1rem; font-family: monospace; overflow-x: auto;">
 {<br>
-&nbsp;&nbsp;"nodes": [...],<br>
-&nbsp;&nbsp;"count": 42,<br>
-&nbsp;&nbsp;"filter": {...}<br>
+&nbsp;&nbsp;"address": "2:5001/100",<br>
+&nbsp;&nbsp;"domain": "fidonet",<br>
+&nbsp;&nbsp;"available_domains": ["fidonet"],<br>
+&nbsp;&nbsp;"history": [...],<br>
+&nbsp;&nbsp;"count": 52<br>
 }
                 </div>
-            </div>
-
-            <div class="alert alert-success">
-                <strong>💡 Pro Tip:</strong> Use the <code>limit</code> and <code>offset</code> parameters for efficient pagination when dealing with large result sets. The API performs well with limits up to 200 records per request.
+                <p style="color: var(--text-secondary);">
+                    Duplicate entries in the source nodelists are preserved: a node listed twice on one date has rows
+                    with <code>conflict_sequence</code> 0 and 1 and <code>has_conflict</code> set. Every field of every
+                    record is described in the <a href="/api/docs">OpenAPI document</a>.
+                </p>
             </div>
 {{end}}

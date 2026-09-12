@@ -50,6 +50,15 @@ func (s *Server) SetupRouter() http.Handler {
 		r.Get("/{zone}/{net}/{node}/timeline", s.GetNodeTimelineHandler)
 		r.Get("/{zone}/{net}/{node}/points", s.GetNodePointsHandler)
 		r.Get("/{zone}/{net}/{node}/ping", s.GetNodePingHandler)
+		r.Get("/{zone}/{net}/{node}/tests", s.GetNodeTestsHandler)
+		r.Get("/{zone}/{net}/{node}/tests/detail", s.GetNodeTestDetailHandler)
+	})
+
+	// Reachability (testdaemon results) routes
+	r.Route("/api/reachability", func(r chi.Router) {
+		r.Use(heavy)
+		r.Get("/trends", s.GetReachabilityTrendsHandler)
+		r.Get("/nodes", s.SearchReachabilityHandler)
 	})
 
 	// Point (FTS-5002 pointlist) routes

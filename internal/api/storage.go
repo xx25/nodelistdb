@@ -17,8 +17,8 @@ import (
 // could not tell which of the 89 the API actually calls, and a test double had
 // to satisfy all of them. Splitting it into five per-subject readers costs
 // nothing at the call site - *storage.CachedStorage satisfies them all without
-// being told - and makes the API's storage footprint the twenty-seven methods
-// listed below.
+// being told - and makes the API's storage footprint the methods listed
+// below (count them; the number here went stale twice).
 
 // NodeReader is the nodelist itself: what a node is, was, and which networks
 // it appears in.
@@ -67,6 +67,17 @@ type AnalyticsReader interface {
 	GetNodePingReplies(ctx context.Context, domain string, zone, net, node int, limit int) ([]storage.PingReplyRow, error)
 }
 
+// ReachabilityReader is what the testdaemon found: per-node test history,
+// one test in full, per-node statistics and the network-wide trend.
+type ReachabilityReader interface {
+	GetNodeTestHistory(ctx context.Context, zone, net, node int, days int, domain string) ([]storage.NodeTestResult, error)
+	GetDetailedTestResult(ctx context.Context, zone, net, node int, testTime string, domain string) (*storage.NodeTestResult, error)
+	GetNodeReachabilityStats(ctx context.Context, zone, net, node int, days int, domain string) (*storage.NodeReachabilityStats, error)
+	GetReachabilityTrends(ctx context.Context, days int, domain string) ([]storage.ReachabilityTrend, error)
+	GetReachabilityTrendsAllTime(ctx context.Context, domain string) ([]storage.ReachabilityTrend, error)
+	SearchNodesByReachability(ctx context.Context, f storage.ReachabilityFilter) ([]storage.NodeTestResult, error)
+}
+
 // PSTNStore is the only writable surface the API has: the modem tester's
 // record of which phone numbers answer.
 type PSTNStore interface {
@@ -84,6 +95,7 @@ type Storage interface {
 	StatsReader
 	SysopReader
 	AnalyticsReader
+	ReachabilityReader
 	PSTNStore
 }
 

@@ -323,7 +323,7 @@ func TestRejectionLoggingIsSampled(t *testing.T) {
 		h.ServeHTTP(httptest.NewRecorder(), req)
 	}
 
-	if got := m.Stats()["rejected"].(uint64); got != 499 {
+	if got := m.Stats().Rejected; got != 499 {
 		t.Fatalf("rejected count = %d, want 499: sampling must not lose counts", got)
 	}
 	// The log bucket holds logSampleRate.Burst tokens; anything past that is

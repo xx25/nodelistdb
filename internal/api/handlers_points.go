@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/storage"
 )
 
 // resolvePointDomain picks the FTN network for a point endpoint. It consults
@@ -74,28 +75,42 @@ func (s *Server) SearchPointsHandler(w http.ResponseWriter, r *http.Request) {
 		points = []database.Point{}
 	}
 
-	response := map[string]interface{}{
-		"points": points,
-		"count":  len(points),
-		"filter": map[string]interface{}{
-			"zone":        filter.Zone,
-			"net":         filter.Net,
-			"node":        filter.Node,
-			"point":       filter.PointNum,
-			"domain":      filter.Domain,
-			"list_source": filter.ListSource,
-			"system_name": filter.SystemName,
-			"location":    filter.Location,
-			"sysop_name":  filter.SysopName,
-			"date_from":   filter.DateFrom,
-			"date_to":     filter.DateTo,
-			"latest_only": filter.LatestOnly,
-			"limit":       filter.Limit,
-			"offset":      filter.Offset,
+	WriteJSONSuccess(w, pointSearchResponse{
+		Points: points,
+		Count:  len(points),
+		Filter: pointFilterEcho{
+			Zone: filter.Zone, Net: filter.Net, Node: filter.Node, Point: filter.PointNum,
+			Domain: filter.Domain, ListSource: filter.ListSource,
+			SystemName: filter.SystemName, Location: filter.Location, SysopName: filter.SysopName,
+			DateFrom: filter.DateFrom, DateTo: filter.DateTo, LatestOnly: filter.LatestOnly,
+			Limit: filter.Limit, Offset: filter.Offset,
 		},
-	}
+	})
+}
 
-	WriteJSONSuccess(w, response)
+// pointSearchResponse is the GET /api/points body.
+type pointSearchResponse struct {
+	Points []database.Point `json:"points"`
+	Count  int              `json:"count"`
+	Filter pointFilterEcho  `json:"filter"`
+}
+
+// pointFilterEcho is the search's reading of its parameters.
+type pointFilterEcho struct {
+	Zone       *int       `json:"zone"`
+	Net        *int       `json:"net"`
+	Node       *int       `json:"node"`
+	Point      *int       `json:"point"`
+	Domain     *string    `json:"domain"`
+	ListSource *string    `json:"list_source"`
+	SystemName *string    `json:"system_name"`
+	Location   *string    `json:"location"`
+	SysopName  *string    `json:"sysop_name"`
+	DateFrom   *time.Time `json:"date_from"`
+	DateTo     *time.Time `json:"date_to"`
+	LatestOnly *bool      `json:"latest_only"`
+	Limit      int        `json:"limit"`
+	Offset     int        `json:"offset"`
 }
 
 // GetNodePointsHandler returns the snapshot points under a boss node.
@@ -213,6 +228,9 @@ func (s *Server) PointlistDatesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if files == nil {
+		files = []database.PointlistFile{}
+	}
 	response := map[string]interface{}{
 		"files": files,
 		"count": len(files),
@@ -230,6 +248,9 @@ func (s *Server) PointlistSourcesHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if sources == nil {
+		sources = []storage.PointlistSourceInfo{}
+	}
 	response := map[string]interface{}{
 		"sources": sources,
 		"count":   len(sources),

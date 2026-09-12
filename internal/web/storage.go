@@ -71,7 +71,7 @@ type ReachabilityReader interface {
 	GetNodeReachabilityStats(ctx context.Context, zone, net, node int, days int, domain string) (*storage.NodeReachabilityStats, error)
 	GetReachabilityTrends(ctx context.Context, days int, domain string) ([]storage.ReachabilityTrend, error)
 	GetReachabilityTrendsAllTime(ctx context.Context, domain string) ([]storage.ReachabilityTrend, error)
-	SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]storage.NodeTestResult, error)
+	SearchNodesByReachability(ctx context.Context, f storage.ReachabilityFilter) ([]storage.NodeTestResult, error)
 }
 
 // ProtocolReader is the ten config-driven protocol and IPv6 listings. These are bound as method values to protocolNodesFetcher, so they migrate as a set or not at all.

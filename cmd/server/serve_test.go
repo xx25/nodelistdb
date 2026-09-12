@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nodelistdb/internal/api"
 	"github.com/nodelistdb/internal/cache"
 )
 
@@ -79,7 +80,7 @@ func TestCacheStatsHandlerShape(t *testing.T) {
 		t.Errorf("Content-Type = %q, want JSON", ct)
 	}
 
-	var got cacheStats
+	var got api.CacheStats
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("response is not JSON: %s", rec.Body.String())
 	}

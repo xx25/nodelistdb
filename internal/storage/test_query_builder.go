@@ -177,9 +177,12 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 
 			-- For backward compatibility
 			countIf(rn = 1 AND cyc_operational) as successful_tests,
-			avgIf(cyc_operational, rn = 1) * 100 as success_rate,
+			ifNotFinite(avgIf(cyc_operational, rn = 1) * 100, 0) as success_rate,
 
-			avgIf(least(
+			-- ifNotFinite: avgIf over no matching rows is NaN, which the JSON
+			-- encoder refuses; a node with no successful (or no IFCICO, no IPv6,
+			-- ...) test reports 0 rather than breaking the response.
+			ifNotFinite(avgIf(least(
 				if(binkp_response_ms > 0, binkp_response_ms, 999999),
 				if(ifcico_response_ms > 0, ifcico_response_ms, 999999),
 				if(telnet_response_ms > 0, telnet_response_ms, 999999)
@@ -187,26 +190,26 @@ func (tqb *TestQueryBuilder) BuildReachabilityStatsQuery() string {
 				if(binkp_response_ms > 0, binkp_response_ms, 999999),
 				if(ifcico_response_ms > 0, ifcico_response_ms, 999999),
 				if(telnet_response_ms > 0, telnet_response_ms, 999999)
-			) < 999999) as avg_response_ms,
+			) < 999999), 0) as avg_response_ms,
 			max(test_time) as last_test_time,
 			-- Current status is the latest CYCLE's verdict, not whichever row was
 			-- written last (that can be a failing backup hostname).
 			argMaxIf(cyc_operational, test_time, rn = 1) as last_status,
 
 			-- Combined success rates (IPv4 OR IPv6)
-			avgIf(binkp_success, binkp_tested) * 100 as binkp_success_rate,
-			avgIf(ifcico_success, ifcico_tested) * 100 as ifcico_success_rate,
-			avgIf(telnet_success, telnet_tested) * 100 as telnet_success_rate,
+			ifNotFinite(avgIf(binkp_success, binkp_tested) * 100, 0) as binkp_success_rate,
+			ifNotFinite(avgIf(ifcico_success, ifcico_tested) * 100, 0) as ifcico_success_rate,
+			ifNotFinite(avgIf(telnet_success, telnet_tested) * 100, 0) as telnet_success_rate,
 
 			-- IPv4-only success rates
-			avgIf(binkp_ipv4_success, binkp_ipv4_tested AND length(resolved_ipv4) > 0) * 100 as binkp_ipv4_success_rate,
-			avgIf(ifcico_ipv4_success, ifcico_ipv4_tested AND length(resolved_ipv4) > 0) * 100 as ifcico_ipv4_success_rate,
-			avgIf(telnet_ipv4_success, telnet_ipv4_tested AND length(resolved_ipv4) > 0) * 100 as telnet_ipv4_success_rate,
+			ifNotFinite(avgIf(binkp_ipv4_success, binkp_ipv4_tested AND length(resolved_ipv4) > 0) * 100, 0) as binkp_ipv4_success_rate,
+			ifNotFinite(avgIf(ifcico_ipv4_success, ifcico_ipv4_tested AND length(resolved_ipv4) > 0) * 100, 0) as ifcico_ipv4_success_rate,
+			ifNotFinite(avgIf(telnet_ipv4_success, telnet_ipv4_tested AND length(resolved_ipv4) > 0) * 100, 0) as telnet_ipv4_success_rate,
 
 			-- IPv6-only success rates
-			avgIf(binkp_ipv6_success, binkp_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as binkp_ipv6_success_rate,
-			avgIf(ifcico_ipv6_success, ifcico_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as ifcico_ipv6_success_rate,
-			avgIf(telnet_ipv6_success, telnet_ipv6_tested AND length(resolved_ipv6) > 0) * 100 as telnet_ipv6_success_rate
+			ifNotFinite(avgIf(binkp_ipv6_success, binkp_ipv6_tested AND length(resolved_ipv6) > 0) * 100, 0) as binkp_ipv6_success_rate,
+			ifNotFinite(avgIf(ifcico_ipv6_success, ifcico_ipv6_tested AND length(resolved_ipv6) > 0) * 100, 0) as ifcico_ipv6_success_rate,
+			ifNotFinite(avgIf(telnet_ipv6_success, telnet_ipv6_tested AND length(resolved_ipv6) > 0) * 100, 0) as telnet_ipv6_success_rate
 		FROM ranked
 		GROUP BY domain, zone, net, node`, testSessionWindowSeconds)
 }
@@ -266,7 +269,7 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 			countIf(day_status = 1) AS operational_nodes,
 			countIf(day_status = 0) AS failed_nodes,
 			avg(toUInt8(day_status)) * 100 AS success_rate,
-			avgIf(day_response, day_status = 1 AND day_response < 999999) AS avg_response_ms
+			ifNotFinite(avgIf(day_response, day_status = 1 AND day_response < 999999), 0) AS avg_response_ms
 		FROM (
 			SELECT
 				domain, zone, net, node, day_status, day_response,
@@ -444,7 +447,15 @@ func (tqb *TestQueryBuilder) BuildVModemUnconfirmedQuery(nodeFilter, domainFilte
 // one BuildVMODEMNodesQuery uses: the aggregated row is the node's own verdict
 // over all its hostnames, so it wins when present, and hostname order decides
 // otherwise.
-func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
+func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery(protocol string) string {
+	// The protocol predicate is applied in SQL, after one row per node is
+	// picked and before LIMIT. It used to run in Go over a pre-limited page,
+	// so a protocol that is rare among the newest results (FTP, VModem) could
+	// come back empty while nodes that matched sat just past the limit.
+	protocolClause := ""
+	if pred, ok := protocolSuccessPredicates[protocol]; ok {
+		protocolClause = "AND " + fmt.Sprintf(pred, "")
+	}
 	return applyTestResultColumns(`
 		SELECT
 			{{TEST_RESULT_COLUMNS}}
@@ -454,7 +465,9 @@ func (tqb *TestQueryBuilder) BuildSearchByReachabilityQuery() string {
 			WHERE test_time >= now() - INTERVAL ? DAY
 			AND (? = '' OR domain = ?)
 		)
-		WHERE rn = 1 AND is_operational = ?
+		WHERE rn = 1
+		AND (? = '' OR (? = 'operational' AND is_operational) OR (? = 'failed' AND NOT is_operational))
+		` + protocolClause + `
 		ORDER BY test_time DESC
 		LIMIT ?`)
 }

@@ -110,7 +110,8 @@ func TestTestResultQueryColumnCounts(t *testing.T) {
 		{"BuildDetailedTestResultQuery", qb.BuildDetailedTestResultQuery()},
 		{"BuildProtocolEnabledQuery", qb.BuildProtocolEnabledQuery("binkp", "", "", 30)},
 		{"BuildVModemUnconfirmedQuery", qb.BuildVModemUnconfirmedQuery("", "", 30)},
-		{"BuildSearchByReachabilityQuery", qb.BuildSearchByReachabilityQuery()},
+		{"BuildSearchByReachabilityQuery", qb.BuildSearchByReachabilityQuery("")},
+		{"BuildSearchByReachabilityQuery(vmodem)", qb.BuildSearchByReachabilityQuery("vmodem")},
 		{"buildAKAMismatchQuery", am.buildAKAMismatchQuery("", "fidonet", 30)},
 	}
 

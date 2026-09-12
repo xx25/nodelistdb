@@ -126,6 +126,15 @@ type RobotStat struct {
 }
 
 // PingReplyRow is one stored reply with its parsed hop list.
+// newPingTraceSummary starts the three lists empty rather than nil: the API
+// promises arrays, and a window with no pings would otherwise publish null.
+func newPingTraceSummary(domain string, days int) *PingTraceSummary {
+	return &PingTraceSummary{
+		Domain: domain, Days: days,
+		Nodes: []PingNodeSummary{}, Tracers: []TracerStat{}, Robots: []RobotStat{},
+	}
+}
+
 type PingReplyRow struct {
 	pingtrace.Reply
 	Hops []pingtrace.Hop `json:"hops"`
@@ -310,7 +319,7 @@ func (po *PingTraceOperations) GetPingTraceSummary(ctx context.Context, domain s
 	if err != nil {
 		return nil, fmt.Errorf("query flagged nodes: %w", err)
 	}
-	summary := &PingTraceSummary{Domain: domain, Days: days}
+	summary := newPingTraceSummary(domain, days)
 	index := map[string]int{}
 	for rows.Next() {
 		var (

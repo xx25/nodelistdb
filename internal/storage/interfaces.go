@@ -75,7 +75,7 @@ type Operations interface {
 	GetNodeReachabilityStats(ctx context.Context, zone, net, node int, days int, domain string) (*NodeReachabilityStats, error)
 	GetReachabilityTrends(ctx context.Context, days int, domain string) ([]ReachabilityTrend, error)
 	GetReachabilityTrendsAllTime(ctx context.Context, domain string) ([]ReachabilityTrend, error)
-	SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]NodeTestResult, error)
+	SearchNodesByReachability(ctx context.Context, f ReachabilityFilter) ([]NodeTestResult, error)
 	GetIPv6EnabledNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error)
 	GetIPv6NonWorkingNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error)
 	GetIPv6AdvertisedIPv4OnlyNodes(ctx context.Context, limit int, days int, includeZeroNodes bool, domain string) ([]NodeTestResult, error)

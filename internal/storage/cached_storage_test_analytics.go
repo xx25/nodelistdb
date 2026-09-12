@@ -313,9 +313,9 @@ func (cs *CachedStorage) GetReachabilityTrendsAllTime(ctx context.Context, domai
 }
 
 // SearchNodesByReachability returns nodes filtered by reachability status (cached)
-func (cs *CachedStorage) SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
-	return cachedFetchSlice(cs, cs.keyGen.SearchNodesByReachabilityKey(operational, limit, days, domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
-		return cs.Storage.SearchNodesByReachability(ctx, operational, limit, days, domain)
+func (cs *CachedStorage) SearchNodesByReachability(ctx context.Context, f ReachabilityFilter) ([]NodeTestResult, error) {
+	return cachedFetchSlice(cs, cs.keyGen.SearchNodesByReachabilityKey(f.Status, f.Protocol, f.Limit, f.Days, f.Domain), cs.config.TestAnalyticsTTL, func() ([]NodeTestResult, error) {
+		return cs.Storage.SearchNodesByReachability(ctx, f)
 	})
 }
 

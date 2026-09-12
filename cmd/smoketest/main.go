@@ -147,7 +147,7 @@ func main() {
 	check("GetReachabilityTrends", err)
 	_, err = s.GetReachabilityTrendsAllTime(ctx, "")
 	check("GetReachabilityTrendsAllTime", err)
-	_, err = s.SearchNodesByReachability(ctx, true, 5, 7, "")
+	_, err = s.SearchNodesByReachability(ctx, storage.ReachabilityFilter{Status: "operational", Days: 7, Limit: 5})
 	check("SearchNodesByReachability", err)
 
 	// --- Protocol / IPv6 analytics

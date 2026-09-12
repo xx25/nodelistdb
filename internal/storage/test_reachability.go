@@ -144,16 +144,68 @@ func (r *ReachabilityOperations) queryTrends(ctx context.Context, conn *sql.DB, 
 	return trends, nil
 }
 
-// SearchNodesByReachability searches for nodes by reachability status.
-// An empty domain matches every network.
-func (r *ReachabilityOperations) SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]NodeTestResult, error) {
+// ReachabilityFilter selects the latest test result per node.
+//
+// Status is "operational", "failed" or "" for both. Protocol is one of
+// ReachabilityProtocols or "" for any; it means "that protocol succeeded in
+// the node's latest test" (for vmodem, a confirmed VMP responder). Days is
+// the look-back window, Limit the page size, Domain the FTN network ("" for
+// every network).
+type ReachabilityFilter struct {
+	Status   string
+	Protocol string
+	Days     int
+	Limit    int
+	Domain   string
+}
+
+// ReachabilityStatuses lists the accepted Status values besides "".
+var ReachabilityStatuses = []string{"operational", "failed"}
+
+// ReachabilityProtocols lists the accepted Protocol values besides "".
+var ReachabilityProtocols = []string{"binkp", "ifcico", "telnet", "ftp", "vmodem"}
+
+// Validate reports the first field that holds a value the query cannot
+// express, so a handler can turn it into a 400 instead of a silent "any".
+func (f ReachabilityFilter) Validate() error {
+	if f.Status != "" && !containsString(ReachabilityStatuses, f.Status) {
+		return fmt.Errorf("status must be one of operational, failed")
+	}
+	if f.Protocol != "" && !containsString(ReachabilityProtocols, f.Protocol) {
+		return fmt.Errorf("protocol must be one of binkp, ifcico, telnet, ftp, vmodem")
+	}
+	if f.Days <= 0 {
+		return fmt.Errorf("days must be positive")
+	}
+	if f.Limit <= 0 {
+		return fmt.Errorf("limit must be positive")
+	}
+	return nil
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// SearchNodesByReachability returns each node's latest test result in the
+// window, newest first, narrowed by status and protocol in SQL so that a
+// page is never short of rows that exist.
+func (r *ReachabilityOperations) SearchNodesByReachability(ctx context.Context, f ReachabilityFilter) ([]NodeTestResult, error) {
+	if err := f.Validate(); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	conn := r.db.Conn()
-	query := r.queryBuilder.BuildSearchByReachabilityQuery()
+	query := r.queryBuilder.BuildSearchByReachabilityQuery(f.Protocol)
 
-	rows, err := conn.QueryContext(ctx, query, days, domain, domain, operational, limit)
+	rows, err := conn.QueryContext(ctx, query, f.Days, f.Domain, f.Domain, f.Status, f.Status, f.Status, f.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search nodes by reachability: %w", err)
 	}

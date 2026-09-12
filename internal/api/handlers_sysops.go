@@ -5,6 +5,8 @@ import (
 	"net/url"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/nodelistdb/internal/database"
+	"github.com/nodelistdb/internal/storage"
 )
 
 // SysopsHandler handles requests for listing sysops.
@@ -24,6 +26,9 @@ func (s *Server) SysopsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if sysops == nil {
+		sysops = []storage.SysopInfo{}
+	}
 	response := map[string]interface{}{
 		"sysops": sysops,
 		"count":  len(sysops),
@@ -64,6 +69,9 @@ func (s *Server) SysopNodesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if nodes == nil {
+		nodes = []database.Node{}
+	}
 	response := map[string]interface{}{
 		"sysop_name": decodedName,
 		"nodes":      nodes,

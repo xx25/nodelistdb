@@ -115,8 +115,8 @@ func (kg *KeyGenerator) ReachabilityTrendsKey(days int, domain string) string {
 	return fmt.Sprintf("%s:reachability:trends:%d:%s", kg.Prefix, days, domain)
 }
 
-func (kg *KeyGenerator) SearchNodesByReachabilityKey(operational bool, limit, days int, domain string) string {
-	return fmt.Sprintf("%s:reachability:search:%t:%d:%d:%s", kg.Prefix, operational, limit, days, domain)
+func (kg *KeyGenerator) SearchNodesByReachabilityKey(status, protocol string, limit, days int, domain string) string {
+	return fmt.Sprintf("%s:reachability:search:%s:%s:%d:%d:%s", kg.Prefix, status, protocol, limit, days, domain)
 }
 
 func (kg *KeyGenerator) NodeTestHistoryKey(zone, net, node, days int) string {

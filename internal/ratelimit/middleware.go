@@ -75,6 +75,7 @@ func DefaultConfig() Config {
 				"/node/", "/reachability", "/points/", "/analytics/",
 				"/stats", "/api/networks", "/api/nodes/", "/api/points/",
 				"/api/stats", "/api/analytics/", "/api/software/", "/api/sysops",
+				"/api/reachability/",
 			},
 			Rate: Rate{Refill: 0.1, Burst: 10},
 		}, {
@@ -192,10 +193,18 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 }
 
 // Stats reports the limiter's counters for the health and stats endpoints.
-func (m *Middleware) Stats() map[string]any {
-	return map[string]any{
-		"allowed":  m.allowed.Load(),
-		"rejected": m.rejected.Load(),
-		"keys":     m.limiter.Len(),
+func (m *Middleware) Stats() Stats {
+	return Stats{
+		Allowed:  m.allowed.Load(),
+		Rejected: m.rejected.Load(),
+		Keys:     m.limiter.Len(),
 	}
+}
+
+// Stats is the /api/ratelimit/stats body: lifetime counters plus the number
+// of client buckets currently tracked.
+type Stats struct {
+	Allowed  uint64 `json:"allowed"`
+	Rejected uint64 `json:"rejected"`
+	Keys     int    `json:"keys"`
 }

@@ -216,14 +216,7 @@ type reachabilityStub struct {
 
 	trends    []storage.ReachabilityTrend
 	nodes     []storage.NodeTestResult
-	searchLog []reachabilitySearch
-}
-
-type reachabilitySearch struct {
-	operational bool
-	limit       int
-	days        int
-	domain      string
+	searchLog []storage.ReachabilityFilter
 }
 
 func (s *reachabilityStub) GetReachabilityTrends(ctx context.Context, days int, domain string) ([]storage.ReachabilityTrend, error) {
@@ -234,11 +227,8 @@ func (s *reachabilityStub) GetReachabilityTrendsAllTime(ctx context.Context, dom
 	return s.trends, nil
 }
 
-func (s *reachabilityStub) SearchNodesByReachability(ctx context.Context, operational bool, limit int, days int, domain string) ([]storage.NodeTestResult, error) {
-	s.searchLog = append(s.searchLog, reachabilitySearch{operational: operational, limit: limit, days: days, domain: domain})
-	if !operational {
-		return nil, nil
-	}
+func (s *reachabilityStub) SearchNodesByReachability(ctx context.Context, f storage.ReachabilityFilter) ([]storage.NodeTestResult, error) {
+	s.searchLog = append(s.searchLog, f)
 	return s.nodes, nil
 }
 
@@ -273,22 +263,20 @@ func TestReachabilityHandlerOpensOnRecentNodes(t *testing.T) {
 		t.Error("a bare /reachability visit rendered the empty-results panel")
 	}
 
-	// Both statuses are searched, so the default list can mix them, and each
-	// search asks for more rows than the page shows - the protocol filter runs
-	// in Go over whatever came back.
-	if len(ops.searchLog) != 2 {
-		t.Fatalf("node searches = %d, want 2 (operational and failed)", len(ops.searchLog))
+	// One search, with status and protocol left open and both filters
+	// pushed into SQL, so the page shows exactly the rows it asked for.
+	if len(ops.searchLog) != 1 {
+		t.Fatalf("node searches = %d, want 1", len(ops.searchLog))
 	}
-	if ops.searchLog[0].operational == ops.searchLog[1].operational {
-		t.Error("both node searches asked for the same status")
+	got := ops.searchLog[0]
+	if got.Status != "" || got.Protocol != "" {
+		t.Errorf("default search = status %q protocol %q, want both open", got.Status, got.Protocol)
 	}
-	for _, got := range ops.searchLog {
-		if got.limit < reachabilityFetchFloor {
-			t.Errorf("search(operational=%v) limit = %d, want at least the %d-row pre-filter floor", got.operational, got.limit, reachabilityFetchFloor)
-		}
-		if got.days != 1 {
-			t.Errorf("search(operational=%v) days = %d, want the 1-day default window", got.operational, got.days)
-		}
+	if got.Limit != 10 {
+		t.Errorf("search limit = %d, want the page's default of 10", got.Limit)
+	}
+	if got.Days != 1 {
+		t.Errorf("search days = %d, want the 1-day default window", got.Days)
 	}
 }
 

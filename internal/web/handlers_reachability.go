@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -92,97 +91,31 @@ func (s *Server) ReachabilityHandler(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "reachability", data)
 }
 
-// reachabilityFetchFloor is the smallest pre-filter pool the protocol filter is
-// given to work with, whatever the requested page size.
-//
-// The protocol filter runs in Go over rows the status query already returned, so
-// a pool the size of the page finds nothing for a protocol that is absent from
-// the newest tests but present a little further back - a rare protocol like FTP
-// can easily be missing from the 20 most recent results. The pool is a floor
-// rather than a multiple of the page size because the default page is only 10
-// rows.
-const reachabilityFetchFloor = 50
-
-// getFilteredReachabilityNodes retrieves nodes based on the applied filters
+// getFilteredReachabilityNodes returns the newest test result per node,
+// narrowed by status and protocol. Both filters run in SQL, so a protocol
+// that is rare among the newest results (FTP, a confirmed VMODEM) is found
+// wherever it sits rather than only inside a pre-fetched page.
 func (s *Server) getFilteredReachabilityNodes(ctx context.Context, statusFilter, protocolFilter string, periodFilter, limitFilter int, domain string) ([]storage.NodeTestResult, error) {
-	// For now, use the existing SearchNodesByReachability method and apply additional filtering
-	// This could be optimized by adding dedicated database queries for these filters
-
-	var allNodes []storage.NodeTestResult
-
-	fetchLimit := max(limitFilter*2, reachabilityFetchFloor)
-
-	switch statusFilter {
-	case "operational":
-		nodes, err := s.storage.SearchNodesByReachability(ctx, true, fetchLimit, periodFilter, domain)
-		if err != nil {
-			return nil, err
-		}
-		allNodes = nodes
-	case "failed":
-		nodes, err := s.storage.SearchNodesByReachability(ctx, false, fetchLimit, periodFilter, domain)
-		if err != nil {
-			return nil, err
-		}
-		allNodes = nodes
-	default: // "all" or empty
-		// Get both operational and failed nodes - fetch more to ensure we get both types
-		// When status=all, we want to show a mix of both operational and failed
-		operational, err := s.storage.SearchNodesByReachability(ctx, true, fetchLimit, periodFilter, domain)
-		if err != nil {
-			return nil, err
-		}
-		failed, err := s.storage.SearchNodesByReachability(ctx, false, fetchLimit, periodFilter, domain)
-		if err != nil {
-			return nil, err
-		}
-		allNodes = append(operational, failed...)
-
-		// Sort by test time (most recent first)
-		sort.Slice(allNodes, func(i, j int) bool {
-			return allNodes[i].TestTime.After(allNodes[j].TestTime)
-		})
+	f := storage.ReachabilityFilter{
+		Status:   statusFilter,
+		Protocol: protocolFilter,
+		Days:     periodFilter,
+		Limit:    limitFilter,
+		Domain:   domain,
 	}
-
-	// Apply protocol filtering
-	var filteredNodes []storage.NodeTestResult
-	for _, node := range allNodes {
-		switch protocolFilter {
-		case "binkp":
-			if node.BinkPSuccess {
-				filteredNodes = append(filteredNodes, node)
-			}
-		case "ifcico":
-			if node.IfcicoSuccess {
-				filteredNodes = append(filteredNodes, node)
-			}
-		case "telnet":
-			if node.TelnetSuccess {
-				filteredNodes = append(filteredNodes, node)
-			}
-		case "ftp":
-			if node.FTPSuccess {
-				filteredNodes = append(filteredNodes, node)
-			}
-		case "vmodem":
-			// VModemSuccess only says something answered on the announced IVM
-			// port — usually an EMSI mailer or a telnet login, not VMODEM. The
-			// filter asks for VMODEM, so it takes confirmed VMP responders only,
-			// same as the /analytics/vmodem page.
-			if node.IsConfirmedVMODEM() {
-				filteredNodes = append(filteredNodes, node)
-			}
-		default: // "any" or empty
-			filteredNodes = append(filteredNodes, node)
-		}
-
-		// Limit results
-		if len(filteredNodes) >= limitFilter {
-			break
-		}
+	// The page's selects say "all" and "any"; the store says "".
+	if f.Status == "all" {
+		f.Status = ""
 	}
-
-	return filteredNodes, nil
+	if f.Protocol == "any" {
+		f.Protocol = ""
+	}
+	if err := f.Validate(); err != nil {
+		// An unknown value from a hand-edited URL is not worth a 400 on a
+		// browse page: show the unfiltered list, as the page always did.
+		f.Status, f.Protocol = "", ""
+	}
+	return s.storage.SearchNodesByReachability(ctx, f)
 }
 
 // ReachabilityNodeHandler serves the reachability history for a specific node

@@ -52,31 +52,31 @@ const (
 // Ping is one netmail PING sent to one node, and everything learned about
 // it since. It is the row of the ping_tests table.
 type Ping struct {
-	Domain   string
-	Zone     int
-	Net      int
-	Node     int
-	Address  string // "zone:net/node"
-	Mode     string
-	SentTime time.Time
+	Domain   string    `json:"domain"`
+	Zone     int       `json:"zone"`
+	Net      int       `json:"net"`
+	Node     int       `json:"node"`
+	Address  string    `json:"address"` // "zone:net/node"
+	Mode     string    `json:"mode"`
+	SentTime time.Time `json:"sent_time"`
 	// Token is the per-ping random tag carried in the subject, so a robot
 	// that quotes neither MSGID nor REPLY can still be matched.
-	Token string
-	MSGID string
+	Token string `json:"token"`
+	MSGID string `json:"msgid"`
 	// FidomailMessageID is the sender's row id, used to poll delivery state.
-	FidomailMessageID uint64
-	FirstHop          string
-	RouteSource       string
-	Status            string
-	DispatchedTime    time.Time
-	ReplyTime         time.Time
-	RTTSeconds        uint32
-	ReplyMessageID    uint64
-	ReplyMSGID        string
-	ReplyFromName     string
-	ReplyFromAddr     string
-	RobotPID          string
-	RobotTearline     string
+	FidomailMessageID uint64    `json:"fidomail_message_id"`
+	FirstHop          string    `json:"first_hop"`
+	RouteSource       string    `json:"route_source"`
+	Status            string    `json:"status"`
+	DispatchedTime    time.Time `json:"dispatched_time"`
+	ReplyTime         time.Time `json:"reply_time"`
+	RTTSeconds        uint32    `json:"rtt_seconds"`
+	ReplyMessageID    uint64    `json:"reply_message_id"`
+	ReplyMSGID        string    `json:"reply_msgid"`
+	ReplyFromName     string    `json:"reply_from_name"`
+	ReplyFromAddr     string    `json:"reply_from_addr"`
+	RobotPID          string    `json:"robot_pid"`
+	RobotTearline     string    `json:"robot_tearline"`
 	// ReplyInboundAuth / ReplyInboundTier record how the ANSWER reached
 	// us, copied from the reply that set this verdict. An answer on an
 	// unauthenticated session was not relayed to us by a password-protected
@@ -86,13 +86,13 @@ type Ping struct {
 	// a link-less session either side placed all land here alike. Only the
 	// mailer's own session log can name the peer; fidomail's inbox API does
 	// not report it, so no reader may present this as "the node dialled us".
-	ReplyInboundAuth string
-	ReplyInboundTier uint8
-	OutHops          []Hop
-	BackHops         []Hop
-	TraceCount       uint32
-	Error            string
-	UpdatedAt        time.Time
+	ReplyInboundAuth string    `json:"reply_inbound_auth"`
+	ReplyInboundTier uint8     `json:"reply_inbound_tier"`
+	OutHops          []Hop     `json:"out_hops"`
+	BackHops         []Hop     `json:"back_hops"`
+	TraceCount       uint32    `json:"trace_count"`
+	Error            string    `json:"error"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // Key identifies the node a ping targets.
@@ -103,35 +103,35 @@ func (p Ping) Key() string {
 // Reply is one inbound netmail the poller read from fidomail's inbox, as
 // stored in ping_replies together with its classification.
 type Reply struct {
-	FidomailMessageID uint64
-	Kind              string
+	FidomailMessageID uint64 `json:"fidomail_message_id"`
+	Kind              string `json:"kind"`
 	// The ping it answers (zero values when unmatched).
-	PingDomain   string
-	PingZone     int
-	PingNet      int
-	PingNode     int
-	PingSentTime time.Time
-	PingMSGID    string
+	PingDomain   string    `json:"ping_domain"`
+	PingZone     int       `json:"ping_zone"`
+	PingNet      int       `json:"ping_net"`
+	PingNode     int       `json:"ping_node"`
+	PingSentTime time.Time `json:"ping_sent_time"`
+	PingMSGID    string    `json:"ping_msgid"`
 
-	MSGID    string
-	ReplyID  string
-	FromName string
-	FromAddr string
-	ToName   string
-	Subject  string
+	MSGID    string `json:"msgid"`
+	ReplyID  string `json:"reply_id"`
+	FromName string `json:"from_name"`
+	FromAddr string `json:"from_addr"`
+	ToName   string `json:"to_name"`
+	Subject  string `json:"subject"`
 	// Body is the netmail as it arrived. It is STORED -- the hop chain a
 	// reply quotes is parsed out of it on read, and correlation matches
 	// our token in it -- but never published: it is a third party's
 	// private mail, and this node holds it only because it was addressed
 	// here. json:"-" keeps it out of /api/nodes/{z}/{n}/{n}/ping, which
 	// serialises the stored row wholesale.
-	Body       string `json:"-"`
-	Date       time.Time
-	ReceivedAt time.Time
-	PID        string
-	Tearline   string
-	Vias       []string
-	UpdatedAt  time.Time
+	Body       string    `json:"-"`
+	Date       time.Time `json:"date"`
+	ReceivedAt time.Time `json:"received_at"`
+	PID        string    `json:"pid"`
+	Tearline   string    `json:"tearline"`
+	Vias       []string  `json:"vias"`
+	UpdatedAt  time.Time `json:"updated_at"`
 
 	// InboundTier and InboundAuth record HOW this reply reached us, not
 	// what it says. On an unauthenticated session (fidomail tier B or C)
@@ -144,8 +144,8 @@ type Reply struct {
 	// "unsecure"), empty when it did not report one, so the rule for which
 	// tiers count as authenticated is never restated here and cannot drift
 	// from fidomail's own Unsecure view.
-	InboundTier uint8
-	InboundAuth string
+	InboundTier uint8  `json:"inbound_tier"`
+	InboundAuth string `json:"inbound_auth"`
 }
 
 // Inbound auth verdicts, as stored in ping_replies.inbound_auth.

@@ -28,17 +28,17 @@ type Hop struct {
 	// Address is the FTN address the line names, without any @domain
 	// suffix ("2:5020/469", "2:5020/469.12"). Empty when the line carries
 	// no recognisable address.
-	Address string
+	Address string `json:"address"`
 	// Time is when the hop processed the message. Zero when the line has
 	// no recognisable timestamp. FTS-4009 §2 timestamps carry an explicit
 	// "UTC" marker only optionally; TimeIsUTC says whether one was present.
-	Time      time.Time
-	TimeIsUTC bool
+	Time      time.Time `json:"time"`
+	TimeIsUTC bool      `json:"time_is_utc"`
 	// Software is the free text left after the address and timestamp are
 	// removed: normally the program name and version.
-	Software string
+	Software string `json:"software"`
 	// Raw is the line as found, with the kludge/quote prefix stripped.
-	Raw string
+	Raw string `json:"raw"`
 }
 
 var (

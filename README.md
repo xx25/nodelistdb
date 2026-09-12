@@ -166,57 +166,86 @@ ftp:
 
 ## REST API
 
-The REST API is available at `/api` when the server is running.
+The REST API is available at `/api` when the server is running. The OpenAPI
+document at `/api/openapi.yaml` (Swagger UI at `/api/docs`) is the contract:
+three tests in `internal/api` hold it against the router, the handlers'
+response keys and the Go types they encode, so it cannot drift silently.
+The web server's `/api/help` page is the short tour.
+
+Conventions: the database holds several FTN networks and most endpoints take
+`?domain=` (endpoints about one address resolve it from the address when
+omitted; listings default to `fidonet` or to all networks as documented).
+Searches require at least one constraint. Errors are `{error, status, time}`;
+rate limiting answers `429` with `Retry-After`, an over-budget query `503`.
 
 ### Endpoints
 
-**Node Operations:**
-- `GET /api/nodes` - Search nodes with filtering
-  - Query params: `zone`, `net`, `node`, `system_name`, `location`, `sysop_name`, `node_type`, `is_cm`, `date_from`, `date_to`, `limit`, `offset`
-- `GET /api/nodes/{zone}/{net}/{node}` - Get specific node details
-- `GET /api/nodes/{zone}/{net}/{node}/history` - Get complete node history
-- `GET /api/nodes/{zone}/{net}/{node}/changes` - Get node change log
-- `GET /api/nodes/{zone}/{net}/{node}/timeline` - Get node timeline visualization
+**Networks and statistics:**
+- `GET /api/networks` - FTN networks in the database with their latest nodelist date
+- `GET /api/stats` - Network statistics for one date (`?date=`, nearest available), wrapped with the date actually used
+- `GET /api/stats/dates` - Available nodelist dates
+- `GET /api/flags` - FidoNet flag documentation (`?category=`, `?flag=`)
+- `GET /api/nodelist/latest` - Newest nodelist file and its download URL
 
-**Sysop Operations:**
-- `GET /api/sysops` - List sysops with filtering
-- `GET /api/sysops/{name}/nodes` - Get all nodes for a specific sysop
+**Nodes:**
+- `GET /api/nodes` - Search nodes
+  - Query params: `domain`, `zone`, `net`, `node`, `system_name`, `location`, `sysop_name`, `node_type`, `is_cm`, `is_mo`, `has_inet`, `has_binkp`, `date_from`, `date_to`, `latest_only`, `limit` (max 500), `offset`
+- `GET /api/nodes/{zone}/{net}/{node}` - Most recent entry of one address
+- `GET /api/nodes/{zone}/{net}/{node}/history` - Every entry, with first and last dates
+- `GET /api/nodes/{zone}/{net}/{node}/changes` - Change log
+- `GET /api/nodes/{zone}/{net}/{node}/timeline` - Active/removed events for a chart
+- `GET /api/sysops` - List sysops (`?name=`, `?limit=` max 200, `?offset=`)
+- `GET /api/sysops/{name}/nodes` - A sysop's nodes
 
-**Statistics:**
-- `GET /api/stats` - Get network statistics
-- `GET /api/stats/dates` - Get available nodelist dates
+**Points (FTS-5002 pointlists):**
+- `GET /api/nodes/{zone}/{net}/{node}/points` - Pointlist snapshot under a boss (`?date=`)
+- `GET /api/points` - Search point entries
+- `GET /api/points/{zone}/{net}/{node}/{point}` - One point; `/history` for every stored entry
+- `GET /api/pointlists/dates` - Imported pointlist issues (`?source=`)
+- `GET /api/pointlists/sources` - Imported pointlist series
 
-**Software Analytics:**
-- `GET /api/software/binkp` - BinkP software distribution
-- `GET /api/software/ifcico` - IFCico software distribution
-- `GET /api/software/binkd` - Detailed Binkd statistics
+**Reachability (testdaemon results):**
+- `GET /api/nodes/{zone}/{net}/{node}/tests` - One node's test results in the window (`?days=`, 1-365) with per-protocol statistics
+- `GET /api/nodes/{zone}/{net}/{node}/tests/detail?time=` - One test result in full, by its `test_time`
+- `GET /api/reachability/nodes` - Each node's newest result, filtered by `status` (operational/failed) and `protocol` (binkp/ifcico/telnet/ftp/vmodem)
+- `GET /api/reachability/trends` - Tested and operational counts per day (`?days=`, omit for all time)
+- `GET /api/nodes/{zone}/{net}/{node}/ping` - Netmail PING history of one node with the paths mail walked
+- `GET /api/analytics/pingtrace` - PING/TRACE summary
+- `GET /api/software/binkp`, `/ifcico`, `/binkd` - Mailer software, version and OS distributions
+- `GET /api/analytics/geo-hosting` - Hosting by country and provider
+- Analytics endpoints take `?days=` (default 365) and `?domain=` (default all networks)
 
-**Reference & Documentation:**
-- `GET /api/flags` - Get FidoNet flag documentation
-- `GET /api/nodelist/latest` - Get latest nodelist information
+**PSTN / modem testing:**
+- `GET /api/nodes/pstn` - Nodes with a dialable phone number
+- `GET /api/nodes/pstn/dead`, `GET /api/nodes/pstn/recent-success` - Dead marks and recently reached numbers
+- `POST /api/modem/results/direct`, `POST`/`DELETE /api/modem/pstn-dead` - Writes for the modem test caller (bearer API key; see "Modem-Test Result Submission" in CLAUDE.md)
+
+**Operations and documentation:**
+- `GET /api/health` - Health report
+- `GET /api/cache/stats`, `/api/ratelimit/stats`, `/api/ftp/stats` - Counters, registered when the feature is on
 - `GET /api/openapi.yaml` - OpenAPI specification
 - `GET /api/docs` - Interactive Swagger UI documentation
 
 ### Example API Usage
 
 ```bash
-# Search for nodes with internet connectivity
-curl "http://localhost:8080/api/nodes?has_inet=true&limit=10"
+# Networks in the database
+curl "http://localhost:8080/api/networks"
 
-# Get specific node details
-curl "http://localhost:8080/api/nodes/2/5001/100"
+# Nodes with internet connectivity, one entry per node
+curl "http://localhost:8080/api/nodes?has_inet=true&latest_only=true&limit=10"
 
-# Get node history
-curl "http://localhost:8080/api/nodes/2/5001/100/history"
+# One node in another network
+curl "http://localhost:8080/api/nodes/21/1/100?domain=fsxnet"
 
-# Get network statistics
-curl "http://localhost:8080/api/stats"
+# What the daemon found when it called a node this week
+curl "http://localhost:8080/api/nodes/2/5001/100/tests?days=7"
 
-# Get BinkP software distribution
+# Nodes whose newest test failed today
+curl "http://localhost:8080/api/reachability/nodes?status=failed&days=1"
+
+# BinkP software distribution over the last year
 curl "http://localhost:8080/api/software/binkp?days=365"
-
-# Get all nodes for a sysop
-curl "http://localhost:8080/api/sysops/John_Doe/nodes"
 ```
 
 ## Architecture

@@ -680,7 +680,7 @@ func normalizeOS(os string) string {
 }
 
 func mapToSoftwareTypeStats(m map[string]int, total int) []SoftwareTypeStats {
-	var stats []SoftwareTypeStats
+	stats := []SoftwareTypeStats{} // never nil: the API promises an array
 	for software, count := range m {
 		percentage := 0.0
 		if total > 0 {
@@ -702,7 +702,7 @@ func mapToSoftwareTypeStats(m map[string]int, total int) []SoftwareTypeStats {
 }
 
 func mapToVersionStats(m map[string]int, total int) []SoftwareVersionStats {
-	var stats []SoftwareVersionStats
+	stats := []SoftwareVersionStats{} // never nil: the API promises an array
 	for version, count := range m {
 		percentage := 0.0
 		if total > 0 {
@@ -736,7 +736,7 @@ func mapToVersionStats(m map[string]int, total int) []SoftwareVersionStats {
 }
 
 func mapToOSStats(m map[string]int, total int) []OSStats {
-	var stats []OSStats
+	stats := []OSStats{} // never nil: the API promises an array
 	for os, count := range m {
 		percentage := 0.0
 		if total > 0 {
@@ -758,7 +758,7 @@ func mapToOSStats(m map[string]int, total int) []OSStats {
 }
 
 func mapToBinkdVersionStats(m map[string]int, total int) []SoftwareVersionStats {
-	var stats []SoftwareVersionStats
+	stats := []SoftwareVersionStats{} // never nil: the API promises an array
 	for version, count := range m {
 		percentage := 0.0
 		if total > 0 {
