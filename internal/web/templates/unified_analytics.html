@@ -27,9 +27,9 @@
                 <th data-sortable data-type="address">Node Address</th>
                 <th data-sortable data-type="string">Hostname</th>
 
-                {{/* Version column for protocols that support it (BinkP, IFCICO) */}}
+                {{/* Version column for protocols that support it (BinkP, IFCICO, Telnet) */}}
                 {{if .Config.ShowVersion}}
-                    <th data-sortable data-type="string">Version</th>
+                    <th data-sortable data-type="string">{{if eq .Config.VersionField "TelnetMailerInfo"}}Mailer{{else}}Version{{end}}</th>
                 {{end}}
 
                 {{/* Anonymous login column for FTP */}}
@@ -54,6 +54,7 @@
                         {{$version := ""}}
                         {{if eq $.Config.VersionField "BinkPVersion"}}{{$version = .BinkPVersion}}{{end}}
                         {{if eq $.Config.VersionField "IfcicoMailerInfo"}}{{$version = .IfcicoMailerInfo}}{{end}}
+                        {{if eq $.Config.VersionField "TelnetMailerInfo"}}{{$version = .TelnetMailerInfo}}{{end}}
 
                         {{if $version}}
                             <span class="badge badge-info">{{$version}}</span>

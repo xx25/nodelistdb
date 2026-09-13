@@ -446,15 +446,16 @@ func (s *Server) TelnetAnalyticsHandler(w http.ResponseWriter, r *http.Request) 
 	config := ProtocolPageConfig{
 		basePageConfig: basePageConfig{
 			PageTitle:    "Telnet Enabled Nodes",
-			PageSubtitle: template.HTML(`<p class="subtitle">Nodes that have been successfully tested with Telnet protocol</p>`),
+			PageSubtitle: template.HTML(`<p class="subtitle">Nodes whose ITN port completed an EMSI mail session over telnet</p>`),
 			StatsHeading: "Telnet Enabled",
 			InfoText: []string{
-				`<strong>Note:</strong> This report shows nodes that have been successfully tested with Telnet protocol over the last %d days. Telnet is commonly used for BBS access in the FidoNet community.`,
+				`<strong>Note:</strong> This report shows nodes whose ITN port completed an EMSI handshake over telnet within the last %d days — a mailer answered, not merely a port that accepted the connection. The Mailer column is what the remote identified itself as in EMSI_DAT. Ports that answer with something else (a BBS login prompt, ssh, silence) are counted as failures; see each node's test history for what was found there.`,
 			},
 			EmptyStateTitle: "No Telnet enabled nodes found for the selected period.",
-			EmptyStateDesc:  "This could mean that either no nodes with Telnet support were tested during this period, or none of them responded successfully to protocol tests.",
+			EmptyStateDesc:  "This could mean that either no nodes with Telnet support were tested during this period, or none of them completed an EMSI handshake on the ITN port.",
 		},
-		ShowVersion: false,
+		ShowVersion:  true,
+		VersionField: "TelnetMailerInfo",
 	}
 	s.renderAnalyticsNodes(w, r, config, "unified_analytics", s.storage.GetTelnetEnabledNodes)
 }

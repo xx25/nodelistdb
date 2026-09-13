@@ -55,8 +55,8 @@ func containsFormatVerb(s string) bool {
 // Telnet, VModem, FTP), which share unified_analytics.html.
 type ProtocolPageConfig struct {
 	basePageConfig
-	ShowVersion   bool   // Show version column (true for BinkP, IFCICO)
-	VersionField  string // Field name: "BinkPVersion", "IfcicoVersion"
+	ShowVersion   bool   // Show version column (true for BinkP, IFCICO, Telnet)
+	VersionField  string // Field name: "BinkPVersion", "IfcicoMailerInfo", "TelnetMailerInfo"
 	ShowAnonLogin bool   // Show anonymous login column (FTP only)
 }
 
