@@ -94,7 +94,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(ctx context.Context,
 			WHERE test_time >= now() - INTERVAL 7 DAY
 				AND length(resolved_ipv6) > 0
 				AND is_operational = true
-				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true OR ftp_success = true)
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}} OR ftp_success = true)
 				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM recent_nodes)
 				{{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
@@ -121,7 +121,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(ctx context.Context,
 			-- working IPv6.
 			WHERE length(r.resolved_ipv6) > 0
 				AND r.is_operational = true
-				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true OR r.ftp_success = true)
+				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR {{TELNET_IPV6_OK_R}} OR r.ftp_success = true)
 		)
 		SELECT
 			{{TEST_RESULT_COLUMNS_RR_NODENAME}}
@@ -133,6 +133,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithWorkingIPv6(ctx context.Context,
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
@@ -191,7 +192,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(ctx context.Conte
 		ipv6_success_counts AS (
 			SELECT
 				domain, zone, net, node,
-				countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
+				countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}}) as success_count
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL 7 DAY
 				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM nodes_with_ipv6)
@@ -241,6 +242,7 @@ func (ipv6 *IPv6QueryOperations) getNewNodesWithNonWorkingIPv6(ctx context.Conte
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
@@ -283,7 +285,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(ctx context.Context, li
 			WHERE test_time >= now() - INTERVAL 14 DAY
 				AND test_time < now() - INTERVAL 7 DAY
 				AND length(resolved_ipv6) > 0
-				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}})
 				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM old_nodes)
 				{{DOMAIN_FILTER}}
 		),
@@ -293,7 +295,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(ctx context.Context, li
 			FROM (
 				SELECT
 					domain, zone, net, node,
-					countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
+					countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}})) as ipv6_success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 7 DAY
 					AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM had_ipv6_before)
@@ -341,6 +343,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatLostIPv6(ctx context.Context, li
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 
@@ -391,7 +394,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(ctx context.Context, 
 			FROM (
 				SELECT
 					domain, zone, net, node,
-					countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)) as ipv6_success_count
+					countIf(length(resolved_ipv6) > 0 AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}})) as ipv6_success_count
 				FROM node_test_results
 				WHERE test_time >= now() - INTERVAL 14 DAY
 					AND test_time < now() - INTERVAL 7 DAY
@@ -407,7 +410,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(ctx context.Context, 
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL 7 DAY
 				AND length(resolved_ipv6) > 0
-				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}})
 				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM no_ipv6_before)
 				{{DOMAIN_FILTER}}
 		),
@@ -450,6 +453,7 @@ func (ipv6 *IPv6QueryOperations) getOldNodesThatGainedIPv6(ctx context.Context, 
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(0)) // 0: weekly news has no days window of its own
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, weeklyNewsPeriodDays)
 

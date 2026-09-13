@@ -93,7 +93,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(ctx context.Context, limit 
 				{{NODELIST_GATE}}
 				AND length(resolved_ipv6) > 0
 				AND is_operational = true
-				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}})
 				%s
 				{{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
@@ -121,7 +121,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(ctx context.Context, limit 
 			-- those to represent the node.
 			WHERE length(r.resolved_ipv6) > 0
 				AND r.is_operational = true
-				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
+				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR {{TELNET_IPV6_OK_R}})
 		)
 		SELECT
 			{{TEST_RESULT_COLUMNS_RR_NODENAME}}
@@ -133,6 +133,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6EnabledNodes(ctx context.Context, limit 
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
@@ -214,7 +215,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(ctx context.Context, lim
 		ipv6_success_counts AS (
 			SELECT
 				domain, zone, net, node,
-				countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
+				countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}}) as success_count
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM nodes_with_ipv6)
@@ -264,6 +265,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NonWorkingNodes(ctx context.Context, lim
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
@@ -339,7 +341,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(ctx context.Cont
 				{{NODELIST_GATE}}
 				AND length(resolved_ipv6) > 0
 				AND is_operational = true
-				AND (binkp_success = true OR ifcico_success = true OR telnet_success = true)
+				AND (binkp_success = true OR ifcico_success = true OR {{TELNET_OK}})
 				%s
 				{{DOMAIN_FILTER}}
 		),
@@ -347,7 +349,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(ctx context.Cont
 		ipv6_success_counts AS (
 			SELECT
 				domain, zone, net, node,
-				countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true) as success_count
+				countIf(binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}}) as success_count
 			FROM node_test_results
 			WHERE test_time >= now() - INTERVAL ? DAY
 				AND (domain, zone, net, node) IN (SELECT domain, zone, net, node FROM nodes_with_working_ipv4)
@@ -399,6 +401,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6AdvertisedIPv4OnlyNodes(ctx context.Cont
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
@@ -475,8 +478,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(ctx context.Context, limit int
 			WHERE test_time >= now() - INTERVAL ? DAY
 				{{NODELIST_GATE}}
 				AND length(resolved_ipv6) > 0
-				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
-				AND NOT (binkp_ipv4_success = true OR ifcico_ipv4_success = true OR telnet_ipv4_success = true)
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}})
+				AND NOT (binkp_ipv4_success = true OR ifcico_ipv4_success = true OR {{TELNET_IPV4_OK}})
 				%s
 				{{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
@@ -505,8 +508,8 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(ctx context.Context, limit int
 			-- the report. The anchor is the latest QUALIFYING test, so at least
 			-- one row always survives this and no node is dropped.
 			WHERE length(r.resolved_ipv6) > 0
-				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
-				AND NOT (r.binkp_ipv4_success = true OR r.ifcico_ipv4_success = true OR r.telnet_ipv4_success = true)
+				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR {{TELNET_IPV6_OK_R}})
+				AND NOT (r.binkp_ipv4_success = true OR r.ifcico_ipv4_success = true OR {{TELNET_IPV4_OK_R}})
 		)
 		SELECT
 			{{TEST_RESULT_COLUMNS_RR_NODENAME}}
@@ -518,6 +521,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6OnlyNodes(ctx context.Context, limit int
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
@@ -593,7 +597,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(ctx context.Context, limit
 				{{NODELIST_GATE}}
 				AND length(resolved_ipv6) > 0
 				AND length(resolved_ipv4) = 0
-				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR telnet_ipv6_success = true)
+				AND (binkp_ipv6_success = true OR ifcico_ipv6_success = true OR {{TELNET_IPV6_OK}})
 				%s
 				{{DOMAIN_FILTER}}
 			GROUP BY domain, zone, net, node
@@ -621,7 +625,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(ctx context.Context, limit
 			-- guard in GetIPv6OnlyNodes.
 			WHERE length(r.resolved_ipv6) > 0
 				AND length(r.resolved_ipv4) = 0
-				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR r.telnet_ipv6_success = true)
+				AND (r.binkp_ipv6_success = true OR r.ifcico_ipv6_success = true OR {{TELNET_IPV6_OK_R}})
 		)
 		SELECT
 			{{TEST_RESULT_COLUMNS_RR_NODENAME}}
@@ -633,6 +637,7 @@ func (ipv6 *IPv6QueryOperations) GetPureIPv6OnlyNodes(ctx context.Context, limit
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)
@@ -738,7 +743,11 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(ctx context.Context, limit int,
 		best_results AS (
 			SELECT r.domain, r.test_time, r.zone, r.net, r.node,
 				r.resolved_ipv6, r.isp, r.org,
-				r.binkp_ipv4_success, r.ifcico_ipv4_success, r.telnet_ipv4_success,
+				r.binkp_ipv4_success, r.ifcico_ipv4_success,
+				-- Projected through the EMSI-evidence gate so the INO4 badge
+				-- derived from it does not credit a pre-2026-09-10 bare-connect
+				-- "success" as a working IPv4 mailer.
+				{{TELNET_IPV4_OK_R}} AS telnet_ipv4_success,
 				row_number() OVER (PARTITION BY r.domain, r.zone, r.net, r.node
 					ORDER BY r.hostname_index ASC) as rn
 			FROM node_test_results r
@@ -763,6 +772,7 @@ func (ipv6 *IPv6QueryOperations) GetIPv6NodeList(ctx context.Context, limit int,
 
 	query = strings.ReplaceAll(query, "{{NODE_WINDOW}}", nodeIdentityWindowSQL(days))
 	query = applyTestResultColumns(query)
+	query = applyTelnetEvidence(query)
 	query = strings.ReplaceAll(query, "{{DOMAIN_FILTER}}", domainFilterSQL(domain, ""))
 	query = applyCycleWindows(query, days)
 	query = applyNodelistGate(query, "", domainFilterSQL(domain, ""), nodeFilter)

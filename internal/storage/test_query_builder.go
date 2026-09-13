@@ -296,21 +296,12 @@ func (tqb *TestQueryBuilder) BuildReachabilityTrendsQuery() string {
 // written before the tester classified variants, whose bare vmodem_success
 // carries no evidence at all (vmodem_variant defaults to the empty string).
 //
-// Telnet asks for the same kind of evidence. Until 2026-09-10 the ITN tester
-// reported success for any accepted TCP connection, so a BBS login prompt or
-// an ssh banner on the announced port counted as a working mailer; since then
-// success means a completed EMSI handshake, and what the remote said in
-// EMSI_DAT is stored alongside. Requiring that evidence drops the old
-// bare-connect rows, which would otherwise keep a node on the list for the
-// whole report window after its first honest failure (the page keeps a node's
-// latest *successful* row, not its latest row). The address list is the
-// primary witness because EMSI_DAT's first field is the remote's AKAs and is
-// never empty on a real handshake; the mailer name/version fields further
-// along may legitimately be blank.
+// Telnet asks for the same kind of evidence: the EMSI_DAT witness described
+// at telnetSuccessSQL, which no pre-2026-09-10 bare-connect row carries.
 var protocolSuccessPredicates = map[string]string{
 	"binkp":  "%[1]sbinkp_success = true",
 	"ifcico": "%[1]sifcico_success = true",
-	"telnet": "%[1]stelnet_success = true AND (notEmpty(%[1]stelnet_addresses) OR %[1]stelnet_mailer_info != '')",
+	"telnet": telnetSuccessSQL("%[1]s", "telnet_success"),
 	"ftp":    "%[1]sftp_success = true",
 	"vmodem": "%[1]svmodem_variant = 'vmp' AND %[1]svmodem_conformant = true",
 }
