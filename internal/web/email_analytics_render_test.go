@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +117,13 @@ func samplePage() emailAnalyticsPage {
 		}
 	}
 
+	// The first two nodes can be reached another way; the rest only by email.
+	nodes[0].OtherTransports = []string{"IBN"}
+	nodes[1].OtherTransports = []string{"IBN", "PSTN"}
+	for i := 2; i < len(nodes); i++ {
+		nodes[i].EmailOnly = true
+	}
+
 	// Give the first node a DNS verdict, and the SEAT node a dead one.
 	nodes[0].Endpoint = []storage.EmailEndpointStatus{
 		{Address: "sysop@example.net", MailDomain: "example.net", Status: storage.EmailDomainStatusOK, Detail: "1 MX host", CheckTime: date},
@@ -128,6 +136,7 @@ func samplePage() emailAnalyticsPage {
 		Title:      "FidoNet over Email",
 		ActivePage: "analytics",
 		Nodes:      nodes,
+		AllCount:   len(nodes),
 		Stats:      computeEmailStats(nodes),
 		Trend: []storage.EmailFlagTrendPoint{
 			{Year: 2001, Flags: map[string]int{"IEM": 114, "IMI": 141, "ITX": 120, "ISE": 19, "IUC": 147, "EMA": 9, "EVY": 5}, AnyEmail: 296, TotalNodes: 13792},
@@ -274,6 +283,7 @@ func TestEmailAnalyticsEndpointColumn(t *testing.T) {
 		Title:      "FidoNet over Email",
 		ActivePage: "analytics",
 		Nodes:      nodes,
+		AllCount:   len(nodes),
 		Stats:      computeEmailStats(nodes),
 		FlagOrder:  storage.EmailFlagOrder(),
 	})
@@ -403,7 +413,7 @@ func TestEmailAnalyticsListsEveryMailDomain(t *testing.T) {
 
 	html := renderEmailAnalytics(t, emailAnalyticsPage{
 		Title: "FidoNet over Email", ActivePage: "analytics",
-		Nodes: nodes, Stats: stats, FlagOrder: storage.EmailFlagOrder(),
+		Nodes: nodes, AllCount: len(nodes), Stats: stats, FlagOrder: storage.EmailFlagOrder(),
 	})
 	if strings.Contains(html, "top 20") {
 		t.Error("the heading should no longer advertise a truncated list")
@@ -461,5 +471,93 @@ func TestRedactLocalPart(t *testing.T) {
 		if got := emailflags.RedactLocalPart(tt.in); got != tt.want {
 			t.Errorf("RedactLocalPart(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+// TestEmailAnalyticsEmailOnlyToggle covers the unfiltered view: both toggle
+// links with their counts, the Also via column, and the summary tile.
+func TestEmailAnalyticsEmailOnlyToggle(t *testing.T) {
+	page := samplePage()
+	page.EmailOnlyCount = countEmailOnly(page.Nodes)
+	page.AllURL = "/analytics/email"
+	page.EmailOnlyURL = "/analytics/email?only=email"
+	html := renderEmailAnalytics(t, page)
+
+	for _, want := range []string{
+		`href="/analytics/email?only=email"`,
+		"All nodes with email flags (5)",
+		"Email-only nodes (3)",
+		"Also via",
+		"Email-only (no IP, no PSTN)",
+		`<span class="badge badge-secondary">PSTN</span>`,
+		"email only",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("unfiltered page is missing %q", want)
+		}
+	}
+	if page.Stats.EmailOnly != 3 {
+		t.Errorf("Stats.EmailOnly = %d, want 3", page.Stats.EmailOnly)
+	}
+}
+
+// TestEmailAnalyticsEmailOnlyFiltered covers the filtered view, including the
+// case where the network has email nodes but none that are email-only: that
+// must not read as "no nodes advertise email".
+func TestEmailAnalyticsEmailOnlyFiltered(t *testing.T) {
+	all := samplePage().Nodes
+	shown := filterEmailOnly(all)
+	if len(shown) != 3 {
+		t.Fatalf("filterEmailOnly kept %d nodes, want 3", len(shown))
+	}
+
+	page := samplePage()
+	page.Nodes = shown
+	page.Stats = computeEmailStats(shown)
+	page.AllCount = len(all)
+	page.EmailOnlyCount = len(shown)
+	page.EmailOnly = true
+	html := renderEmailAnalytics(t, page)
+
+	if strings.Contains(html, "Also via") {
+		t.Error("the Also via column is empty by definition in the email-only view and should be hidden")
+	}
+	if strings.Contains(html, "2:5001/100") {
+		t.Error("a node reachable over IBN is listed in the email-only view")
+	}
+	if !strings.Contains(html, "not only the email-only ones") {
+		t.Error("the trend should say it does not follow the filter")
+	}
+
+	page.Nodes = nil
+	page.Stats = computeEmailStats(nil)
+	page.EmailOnlyCount = 0
+	html = renderEmailAnalytics(t, page)
+	if strings.Contains(html, "No nodes advertising email transport were found") {
+		t.Error("an empty email-only view must not claim the network has no email nodes")
+	}
+	if !strings.Contains(html, "can also be reached another way") {
+		t.Error("empty email-only view message missing")
+	}
+}
+
+// TestEmailPageURL pins that each toggle keeps the other parameters.
+func TestEmailPageURL(t *testing.T) {
+	r := httptest.NewRequest("GET", "/analytics/email?fields=1&domain=fsxnet", nil)
+	if got := emailPageURL(r, "only", "email"); got != "/analytics/email?domain=fsxnet&fields=1&only=email" {
+		t.Errorf("setting only: got %q", got)
+	}
+
+	r = httptest.NewRequest("GET", "/analytics/email?only=email&fields=1", nil)
+	if got := emailPageURL(r, "fields", ""); got != "/analytics/email?only=email" {
+		t.Errorf("clearing fields: got %q", got)
+	}
+	if got := emailPageURL(r, "only", ""); got != "/analytics/email?fields=1" {
+		t.Errorf("clearing only: got %q", got)
+	}
+
+	r = httptest.NewRequest("GET", "/analytics/email?only=email", nil)
+	if got := emailPageURL(r, "only", ""); got != "/analytics/email" {
+		t.Errorf("clearing the last parameter: got %q", got)
 	}
 }

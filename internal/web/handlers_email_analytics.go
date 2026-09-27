@@ -82,6 +82,8 @@ var emailSeriesColors = map[string]string{
 // EmailSummaryStats aggregates the current nodelist's email capabilities.
 type EmailSummaryStats struct {
 	TotalNodes int
+	// EmailOnly counts nodes with no other published transport.
+	EmailOnly int
 	// Resolved counts nodes for which at least one address could be worked out.
 	Resolved   int
 	Unresolved int
@@ -111,6 +113,9 @@ func computeEmailStats(nodes []storage.EmailCapableNode) EmailSummaryStats {
 	addresses := make(map[string]bool)
 
 	for _, n := range nodes {
+		if n.EmailOnly {
+			stats.EmailOnly++
+		}
 		if n.Resolved {
 			stats.Resolved++
 		} else {
@@ -165,11 +170,26 @@ func computeEmailStats(nodes []storage.EmailCapableNode) EmailSummaryStats {
 
 // emailAnalyticsPage is the template payload for /analytics/email.
 type emailAnalyticsPage struct {
-	Title            string
-	ActivePage       string
-	Version          string
-	Nodes            []storage.EmailCapableNode
-	Stats            EmailSummaryStats
+	Title      string
+	ActivePage string
+	Version    string
+	Nodes      []storage.EmailCapableNode
+	Stats      EmailSummaryStats
+	// AllCount and EmailOnlyCount size both views of the filter, whichever
+	// one is showing, so the toggle can label each with its count.
+	AllCount       int
+	EmailOnlyCount int
+	// EmailOnly is true when the report is narrowed to nodes that email is
+	// the only way to reach. The summary, flag counts, mail domains and node
+	// table follow the filter; the trend does not.
+	EmailOnly bool
+	// AllURL and EmailOnlyURL are the toggle's links, each keeping the
+	// request's other parameters.
+	AllURL       string
+	EmailOnlyURL string
+	// FieldsOnURL and FieldsOffURL toggle the Location/System Name fallback.
+	FieldsOnURL      string
+	FieldsOffURL     string
 	Trend            []storage.EmailFlagTrendPoint
 	FlagOrder        []string
 	Limit            int
@@ -186,6 +206,7 @@ func (s *Server) EmailAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	// section 2.3.4) is a heuristic that FTS-5001 warns about, so it is opt-in
 	// per request rather than the default.
 	useFieldFallback := r.URL.Query().Get("fields") == "1"
+	emailOnly := r.URL.Query().Get("only") == "email"
 
 	var displayError error
 
@@ -208,14 +229,25 @@ func (s *Server) EmailAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 		trend = nil
 	}
 
-	stats := computeEmailStats(nodes)
+	allCount := len(nodes)
+	shown := nodes
+	if emailOnly {
+		shown = filterEmailOnly(nodes)
+	}
 
 	data := emailAnalyticsPage{
 		Title:            "FidoNet over Email",
 		ActivePage:       "analytics",
 		Version:          version.GetVersionInfo(),
-		Nodes:            nodes,
-		Stats:            stats,
+		Nodes:            shown,
+		Stats:            computeEmailStats(shown),
+		AllCount:         allCount,
+		EmailOnlyCount:   countEmailOnly(nodes),
+		EmailOnly:        emailOnly,
+		AllURL:           emailPageURL(r, "only", ""),
+		EmailOnlyURL:     emailPageURL(r, "only", "email"),
+		FieldsOnURL:      emailPageURL(r, "fields", "1"),
+		FieldsOffURL:     emailPageURL(r, "fields", ""),
 		Trend:            trend,
 		FlagOrder:        storage.EmailFlagOrder(),
 		Limit:            limit,
@@ -224,4 +256,41 @@ func (s *Server) EmailAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.renderStatus(w, "email_analytics", data, statusFor(displayError))
+}
+
+// filterEmailOnly keeps the nodes that email is the only way to reach.
+func filterEmailOnly(nodes []storage.EmailCapableNode) []storage.EmailCapableNode {
+	out := make([]storage.EmailCapableNode, 0, len(nodes))
+	for _, n := range nodes {
+		if n.EmailOnly {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func countEmailOnly(nodes []storage.EmailCapableNode) int {
+	count := 0
+	for _, n := range nodes {
+		if n.EmailOnly {
+			count++
+		}
+	}
+	return count
+}
+
+// emailPageURL is this page's URL with one query parameter set, or removed
+// when value is empty, keeping every other parameter (only, fields, limit,
+// domain) so the page's toggles never undo one another.
+func emailPageURL(r *http.Request, key, value string) string {
+	q := r.URL.Query()
+	if value == "" {
+		q.Del(key)
+	} else {
+		q.Set(key, value)
+	}
+	if len(q) == 0 {
+		return r.URL.Path
+	}
+	return r.URL.Path + "?" + q.Encode()
 }

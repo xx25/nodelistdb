@@ -44,12 +44,27 @@
 {{define "content"}}
 {{template "error_display" .}}
 
-{{if .Nodes}}
+{{if .AllCount}}
+{{/* The filter narrows everything below except the trend, so it sits above
+     the summary rather than beside the node table. */}}
+<div class="time-selector">
+    <p>Show</p>
+    <a href="{{.AllURL}}" class="btn{{if not .EmailOnly}} active{{end}}">All nodes with email flags ({{.AllCount}})</a>
+    <a href="{{.EmailOnlyURL}}" class="btn{{if .EmailOnly}} active{{end}}"
+       title="No IBN, IFC, ITN, IVM, IFT or IP flag and no dialable phone number: email is the only published way to deliver mail">Email-only nodes ({{.EmailOnlyCount}})</a>
+</div>
+
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
     <div class="stats-box">
         <h3>{{.Stats.TotalNodes}}</h3>
-        <p>Nodes with email flags</p>
+        <p>{{if .EmailOnly}}Email-only nodes{{else}}Nodes with email flags{{end}}</p>
     </div>
+    {{if not .EmailOnly}}
+    <div class="stats-box">
+        <h3>{{.Stats.EmailOnly}}</h3>
+        <p>Email-only (no IP, no PSTN)</p>
+    </div>
+    {{end}}
     <div class="stats-box">
         <h3>{{.Stats.TotalAddresses}}</h3>
         <p>Distinct addresses</p>
@@ -75,6 +90,8 @@
     <p class="text-muted" style="margin-top: 0;">
         One nodelist sampled per year. A node may advertise several flags, so the
         series overlap and are not additive.
+        {{if .EmailOnly}}Unlike the rest of the page, the trend counts every node
+        with email flags, not only the email-only ones.{{end}}
     </p>
     <div class="email-chart-container">
         <canvas id="emailTrendChart"></canvas>
@@ -222,6 +239,7 @@
 {{end}}
 
 <!-- Node table -->
+{{if .Nodes}}
 <div class="table-responsive">
     <table class="data-table sortable-table">
         <thead>
@@ -231,6 +249,7 @@
                 <th data-sortable data-type="string">Location</th>
                 <th data-sortable data-type="string">Sysop</th>
                 <th>Flags</th>
+                {{if not $.EmailOnly}}<th data-sortable data-type="string" title="Other published ways to deliver mail: Internet session flags, and PSTN for a dialable phone number">Also via</th>{{end}}
                 <th>Mail domain</th>
                 <th>Endpoint</th>
                 <th>Actions</th>
@@ -251,6 +270,11 @@
                           title="{{if .Standard}}FTS-5001{{else}}non-standard, defined by no FTSC document{{end}}{{if .ReceiptRequired}}; receipts required within 24h{{end}}{{if gt .Occurrences 1}}; listed {{.Occurrences}} times{{end}}; address {{if .Resolved}}from {{.Source.String}}{{else}}unresolved{{end}}">{{.Flag}}</span>
                     {{end}}
                 </td>
+                {{if not $.EmailOnly}}
+                <td>
+                    {{range .OtherTransports}}<span class="badge badge-secondary">{{.}}</span> {{else}}<span class="text-muted">email only</span>{{end}}
+                </td>
+                {{end}}
                 <td>
                     {{/* Domains, never the addresses themselves. The nodelist
                          publishes the full address, but a web page is far easier
@@ -311,8 +335,20 @@
         </tbody>
     </table>
 </div>
+{{else}}
+<div class="alert alert-info">
+    Every node advertising email transport in the latest nodelist for this network
+    can also be reached another way. <a href="{{.AllURL}}">Show all of them</a>.
+</div>
+{{end}}
 
 <div class="info-box" style="margin-top: 2rem;">
+    <p><strong>Email-only nodes.</strong> A node is counted as email-only when its nodelist entry
+    offers no other way to deliver mail: no Internet session flag (IBN, IFC, ITN, IVM, IFT or the
+    generic IP) and no dialable phone number. INA does not count &mdash; it is an address, not a
+    transport. Such a node may still pick mail up from its host or hub; the nodelist simply
+    publishes nothing that could deliver to it except email.</p>
+
     <p><strong>What these flags mean.</strong> FTS-5001 defines five flags for carrying FidoNet mail
     over Internet email: IEM, ITX, IUC, IMI and ISE. They are capability advertisements, not a single
     protocol &mdash; a flag may name an encoding without defining a complete message format.
@@ -338,11 +374,11 @@
     <p><strong>Field fallback is on.</strong> Addresses are also being recovered from the Location and
     System Name fields (FSP-1012 &sect;2.3.4). FTS-5001 warns these fields are easily mistaken for
     Internet data, so treat those rows as guesses.
-    <a href="?">Turn it off</a>.</p>
+    <a href="{{.FieldsOffURL}}">Turn it off</a>.</p>
     {{else}}
     <p>Some nodes publish the address in the Location or System Name field instead, where the flag
     list would be too long (FSP-1012 &sect;2.3.4). That recovery is a heuristic and is off by default.
-    <a href="?fields=1">Try it</a>.</p>
+    <a href="{{.FieldsOnURL}}">Try it</a>.</p>
     {{end}}
 </div>
 

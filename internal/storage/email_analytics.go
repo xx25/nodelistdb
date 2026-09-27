@@ -86,6 +86,7 @@ func (ao *AnalyticsOperations) GetEmailCapableNodes(ctx context.Context, limit i
 			sysop_name,
 			nodelist_date,
 			node_type,
+			phone,
 			flags,
 			-- Aliased to a distinct name on purpose: the WHERE clause still
 			-- references the native internet_config column, and reusing the
@@ -123,6 +124,7 @@ func (ao *AnalyticsOperations) GetEmailCapableNodes(ctx context.Context, limit i
 			&n.SysopName,
 			&n.NodelistDate,
 			&n.NodeType,
+			&n.Phone,
 			&n.Flags,
 			&configJSON,
 		); err != nil {
@@ -130,6 +132,7 @@ func (ao *AnalyticsOperations) GetEmailCapableNodes(ctx context.Context, limit i
 		}
 
 		var ic *database.InternetConfiguration
+		configUnreadable := false
 		if configJSON != "" && configJSON != "{}" && configJSON != "null" {
 			var parsed database.InternetConfiguration
 			// A row whose JSON will not decode still advertised the flags that
@@ -137,6 +140,8 @@ func (ao *AnalyticsOperations) GetEmailCapableNodes(ctx context.Context, limit i
 			// array yields rather than dropped.
 			if err := json.Unmarshal([]byte(configJSON), &parsed); err == nil {
 				ic = &parsed
+			} else {
+				configUnreadable = true
 			}
 		}
 
@@ -152,6 +157,11 @@ func (ao *AnalyticsOperations) GetEmailCapableNodes(ctx context.Context, limit i
 			// the row is not actually email capable.
 			continue
 		}
+
+		n.OtherTransports = otherTransports(n.Flags, ic, n.Phone)
+		// A row whose internet_config would not decode may well carry IBN
+		// in it, so it is never claimed as email-only on the flags alone.
+		n.EmailOnly = len(n.OtherTransports) == 0 && !configUnreadable
 		results = append(results, n)
 	}
 
@@ -344,6 +354,53 @@ func (ao *AnalyticsOperations) GetEmailFlagTrend(ctx context.Context, domain str
 	return results, nil
 }
 
+// directTransportFlags are the flags advertising a way to reach a node other
+// than email: the Internet session protocols, in presentation order, and the
+// generic IP flag. INA is absent on purpose -- it is an address, not a
+// transport, and a node publishing only INA and IEM still receives mail only
+// by email.
+var directTransportFlags = []string{"IBN", "IFC", "ITN", "IVM", "IFT", "IP"}
+
+// otherTransports lists how else a node can be reached besides email: the
+// Internet session flags it advertises, then "PSTN" when it publishes a
+// dialable phone number. An empty result means email is the only way in.
+//
+// The flags array is consulted as well as internet_config because the parser
+// has not always filed every flag there; the same reasoning is behind
+// emailFlagPresenceSQL.
+func otherTransports(flags []string, ic *database.InternetConfiguration, phone string) []string {
+	var out []string
+	for _, flag := range directTransportFlags {
+		present := false
+		if ic != nil {
+			_, present = ic.Protocols[flag]
+		}
+		for _, f := range flags {
+			if present {
+				break
+			}
+			present = f == flag || strings.HasPrefix(f, flag+":")
+		}
+		if present {
+			out = append(out, flag)
+		}
+	}
+	if hasDialablePhone(phone) {
+		out = append(out, "PSTN")
+	}
+	return out
+}
+
+// hasDialablePhone reports whether a nodelist phone field names a number that
+// could actually be dialed. "-Unpublished-" and the all-zero placeholder
+// ("000-000-000-000") are how the nodelist says there is none.
+func hasDialablePhone(phone string) bool {
+	if normalizePhone(phone) == "" {
+		return false
+	}
+	return strings.Trim(phone, "0-+ ") != ""
+}
+
 // summarize fills the display-oriented fields derived from Capabilities.
 func (n *EmailCapableNode) summarize() {
 	seen := make(map[string]bool)
@@ -401,7 +458,16 @@ type EmailCapableNode struct {
 	SysopName    string    `json:"sysop_name"`
 	NodelistDate time.Time `json:"nodelist_date"`
 	NodeType     string    `json:"node_type"`
+	Phone        string    `json:"phone"`
 	Flags        []string  `json:"flags"`
+
+	// OtherTransports lists every way to reach the node besides email:
+	// advertised Internet session flags (IBN, IFC, ITN, IVM, IFT, IP) and
+	// "PSTN" for a dialable phone number.
+	OtherTransports []string `json:"other_transports"`
+	// EmailOnly is true when OtherTransports is empty: email is the only
+	// published way to deliver mail to this node.
+	EmailOnly bool `json:"email_only"`
 
 	// Capabilities is the resolved per-flag view.
 	Capabilities []emailflags.Capability `json:"capabilities"`
