@@ -70,9 +70,11 @@ func TestStaticHandlerCachePolicy(t *testing.T) {
 			t.Fatalf("If-None-Match %s: %d, %d bytes, want 304 and empty", inm, rec.Code, rec.Body.Len())
 		}
 	}
-	rec = get("/static/style.css", `"`+hash+`-not"`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("If-None-Match with a tag that merely contains ours: %d, want 200", rec.Code)
+	for _, inm := range []string{`"` + hash + `-not"`, `"unrelated,*,tag"`, `"x", "*"`, `*, "y"`} {
+		rec = get("/static/style.css", inm)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("If-None-Match %s must not match: %d, want 200", inm, rec.Code)
+		}
 	}
 
 	rec = get("/static/style.css?v=stale", "")

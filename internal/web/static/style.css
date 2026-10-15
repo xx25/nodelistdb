@@ -967,6 +967,18 @@ table a:hover {
         display: inline-flex;
     }
 
+    /* Seven controls do not fit one row in a 324px sheet: let the header
+       wrap, with the month/year selects taking a full row of their own. */
+    .date-picker-header {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .date-picker-current {
+        flex: 1 1 100%;
+        order: 1;
+    }
+
     .date-picker-input {
         width: 160px;
     }
@@ -3061,6 +3073,14 @@ code {
     .ipv6-tooltip.is-open::before,
     .flag-tooltip.is-open .tooltip-text::after {
         display: none;
+    }
+
+    /* The date-picker sheet sits over page content; the desktop popover's
+       translucent background (set later in this file, hence here) would let
+       it show through. */
+    .date-picker-dropdown {
+        background: #fffdf8;
+        box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.25);
     }
 
     /* The tooltip badges are tap targets now; give them a thumb's height. */

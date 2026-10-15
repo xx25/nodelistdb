@@ -103,11 +103,12 @@ const dp = await ev(`(async () => {
   if (!toggle || !dd) return null; toggle.click(); await new Promise(r => setTimeout(r, 100));
   const r = dd.getBoundingClientRect(); const open = getComputedStyle(dd).display !== 'none';
   const closeBtn = dd.querySelector('.date-picker-close'); const closeVisible = closeBtn && getComputedStyle(closeBtn).display !== 'none';
+  const overflowing = [...dd.querySelectorAll('button, select')].filter(c => { const b = c.getBoundingClientRect(); return b.width && (b.right > r.right + 1 || b.left < r.left - 1); }).length;
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await new Promise(r => setTimeout(r, 100));
-  return { open, inView: r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, closeVisible, closedByEscape: getComputedStyle(dd).display === 'none', focusBack: document.activeElement === toggle };
+  return { open, inView: r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, closeVisible, controlsOverflowing: overflowing, closedByEscape: getComputedStyle(dd).display === 'none', focusBack: document.activeElement === toggle };
 })()`);
-check('date picker opens as an on-screen sheet with a close button, Escape closes it', dp && dp.open && dp.inView && dp.closeVisible && dp.closedByEscape && dp.focusBack, JSON.stringify(dp));
+check('date picker opens as an on-screen sheet with a close button, Escape closes it', dp && dp.open && dp.inView && dp.closeVisible && dp.controlsOverflowing === 0 && dp.closedByEscape && dp.focusBack, JSON.stringify(dp));
 
 console.log(`\n${failures} failure(s)`);
 chrome.kill();

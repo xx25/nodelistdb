@@ -135,24 +135,54 @@ func (s *Server) StaticHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// etagMatches implements If-None-Match for a single weak validator: "*", or
-// any listed tag equal to ours, compared weakly (a W/ prefix on either side
-// is ignored). Substring matching would accept "*" only by accident and
-// would match a tag that merely contains ours.
+// etagMatches implements If-None-Match for a single weak validator: "*" on
+// its own, or any listed entity-tag equal to ours compared weakly (a W/
+// prefix on either side is ignored). The header is tokenised rather than
+// split on commas, because an entity-tag is a quoted string and may contain
+// a comma - "a,*,b" is one tag that matches nothing, not three candidates.
 func etagMatches(header, etag string) bool {
+	header = strings.TrimSpace(header)
 	if header == "" {
 		return false
 	}
-	strip := func(t string) string {
-		t = strings.TrimSpace(t)
-		return strings.TrimPrefix(t, "W/")
+	if header == "*" {
+		return true
 	}
-	want := strip(etag)
-	for _, candidate := range strings.Split(header, ",") {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "*" || strip(candidate) == want {
+	want := strings.TrimPrefix(etag, "W/")
+	for _, candidate := range parseETagList(header) {
+		if candidate == want {
 			return true
 		}
 	}
 	return false
+}
+
+// parseETagList returns the quoted entity-tags in an If-None-Match list,
+// each with any W/ prefix removed and still in its quotes. Anything that is
+// not a quoted string is skipped, since it cannot equal a real tag.
+func parseETagList(header string) []string {
+	var tags []string
+	i := 0
+	for i < len(header) {
+		switch {
+		case header[i] == ' ' || header[i] == '\t' || header[i] == ',':
+			i++
+		case strings.HasPrefix(header[i:], "W/"):
+			i += 2
+		case header[i] == '"':
+			end := strings.IndexByte(header[i+1:], '"')
+			if end < 0 {
+				return tags
+			}
+			tags = append(tags, header[i:i+end+2])
+			i += end + 2
+		default:
+			// An unquoted token (such as a stray "*" inside a list) is not an
+			// entity-tag; skip to the next delimiter.
+			for i < len(header) && header[i] != ',' {
+				i++
+			}
+		}
+	}
+	return tags
 }
