@@ -33,6 +33,7 @@ func renderTestDetail(t *testing.T, tr *storage.NodeTestResult) string {
 	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("test_detail Execute error: %v", err)
 	}
+	assertTablesWrapped(t, buf.String())
 	return buf.String()
 }
 

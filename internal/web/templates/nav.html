@@ -1,6 +1,7 @@
 {{define "nav"}}
 <nav class="site-nav" aria-label="Primary">
     <div class="nav-container">
+        <div class="nav-links">
         <a href="/" {{if eq .ActivePage "search"}}class="nav-link active" aria-current="page"{{else}}class="nav-link"{{end}}>
             <span class="nav-label">Search</span>
             <span class="nav-meta">Nodes and SysOps</span>
@@ -33,6 +34,7 @@
             <span class="nav-label">API</span>
             <span class="nav-meta">HTTP endpoints</span>
         </a>
+        </div>
         <div class="nav-network" id="network-switch" hidden>
             <label for="network-switch-select" class="nav-network-label">Network</label>
             <select id="network-switch-select"></select>
@@ -49,5 +51,5 @@
         </noscript>
     </div>
 </nav>
-<script src="/static/network-switch.js" defer></script>
+<script src="{{asset "network-switch.js"}}" defer></script>
 {{end}}

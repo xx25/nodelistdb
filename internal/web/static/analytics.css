@@ -1,11 +1,14 @@
 /* Analytics Page Styles */
 
-/* Small button variant */
-.btn-sm {
-    padding: 0.125rem 0.25rem !important;
-    font-size: 0.875rem !important;
-    line-height: 1.2 !important;
-    min-width: auto !important;
+/* Small button variant. No !important here: the phone stylesheet has to be
+   able to make these tall enough to tap, and a declaration marked important
+   cannot be overridden by any media query. The doubled class keeps the same
+   precedence over .btn and the colour variants that !important used to buy. */
+.btn.btn-sm {
+    padding: 0.125rem 0.25rem;
+    font-size: 0.875rem;
+    line-height: 1.2;
+    min-width: auto;
 }
 
 /* Compact action buttons */
@@ -18,11 +21,12 @@
 }
 
 .compact-actions a,
-.compact-actions .btn {
-    padding: 0.125rem 0.25rem !important;
-    font-size: 0.875rem !important;
-    line-height: 1.2 !important;
-    min-width: auto !important;
+.compact-actions .btn,
+.compact-actions .btn.btn-sm {
+    padding: 0.125rem 0.25rem;
+    font-size: 0.875rem;
+    line-height: 1.2;
+    min-width: auto;
     white-space: nowrap;
     flex-shrink: 0;
 }
@@ -232,11 +236,46 @@
     overflow-x: auto;
 }
 
-/* Actions column styling - ensure consistent width across all analytics tables */
-table th:last-child,
-table td:last-child {
+/* Actions column: a fixed width so the buttons line up across rows. This
+   used to be every table's last column, which gave two-column summary
+   tables a 145px second column and squeezed anything whose last column was
+   data; the cells opt in with .actions-cell instead. */
+.actions-cell,
+.downloads-table-actions {
     min-width: 145px;
     width: 145px;
+}
+
+/* The summary tables on the PSTN / file-request / PING pages: nested in a
+   card, so no outer margin. */
+.data-table--flush {
+    margin: 0;
+}
+
+.data-table--small {
+    font-size: 0.85em;
+}
+
+/* Two summary tables side by side; one column on phones (see the phone
+   block at the end of style.css). */
+.summary-grid {
+    display: grid;
+    /* minmax(0, …): a bare 1fr keeps the track's automatic minimum, so a
+       wide table inside would grow the track (and the page) instead of
+       scrolling within its wrapper. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.summary-grid > * {
+    min-width: 0;
+}
+
+.summary-grid--wide {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    margin-top: 1.5rem;
+    margin-bottom: 0;
 }
 
 /* Ensure sortable tables maintain proper column widths */
@@ -437,4 +476,28 @@ table td:last-child {
 .path .delta {
     color: var(--text-secondary);
     font-size: 0.8em;
+}
+
+/* Phone rules for the classes defined in this file. They live here rather
+   than in style.css's phone block because this stylesheet loads second:
+   a same-specificity desktop rule here would otherwise outrank a phone rule
+   there. */
+@media (max-width: 768px) {
+    .summary-grid,
+    .summary-grid--wide {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* Tap targets for the action buttons in tables. */
+    .actions-cell .btn.btn-sm,
+    .compact-actions .btn.btn-sm,
+    .compact-actions a {
+        min-height: 40px;
+        padding: 0.5rem 0.7rem;
+    }
+
+    .compact-actions {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
 }

@@ -7,8 +7,8 @@
 {{define "page_subtitle"}}<p class="subtitle">{{.Config.PageSubtitle}}</p>{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/vendor/chart.min.js"></script>
-<script src="/static/software-charts.js"></script>
+<script src="{{asset "vendor/chart.min.js"}}"></script>
+<script src="{{asset "software-charts.js"}}"></script>
 {{end}}
 
 {{define "content"}}

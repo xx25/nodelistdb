@@ -7,8 +7,7 @@
 {{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/sortable-table.js"></script>
-<script src="/static/tooltip.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -38,7 +37,7 @@
 </div>
 
 <div class="table-responsive">
-    <table class="data-table sortable-table">
+    <table class="data-table sortable-table table--sticky-first">
         <thead>
             <tr>
                 <th data-sortable data-type="address">FidoNet Address</th>
@@ -46,7 +45,7 @@
                 <th>Network Address</th>
                 <th data-sortable data-type="string">Location</th>
                 <th data-sortable data-type="date">Last Tested</th>
-                <th>Actions</th>
+                <th class="actions-cell">Actions</th>
             </tr>
         </thead>
         <tbody>

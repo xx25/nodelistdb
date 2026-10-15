@@ -9,7 +9,6 @@
 {{end}}
 
 {{define "head_scripts"}}
-<script src="/static/tooltip.js"></script>
 {{end}}
 
 {{define "content"}}
@@ -133,20 +132,20 @@
                                     </div>
                                 </div>
                                 {{if .NewNode.Flags}}
-                                <div class="info-item" style="grid-column: span 2;">
+                                <div class="info-item info-item--wide">
                                     <strong>Flags</strong>
                                     <div style="margin-top: 0.5rem;">{{flagBadges $.FlagDescriptions .NewNode.Flags}}</div>
                                 </div>
                                 {{end}}
                                 {{if .NewNode.ModemFlags}}
-                                <div class="info-item" style="grid-column: span 2;">
+                                <div class="info-item info-item--wide">
                                     <strong>Modem Flags</strong>
                                     <div style="margin-top: 0.5rem;">{{flagBadges $.FlagDescriptions .NewNode.ModemFlags}}</div>
                                 </div>
                                 {{end}}
                                 {{$protocols := getInternetProtocols .NewNode.InternetConfig}}
                                 {{if $protocols}}
-                                <div class="info-item" style="grid-column: span 2;">
+                                <div class="info-item info-item--wide">
                                     <strong>Internet Protocols</strong>
                                     <div style="margin-top: 0.5rem;">
                                         {{$internetConfig := .NewNode.InternetConfig}}
@@ -164,7 +163,7 @@
                                 {{end}}
                                 {{$defaults := getInternetAddresses .NewNode.InternetConfig}}
                                 {{if $defaults}}
-                                <div class="info-item" style="grid-column: span 2;">
+                                <div class="info-item info-item--wide">
                                     <strong>Internet Addresses</strong>
                                     <div style="margin-top: 0.5rem;">
                                         {{range $default := $defaults}}
@@ -180,7 +179,7 @@
                                 {{end}}
                                 {{$emails := getEmails .NewNode.InternetConfig}}
                                 {{if $emails}}
-                                <div class="info-item" style="grid-column: span 2;">
+                                <div class="info-item info-item--wide">
                                     <strong>Email Addresses</strong>
                                     <div style="margin-top: 0.5rem;">
                                         {{range $emails}}

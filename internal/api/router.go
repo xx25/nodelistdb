@@ -29,7 +29,9 @@ func (s *Server) SetupRouter() http.Handler {
 	// same question, and its rewrite is unconditional - a forged
 	// X-Forwarded-For became indistinguishable from a real peer address.
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Compress(5))
+	// Compression is applied once, around the whole server, in cmd/server
+	// (wrapHandler) - it used to be only here, leaving every web page and
+	// stylesheet uncompressed.
 
 	// Note: LoggingMiddleware is now applied at the top level in cmd/server/main.go
 	// to capture both API and web routes, so we don't need it here anymore

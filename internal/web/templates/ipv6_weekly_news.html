@@ -39,16 +39,6 @@
             border-left: 4px solid #17a2b8;
         }
 
-        .compact-actions {
-            display: flex;
-            gap: 0.25rem;
-        }
-
-        .compact-actions a {
-            padding: 0.125rem 0.25rem;
-            font-size: 0.875rem;
-        }
-
         .badge[title] {
             cursor: help;
             position: relative;
@@ -112,8 +102,7 @@
 {{end}}
 
 {{define "head_scripts"}}
-<script src="/static/tooltip.js"></script>
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -172,7 +161,7 @@
 
                 {{if .NewNodesWorking}}
                 <div class="table-responsive">
-                    <table class="data-table sortable-table">
+                    <table class="data-table sortable-table table--sticky-first">
                         <thead>
                             <tr>
                                 <th data-sortable data-type="address">Node Address</th>
@@ -180,7 +169,7 @@
                                 <th data-sortable data-type="string">Working Protocols</th>
                                 <th data-sortable data-type="string">Location</th>
                                 <th data-sortable data-type="date">Last Tested</th>
-                                <th>Actions</th>
+                                <th class="actions-cell">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -210,7 +199,7 @@
                                 <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
-                                <td>
+                                <td class="actions-cell">
                                     <div class="compact-actions">
                                         <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm btn-info">View</a>
                                         <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>
@@ -233,7 +222,7 @@
 
                 {{if .NewNodesNonWorking}}
                 <div class="table-responsive">
-                    <table class="data-table sortable-table">
+                    <table class="data-table sortable-table table--sticky-first">
                         <thead>
                             <tr>
                                 <th data-sortable data-type="address">Node Address</th>
@@ -241,7 +230,7 @@
                                 <th data-sortable data-type="string">Tested Protocols</th>
                                 <th data-sortable data-type="string">Location</th>
                                 <th data-sortable data-type="date">Last Tested</th>
-                                <th>Actions</th>
+                                <th class="actions-cell">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -270,7 +259,7 @@
                                 <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
-                                <td>
+                                <td class="actions-cell">
                                     <div class="compact-actions">
                                         <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm btn-info">View</a>
                                         <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>
@@ -293,7 +282,7 @@
 
                 {{if .OldNodesLostIPv6}}
                 <div class="table-responsive">
-                    <table class="data-table sortable-table">
+                    <table class="data-table sortable-table table--sticky-first">
                         <thead>
                             <tr>
                                 <th data-sortable data-type="address">Node Address</th>
@@ -301,7 +290,7 @@
                                 <th data-sortable data-type="string">Status</th>
                                 <th data-sortable data-type="string">Location</th>
                                 <th data-sortable data-type="date">Last Tested</th>
-                                <th>Actions</th>
+                                <th class="actions-cell">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -332,7 +321,7 @@
                                 <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
-                                <td>
+                                <td class="actions-cell">
                                     <div class="compact-actions">
                                         <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm btn-info">View</a>
                                         <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>
@@ -355,7 +344,7 @@
 
                 {{if .OldNodesGainedIPv6}}
                 <div class="table-responsive">
-                    <table class="data-table sortable-table">
+                    <table class="data-table sortable-table table--sticky-first">
                         <thead>
                             <tr>
                                 <th data-sortable data-type="address">Node Address</th>
@@ -363,7 +352,7 @@
                                 <th data-sortable data-type="string">Working Protocols</th>
                                 <th data-sortable data-type="string">Location</th>
                                 <th data-sortable data-type="date">Last Tested</th>
-                                <th>Actions</th>
+                                <th class="actions-cell">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -393,7 +382,7 @@
                                 <td data-value="{{.TestTime.Unix}}">
                                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                                 </td>
-                                <td>
+                                <td class="actions-cell">
                                     <div class="compact-actions">
                                         <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm btn-info">View</a>
                                         <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}" class="btn btn-sm btn-secondary">History</a>

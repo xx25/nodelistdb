@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{block "title" .}}NodelistDB{{end}} - NodelistDB</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="stylesheet" href="/static/analytics.css">
+    <link rel="stylesheet" href="{{asset "style.css"}}">
+    <link rel="stylesheet" href="{{asset "analytics.css"}}">
     {{block "extra_css" .}}{{end}}
     {{block "head_scripts" .}}{{end}}
 </head>
@@ -26,6 +26,8 @@
 
         {{template "footer" .}}
     </div>
+    <script src="{{asset "tooltip.js"}}" defer></script>
+    <script src="{{asset "table-scroll.js"}}" defer></script>
     {{block "footer_scripts" .}}{{end}}
 </body>
 </html>

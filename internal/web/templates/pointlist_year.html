@@ -29,7 +29,7 @@
                     <th data-sortable data-type="string">File</th>
                     <th data-sortable data-type="date" data-default-sort="desc">Date</th>
                     <th data-sortable data-type="number">Day #</th>
-                    <th>Action</th>
+                    <th class="actions-cell">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -42,7 +42,7 @@
                     </td>
                     <td data-value="{{.Date.Unix}}">{{.Date.Format "2006-01-02"}}</td>
                     <td data-value="{{.DayNumber}}">{{.DayNumber}}</td>
-                    <td class="downloads-table-actions">
+                    <td class="downloads-table-actions actions-cell">
                         <a href="/download/pointlist/{{$.Network}}/{{$.Source}}/{{.Year}}/{{.Name}}" class="btn btn-secondary btn-sm">Download</a>
                     </td>
                 </tr>
@@ -54,5 +54,5 @@
 {{end}}
 
 {{define "footer_scripts"}}
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}

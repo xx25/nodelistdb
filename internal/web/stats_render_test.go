@@ -63,7 +63,9 @@ func newTestServer(t *testing.T, ops Storage) *Server {
 		storage:     ops,
 		templates:   make(map[string]*template.Template),
 		templatesFS: TemplatesFS,
+		staticFS:    StaticFS,
 	}
+	s.loadAssetHashes()
 	if err := s.loadTemplates(); err != nil {
 		t.Fatalf("loading templates: %v", err)
 	}

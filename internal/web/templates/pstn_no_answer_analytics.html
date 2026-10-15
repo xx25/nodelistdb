@@ -7,7 +7,7 @@
 {{define "page_subtitle"}}<p class="subtitle">Nodes dialed via modem that never answered</p>{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -38,11 +38,12 @@
 </div>
 
 <!-- Disposition and Operator Breakdown side by side -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+<div class="summary-grid">
     {{if .Stats.DispositionCounts}}
     <div class="stats-box">
         <h4>By Last Disposition</h4>
-        <table class="data-table" style="margin: 0;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush">
             <thead><tr><th>Disposition</th><th>Nodes</th></tr></thead>
             <tbody>
                 {{range .Stats.DispositionCounts}}
@@ -50,12 +51,14 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
     {{end}}
     {{if .Stats.OperatorCounts}}
     <div class="stats-box">
         <h4>By Last Operator</h4>
-        <table class="data-table" style="margin: 0;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush">
             <thead><tr><th>Operator</th><th>Nodes</th></tr></thead>
             <tbody>
                 {{range .Stats.OperatorCounts}}
@@ -63,15 +66,17 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
     {{end}}
 </div>
 
 {{if .Stats.ZoneCounts}}
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+<div class="summary-grid">
     <div class="stats-box">
         <h4>By Zone</h4>
-        <table class="data-table" style="margin: 0;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush">
             <thead><tr><th>Zone</th><th>Nodes</th></tr></thead>
             <tbody>
                 {{range .Stats.ZoneCounts}}
@@ -79,13 +84,14 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 {{end}}
 
 <!-- Main Node Table -->
 <div class="table-responsive">
-    <table class="data-table sortable-table">
+    <table class="data-table sortable-table table--sticky-first">
         <thead>
             <tr>
                 <th data-sortable data-type="address">Node Address</th>
@@ -95,7 +101,7 @@
                 <th data-sortable data-type="number">Hangup Cause</th>
                 <th data-sortable data-type="string">Last Operator</th>
                 <th data-sortable data-type="date">Last Tested</th>
-                <th>Actions</th>
+                <th class="actions-cell">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -114,7 +120,7 @@
                 <td data-value="{{.TestTime.Unix}}">
                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                 </td>
-                <td>
+                <td class="actions-cell">
                     <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a>
                     <a href="/reachability/modem-test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{urlquery (.TestTime.Format "2006-01-02T15:04:05Z07:00")}}" class="btn btn-sm">Details</a>
                 </td>

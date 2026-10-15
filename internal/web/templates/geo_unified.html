@@ -15,7 +15,7 @@
 {{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -43,7 +43,7 @@
 
 <!-- Nodes Table -->
 <div class="table-responsive">
-    <table class="data-table sortable-table">
+    <table class="data-table sortable-table table--sticky-first">
         <thead>
             <tr>
                 <th data-sortable data-type="address">Address</th>

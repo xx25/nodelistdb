@@ -76,6 +76,11 @@ class NodelistDatePicker {
                                 <path d="M5.33 20.13l1.77-1.77L15.46 12 7.1 3.64 5.33 5.41 11.46 12z"/>
                             </svg>
                         </button>
+                        <button type="button" class="date-picker-nav date-picker-close" aria-label="Close">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                            </svg>
+                        </button>
                     </div>
                     <div class="date-picker-days-header">
                         ${this.dayNames.map(day => `<div class="date-picker-day-name">${day}</div>`).join('')}
@@ -205,6 +210,18 @@ class NodelistDatePicker {
             if (!this.container.contains(e.target)) {
                 dropdown.style.display = 'none';
             }
+        });
+
+        // Close button (shown on phones, where the dropdown is a bottom
+        // sheet) and Escape; both hand focus back to the toggle.
+        const close = () => {
+            if (dropdown.style.display === 'none') return;
+            dropdown.style.display = 'none';
+            toggleBtn.focus();
+        };
+        document.querySelector('.date-picker-close').addEventListener('click', close);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') close();
         });
         
         // Navigation buttons

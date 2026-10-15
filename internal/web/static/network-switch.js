@@ -145,9 +145,20 @@
         }).catch(function () { /* API unavailable: leave the switcher hidden */ });
     }
 
+    // On phones the pills are a horizontally scrolling strip (style.css);
+    // start it with the current page's pill in view.
+    function revealActiveLink() {
+        var active = document.querySelector('.nav-links .nav-link.active');
+        var strip = active && active.parentElement;
+        if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+        var left = active.offsetLeft - (strip.clientWidth - active.offsetWidth) / 2;
+        strip.scrollLeft = Math.max(0, left);
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', function () { init(); revealActiveLink(); });
     } else {
         init();
+        revealActiveLink();
     }
 })();

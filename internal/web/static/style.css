@@ -478,9 +478,16 @@ table a:hover {
 
 .node-info {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
     gap: 1rem;
     margin: 2rem 0;
+}
+
+/* A card that takes two tracks on desktop. On a phone the grid has one
+   track, and "span 2" there used to create an implicit second column off
+   the right edge; the phone block makes it span the full row instead. */
+.info-item--wide {
+    grid-column: span 2;
 }
 
 .info-item {
@@ -932,17 +939,39 @@ table a:hover {
 }
 
 /* Responsive for date picker */
+/* Close button in the sheet header; phones only, the desktop popover is
+   dismissed by clicking elsewhere as before. */
+.date-picker-close {
+    display: none;
+    margin-left: auto;
+}
+
+/* On phones the dropdown is a bottom sheet: fixed to the viewport, so it
+   can neither leave the screen sideways (it used to start 50px off the left
+   edge on /stats) nor be clipped by .container { overflow: hidden }. */
 @media (max-width: 768px) {
     .date-picker-dropdown {
-        min-width: 280px;
-        left: 50%;
-        transform: translateX(-50%);
+        position: fixed;
+        left: 1rem;
+        right: 1rem;
+        top: auto;
+        bottom: 1rem;
+        transform: none;
+        min-width: 0;
+        width: auto;
+        max-height: 70dvh;
+        overflow-y: auto;
     }
-    
+
+    .date-picker-close {
+        display: inline-flex;
+    }
+
     .date-picker-input {
         width: 160px;
     }
 }
+
 /* Geo Analytics Styles */
 .stats-summary {
     display: flex;
@@ -1125,7 +1154,8 @@ table a:hover {
     cursor: help;
 }
 
-.ip-tooltip:hover::after {
+.ip-tooltip:hover::after,
+.ip-tooltip.is-open::after {
     content: attr(data-ips);
     position: absolute;
     bottom: 100%;
@@ -1148,7 +1178,8 @@ table a:hover {
     transition-delay: 0.3s; /* Delay appearance to allow text selection */
 }
 
-.ip-tooltip:hover::before {
+.ip-tooltip:hover::before,
+.ip-tooltip.is-open::before {
     content: '';
     position: absolute;
     bottom: 100%;
@@ -1169,7 +1200,8 @@ table a:hover {
     cursor: help;
 }
 
-.ipv6-tooltip:hover::after {
+.ipv6-tooltip:hover::after,
+.ipv6-tooltip.is-open::after {
     content: attr(data-ipv6);
     position: absolute;
     bottom: 100%;
@@ -1192,7 +1224,8 @@ table a:hover {
     transition-delay: 0.3s;
 }
 
-.ipv6-tooltip:hover::before {
+.ipv6-tooltip:hover::before,
+.ipv6-tooltip.is-open::before {
     content: '';
     position: absolute;
     bottom: 100%;
@@ -1290,7 +1323,8 @@ table a:hover {
     border-color: #333 transparent transparent transparent;
 }
 
-.flag-tooltip:hover .tooltip-text {
+.flag-tooltip:hover .tooltip-text,
+.flag-tooltip.is-open .tooltip-text {
     visibility: visible;
     opacity: 1;
 }
@@ -1462,6 +1496,13 @@ nav,
     max-width: none;
     padding: 0;
     margin: 0;
+}
+
+/* The pills' wrapper exists for the phone layout only; on desktop it
+   contributes no box, so the anchors stay direct flex items of
+   .nav-container exactly as before. */
+.nav-links {
+    display: contents;
 }
 
 .nav-link,
@@ -1736,9 +1777,9 @@ nav a.active {
     background: #ffffff;
 }
 
-.btn-sm {
-    padding: 0.5rem 0.9rem !important;
-    font-size: 0.82rem !important;
+.btn.btn-sm {
+    padding: 0.5rem 0.9rem;
+    font-size: 0.82rem;
 }
 
 .text-link {
@@ -1868,6 +1909,16 @@ nav a.active {
 
 .form-group--third {
     grid-column: span 4;
+}
+
+.form-group--sixth {
+    grid-column: span 2;
+}
+
+/* A button that shares the row with the inputs: pushed to the bottom of its
+   cell so it lines up with the input boxes, not the labels. */
+.form-group--button {
+    justify-content: flex-end;
 }
 
 .form-group label {
@@ -2512,6 +2563,7 @@ code {
     .form-group--wide,
     .form-group--half,
     .form-group--third,
+    .form-group--sixth,
     .form-actions {
         grid-column: auto;
     }
@@ -2537,4 +2589,521 @@ code {
 .aka-list .badge {
     margin-right: 0.25rem;
     margin-bottom: 0.125rem;
+}
+
+/* Sortable table headers. Everything sortable-table.js used to set inline
+   lives here, so the phone stylesheet can still make the first column sticky
+   (an inline position: relative would have won over it). */
+.sortable-table th[data-sortable] {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 24px;
+}
+
+.sortable-table th[data-sortable] .sort-indicator {
+    position: absolute;
+    right: 8px;
+    opacity: 0.3;
+    font-size: 14px;
+}
+
+.sortable-table th[data-sortable][data-order="asc"] .sort-indicator,
+.sortable-table th[data-sortable][data-order="desc"] .sort-indicator {
+    opacity: 1;
+}
+
+.sortable-table th[data-sortable]:focus-visible {
+    outline: 2px solid var(--primary-color, #0f766e);
+    outline-offset: -2px;
+}
+
+/* Reachability pages. This used to be a <style> block inside
+   reachability.html, loaded after both stylesheets; it is scoped by the
+   .reachability-page wrapper so the same rules win by specificity instead.
+   The page's own .search-form (a non-wrapping flex row that cut off the
+   period select on phones) and .table-container overrides are gone - the
+   forms use the site's form grid now. .node-info was renamed because the
+   site's .node-info is an auto-fit grid that would lay the heading and the
+   definition list side by side. */
+.reachability-page .reachability-section {
+    background: #f9f9f9;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.reachability-page .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.reachability-page .stat-card {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.reachability-page .stat-card h4 {
+    margin: 0 0 10px 0;
+    color: #666;
+    font-size: 14px;
+    text-transform: uppercase;
+}
+
+.reachability-page .stat-value {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+}
+
+.reachability-page .stat-value.success {
+    color: #28a745;
+}
+
+.reachability-page .stat-value.danger {
+    color: #dc3545;
+}
+
+.reachability-page .stat-value.warning {
+    color: #ffc107;
+}
+
+.reachability-page .reachability-node-info {
+    background: #e8f4f8;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.reachability-page .reachability-node-info h3 {
+    margin-top: 0;
+    color: #2c3e50;
+}
+
+.reachability-page .node-details {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.reachability-page .node-details dt {
+    font-weight: bold;
+    color: #555;
+}
+
+.reachability-page .node-details dd {
+    margin: 0;
+}
+
+.reachability-page .chart-container {
+    position: relative;
+    height: 400px;
+    margin-top: 20px;
+}
+
+.reachability-page .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+.reachability-page .results-table th {
+    background: #f0f0f0;
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #ddd;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.reachability-page .results-table th[rowspan="2"] {
+    padding: 10px;
+    font-size: 14px;
+}
+
+.reachability-page .results-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: center;
+    font-size: 12px;
+}
+
+.reachability-page .results-table td:first-child {
+    text-align: left;
+    font-size: 13px;
+}
+
+.reachability-page .results-table tbody tr:hover {
+    background: #f5f5f5;
+}
+
+.reachability-page .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.reachability-page .status-badge.operational {
+    background: #d4edda;
+    color: #155724;
+}
+
+.reachability-page .status-badge.failed {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.reachability-page .status-badge.partial {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.reachability-page .protocol-status {
+    display: inline-block;
+    margin: 0 1px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.reachability-page .protocol-status.success {
+    background: #28a745;
+    color: white;
+}
+
+.reachability-page .protocol-status.failed {
+    background: #dc3545;
+    color: white;
+}
+
+.reachability-page .protocol-status.untested {
+    background: #6c757d;
+    color: white;
+}
+
+.reachability-page /* Reachable, .reachability-page but running something other than the protocol announced. */
+        .protocol-status.other {
+    background: #d39e00;
+    color: #212529;
+}
+
+.reachability-page .error-message {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.reachability-page .no-results {
+    text-align: center;
+    color: #666;
+    padding: 40px;
+    background: #f5f5f5;
+    border-radius: 8px;
+}
+
+.reachability-page .nodes-list {
+    display: grid;
+    gap: 10px;
+}
+
+.reachability-page .node-item {
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.reachability-page .node-item:hover {
+    border-color: #007bff;
+    box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+}
+
+.reachability-page .node-address {
+    font-family: monospace;
+    font-weight: bold;
+    color: #007bff;
+    text-decoration: none;
+}
+
+.reachability-page .node-address:hover {
+    text-decoration: underline;
+}
+
+.reachability-page .response-time {
+    color: #666;
+    font-size: 14px;
+}
+
+/* Point history: the flags column is last and wraps badly when narrow; it
+   used to be widened by the rule that pinned every table's last column. */
+.point-history-table .col-flags {
+    min-width: 145px;
+}
+
+/* Horizontal-scroll affordance for wide tables (table-scroll.js). The script
+   wraps every .table-responsive / .table-container in .table-scroll and
+   sets data-more-left / data-more-right as the inner box scrolls. The edge
+   shadows are overlays, not the wrapper's background, because every cell
+   paints an opaque background that would hide a background-image shadow.
+   They are shown on phones only (see the phone block below). */
+.table-scroll {
+    position: relative;
+}
+
+.table-scroll::before,
+.table-scroll::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 18px;
+    pointer-events: none;
+    z-index: 3;
+    display: none;
+}
+
+.table-scroll::before {
+    left: 0;
+    background: linear-gradient(90deg, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0));
+}
+
+.table-scroll::after {
+    right: 0;
+    background: linear-gradient(270deg, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0));
+}
+
+/* The wrapper takes over .table-container's outer margin, so that
+   .card > :last-child { margin-bottom: 0 } keeps applying to the thing that
+   is now the card's last child. */
+.table-scroll--container {
+    margin: 2rem 0;
+}
+
+.table-scroll > .table-container {
+    margin: 0;
+}
+
+.table-scroll__hint {
+    display: none;
+    margin: 0 0 0.4rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ------------------------------------------------------------------------
+   Phones (the existing 768px breakpoint). Everything that only applies on a
+   narrow screen lives here, so the desktop layout above is untouched.
+   ------------------------------------------------------------------------ */
+@media (max-width: 768px) {
+    /* Scroll affordance: shadows on the side that has more, plus a one-time
+       hint above the table until the reader scrolls it. */
+    .table-scroll[data-more-left]::before,
+    .table-scroll[data-more-right]::after {
+        display: block;
+    }
+
+    .table-scroll__hint[data-show] {
+        display: block;
+    }
+
+    /* Denser cells; the 22px header corners look odd once a header cell is
+       sticky and scrolls under its neighbours. */
+    table th,
+    table td {
+        padding: 0.6rem 0.7rem;
+        font-size: 0.9rem;
+    }
+
+    table th:first-child {
+        border-top-left-radius: 12px;
+    }
+
+    table th:last-child {
+        border-top-right-radius: 12px;
+    }
+
+    /* Sticky first column (opt-in: tables whose first column is the row
+       key, usually a node address). The cell needs its own opaque
+       background because the row's cells paint theirs individually. */
+    .table--sticky-first > thead > tr:first-child > th:first-child,
+    .table--sticky-first > tbody > tr > td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+    }
+
+    .table--sticky-first > tbody > tr > td:first-child {
+        background: #ffffff;
+        box-shadow: 1px 0 0 #e8edf3;
+    }
+
+    .table--sticky-first > tbody > tr:nth-child(even) > td:first-child {
+        background: #fbfdff;
+    }
+
+    .table--sticky-first > tbody > tr:hover > td:first-child {
+        background: #f4faf9;
+    }
+
+    /* The IPv6 node list has an ordinal before the address; hide it so the
+       address becomes the first (sticky) column. */
+    .table--sticky-first .col-ordinal {
+        display: none;
+    }
+
+    .table--sticky-first .col-ordinal + th,
+    .table--sticky-first .col-ordinal + td {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: #ffffff;
+    }
+
+    .info-item--wide {
+        grid-column: 1 / -1;
+    }
+
+    /* 16px inputs: iOS Safari zooms the page on focus for anything smaller. */
+    .form-group input,
+    .form-group select,
+    .form-control,
+    .nav-network select,
+    .date-picker-input,
+    .date-picker-month-select,
+    .date-picker-year-select {
+        font-size: 1rem;
+    }
+
+    /* Tap targets: the row-key link and the action buttons in tables. */
+    .table--sticky-first > tbody > tr > td:first-child a,
+    .table--sticky-first .col-ordinal + td a,
+    .actions-cell a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+    }
+
+}
+
+/* Touch screens: hover is synthesised on tap at best, so a hover-only
+   bubble is unreliable there; the tap handler in tooltip.js sets .is-open
+   instead and hover alone shows nothing. */
+@media (hover: none) {
+    .ip-tooltip:not(.is-open):hover::after,
+    .ip-tooltip:not(.is-open):hover::before,
+    .ipv6-tooltip:not(.is-open):hover::after,
+    .ipv6-tooltip:not(.is-open):hover::before {
+        display: none;
+    }
+
+    .flag-tooltip:not(.is-open):hover .tooltip-text {
+        visibility: hidden;
+        opacity: 0;
+    }
+}
+
+@media (max-width: 768px) {
+    /* The open bubble is a sheet fixed to the bottom of the screen: an
+       absolutely positioned bubble is clipped by the table's scroll box and
+       can leave the viewport sideways. It scrolls when long (so it must take
+       pointer events again) and closes on the next tap anywhere. */
+    .ip-tooltip.is-open::after,
+    .ipv6-tooltip.is-open::after,
+    .flag-tooltip.is-open .tooltip-text {
+        position: fixed;
+        left: 1rem;
+        right: 1rem;
+        bottom: 1rem;
+        top: auto;
+        width: auto;
+        margin: 0;
+        transform: none;
+        min-width: 0;
+        max-width: none;
+        max-height: 60dvh;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        z-index: 1001;
+        pointer-events: auto;
+        transition-delay: 0s;
+    }
+
+    .ip-tooltip.is-open::before,
+    .ipv6-tooltip.is-open::before,
+    .flag-tooltip.is-open .tooltip-text::after {
+        display: none;
+    }
+
+    /* The tooltip badges are tap targets now; give them a thumb's height. */
+    [data-tooltip-toggle] {
+        min-height: 32px;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    /* Copy buttons are 17px squares on desktop; a thumb needs more. */
+    .tooltip-copy-group {
+        gap: 0.5rem;
+    }
+
+    .tooltip-copy-btn {
+        min-width: 36px;
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Navigation: the pills become one horizontally scrolling row; the
+       network switcher keeps its own row below. */
+    .nav-links {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.5rem;
+        width: 100%;
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+        padding-bottom: 0.25rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .nav-links::-webkit-scrollbar {
+        display: none;
+    }
+
+    .nav-links .nav-link,
+    .nav-links a {
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+    }
 }

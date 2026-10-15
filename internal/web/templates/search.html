@@ -128,7 +128,7 @@
     </div>
 
     <div class="table-container">
-        <table>
+        <table class="table--sticky-first">
             <thead>
                 <tr>
                     <th>Address</th>
@@ -137,7 +137,7 @@
                     <th>Sysop</th>
                     <th>Active Period</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th class="actions-cell">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -155,7 +155,7 @@
                         <span class="badge badge-historical">Historical</span>
                         {{end}}
                     </td>
-                    <td><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-secondary btn-sm">View History</a></td>
+                    <td class="actions-cell"><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-secondary btn-sm">View History</a></td>
                 </tr>
                 {{end}}
             </tbody>
@@ -178,7 +178,7 @@
     </div>
 
     <div class="table-container">
-        <table>
+        <table class="table--sticky-first">
             <thead>
                 <tr>
                     <th>Address</th>
@@ -187,7 +187,7 @@
                     <th>Sysop</th>
                     <th>Listed Period</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th class="actions-cell">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -205,7 +205,7 @@
                         <span class="badge badge-historical">Historical</span>
                         {{end}}
                     </td>
-                    <td><a href="/points/{{.Zone}}/{{.Net}}/{{.Node}}/{{.PointNum}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-secondary btn-sm">View History</a></td>
+                    <td class="actions-cell"><a href="/points/{{.Zone}}/{{.Net}}/{{.Node}}/{{.PointNum}}{{if and .Domain (ne .Domain "fidonet")}}?domain={{.Domain}}{{end}}" class="btn btn-secondary btn-sm">View History</a></td>
                 </tr>
                 {{end}}
             </tbody>
@@ -216,5 +216,5 @@
 {{end}}
 
 {{define "footer_scripts"}}
-<script src="/static/app.js"></script>
+<script src="{{asset "app.js"}}"></script>
 {{end}}

@@ -30,6 +30,7 @@ func renderPage(t *testing.T, name string, data any) string {
 	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("rendering %s: %v", name, err)
 	}
+	assertTablesWrapped(t, buf.String())
 	return buf.String()
 }
 

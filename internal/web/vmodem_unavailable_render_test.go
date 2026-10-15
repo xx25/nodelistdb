@@ -68,6 +68,7 @@ func TestVModemUnavailableRender(t *testing.T) {
 	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
+	assertTablesWrapped(t, buf.String())
 	out := buf.String()
 
 	for _, want := range []string{

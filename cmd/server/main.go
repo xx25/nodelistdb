@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/nodelistdb/internal/api"
 	"github.com/nodelistdb/internal/cache"
 	"github.com/nodelistdb/internal/config"
@@ -310,22 +311,40 @@ func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server,
 		writeTimeout = b + writeSlack
 	}
 
-	// The limiter sits inside the logging middleware, so a rejected request
-	// still produces a log line with its 429 - without that, the only
-	// evidence of throttling would be traffic that silently disappears.
-	var handler http.Handler = mux
-	if limiter != nil {
-		handler = limiter.Wrap(handler)
-	}
-
 	return &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", opts.host, opts.port),
-		Handler:           loggingMiddleware(handler),
+		Handler:           loggingMiddleware(wrapHandler(mux, limiter)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       120 * time.Second,
 	}
+}
+
+// wrapHandler is the middleware stack between the logging middleware and the
+// routes, innermost first:
+//
+//   - gzip for every response (HTML pages, CSS, JS, JSON) whose Content-Type is
+//     compressible. It used to sit only on the API router, so every web page
+//     and stylesheet went out uncompressed - 815 KB for /analytics/binkp, which
+//     on a phone is the single largest cost of the site. chi's compressor keys
+//     on the Content-Type set before the first write, skips bodies that already
+//     carry a Content-Encoding (the year tarballs are application/gzip and are
+//     not in its type list anyway), and implements Flush and Hijack, so nothing
+//     above or below it needs to know.
+//   - the rate limiter, outside the compressor so a 429 goes out as plain
+//     text, and inside the logging middleware so a rejected request still
+//     produces a log line with its 429 - without that, the only evidence of
+//     throttling would be traffic that silently disappears.
+//
+// The logging middleware wraps the result, so the bytes it logs are the
+// compressed count.
+func wrapHandler(mux http.Handler, limiter *ratelimit.Middleware) http.Handler {
+	handler := middleware.Compress(5)(mux)
+	if limiter != nil {
+		handler = limiter.Wrap(handler)
+	}
+	return handler
 }
 
 // writeSlack is the head-room WriteTimeout keeps over the longest query

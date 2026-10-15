@@ -7,7 +7,7 @@
 {{define "page_subtitle"}}<p class="subtitle">Nodes supporting file requests via Bark and WaZOO protocols (FTS-5001)</p>{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -43,11 +43,12 @@
 </div>
 
 <!-- Flag Distribution and Capability Matrix side by side -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+<div class="summary-grid">
     <!-- Flag Counts -->
     <div class="stats-box">
         <h4>By Flag</h4>
-        <table class="data-table" style="margin: 0;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush">
             <thead><tr><th>Flag</th><th>Nodes</th></tr></thead>
             <tbody>
                 {{range .Stats.FlagCounts}}
@@ -55,12 +56,14 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
 
     <!-- Capability Matrix Reference -->
     <div class="stats-box">
         <h4>Capability Matrix (FTS-5001)</h4>
-        <table class="data-table" style="margin: 0; font-size: 0.85em;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush data-table--small">
             <thead>
                 <tr>
                     <th>Flag</th>
@@ -83,6 +86,7 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 
@@ -102,7 +106,7 @@
 
 <!-- Main Node Table -->
 <div class="table-responsive">
-    <table class="data-table sortable-table">
+    <table class="data-table sortable-table table--sticky-first">
         <thead>
             <tr>
                 <th data-sortable data-type="address">Node Address</th>
@@ -111,7 +115,7 @@
                 <th data-sortable data-type="string">Sysop</th>
                 <th data-sortable data-type="string">Flag</th>
                 <th>Capabilities</th>
-                <th>Actions</th>
+                <th class="actions-cell">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -133,7 +137,7 @@
                     {{if $caps.WaZOOFileRequest}}<span class="badge badge-info" title="WaZOO File Request">WF</span> {{end}}
                     {{if $caps.WaZOOUpdateRequest}}<span class="badge badge-info" title="WaZOO Update Request">WU</span> {{end}}
                 </td>
-                <td>
+                <td class="actions-cell">
                     <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a>
                 </td>
             </tr>

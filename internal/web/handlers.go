@@ -23,6 +23,8 @@ type Server struct {
 	templates   map[string]*template.Template
 	templatesFS embed.FS
 	staticFS    embed.FS
+	// assetHash maps a static/ path to its content hash; see loadAssetHashes.
+	assetHash   map[string]string
 	linksLoader *links.Loader
 }
 
@@ -88,6 +90,7 @@ func New(storage Storage, templatesFS embed.FS, staticFS embed.FS) (*Server, err
 		staticFS:    staticFS,
 	}
 
+	server.loadAssetHashes()
 	if err := server.loadTemplates(); err != nil {
 		return nil, err
 	}

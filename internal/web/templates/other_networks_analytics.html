@@ -7,7 +7,7 @@
 {{define "page_subtitle"}}{{.Config.PageSubtitle}}{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -26,7 +26,7 @@
                 <th data-sortable data-type="string">Network Name</th>
                 <th data-sortable data-type="number">Node Count</th>
                 <th data-sortable data-type="string">Nodelist Imported</th>
-                <th>Actions</th>
+                <th class="actions-cell">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -45,7 +45,7 @@
                     <span class="badge" title="AKAs detected during handshakes only; nodelist not imported">detected only</span>
                     {{end}}
                 </td>
-                <td>
+                <td class="actions-cell">
                     <a href="/analytics/other-networks/nodes?network={{.NetworkName}}&days={{$.Days}}&limit={{$.Limit}}" class="btn btn-sm btn-outline">View Nodes</a>
                 </td>
             </tr>

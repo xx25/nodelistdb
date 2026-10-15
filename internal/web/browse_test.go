@@ -75,6 +75,7 @@ func TestBrowseTemplateRenders(t *testing.T) {
 			if err := tmpl.Execute(&buf, tc.data); err != nil {
 				t.Fatalf("execute browse template: %v", err)
 			}
+			assertTablesWrapped(t, buf.String())
 			if !strings.Contains(buf.String(), tc.want) {
 				t.Errorf("rendered %s level missing %q", tc.name, tc.want)
 			}

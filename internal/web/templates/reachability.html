@@ -8,236 +8,13 @@
 <p class="subtitle">Node connectivity testing and reachability analysis</p>
 {{end}}
 
-{{define "extra_css"}}
-<style>
-        .reachability-section {
-            background: #f9f9f9;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .search-form {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .search-form input[type="text"] {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        .search-form select {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        .search-form button {
-            padding: 10px 20px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        .search-form button:hover {
-            background: #0056b3;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .stat-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .stat-card h4 {
-            margin: 0 0 10px 0;
-            color: #666;
-            font-size: 14px;
-            text-transform: uppercase;
-        }
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #333;
-        }
-        .stat-value.success {
-            color: #28a745;
-        }
-        .stat-value.danger {
-            color: #dc3545;
-        }
-        .stat-value.warning {
-            color: #ffc107;
-        }
-        .node-info {
-            background: #e8f4f8;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .node-info h3 {
-            margin-top: 0;
-            color: #2c3e50;
-        }
-        .node-details {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .node-details dt {
-            font-weight: bold;
-            color: #555;
-        }
-        .node-details dd {
-            margin: 0;
-        }
-        .chart-container {
-            position: relative;
-            height: 400px;
-            margin-top: 20px;
-        }
-        .table-container {
-            overflow-x: auto;
-            margin-top: 20px;
-        }
-        .results-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-        }
-        .results-table th {
-            background: #f0f0f0;
-            padding: 8px;
-            text-align: center;
-            border: 1px solid #ddd;
-            font-weight: bold;
-            font-size: 12px;
-        }
-        .results-table th[rowspan="2"] {
-            padding: 10px;
-            font-size: 14px;
-        }
-        .results-table td {
-            padding: 8px;
-            border: 1px solid #ddd;
-            text-align: center;
-            font-size: 12px;
-        }
-        .results-table td:first-child {
-            text-align: left;
-            font-size: 13px;
-        }
-        .results-table tbody tr:hover {
-            background: #f5f5f5;
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .status-badge.operational {
-            background: #d4edda;
-            color: #155724;
-        }
-        .status-badge.failed {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        .status-badge.partial {
-            background: #fff3cd;
-            color: #856404;
-        }
-        .protocol-status {
-            display: inline-block;
-            margin: 0 1px;
-            padding: 1px 4px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: bold;
-        }
-        .protocol-status.success {
-            background: #28a745;
-            color: white;
-        }
-        .protocol-status.failed {
-            background: #dc3545;
-            color: white;
-        }
-        .protocol-status.untested {
-            background: #6c757d;
-            color: white;
-        }
-        /* Reachable, but running something other than the protocol announced. */
-        .protocol-status.other {
-            background: #d39e00;
-            color: #212529;
-        }
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-        .no-results {
-            text-align: center;
-            color: #666;
-            padding: 40px;
-            background: #f5f5f5;
-            border-radius: 8px;
-        }
-        .nodes-list {
-            display: grid;
-            gap: 10px;
-        }
-        .node-item {
-            background: white;
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid #e0e0e0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .node-item:hover {
-            border-color: #007bff;
-            box-shadow: 0 2px 4px rgba(0,123,255,0.1);
-        }
-        .node-address {
-            font-family: monospace;
-            font-weight: bold;
-            color: #007bff;
-            text-decoration: none;
-        }
-        .node-address:hover {
-            text-decoration: underline;
-        }
-        .response-time {
-            color: #666;
-            font-size: 14px;
-        }
-    </style>
-{{end}}
-
 {{define "head_scripts"}}
-<script src="/static/vendor/chart.min.js"></script>
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "vendor/chart.min.js"}}"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
+<div class="reachability-page">
             {{if not .Address}}
             <!-- Main reachability page with trends -->
             <div class="reachability-section">
@@ -245,15 +22,23 @@
                 <p>Enter a node address to view its detailed reachability history and test results.</p>
                 
                 <form class="search-form" method="post" action="/reachability/node">
-                    <input type="text" name="address" placeholder="Enter node address (e.g., 2:5001/100)" required>
-                    <select name="days">
-                        <option value="7">Last 7 days</option>
-                        <option value="30" selected>Last 30 days</option>
-                        <option value="90">Last 90 days</option>
-                        <option value="180">Last 180 days</option>
-                        <option value="365">Last year</option>
-                    </select>
-                    <button type="submit">View History</button>
+                    <div class="form-group form-group--half">
+                        <label for="reach-address">Node address</label>
+                        <input type="text" id="reach-address" name="address" placeholder="e.g. 2:5001/100" required>
+                    </div>
+                    <div class="form-group form-group--third">
+                        <label for="reach-days">Period</label>
+                        <select id="reach-days" name="days">
+                            <option value="7">Last 7 days</option>
+                            <option value="30" selected>Last 30 days</option>
+                            <option value="90">Last 90 days</option>
+                            <option value="180">Last 180 days</option>
+                            <option value="365">Last year</option>
+                        </select>
+                    </div>
+                    <div class="form-group form-group--sixth form-group--button">
+                        <button type="submit" class="btn btn-primary">View History</button>
+                    </div>
                 </form>
             </div>
 
@@ -355,16 +140,18 @@
 
                 <!-- Configuration Controls -->
                 <form class="search-form" method="get" action="/reachability">
-                    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 15px;">
-                        <label style="font-weight: bold;">Status:</label>
-                        <select name="status">
+                    <div class="form-group form-group--third">
+                        <label for="reach-status">Status</label>
+                        <select id="reach-status" name="status">
                             <option value="all" {{if eq .StatusFilter "all"}}selected{{end}}>All Nodes</option>
                             <option value="operational" {{if eq .StatusFilter "operational"}}selected{{end}}>Operational Only</option>
                             <option value="failed" {{if eq .StatusFilter "failed"}}selected{{end}}>Failed Only</option>
                         </select>
 
-                        <label style="font-weight: bold;">Time Period:</label>
-                        <select name="nodes_period">
+                    </div>
+                    <div class="form-group form-group--third">
+                        <label for="reach-period">Time period</label>
+                        <select id="reach-period" name="nodes_period">
                             <option value="1" {{if eq .NodesPeriodFilter 1}}selected{{end}}>Last 24 hours</option>
                             <option value="7" {{if eq .NodesPeriodFilter 7}}selected{{end}}>Last 7 days</option>
                             <option value="30" {{if eq .NodesPeriodFilter 30}}selected{{end}}>Last 30 days</option>
@@ -373,8 +160,10 @@
                             <option value="365" {{if eq .NodesPeriodFilter 365}}selected{{end}}>Last year</option>
                         </select>
 
-                        <label style="font-weight: bold;">Protocol:</label>
-                        <select name="protocol">
+                    </div>
+                    <div class="form-group form-group--third">
+                        <label for="reach-protocol">Protocol</label>
+                        <select id="reach-protocol" name="protocol">
                             <option value="any" {{if eq .ProtocolFilter "any"}}selected{{end}}>Any Protocol</option>
                             <option value="binkp" {{if eq .ProtocolFilter "binkp"}}selected{{end}}>BinkP Only</option>
                             <option value="ifcico" {{if eq .ProtocolFilter "ifcico"}}selected{{end}}>IFCICO Only</option>
@@ -383,15 +172,19 @@
                             <option value="vmodem" {{if eq .ProtocolFilter "vmodem"}}selected{{end}}>Confirmed VMODEM Only</option>
                         </select>
 
-                        <label style="font-weight: bold;">Limit:</label>
-                        <select name="limit">
+                    </div>
+                    <div class="form-group form-group--third">
+                        <label for="reach-limit">Limit</label>
+                        <select id="reach-limit" name="limit">
                             <option value="10" {{if eq .LimitFilter 10}}selected{{end}}>10 nodes</option>
                             <option value="25" {{if eq .LimitFilter 25}}selected{{end}}>25 nodes</option>
                             <option value="50" {{if eq .LimitFilter 50}}selected{{end}}>50 nodes</option>
                             <option value="100" {{if eq .LimitFilter 100}}selected{{end}}>100 nodes</option>
                         </select>
 
-                        <button type="submit" style="padding: 8px 16px;">Apply Filters</button>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Apply Filters</button>
                     </div>
                 </form>
 
@@ -444,7 +237,7 @@
             {{else}}
             <!-- Node-specific reachability page -->
             {{if .NodeInfo}}
-            <div class="node-info">
+            <div class="reachability-node-info">
                 <h3>Node Information</h3>
                 <dl class="node-details">
                     <dt>Address:</dt>
@@ -467,13 +260,13 @@
                 <h2>Reachability Statistics</h2>
 
                 <!-- Period Configuration -->
-                <form class="search-form" method="get" style="margin-bottom: 20px;">
+                <form class="search-form" method="get">
                     <input type="hidden" name="zone" value="{{.Zone}}">
                     <input type="hidden" name="net" value="{{.Net}}">
                     <input type="hidden" name="node" value="{{.Node}}">
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <label style="font-weight: bold;">Time Period:</label>
-                        <select name="days" onchange="this.form.submit()">
+                    <div class="form-group form-group--third">
+                        <label for="reach-stats-days">Time period</label>
+                        <select id="reach-stats-days" name="days" onchange="this.form.submit()">
                             <option value="7" {{if eq .Days 7}}selected{{end}}>Last 7 days</option>
                             <option value="14" {{if eq .Days 14}}selected{{end}}>Last 2 weeks</option>
                             <option value="30" {{if eq .Days 30}}selected{{end}}>Last 30 days</option>
@@ -481,7 +274,7 @@
                             <option value="180" {{if eq .Days 180}}selected{{end}}>Last 180 days</option>
                             <option value="365" {{if eq .Days 365}}selected{{end}}>Last year</option>
                         </select>
-                        <span style="color: #666; font-size: 14px;">(Currently showing {{.Days}} days)</span>
+                        <small class="field-hint">Currently showing {{.Days}} days.</small>
                     </div>
                 </form>
                 <div class="stats-grid">
@@ -577,13 +370,16 @@
                 <!-- Time period selector -->
                 <form class="search-form" method="post" action="/reachability/node">
                     <input type="hidden" name="address" value="{{.Address}}">
-                    <select name="days" onchange="this.form.submit()">
+                    <div class="form-group form-group--third">
+                        <label for="reach-history-days">Time period</label>
+                        <select id="reach-history-days" name="days" onchange="this.form.submit()">
                         <option value="7" {{if eq .Days 7}}selected{{end}}>Last 7 days</option>
                         <option value="30" {{if eq .Days 30}}selected{{end}}>Last 30 days</option>
                         <option value="90" {{if eq .Days 90}}selected{{end}}>Last 90 days</option>
                         <option value="180" {{if eq .Days 180}}selected{{end}}>Last 180 days</option>
                         <option value="365" {{if eq .Days 365}}selected{{end}}>Last year</option>
                     </select>
+                    </div>
                 </form>
 
                 <div class="chart-container">
@@ -806,4 +602,5 @@
             </div>
             {{end}}
             {{end}}
+</div>
 {{end}}

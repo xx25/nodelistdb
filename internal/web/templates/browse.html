@@ -9,8 +9,8 @@
 {{end}}
 
 {{define "head_scripts"}}
-<script src="/static/sortable-table.js"></script>
-<script src="/static/datepicker.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
+<script src="{{asset "datepicker.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -70,7 +70,7 @@
     </div>
     {{if .Zones}}
     <div class="table-responsive">
-        <table class="data-table sortable-table">
+        <table class="data-table sortable-table table--sticky-first">
             <thead>
                 <tr>
                     <th data-sortable data-type="number">Zone</th>
@@ -104,7 +104,7 @@
     </div>
     {{if .Regions}}
     <div class="table-responsive">
-        <table class="data-table sortable-table">
+        <table class="data-table sortable-table table--sticky-first">
             <thead>
                 <tr>
                     <th data-sortable data-type="number">Region</th>
@@ -141,7 +141,7 @@
     </div>
     {{if .Nets}}
     <div class="table-responsive">
-        <table class="data-table sortable-table">
+        <table class="data-table sortable-table table--sticky-first">
             <thead>
                 <tr>
                     <th data-sortable data-type="address">Net</th>
@@ -180,7 +180,7 @@
         {{/* Inline widths override the global `table td:last-child { width: 145px }`
              rule (intended for analytics Actions columns). Address shrinks to fit,
              entry takes the rest. */}}
-        <table class="data-table sortable-table" style="table-layout: auto;">
+        <table class="data-table sortable-table table--sticky-first" style="table-layout: auto;">
             <thead>
                 <tr>
                     <th data-sortable data-type="address" style="width: 1%; white-space: nowrap;">Address</th>

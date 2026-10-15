@@ -7,7 +7,7 @@
 {{define "page_subtitle"}}<p class="subtitle">Verified working IPv6 nodes with correct AKA validation (Michiel van der Vlist's format)</p>{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -52,23 +52,23 @@
 </div>
 
 <div class="table-responsive">
-    <table class="data-table sortable-table">
+    <table class="data-table sortable-table table--sticky-first">
         <thead>
             <tr>
-                <th data-sortable data-type="number" data-default-sort="asc">#</th>
+                <th data-sortable data-type="number" data-default-sort="asc" class="col-ordinal">#</th>
                 <th data-sortable data-type="address">Node Address</th>
                 <th data-sortable data-type="string">Sysop</th>
                 <th data-sortable data-type="string">Type</th>
                 <th data-sortable data-type="string">Provider</th>
                 <th data-sortable data-type="string">Remarks</th>
                 <th data-sortable data-type="date">Last Tested</th>
-                <th>Actions</th>
+                <th class="actions-cell">Actions</th>
             </tr>
         </thead>
         <tbody>
             {{range $i, $node := .Nodes}}
             <tr>
-                <td>{{add $i 1}}</td>
+                <td class="col-ordinal">{{add $i 1}}</td>
                 <td>
                     <a href="/node/{{$node.Zone}}/{{$node.Net}}/{{$node.Node}}">{{$node.Zone}}:{{$node.Net}}/{{$node.Node}}</a>
                 </td>
@@ -89,7 +89,7 @@
                 <td data-value="{{$node.TestTime.Unix}}">
                     <span class="text-muted">{{$node.TestTime.Format "2006-01-02 15:04"}}</span>
                 </td>
-                <td>
+                <td class="actions-cell">
                     <a href="/node/{{$node.Zone}}/{{$node.Net}}/{{$node.Node}}" class="btn btn-sm" title="View node history">History</a>
                     <a href="/reachability/node?zone={{$node.Zone}}&net={{$node.Net}}&node={{$node.Node}}" class="btn btn-sm" title="View reachability">Reach.</a>
                 </td>

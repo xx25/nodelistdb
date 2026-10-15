@@ -18,54 +18,59 @@
 
         if (!tbody) return;
 
-        let defaultColumnIndex = -1;
         let defaultColumnHeader = null;
         let defaultOrder = 'desc'; // Default to descending
 
-        headers.forEach((header, index) => {
-            header.style.cursor = 'pointer';
-            header.style.userSelect = 'none';
-            header.style.position = 'relative';
-            header.style.paddingRight = '24px';
+        headers.forEach(header => {
+            // The header's appearance (cursor, indicator placement) lives in
+            // style.css under .sortable-table th[data-sortable]; nothing is set
+            // inline, so the stylesheet can still make the first column sticky
+            // on phones - an inline position:relative would win over that.
+            header.setAttribute('tabindex', '0');
+            header.setAttribute('role', 'columnheader');
+            header.setAttribute('aria-sort', 'none');
 
             // Add sort indicator
             const indicator = document.createElement('span');
             indicator.className = 'sort-indicator';
-            indicator.innerHTML = '⇅';
-            indicator.style.position = 'absolute';
-            indicator.style.right = '8px';
-            indicator.style.opacity = '0.3';
-            indicator.style.fontSize = '14px';
+            indicator.setAttribute('aria-hidden', 'true');
+            indicator.textContent = '⇅';
             header.appendChild(indicator);
 
             // Check if this column has data-default-sort attribute
             if (header.hasAttribute('data-default-sort')) {
-                defaultColumnIndex = index;
                 defaultColumnHeader = header;
                 defaultOrder = header.getAttribute('data-default-sort') || 'desc';
             }
             // Otherwise check if this is a date column (default sort behavior)
             else {
                 const dataType = header.getAttribute('data-type');
-                if (dataType === 'date' && defaultColumnIndex === -1) {
+                if (dataType === 'date' && defaultColumnHeader === null) {
                     // Remember this column for initial sorting (only if no explicit default set)
-                    defaultColumnIndex = index;
                     defaultColumnHeader = header;
                     defaultOrder = 'desc'; // Newest first for dates
                 }
             }
 
-            // Add click handler
-            header.addEventListener('click', function() {
-                sortTable(table, tbody, index, header);
+            // The column to sort is the header's own position in its row
+            // (cellIndex), not its position among the sortable headers: a
+            // non-sortable column before this one used to shift every sort
+            // onto the wrong cells, on first paint as well as on click.
+            const sort = () => sortTable(table, tbody, header.cellIndex, header);
+            header.addEventListener('click', sort);
+            header.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    sort();
+                }
             });
         });
 
         // Perform initial sort on default column
-        if (defaultColumnIndex >= 0 && defaultColumnHeader) {
+        if (defaultColumnHeader) {
             // Set opposite order first so sortTable will toggle to desired order
             defaultColumnHeader.setAttribute('data-order', defaultOrder === 'desc' ? 'asc' : 'desc');
-            sortTable(table, tbody, defaultColumnIndex, defaultColumnHeader);
+            sortTable(table, tbody, defaultColumnHeader.cellIndex, defaultColumnHeader);
         }
     }
 
@@ -78,20 +83,16 @@
         // Clear all sort indicators
         table.querySelectorAll('thead th').forEach(th => {
             th.setAttribute('data-order', 'none');
+            if (th.hasAttribute('aria-sort')) th.setAttribute('aria-sort', 'none');
             const indicator = th.querySelector('.sort-indicator');
-            if (indicator) {
-                indicator.innerHTML = '⇅';
-                indicator.style.opacity = '0.3';
-            }
+            if (indicator) indicator.textContent = '⇅';
         });
 
         // Update current column indicator
         header.setAttribute('data-order', newOrder);
+        header.setAttribute('aria-sort', newOrder === 'asc' ? 'ascending' : 'descending');
         const indicator = header.querySelector('.sort-indicator');
-        if (indicator) {
-            indicator.innerHTML = newOrder === 'asc' ? '▲' : '▼';
-            indicator.style.opacity = '1';
-        }
+        if (indicator) indicator.textContent = newOrder === 'asc' ? '▲' : '▼';
 
         // Sort rows
         rows.sort((rowA, rowB) => {
@@ -137,6 +138,10 @@
     }
 
     function getCellValue(cell, dataType) {
+        // An empty-state row with a single colspan cell has no cell at this
+        // index; sort it as empty rather than throwing.
+        if (!cell) return '';
+
         // Try data attribute first
         if (cell.hasAttribute('data-value')) {
             return cell.getAttribute('data-value');
@@ -162,7 +167,7 @@
 
     function parseAddress(addressStr) {
         // Parse FidoNet address format: zone:net/node
-        const match = addressStr.match(/(\d+):(\d+)\/(\d+)/);
+        const match = (addressStr || '').match(/(\d+):(\d+)\/(\d+)/);
         if (match) {
             return {
                 zone: parseInt(match[1], 10),

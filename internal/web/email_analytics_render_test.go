@@ -31,6 +31,7 @@ func renderEmailAnalytics(t *testing.T, page emailAnalyticsPage) string {
 	if err := tmpl.Execute(&buf, page); err != nil {
 		t.Fatalf("rendering email_analytics: %v", err)
 	}
+	assertTablesWrapped(t, buf.String())
 	return buf.String()
 }
 

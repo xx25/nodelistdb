@@ -7,7 +7,7 @@
 {{define "page_subtitle"}}<p class="subtitle">Nodes successfully reached via actual modem calls</p>{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -28,11 +28,12 @@
 </div>
 
 <!-- Speed Tiers and Protocol Distribution side by side -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+<div class="summary-grid">
     {{if .Stats.SpeedTiers}}
     <div class="stats-box">
         <h4>By Speed</h4>
-        <table class="data-table" style="margin: 0;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush">
             <thead><tr><th>Speed</th><th>Nodes</th></tr></thead>
             <tbody>
                 {{range .Stats.SpeedTiers}}
@@ -40,12 +41,14 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
     {{end}}
     {{if .Stats.ProtocolCounts}}
     <div class="stats-box">
         <h4>By Modem Protocol</h4>
-        <table class="data-table" style="margin: 0;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush">
             <thead><tr><th>Protocol</th><th>Nodes</th></tr></thead>
             <tbody>
                 {{range .Stats.ProtocolCounts}}
@@ -53,16 +56,18 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
     {{end}}
 </div>
 
 <!-- Zone and Operator Breakdown side by side -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+<div class="summary-grid">
     {{if .Stats.ZoneCounts}}
     <div class="stats-box">
         <h4>By Zone</h4>
-        <table class="data-table" style="margin: 0;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush">
             <thead><tr><th>Zone</th><th>Nodes</th></tr></thead>
             <tbody>
                 {{range .Stats.ZoneCounts}}
@@ -70,12 +75,14 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
     {{end}}
     {{if .Stats.OperatorCounts}}
     <div class="stats-box">
         <h4>By Operator</h4>
-        <table class="data-table" style="margin: 0;">
+        <div class="table-responsive">
+        <table class="data-table data-table--flush">
             <thead><tr><th>Operator</th><th>Nodes</th></tr></thead>
             <tbody>
                 {{range .Stats.OperatorCounts}}
@@ -83,13 +90,14 @@
                 {{end}}
             </tbody>
         </table>
+        </div>
     </div>
     {{end}}
 </div>
 
 <!-- Main Node Table -->
 <div class="table-responsive">
-    <table class="data-table sortable-table">
+    <table class="data-table sortable-table table--sticky-first">
         <thead>
             <tr>
                 <th data-sortable data-type="address">Node Address</th>
@@ -100,7 +108,7 @@
                 <th data-sortable data-type="string">EMSI System Name</th>
                 <th data-sortable data-type="string">Mailer Info</th>
                 <th data-sortable data-type="date">Last Tested</th>
-                <th>Actions</th>
+                <th class="actions-cell">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -120,7 +128,7 @@
                 <td data-value="{{.TestTime.Unix}}">
                     <span class="text-muted">{{.TestTime.Format "2006-01-02 15:04"}}</span>
                 </td>
-                <td>
+                <td class="actions-cell">
                     <a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a>
                     <a href="/reachability/modem-test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{urlquery (.TestTime.Format "2006-01-02T15:04:05Z07:00")}}" class="btn btn-sm">Details</a>
                 </td>

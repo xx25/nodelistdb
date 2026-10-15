@@ -9,8 +9,7 @@
 {{end}}
 
 {{define "head_scripts"}}
-<script src="/static/tooltip.js"></script>
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -63,13 +62,13 @@
                         </div>
                     </div>
                     {{if .Latest.Flags}}
-                    <div class="info-item" style="grid-column: span 2;">
+                    <div class="info-item info-item--wide">
                         <strong>Flags</strong>
                         <div style="margin-top: 0.5rem;">{{flagBadges .FlagDescriptions .Latest.Flags}}</div>
                     </div>
                     {{end}}
                     {{if .Latest.ModemFlags}}
-                    <div class="info-item" style="grid-column: span 2;">
+                    <div class="info-item info-item--wide">
                         <strong>Modem Flags</strong>
                         <div style="margin-top: 0.5rem;">{{flagBadges .FlagDescriptions .Latest.ModemFlags}}</div>
                     </div>
@@ -81,7 +80,7 @@
                 <h3>Pointlist History</h3>
                 <p class="muted">Consecutive issues with identical content are collapsed into one period. Overlapping series carrying the same entry (a zone rollup republishes the regional lists) share a row, labeled with their sources.</p>
                 <div class="table-responsive">
-                    <table class="data-table sortable-table">
+                    <table class="data-table sortable-table point-history-table">
                         <thead>
                             <tr>
                                 <th data-sortable data-type="date" data-default-sort="desc">Period</th>
@@ -92,7 +91,7 @@
                                 <th data-sortable data-type="string">Sysop</th>
                                 <th data-sortable data-type="string">Phone</th>
                                 <th data-sortable data-type="number">Speed</th>
-                                <th>Flags</th>
+                                <th class="col-flags">Flags</th>
                             </tr>
                         </thead>
                         <tbody>

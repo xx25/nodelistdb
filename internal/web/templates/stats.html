@@ -9,8 +9,8 @@
 {{end}}
 
 {{define "head_scripts"}}
-<script src="/static/vendor/chart.min.js"></script>
-<script src="/static/datepicker.js"></script>
+<script src="{{asset "vendor/chart.min.js"}}"></script>
+<script src="{{asset "datepicker.js"}}"></script>
 {{end}}
 
 {{define "content"}}
@@ -260,6 +260,10 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                // The points are hidden (pointRadius 0), so a tooltip that
+                // needs the pointer on a point cannot be reached with a
+                // finger; "index" mode picks the nearest x instead.
+                interaction: { mode: "index", intersect: false },
                 plugins: {
                     legend: { display: false }
                 },
@@ -270,7 +274,7 @@
                     },
                     x: {
                         title: { display: true, text: "Date" },
-                        ticks: { maxTicksLimit: 20 }
+                        ticks: { maxTicksLimit: window.matchMedia("(max-width: 768px)").matches ? 6 : 20 }
                     }
                 }
             }

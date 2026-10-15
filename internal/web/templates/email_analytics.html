@@ -7,8 +7,8 @@
 {{define "page_subtitle"}}<p class="subtitle">Nodes advertising mail transport over Internet email (FTS-5001 &ldquo;Email Flags&rdquo;)</p>{{end}}
 
 {{define "head_scripts"}}
-<script src="/static/vendor/chart.min.js"></script>
-<script src="/static/sortable-table.js"></script>
+<script src="{{asset "vendor/chart.min.js"}}"></script>
+<script src="{{asset "sortable-table.js"}}"></script>
 {{end}}
 
 {{define "extra_css"}}
@@ -241,7 +241,7 @@
 <!-- Node table -->
 {{if .Nodes}}
 <div class="table-responsive">
-    <table class="data-table sortable-table">
+    <table class="data-table sortable-table table--sticky-first">
         <thead>
             <tr>
                 <th data-sortable data-type="address">Node</th>
@@ -252,7 +252,7 @@
                 {{if not $.EmailOnly}}<th data-sortable data-type="string" title="Other published ways to deliver mail: Internet session flags, and PSTN for a dialable phone number">Also via</th>{{end}}
                 <th>Mail domain</th>
                 <th>Endpoint</th>
-                <th>Actions</th>
+                <th class="actions-cell">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -329,7 +329,7 @@
                         <span class="text-muted">&ndash;</span>
                     {{end}}
                 </td>
-                <td><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a></td>
+                <td class="actions-cell"><a href="/node/{{.Zone}}/{{.Net}}/{{.Node}}" class="btn btn-sm">History</a></td>
             </tr>
             {{end}}
         </tbody>

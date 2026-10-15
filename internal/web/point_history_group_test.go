@@ -198,6 +198,7 @@ func TestPointHistoryPageRendersPeriods(t *testing.T) {
 	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("point_history Execute error: %v", err)
 	}
+	assertTablesWrapped(t, buf.String())
 	out := buf.String()
 
 	if !strings.Contains(out, "2003-08-08 &ndash; 2003-08-15") {

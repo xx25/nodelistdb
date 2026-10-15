@@ -73,6 +73,7 @@ func renderNodeHistory(t *testing.T, internetConfig string) string {
 	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("node_history Execute error: %v", err)
 	}
+	assertTablesWrapped(t, buf.String())
 	return buf.String()
 }
 

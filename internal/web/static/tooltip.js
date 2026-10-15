@@ -22,6 +22,52 @@
         tooltipElements.forEach(function(element) {
             addCopyButtons(element);
         });
+
+        // Tap / keyboard disclosure. The CSS tooltips open on :hover, which
+        // a touch screen cannot do reliably, so after the copy buttons have
+        // been attached (which moves the tooltip class onto an inner span)
+        // every element that still carries one becomes a focusable button
+        // that toggles .is-open. On phones the open bubble is a fixed sheet
+        // (style.css); tapping it, or anywhere else, closes it.
+        document.querySelectorAll('.ip-tooltip, .ipv6-tooltip, .flag-tooltip').forEach(function(el) {
+            if (el.hasAttribute('data-tooltip-toggle')) return;
+            el.setAttribute('data-tooltip-toggle', '');
+            el.setAttribute('tabindex', '0');
+            el.setAttribute('role', 'button');
+            el.setAttribute('aria-expanded', 'false');
+            el.addEventListener('click', function(e) {
+                if (e.target.closest('a, button') && e.target !== el) return;
+                e.stopPropagation();
+                var open = !el.classList.contains('is-open');
+                closeAllTooltips();
+                if (open) setTooltipOpen(el, true);
+            });
+            el.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    var open = !el.classList.contains('is-open');
+                    closeAllTooltips();
+                    if (open) setTooltipOpen(el, true);
+                } else if (e.key === 'Escape') {
+                    closeAllTooltips();
+                }
+            });
+        });
+        document.addEventListener('click', closeAllTooltips);
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeAllTooltips();
+        });
+    }
+
+    function setTooltipOpen(el, open) {
+        el.classList.toggle('is-open', open);
+        el.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function closeAllTooltips() {
+        document.querySelectorAll('.is-open[data-tooltip-toggle]').forEach(function(el) {
+            setTooltipOpen(el, false);
+        });
     }
 
     /**

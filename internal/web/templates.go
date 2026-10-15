@@ -45,6 +45,9 @@ var chromeFiles = []string{
 func (s *Server) loadTemplates() error {
 	// Create function map for template functions
 	funcMap := template.FuncMap{
+		// asset turns "style.css" into /static/style.css?v=<content hash>, so a
+		// deploy that changes a file also changes its URL; see static.go.
+		"asset":       s.AssetURL,
 		"networkName": nodelistfs.DisplayName,
 		"flagBadges": func(flagDescriptions map[string]flags.FlagInfo, flagList []string) template.HTML {
 			var b strings.Builder

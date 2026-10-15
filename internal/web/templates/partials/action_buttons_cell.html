@@ -11,7 +11,7 @@
     that exists in several FTN networks resolves to the wrong one.
 */}}
 {{define "action_buttons_cell"}}
-<td>
+<td class="actions-cell">
     <div class="compact-actions">
         <a href="/reachability/test?zone={{.Zone}}&net={{.Net}}&node={{.Node}}&time={{.TestTime.Format "2006-01-02T15:04:05Z07:00"}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="btn btn-sm btn-info">Test</a>
         <a href="/reachability/node?zone={{.Zone}}&net={{.Net}}&node={{.Node}}{{if .Domain}}&domain={{.Domain}}{{end}}" class="btn btn-sm btn-secondary">History</a>
