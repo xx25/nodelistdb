@@ -8,6 +8,11 @@
 # 3. Downloading missing files from FTP
 # 4. Importing new files with the parser
 # 5. Compressing and storing files in the proper directory structure
+# 6. Pushing the archive to a secondary download server (rsync, optional)
+#
+# Runs on the host that holds the archive (oracle-vm1 / nodelist.fidonet.cc
+# since 2026-10-27; it was oracle-main before). Everything else it needs is
+# reached over the network: the FTP source, ClickHouse and the API.
 #
 # Uses ClickHouse backend via YAML configuration (config.yaml)
 # Author: Generated for NodelistDB project
@@ -40,6 +45,23 @@ PARSER_PATH="${SCRIPT_DIR}/parser"               # Path to parser binary
 # Remote server sync configuration
 REMOTE_SYNC_HOST="root@nodelist.5001.ru"         # Remote server to sync nodelists to
 REMOTE_NODELIST_DIR="/opt/nodelists"             # Remote nodelist directory
+# rsync destination for the push; defaults to REMOTE_SYNC_HOST:REMOTE_NODELIST_DIR/.
+# Set it explicitly when the remote key is restricted with rrsync, whose paths
+# are relative to the directory it is pinned to (then "host:" is the root).
+REMOTE_SYNC_DEST=""
+
+# Held for the whole run, so a cron run and a hand run never share TEMP_DIR
+# (cleanup() deletes it) or race the "already imported" check. deploy.sh takes
+# the same lock before replacing the parser or this script.
+SYNC_LOCK_FILE=""
+SYNC_LOCK_HELD=false
+
+# Push state: set once the run has started syncing, so cleanup() still pushes
+# what was archived when a later step aborts the run; and so that a push that
+# fails every night fails the run instead of hiding in the log.
+SYNC_STARTED=false
+PUSH_DONE=false
+PUSH_FAILED=false
 
 # Additional FTN networks to sync (fidonet is handled by the main flow).
 # One entry per network: "name|source|url_or_dir|filename_regex"
@@ -71,23 +93,28 @@ EXTRA_POINTLISTS=()
 # Local storage for archived pointlist files:
 # <LOCAL_POINTLIST_DIR>/<network>/<source>/<year>/NAME.DDD.gz
 #
-# Both default to a "pointlists" directory inside the corresponding nodelist
-# root, resolved after the config file is sourced so that overriding
-# LOCAL_NODELIST_DIR/REMOTE_NODELIST_DIR moves them too. Living inside the
-# nodelist root is deliberate, not incidental: whatever mirrors nodelists to a
-# download front end then carries the pointlists with them, with no second
-# transfer to configure and keep working.
+# Defaults to a "pointlists" directory inside the nodelist root, resolved
+# after the config file is sourced so that overriding LOCAL_NODELIST_DIR moves
+# it too. Living inside the nodelist root is deliberate, not incidental: the
+# archive push (and whatever else mirrors nodelists to a download front end)
+# then carries the pointlists with them, with no second transfer to configure
+# and keep working.
 LOCAL_POINTLIST_DIR=""
-REMOTE_POINTLIST_DIR=""
 
 # Load configuration file if it exists
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
 
-# Derive the pointlist roots from the nodelist roots unless set explicitly.
+# Derive the pointlist root from the nodelist root unless set explicitly.
 : "${LOCAL_POINTLIST_DIR:=${LOCAL_NODELIST_DIR}/pointlists}"
-: "${REMOTE_POINTLIST_DIR:=${REMOTE_NODELIST_DIR}/pointlists}"
+
+# The push mirrors the whole nodelist root, pointlists included.
+if [[ -z "$REMOTE_SYNC_DEST" && -n "${REMOTE_SYNC_HOST:-}" ]]; then
+    REMOTE_SYNC_DEST="${REMOTE_SYNC_HOST}:${REMOTE_NODELIST_DIR}/"
+fi
+
+: "${SYNC_LOCK_FILE:=${SCRIPT_DIR}/sync.lock}"
 
 # FidoNet's own archive root. Its year directories used to sit directly in the
 # nodelist root, which made FidoNet the one network with no name in the path —
@@ -96,7 +123,6 @@ fi
 # pointlist tree. The server still serves the old network-less paths, so files
 # already published under them keep resolving.
 : "${LOCAL_FIDONET_DIR:=${LOCAL_NODELIST_DIR}/fidonet}"
-: "${REMOTE_FIDONET_DIR:=${REMOTE_NODELIST_DIR}/fidonet}"
 
 # Shared with scripts/import_pointlists.sh — both must name the same file for
 # the mutual exclusion to mean anything.
@@ -129,8 +155,20 @@ error_exit() {
 }
 
 # Cleanup temporary files (server restart not needed for ClickHouse)
+# TEMP_DIR is shared by every run, so only the run holding the sync lock may
+# delete it; a run that found the lock taken would otherwise wipe the other
+# run's downloads on its way out.
+#
+# A run aborted by error_exit (say, a nodelist the parser rejects) still
+# pushes what it archived before the failure: otherwise one bad file would
+# hold back the mirror on every run until it was dealt with. The exit status
+# of the aborted run is kept.
 cleanup() {
-    if [[ -d "$TEMP_DIR" ]]; then
+    if [[ "$SYNC_LOCK_HELD" == "true" && "$SYNC_STARTED" == "true" && "$PUSH_DONE" != "true" ]]; then
+        push_archive
+    fi
+
+    if [[ "$SYNC_LOCK_HELD" == "true" && -d "$TEMP_DIR" ]]; then
         log "Cleaning up temporary directory: $TEMP_DIR"
         rm -rf "$TEMP_DIR"
     fi
@@ -146,7 +184,10 @@ cleanup() {
 check_dependencies() {
     log "Checking system dependencies..."
     
-    local deps=("curl" "ftp" "gzip" "systemctl")
+    local deps=("curl" "ftp" "gzip" "cmp" "flock" "systemctl")
+    if [[ -n "${REMOTE_SYNC_DEST:-}" ]]; then
+        deps+=("rsync" "ssh")
+    fi
     local missing_deps=()
     
     for dep in "${deps[@]}"; do
@@ -187,11 +228,28 @@ validate_config() {
     fi
     
     # Check if we can reach the API (server must be running)
-    if ! curl -s --connect-timeout 5 "$API_BASE_URL/health" > /dev/null; then
+    if ! wait_for_api; then
         error_exit "Cannot reach NodelistDB API at $API_BASE_URL. Is the server running?"
     fi
-    
+
     log "Configuration validation passed"
+}
+
+# Wait for the API to answer. The sync now runs next to the public web server,
+# so a deploy restarting it must delay a run rather than abort it.
+# Returns: 0 once /health answers 200, 1 after API_WAIT_TRIES attempts
+wait_for_api() {
+    local tries="${API_WAIT_TRIES:-10}" i
+    for ((i = 1; i <= tries; i++)); do
+        if curl -sf --connect-timeout 5 --max-time 15 "$API_BASE_URL/health" > /dev/null; then
+            return 0
+        fi
+        log "API at $API_BASE_URL not answering (attempt $i/$tries)"
+        if ((i < tries)); then
+            sleep "${API_WAIT_INTERVAL:-30}"
+        fi
+    done
+    return 1
 }
 
 #################################################################################
@@ -219,8 +277,12 @@ is_server_running() {
 get_database_dates() {
     log "Fetching existing dates from database via API..."
     
+    # -f: an error page must not read as an empty database, which would send
+    # every file on the FTP server back through the parser. /api/stats is in
+    # the rate limiter's expensive class, so a 429 is retried (curl honours
+    # Retry-After) rather than failing the run.
     local response
-    if ! response=$(curl -s --connect-timeout 10 "$API_BASE_URL/stats/dates"); then
+    if ! response=$(curl -sf --retry 4 --retry-max-time 180 --connect-timeout 10 --max-time 60 "$API_BASE_URL/stats/dates"); then
         error_exit "Failed to fetch dates from API"
     fi
     
@@ -418,45 +480,78 @@ import_to_database() {
     fi
 }
 
+# Gzip a file into the archive.
+# Args: source_file_path destination_gz_path
+# Sets STORE_RESULT to "stored" or "unchanged"; returns 1 on failure.
+#
+# Written to a temporary name and renamed, so the archive never holds a
+# truncated file. A destination that already holds the same content is left
+# alone: rewriting it would only move its mtime, and every rsync mirror would
+# then copy it again (the pointlist series re-archived ~76 unchanged files a
+# night that way). The comparison is on the decompressed bytes, so files
+# gzipped elsewhere or with other gzip settings still count as the same.
+store_gzip() {
+    local src="$1" dest="$2"
+    STORE_RESULT=""
+
+    mkdir -p "$(dirname "$dest")" || return 1
+
+    if [[ -s "$dest" ]] && gzip -dc "$dest" 2>/dev/null | cmp -s - "$src"; then
+        STORE_RESULT="unchanged"
+        return 0
+    fi
+
+    local tmp="${dest}.tmp.$$"
+    if gzip -n -c "$src" > "$tmp" && [[ -s "$tmp" ]] && mv -f "$tmp" "$dest"; then
+        STORE_RESULT="stored"
+        return 0
+    fi
+    rm -f "$tmp"
+    return 1
+}
+
+# Archive name of a fidonet file: z2daily.DDD is published as nodelist.ddd
+# Args: ftp_filename
+fidonet_archive_name() {
+    local name="${1//[zZ]2[dD][aA][iI][lL][yY]/nodelist}"
+    echo "${name,,}"
+}
+
+# Archive path of a fidonet file
+# Args: ftp_filename date(YYYY-MM-DD)
+fidonet_archive_path() {
+    echo "${LOCAL_FIDONET_DIR}/${2%%-*}/$(fidonet_archive_name "$1").gz"
+}
+
 # Compress and store a nodelist file in the proper directory structure
 # Args: source_file_path
-# Creates: /home/dp/nodelists/YYYY/nodelist.XXX.gz
+# Creates: <LOCAL_FIDONET_DIR>/YYYY/nodelist.XXX.gz
 compress_and_store() {
     local file_path="$1"
     local filename=$(basename "$file_path")
-    
+
     # Determine the year for this file based on its date
     local file_date
     if ! file_date=$(filename_to_date "$filename"); then
         error_exit "Could not determine date for file: $filename"
     fi
-    
-    local year=$(echo "$file_date" | cut -d'-' -f1)
-    local year_dir="${LOCAL_FIDONET_DIR}/${year}"
-    
-    # Create year directory if it doesn't exist
-    mkdir -p "$year_dir"
-    
-    # Compress file with .gz extension (following the pattern in /home/dp/nodelists)
-    local compressed_file="${year_dir}/${filename,,}.gz"  # Convert filename to lowercase
-    
+
+    local compressed_file
+    compressed_file=$(fidonet_archive_path "$filename" "$file_date")
+
     log "Compressing and storing $filename -> $compressed_file"
-    
-    # Use gzip to compress the file
-    if gzip -c "$file_path" > "$compressed_file"; then
-        # Verify compressed file was created successfully
-        if [[ -f "$compressed_file" && -s "$compressed_file" ]]; then
-            local original_size=$(stat -c%s "$file_path")
-            local compressed_size=$(stat -c%s "$compressed_file")
-            local ratio=$(( (original_size - compressed_size) * 100 / original_size ))
-            
-            log "Successfully compressed $filename (${ratio}% reduction: ${original_size} -> ${compressed_size} bytes)"
-            return 0
-        else
-            error_exit "Compressed file was not created properly: $compressed_file"
-        fi
+
+    if ! store_gzip "$file_path" "$compressed_file"; then
+        error_exit "Failed to store $filename as $compressed_file"
+    fi
+
+    if [[ "$STORE_RESULT" == "unchanged" ]]; then
+        log "$compressed_file already holds this content - left untouched"
     else
-        error_exit "Failed to compress file: $filename"
+        local original_size=$(stat -c%s "$file_path")
+        local compressed_size=$(stat -c%s "$compressed_file")
+        local ratio=$(( (original_size - compressed_size) * 100 / original_size ))
+        log "Successfully compressed $filename (${ratio}% reduction: ${original_size} -> ${compressed_size} bytes)"
     fi
 }
 
@@ -465,34 +560,38 @@ compress_and_store() {
 # REMOTE SERVER SYNCHRONIZATION
 #################################################################################
 
-# Sync a compressed nodelist file to remote server
-# Args: compressed_file_path
-sync_to_remote() {
-    local file_path="$1"
-    
-    # Skip if remote sync is not configured
-    if [[ -z "${REMOTE_SYNC_HOST:-}" ]]; then
+# Push the whole archive to the remote download server.
+#
+# One rsync of the tree at the end of a run, rather than an scp per file as
+# it was written: a file whose push failed used to be missing on the mirror
+# for good, because the next run skips any date already in the database. Now
+# the next run simply carries it over. Unchanged files cost a stat each.
+#
+# Never --delete: the archive is append-only, and a mistaken source path must
+# not be able to empty the mirror. (The 5001 key is also pinned with
+# `rrsync -no-del`, so the remote refuses it regardless.)
+push_archive() {
+    PUSH_DONE=true
+    if [[ -z "${REMOTE_SYNC_DEST:-}" ]]; then
         return 0
     fi
-    
-    local filename=$(basename "$file_path")
-    local year_dir=$(basename $(dirname "$file_path"))
-    local remote_dir="${REMOTE_FIDONET_DIR}/${year_dir}"
-    
-    log "Syncing $filename to $REMOTE_SYNC_HOST:$remote_dir..."
-    
-    # Create remote year directory if needed and copy file
-    if ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
-        if scp -q "$file_path" "${REMOTE_SYNC_HOST}:${remote_dir}/"; then
-            log "Successfully synced $filename to remote server"
-            return 0
-        else
-            log "Warning: Failed to copy $filename to remote server" error
-            return 1
-        fi
+
+    log "Pushing archive $LOCAL_NODELIST_DIR/ to $REMOTE_SYNC_DEST..."
+    mkdir -p "$TEMP_DIR"
+    local rc=0
+    # ControlMaster off: a persisting master ssh would inherit the sync lock's
+    # fd and keep holding it after this run exits.
+    rsync -a --no-owner --no-group --timeout=120 --stats \
+        --exclude='*.tmp.*' \
+        -e "ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ControlMaster=no -o ControlPath=none" \
+        "${LOCAL_NODELIST_DIR}/" "$REMOTE_SYNC_DEST" > "${TEMP_DIR}/rsync.log" 2>&1 || rc=$?
+
+    if [[ $rc -eq 0 ]]; then
+        log "Archive pushed ($(grep -E '^Number of regular files transferred' "${TEMP_DIR}/rsync.log" | tr -s ' '))"
     else
-        log "Warning: Cannot connect to remote server $REMOTE_SYNC_HOST" error
-        return 1
+        PUSH_FAILED=true
+        log "ERROR: archive push to $REMOTE_SYNC_DEST failed (rsync rc=$rc) - the next run retries" error
+        tail -5 "${TEMP_DIR}/rsync.log" | while read -r line; do log "  $line" error; done
     fi
 }
 
@@ -505,7 +604,7 @@ sync_to_remote() {
 get_database_dates_for_domain() {
     local domain="$1"
     local response
-    if ! response=$(curl -s --connect-timeout 10 "$API_BASE_URL/stats/dates?domain=${domain}"); then
+    if ! response=$(curl -sf --retry 4 --retry-max-time 180 --connect-timeout 10 --max-time 60 "$API_BASE_URL/stats/dates?domain=${domain}"); then
         error_exit "Failed to fetch dates for network $domain from API"
     fi
     echo "$response" | grep -o '"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"' | tr -d '"' | sort
@@ -549,7 +648,9 @@ download_extra_network_file() {
 
     case "$source" in
         http)
-            curl -s --connect-timeout 15 --retry "$MAX_RETRIES" -o "$local_file" "${location%/}/${remote_file}"
+            # -f: an error page is not a nodelist. An archive-only fetch never
+            # reaches the parser, so nothing else would stop it being archived.
+            curl -sf --connect-timeout 15 --retry "$MAX_RETRIES" -o "$local_file" "${location%/}/${remote_file}"
             [[ -f "$local_file" && -s "$local_file" ]]
             ;;
         ftp)
@@ -648,9 +749,17 @@ sync_extra_network() {
             continue
         fi
 
+        # Done only when the date is imported AND its file is archived; an
+        # imported date with no file (a failed or interrupted archive write)
+        # is fetched again and archived without a second import.
+        local year="${file_date%%-*}"
+        local archive_only=false
         if grep -q "^$file_date$" <<< "$db_dates"; then
-            log "Skipping $remote_file - date $file_date already imported for $name"
-            continue
+            if [[ -s "${LOCAL_NODELIST_DIR}/${name}/${year}/${plain_name,,}.gz" ]]; then
+                log "Skipping $remote_file - date $file_date already imported and archived for $name"
+                continue
+            fi
+            archive_only=true
         fi
 
         local temp_file="${TEMP_DIR}/${remote_file,,}"
@@ -668,33 +777,26 @@ sync_extra_network() {
         fi
 
         # Import with the network's parser flag
-        log "Importing $(basename "$nodelist_file") into database (network: $name)..."
-        if ! "$PARSER_PATH" -path "$nodelist_file" -config "$CONFIG_PATH" -network "$name" -verbose \
-                > "${TEMP_DIR}/parser.log" 2>&1; then
-            log "Parser failed for $(basename "$nodelist_file") (network $name):" error
-            tail -10 "${TEMP_DIR}/parser.log" | while read -r line; do log "  $line" error; done
-            rm -f "$nodelist_file"
-            continue
+        if [[ "$archive_only" == "true" ]]; then
+            log "$(basename "$nodelist_file") already imported for $name - archiving only"
+        else
+            log "Importing $(basename "$nodelist_file") into database (network: $name)..."
+            if ! "$PARSER_PATH" -path "$nodelist_file" -config "$CONFIG_PATH" -network "$name" -verbose \
+                    > "${TEMP_DIR}/parser.log" 2>&1; then
+                log "Parser failed for $(basename "$nodelist_file") (network $name):" error
+                tail -10 "${TEMP_DIR}/parser.log" | while read -r line; do log "  $line" error; done
+                rm -f "$nodelist_file"
+                continue
+            fi
         fi
 
-        # Store at <root>/<network>/<year>/<name>.DDD.gz
-        local year=$(echo "$file_date" | cut -d'-' -f1)
-        local year_dir="${LOCAL_NODELIST_DIR}/${name}/${year}"
-        mkdir -p "$year_dir"
-        local compressed_file="${year_dir}/$(basename "${nodelist_file,,}").gz"
-        gzip -c "$nodelist_file" > "$compressed_file"
-        log "Stored $compressed_file"
-
-        # Optional remote mirror (same relative layout)
-        if [[ -n "${REMOTE_SYNC_HOST:-}" ]]; then
-            local remote_dir="${REMOTE_NODELIST_DIR}/${name}/${year}"
-            # -n: without it ssh drains this loop's stdin (the herestring of
-            # remote filenames), so only the first file of a series is ever
-            # processed.
-            if ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
-                scp -q "$compressed_file" "${REMOTE_SYNC_HOST}:${remote_dir}/" \
-                    || log "Warning: failed to mirror $compressed_file" error
-            fi
+        # Store at <root>/<network>/<year>/<name>.DDD.gz; push_archive carries
+        # it to the remote mirror at the end of the run.
+        local compressed_file="${LOCAL_NODELIST_DIR}/${name}/${year}/$(basename "${nodelist_file,,}").gz"
+        if store_gzip "$nodelist_file" "$compressed_file"; then
+            log "Stored $compressed_file ($STORE_RESULT)"
+        else
+            log "Failed to store $compressed_file - will retry next run" error
         fi
 
         rm -f "$nodelist_file"
@@ -789,28 +891,15 @@ sync_extra_pointlist() {
             log "Pointlist $(basename "$pointlist_file") already imported - archiving only"
         fi
 
-        # Archive at <root>/<network>/<source>/<year>/NAME.DDD.gz
-        local year_dir="${LOCAL_POINTLIST_DIR}/${network}/${name}/${year}"
-        mkdir -p "$year_dir"
-        local compressed_file="${year_dir}/$(basename "${pointlist_file,,}").gz"
-        gzip -c "$pointlist_file" > "$compressed_file"
-        log "Stored $compressed_file"
-
-        # Optional remote mirror, same relative layout as the local archive.
-        # The nodelist paths have always done this; without it a secondary
-        # download server keeps serving nodelists and never gains a single
-        # pointlist, however long the sync runs.
-        if [[ -n "${REMOTE_SYNC_HOST:-}" && -n "${REMOTE_POINTLIST_DIR:-}" ]]; then
-            local remote_dir="${REMOTE_POINTLIST_DIR}/${network}/${name}/${year}"
-            # -n: without it ssh drains this loop's stdin (the herestring of
-            # remote filenames), so only the first file of a series is ever
-            # processed.
-            if ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_SYNC_HOST" "mkdir -p $remote_dir" 2>/dev/null; then
-                scp -q "$compressed_file" "${REMOTE_SYNC_HOST}:${remote_dir}/" \
-                    || log "Warning: failed to mirror $compressed_file" error
-            else
-                log "Warning: cannot reach $REMOTE_SYNC_HOST to mirror $compressed_file" error
-            fi
+        # Archive at <root>/<network>/<source>/<year>/NAME.DDD.gz. Every issue
+        # still in the file echo comes through here each run, so an unchanged
+        # one must stay untouched (see store_gzip). push_archive carries new
+        # ones to the remote mirror at the end of the run.
+        local compressed_file="${LOCAL_POINTLIST_DIR}/${network}/${name}/${year}/$(basename "${pointlist_file,,}").gz"
+        if store_gzip "$pointlist_file" "$compressed_file"; then
+            log "Stored $compressed_file ($STORE_RESULT)"
+        else
+            log "Failed to store $compressed_file - will retry next run" error
         fi
 
         rm -f "$pointlist_file"
@@ -889,19 +978,30 @@ sync_nodelists() {
     log "Step 3: Determining files to download..."
     local files_to_download=()
     local files_skipped=0
-    
+    # Files whose date is imported but whose archive file is missing: fetched
+    # again and archived, never imported twice. Without this, an archive write
+    # that failed after a successful import (full disk, a kill in between) left
+    # a date that no later run would ever archive.
+    local -A archive_only=()
+
     # Check each FTP file against database
     while IFS= read -r ftp_file; do
         [[ -z "$ftp_file" ]] && continue
-        
+
         # Convert filename to date
         local file_date
         if file_date=$(filename_to_date "$ftp_file"); then
-            
+
             # Check if this date already exists in database
             if grep -q "^$file_date$" <<< "$db_dates"; then
-                log "Skipping $ftp_file - date $file_date already in database"
-                files_skipped=$((files_skipped + 1))
+                if [[ -s "$(fidonet_archive_path "$ftp_file" "$file_date")" ]]; then
+                    log "Skipping $ftp_file - date $file_date already in database and archived"
+                    files_skipped=$((files_skipped + 1))
+                else
+                    log "Need to archive: $ftp_file (date: $file_date in database, file missing)"
+                    files_to_download+=("$ftp_file")
+                    archive_only["$ftp_file"]=1
+                fi
             else
                 log "Need to download: $ftp_file (date: $file_date)"
                 files_to_download+=("$ftp_file")
@@ -948,24 +1048,22 @@ sync_nodelists() {
         # If this is a z2daily file, rename it to nodelist format for processing
         local processed_file="$temp_file"
         if [[ "$ftp_file" =~ ^[zZ]2[dD][aA][iI][lL][yY]\. ]]; then
-            local nodelist_name="${ftp_file//[zZ]2[dD][aA][iI][lL][yY]/nodelist}"
-            processed_file="${TEMP_DIR}/${nodelist_name,,}"  # Convert to lowercase
+            processed_file="${TEMP_DIR}/$(fidonet_archive_name "$ftp_file")"
             log "Renaming z2daily file: $ftp_file -> $(basename "$processed_file")"
             mv "$temp_file" "$processed_file"
         fi
-        
-        # Import file into database
-        import_to_database "$processed_file"
-        
-        # Compress and store file in proper location
+
+        # Import file into database (unless only its archive copy is missing)
+        if [[ -n "${archive_only[$ftp_file]:-}" ]]; then
+            log "$(basename "$processed_file") already in database - archiving only"
+        else
+            import_to_database "$processed_file"
+        fi
+
+        # Compress and store file in proper location. The remote mirror gets
+        # it from push_archive at the end of the run.
         compress_and_store "$processed_file"
 
-        # Sync compressed file to remote server
-        local file_date_sync=$(filename_to_date "$(basename "$processed_file")")
-        local year_sync=$(echo "$file_date_sync" | cut -d"-" -f1)
-        local compressed_file_sync="${LOCAL_FIDONET_DIR}/${year_sync}/$(basename "${processed_file,,}").gz"
-        sync_to_remote "$compressed_file_sync"
-        
         # Clean up temporary file
         rm -f "$processed_file"
         
@@ -988,8 +1086,7 @@ sync_nodelists() {
             [[ " ${failed_files[*]:-} " == *" $file "* ]] && continue
             local file_date=$(filename_to_date "$file")
             if [[ "$file" =~ ^[zZ]2[dD][aA][iI][lL][yY]\. ]]; then
-                local nodelist_name="${file//[zZ]2[dD][aA][iI][lL][yY]/nodelist}"
-                log "  - $file -> ${nodelist_name,,} (date: $file_date)"
+                log "  - $file -> $(fidonet_archive_name "$file") (date: $file_date)"
             else
                 log "  - $file (date: $file_date)"
             fi
@@ -1028,19 +1125,21 @@ API_BASE_URL="http://localhost:8080/api"      # NodelistDB API endpoint
 # Parser Configuration
 PARSER_PATH="./bin/parser"                    # Path to parser binary
 
-# Remote server sync configuration
+# Remote server sync configuration: the whole archive is rsync'ed there at
+# the end of each run (never with --delete). Empty REMOTE_SYNC_HOST = no push.
 REMOTE_SYNC_HOST="root@nodelist.5001.ru"         # Remote server to sync nodelists to
 REMOTE_NODELIST_DIR="/opt/nodelists"             # Remote nodelist directory
+# With an rrsync-restricted key, name the destination relative to the pinned dir:
+# REMOTE_SYNC_DEST="root@nodelist.5001.ru:"
 
 # Pointlist series to sync (FTS-5002 weeklies). Empty means none.
 # "name|source|url_or_dir|filename_regex|charset[|network]"
 # EXTRA_POINTLISTS=("z2|ftp|/z2pnt|z2pnt\.z[0-9]{2}|cp437")
 #
-# The archive roots default to <nodelist root>/pointlists on both ends, which
-# is what lets an existing nodelist mirror carry pointlists too. Override only
-# if they must live somewhere else:
+# The archive root defaults to <nodelist root>/pointlists, which is what lets
+# the archive push and any nodelist mirror carry pointlists too. Override only
+# if it must live somewhere else:
 # LOCAL_POINTLIST_DIR="/opt/nodelists/pointlists"
-# REMOTE_POINTLIST_DIR="/opt/nodelists/pointlists"
 
 # Download Configuration
 MAX_RETRIES=3                                 # Number of retry attempts for failed downloads
@@ -1274,7 +1373,23 @@ main() {
     if ! create_sample_config; then
         exit 1
     fi
-    
+
+    # One run at a time. Taken before the cleanup trap exists and without
+    # error_exit, so a run that loses never touches the winner's TEMP_DIR.
+    # Opened read-only for the same reason as the pointlist lock below:
+    # fs.protected_regular refuses a write-open of another user's file.
+    [[ -e "$SYNC_LOCK_FILE" ]] || : > "$SYNC_LOCK_FILE" 2>/dev/null || true
+    if [[ ! -r "$SYNC_LOCK_FILE" ]]; then
+        log "ERROR: cannot open lock file $SYNC_LOCK_FILE" error
+        exit 1
+    fi
+    exec 200<"$SYNC_LOCK_FILE"
+    if ! flock -n 200; then
+        log "Another sync run holds $SYNC_LOCK_FILE - exiting" error
+        exit 0
+    fi
+    SYNC_LOCK_HELD=true
+
     # Set up cleanup trap
     trap cleanup EXIT
     
@@ -1304,8 +1419,14 @@ main() {
             [[ -z "$ftp_file" ]] && continue
             local file_date
             if file_date=$(filename_to_date "$ftp_file"); then
-                if ! echo "$db_dates" | grep -q "^$file_date$"; then
+                # A herestring, not `echo | grep -q`: under pipefail, grep -q
+                # quitting at an early match SIGPIPEs echo and the pipeline
+                # reads as "not found" (it flagged two imported dates).
+                if ! grep -q "^$file_date$" <<< "$db_dates"; then
                     log "  Would download: $ftp_file (date: $file_date)"
+                    would_download=$((would_download + 1))
+                elif [[ ! -s "$(fidonet_archive_path "$ftp_file" "$file_date")" ]]; then
+                    log "  Would archive only: $ftp_file (date: $file_date in database, file missing)"
                     would_download=$((would_download + 1))
                 fi
             fi
@@ -1317,10 +1438,16 @@ main() {
     
     # Run the actual synchronization (fidonet first, then extra networks,
     # then pointlist series)
+    SYNC_STARTED=true
     sync_nodelists
     sync_extra_networks
     sync_extra_pointlists
-    
+    push_archive
+
+    if [[ "$PUSH_FAILED" == "true" ]]; then
+        log "=== NodelistDB FTP Sync Script Completed, but the archive push FAILED ===" error
+        exit 1
+    fi
     log "=== NodelistDB FTP Sync Script Completed Successfully ==="
 }
 

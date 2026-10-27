@@ -27,24 +27,27 @@ build_binaries() {
     BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
     LDFLAGS="-X 'github.com/nodelistdb/internal/version.Version=${VERSION}' -X 'github.com/nodelistdb/internal/version.GitCommit=${COMMIT}' -X 'github.com/nodelistdb/internal/version.BuildTime=${BUILD_TIME}'"
 
-    # Build for x86_64 (oracle-vm1 and nodelist.5001.ru — both run the server)
+    # Build for x86_64 (oracle-vm1 and nodelist.5001.ru — both run the server;
+    # vm1 also runs the parser, from sync_nodelists.sh)
     echo "  Building for x86_64..."
     GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/server-amd64" ./cmd/server
+    GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/parser-amd64" ./cmd/parser
     GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/testdaemon-amd64" ./cmd/testdaemon
 
-    # Build for ARM64 (oracle-main.thodin.net — parser + testdaemon only).
+    # Build for ARM64 (oracle-main.thodin.net — testdaemon only).
     # No server-arm64: the web server moved to vm1 on 2026-07-30 and
-    # nodelistdb.service is disabled on oracle-main. Building a binary nothing
-    # deploys is how the old topology got baked into this script.
+    # nodelistdb.service is disabled on oracle-main. No parser-arm64 either:
+    # the sync and the archive it writes moved to vm1 on 2026-10-27. Building
+    # a binary nothing deploys is how the old topology got baked into this
+    # script.
     echo "  Building for ARM64..."
-    GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/parser-arm64" ./cmd/parser
     GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o "$BIN_DIR/testdaemon-arm64" ./cmd/testdaemon
 
     echo -e "  ${GREEN}✓ Build complete${NC}"
     echo ""
 }
 
-# Server 1: main (ARM64, parser + testdaemon) — reached over ZeroTier
+# Server 1: main (ARM64, testdaemon) — reached over ZeroTier
 #
 # Shipped over the private overlay at 10.121.20.211 rather than the public
 # name: it is the same host, but the overlay path does not depend on public
@@ -55,44 +58,40 @@ build_binaries() {
 # few minutes later, so a stalled transfer here is worth retrying over
 # oracle-main.thodin.net before assuming the host is at fault).
 #
-# This host keeps ClickHouse, the parser, sync_nodelists.sh and the testdaemon.
-# It does NOT run the web server any more: that moved to oracle-vm1 on
-# 2026-07-30 and `nodelistdb.service` here is disabled. Until then this
-# function stopped, reinstalled and STARTED that unit, which would have
-# resurrected a second web server on this host — and the is-active check
-# afterwards would have called it a success.
+# This host keeps ClickHouse and the testdaemon (and fidomail, whose FTP the
+# sync reads). It does NOT run the web server any more: that moved to
+# oracle-vm1 on 2026-07-30 and `nodelistdb.service` here is disabled. Until
+# then this function stopped, reinstalled and STARTED that unit, which would
+# have resurrected a second web server on this host — and the is-active check
+# afterwards would have called it a success. Nor does it run the parser or
+# sync_nodelists.sh, or hold the nodelist archive: all three moved to vm1 on
+# 2026-10-27.
 deploy_oracle_main() {
-    echo -e "${YELLOW}[1/3] Deploying to main / oracle-main.thodin.net (ARM64, parser + testdaemon)...${NC}"
+    echo -e "${YELLOW}[1/3] Deploying to main / oracle-main.thodin.net (ARM64, testdaemon)...${NC}"
 
     HOST="dp@${DEPLOY_MAIN_HOST:-10.121.20.211}"
     REMOTE_PATH="/opt/nodelistdb"
 
     # Check binaries exist
-    if [[ ! -f "$BIN_DIR/parser-arm64" ]] || [[ ! -f "$BIN_DIR/testdaemon-arm64" ]]; then
+    if [[ ! -f "$BIN_DIR/testdaemon-arm64" ]]; then
         echo -e "${RED}Error: ARM64 binaries not found. Run with --build flag.${NC}"
         exit 1
     fi
 
-    # Copy binaries
-    echo "  Copying parser..."
-    scp -q "$BIN_DIR/parser-arm64" "$HOST:/tmp/parser-new"
-
     echo "  Copying testdaemon..."
     scp -q "$BIN_DIR/testdaemon-arm64" "$HOST:/tmp/testdaemon-new"
 
-    # Only the testdaemon runs here, so only it needs stopping. The parser is a
-    # CLI invoked by sync_nodelists.sh; copy over it while nothing is running.
     echo "  Stopping testdaemon..."
     ssh "$HOST" "sudo systemctl stop nodelistdb-testdaemon"
 
     echo "  Installing binaries..."
-    ssh "$HOST" "sudo cp /tmp/parser-new $REMOTE_PATH/parser && sudo cp /tmp/testdaemon-new $REMOTE_PATH/testdaemon"
+    ssh "$HOST" "sudo cp /tmp/testdaemon-new $REMOTE_PATH/testdaemon"
 
     echo "  Starting testdaemon..."
     ssh "$HOST" "sudo systemctl start nodelistdb-testdaemon"
 
     echo "  Cleaning up..."
-    ssh "$HOST" "rm -f /tmp/parser-new /tmp/testdaemon-new"
+    ssh "$HOST" "rm -f /tmp/testdaemon-new"
 
     # Verify
     echo "  Verifying..."
@@ -107,40 +106,70 @@ deploy_oracle_main() {
     echo ""
 }
 
-# Server 2: oracle-vm1 (x86_64, server only) — the public web/FTP front end
-# since 2026-07-30. Reached as dp@nodelist.fidonet.cc: there is no oracle-vm1
-# DNS name, and the A/AAAA record for the site points here.
+# Server 2: oracle-vm1 (x86_64) — the public web/FTP front end since
+# 2026-07-30, and since 2026-10-27 also the home of the nodelist archive and
+# of the nightly sync (nodelistdb-sync.timer) that fills it: parser and
+# sync_nodelists.sh are installed here too. Reached as dp@nodelist.fidonet.cc:
+# there is no oracle-vm1 DNS name, and the A/AAAA record for the site points
+# here.
 deploy_vm1() {
-    echo -e "${YELLOW}[2/3] Deploying to oracle-vm1 / nodelist.fidonet.cc (x86_64, server)...${NC}"
+    echo -e "${YELLOW}[2/3] Deploying to oracle-vm1 / nodelist.fidonet.cc (x86_64, server + parser + sync)...${NC}"
 
     HOST="dp@nodelist.fidonet.cc"
     REMOTE_PATH="/opt/nodelistdb"
 
     local ssh_opts=(-o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=6)
 
-    if [[ ! -f "$BIN_DIR/server-amd64" ]]; then
-        echo -e "${RED}Error: x86_64 binary not found. Run with --build flag.${NC}"
+    if [[ ! -f "$BIN_DIR/server-amd64" ]] || [[ ! -f "$BIN_DIR/parser-amd64" ]]; then
+        echo -e "${RED}Error: x86_64 binaries not found. Run with --build flag.${NC}"
         exit 1
     fi
 
-    echo "  Copying server..."
-    scp "${ssh_opts[@]}" -q "$BIN_DIR/server-amd64" "$HOST:/tmp/server-new"
+    # local file -> staged remote name
+    local -A uploads=(
+        ["$BIN_DIR/server-amd64"]=/tmp/server-new
+        ["$BIN_DIR/parser-amd64"]=/tmp/parser-new
+        ["$SCRIPT_DIR/sync_nodelists.sh"]=/tmp/sync_nodelists-new.sh
+    )
 
-    # Verify the upload before touching the running service.
-    echo "  Verifying checksum..."
+    echo "  Copying server, parser and sync_nodelists.sh..."
+    local src
+    for src in "${!uploads[@]}"; do
+        scp "${ssh_opts[@]}" -q "$src" "$HOST:${uploads[$src]}"
+    done
+
+    # Verify the uploads before touching the running service.
+    echo "  Verifying checksums..."
     local lsha rsha
-    lsha=$(sha256sum "$BIN_DIR/server-amd64" | awk '{print $1}')
-    rsha=$(ssh "${ssh_opts[@]}" "$HOST" "sha256sum /tmp/server-new | awk '{print \$1}'")
-    if [[ "$lsha" != "$rsha" ]]; then
-        echo -e "  ${RED}✗ Checksum mismatch (local=$lsha remote=$rsha) — aborting${NC}"
-        exit 1
-    fi
+    for src in "${!uploads[@]}"; do
+        lsha=$(sha256sum "$src" | awk '{print $1}')
+        rsha=$(ssh "${ssh_opts[@]}" "$HOST" "sha256sum ${uploads[$src]} | awk '{print \$1}'")
+        if [[ "$lsha" != "$rsha" ]]; then
+            echo -e "  ${RED}✗ Checksum mismatch for $(basename "$src") (local=$lsha remote=$rsha) — aborting${NC}"
+            exit 1
+        fi
+    done
 
     # Stage then atomic rename: an in-place cp over the running binary fails
     # with "Text file busy". The unit runs as User=daemon, so sudo is needed
     # for the install and the restart.
-    echo "  Installing binary and restarting..."
-    ssh "${ssh_opts[@]}" "$HOST" "sudo cp /tmp/server-new $REMOTE_PATH/server.new && sudo chmod 755 $REMOTE_PATH/server.new && sudo mv -f $REMOTE_PATH/server.new $REMOTE_PATH/server && sudo systemctl restart nodelistdb && rm -f /tmp/server-new"
+    #
+    # All of it happens under the sync lock (sync_nodelists.sh holds it for a
+    # whole run): a sync mid-run must not have its parser swapped between two
+    # imports, nor lose the API it checks against to the restart. -w waits
+    # out a running sync instead of failing the deploy.
+    echo "  Installing (waiting for any running sync) and restarting..."
+    ssh "${ssh_opts[@]}" "$HOST" "sudo flock -w 1800 $REMOTE_PATH/sync.lock sh -ec '
+        for f in server parser; do
+            cp /tmp/\$f-new $REMOTE_PATH/\$f.new
+            chmod 755 $REMOTE_PATH/\$f.new
+            mv -f $REMOTE_PATH/\$f.new $REMOTE_PATH/\$f
+        done
+        cp /tmp/sync_nodelists-new.sh $REMOTE_PATH/sync_nodelists.sh.new
+        chmod 755 $REMOTE_PATH/sync_nodelists.sh.new
+        mv -f $REMOTE_PATH/sync_nodelists.sh.new $REMOTE_PATH/sync_nodelists.sh
+        systemctl restart nodelistdb
+    ' && rm -f /tmp/server-new /tmp/parser-new /tmp/sync_nodelists-new.sh"
 
     # ClickHouse is one hop away over the private VCN, so startup is quick —
     # but check the HTTP surface too, not just the unit state: this host serves
@@ -289,14 +318,15 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --no-build     Skip building, use existing binaries"
-            echo "  --oracle-main  Deploy only to main / oracle-main.thodin.net (ARM64)"
-            echo "  --vm1          Deploy only to oracle-vm1 / nodelist.fidonet.cc"
+            echo "  --oracle-main  Deploy only to main / oracle-main.thodin.net (ARM64, testdaemon)"
+            echo "  --vm1          Deploy only to oracle-vm1 / nodelist.fidonet.cc (server, parser, sync)"
             echo "  --5001         Deploy only to nodelist.5001.ru (x86_64)"
             echo "  (default)      Build and deploy to all servers"
             echo ""
             echo "Servers:"
-            echo "  main (10.121.20.211)    ARM64, parser + testdaemon (+ ClickHouse, sync)"
-            echo "  nodelist.fidonet.cc     x86_64, server only — the public site since 2026-07-30"
+            echo "  main (10.121.20.211)    ARM64, testdaemon (+ ClickHouse, fidomail)"
+            echo "  nodelist.fidonet.cc     x86_64, server + parser + nightly sync — the public"
+            echo "                          site and the nodelist archive's home"
             echo "  nodelist.5001.ru        x86_64, server only (via jumphost by default)"
             echo ""
             echo "Environment:"
@@ -321,14 +351,14 @@ fi
 
 # Show binary info
 echo "Binaries to deploy:"
-if [[ -f "$BIN_DIR/parser-arm64" ]]; then
-    echo "  - parser-arm64:     $(ls -lh "$BIN_DIR/parser-arm64" | awk '{print $5}')"
+if [[ -f "$BIN_DIR/testdaemon-arm64" ]]; then
     echo "  - testdaemon-arm64: $(ls -lh "$BIN_DIR/testdaemon-arm64" | awk '{print $5}')"
 else
     echo "  - ARM64 binaries:   NOT FOUND (use --build)"
 fi
-if [[ -f "$BIN_DIR/server-amd64" ]]; then
+if [[ -f "$BIN_DIR/server-amd64" ]] && [[ -f "$BIN_DIR/parser-amd64" ]]; then
     echo "  - server-amd64:     $(ls -lh "$BIN_DIR/server-amd64" | awk '{print $5}')"
+    echo "  - parser-amd64:     $(ls -lh "$BIN_DIR/parser-amd64" | awk '{print $5}')"
 else
     echo "  - x86_64 binaries:  NOT FOUND (use --build)"
 fi

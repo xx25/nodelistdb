@@ -1,0 +1,28 @@
+[Unit]
+Description=NodelistDB nightly nodelist/pointlist sync and archive push
+Documentation=https://github.com/xx25/nodelistdb
+# Runs on oracle-vm1, the archive's home since 2026-10-27. The FTP source
+# (fidomail) and ClickHouse are on oracle-main, reached over the private VCN;
+# the API it checks against is the local web server, addressed by its VCN IP
+# (sync_config.conf), because loopback callers share one rate-limit bucket.
+After=network-online.target nodelistdb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dp
+Group=dp
+WorkingDirectory=/opt/nodelistdb
+ExecStart=/opt/nodelistdb/sync_nodelists.sh --quiet
+# Archive files must stay readable by the web server (User=daemon).
+UMask=0022
+# A daily import peaks around 25 MB; this box has under 1 GB and also runs the
+# public web server, so a runaway run is killed here rather than by the OOM
+# killer choosing the server.
+MemoryMax=384M
+Nice=10
+# A normal run takes seconds to minutes; a backlog after a long outage takes
+# longer, but a run still going after two hours is stuck.
+TimeoutStartSec=2h
+NoNewPrivileges=true
+ProtectSystem=full

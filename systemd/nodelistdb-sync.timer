@@ -1,0 +1,14 @@
+[Unit]
+Description=Run the NodelistDB sync nightly
+Documentation=https://github.com/xx25/nodelistdb
+
+[Timer]
+# The z2daily issue lands in fidomail's file area around 23:15 UTC; the old
+# root cron on oracle-main ran this at 02:00 and so does this.
+OnCalendar=*-*-* 02:00:00 UTC
+# A missed run (vm1 down at 02:00) runs at boot; the script's own lock keeps it
+# from overlapping a hand run.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
