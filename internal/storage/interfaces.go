@@ -47,6 +47,7 @@ type Operations interface {
 	// Search operations
 	SearchNodesBySysop(ctx context.Context, sysopName string, limit int, domain string) ([]NodeSummary, error)
 	GetNodeChanges(ctx context.Context, zone, net, node int, domain string) ([]database.NodeChange, error)
+	GetNodeTimeline(ctx context.Context, zone, net, node int, domain string) (NodeTimeline, error)
 	GetUniqueSysops(ctx context.Context, nameFilter string, limit, offset int) ([]SysopInfo, error)
 	GetNodesBySysop(ctx context.Context, sysopName string, limit int) ([]database.Node, error)
 	SearchNodesWithLifetime(ctx context.Context, filter database.NodeFilter) ([]NodeSummary, error)

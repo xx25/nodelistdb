@@ -23,7 +23,7 @@ func TestWrapHandlerCompressesPages(t *testing.T) {
 		w.Header().Set("Content-Type", "application/gzip")
 		_, _ = w.Write([]byte{0x1f, 0x8b, 0x08})
 	})
-	h := wrapHandler(mux, nil)
+	h := wrapHandler(mux, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/page", nil)
 	req.Header.Set("Accept-Encoding", "gzip")

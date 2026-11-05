@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -138,7 +139,28 @@ func run(opts options) error {
 		apiServer.SetRateLimitStatsHandler(rateLimitStatsHandler(limiter))
 	}
 
-	return serve(buildHTTPServer(opts, apiServer, webServer, longestBudget(readBudget, analyticsBudget), limiter), ftpServer)
+	resolver, err := ratelimit.NewClientIPResolver(cfg.RateLimit.TrustedProxies)
+	if err != nil {
+		return fmt.Errorf("trusted proxies: %w", err)
+	}
+
+	handler := buildMux(apiServer, webServer)
+	writeTimeout := writeTimeoutFor(longestBudget(readBudget, analyticsBudget))
+
+	servers := []*http.Server{newHTTPServer(
+		fmt.Sprintf("%s:%s", opts.host, opts.port),
+		mainRequestLog(resolver).middleware(wrapHandler(handler, limiter, nil)),
+		writeTimeout,
+	)}
+	for _, l := range cfg.AnonListeners {
+		anon, err := buildAnonServer(cfg.RateLimit, l.WithDefaults(), handler, writeTimeout)
+		if err != nil {
+			return fmt.Errorf("anon listener %q: %w", l.Name, err)
+		}
+		servers = append(servers, anon)
+	}
+
+	return serve(ftpServer, servers...)
 }
 
 // longestBudget returns whichever budget runs longest. Sizing WriteTimeout off
@@ -295,30 +317,63 @@ func buildAPI(cfg *config.Config, db *database.ClickHouseDB, deps serverDeps, ft
 	return apiServer, nil
 }
 
-func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server, longest querybudget.Budget, limiter *ratelimit.Middleware) *http.Server {
-	// The API is a Chi router mounted under /api/; the web pages are on a
-	// plain ServeMux. One logging middleware wraps both.
+// buildMux is the one handler every listener serves. The API is a Chi router
+// mounted under /api/; the web pages are on a plain ServeMux.
+func buildMux(apiServer *api.Server, webServer *web.Server) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiServer.SetupRouter())
 	webServer.SetupRoutes(mux)
+	return mux
+}
 
-	// WriteTimeout is a TCP-level deadline that does NOT cancel r.Context(),
-	// so it silently caps every query budget: a route allowed 120s would still
-	// have its connection cut at 60. Keep it strictly above the longest budget
-	// rather than letting the two disagree.
+// writeTimeoutFor sizes WriteTimeout, which is a TCP-level deadline that does
+// NOT cancel r.Context(), so it silently caps every query budget: a route
+// allowed 120s would still have its connection cut at 60. Keep it strictly
+// above the longest budget rather than letting the two disagree.
+func writeTimeoutFor(longest querybudget.Budget) time.Duration {
 	writeTimeout := 60 * time.Second
 	if b := longest.Duration(); b+writeSlack > writeTimeout {
 		writeTimeout = b + writeSlack
 	}
+	return writeTimeout
+}
 
+func newHTTPServer(addr string, handler http.Handler, writeTimeout time.Duration) *http.Server {
 	return &http.Server{
-		Addr:              fmt.Sprintf("%s:%s", opts.host, opts.port),
-		Handler:           loggingMiddleware(wrapHandler(mux, limiter)),
+		Addr:              addr,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       120 * time.Second,
 	}
+}
+
+// buildAnonServer serves mux to one anonymity network; see config.AnonListener.
+func buildAnonServer(rl config.RateLimitConfig, l config.AnonListener, mux http.Handler, writeTimeout time.Duration) (*http.Server, error) {
+	limiter, err := buildAnonLimiter(rl, l)
+	if err != nil {
+		return nil, err
+	}
+	gate := ratelimit.NewDownloadGate(ratelimit.GateConfig{
+		Name: l.Name,
+		// /api/nodelist/latest streams the file itself when the newest issue
+		// is stored uncompressed.
+		Prefixes:      []string{"/download/", "/api/nodelist/latest"},
+		BytesPerSec:   l.DownloadBytesPerSec,
+		MaxConcurrent: l.MaxConcurrentDownloads,
+	})
+	logging.Info("Anonymity listener enabled",
+		slog.String("name", l.Name),
+		slog.String("address", l.Address),
+		slog.Int64("download_bytes_per_sec", l.DownloadBytesPerSec),
+		slog.Int("max_concurrent_downloads", l.MaxConcurrentDownloads),
+		slog.Float64("expensive_rps", l.ExpensiveRPS))
+	return newHTTPServer(
+		l.Address,
+		anonRequestLog(l.Name).middleware(stripForwardingHeaders(wrapHandler(mux, limiter, gate))),
+		writeTimeout,
+	), nil
 }
 
 // wrapHandler is the middleware stack between the logging middleware and the
@@ -332,6 +387,9 @@ func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server,
 //     carry a Content-Encoding (the year tarballs are application/gzip and are
 //     not in its type list anyway), and implements Flush and Hijack, so nothing
 //     above or below it needs to know.
+//   - the download gate, on anonymity listeners only, outside the compressor so
+//     it meters the bytes that leave and inside the limiter so a request that
+//     is refused anyway never holds a download slot.
 //   - the rate limiter, outside the compressor so a 429 goes out as plain
 //     text, and inside the logging middleware so a rejected request still
 //     produces a log line with its 429 - without that, the only evidence of
@@ -339,23 +397,32 @@ func buildHTTPServer(opts options, apiServer *api.Server, webServer *web.Server,
 //
 // The logging middleware wraps the result, so the bytes it logs are the
 // compressed count.
-func wrapHandler(mux http.Handler, limiter *ratelimit.Middleware) http.Handler {
+func wrapHandler(mux http.Handler, limiter *ratelimit.Middleware, gate *ratelimit.DownloadGate) http.Handler {
 	handler := middleware.Compress(5)(mux)
+	if gate != nil {
+		handler = gate.Wrap(handler)
+	}
 	if limiter != nil {
 		handler = limiter.Wrap(handler)
 	}
 	return handler
 }
 
+// shutdownGrace is how long in-flight requests get to finish on shutdown.
+const shutdownGrace = 15 * time.Second
+
 // writeSlack is the head-room WriteTimeout keeps over the longest query
 // budget, so that a request which times out has room to render and send its
 // own 503 instead of having the connection dropped underneath it.
 const writeSlack = 15 * time.Second
 
-// serve runs the HTTP (and optionally FTP) servers until a signal arrives,
-// then shuts them down. It returns rather than exiting, so run's defers fire.
-func serve(server *http.Server, ftpServer *ftp.Server) error {
-	errs := make(chan error, 2)
+// serve runs the HTTP (and optionally FTP) servers until a signal arrives or
+// one of them fails, then shuts them all down. It returns rather than exiting,
+// so run's defers fire.
+func serve(ftpServer *ftp.Server, servers ...*http.Server) error {
+	// Room for every server to fail at once: only the first is read, and a
+	// send with nobody listening must not strand its goroutine.
+	errs := make(chan error, len(servers)+1)
 
 	if ftpServer != nil {
 		go func() {
@@ -365,12 +432,14 @@ func serve(server *http.Server, ftpServer *ftp.Server) error {
 		}()
 	}
 
-	go func() {
-		logging.Info("Server listening", slog.String("address", "http://"+server.Addr))
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errs <- fmt.Errorf("HTTP server: %w", err)
-		}
-	}()
+	for _, server := range servers {
+		go func() {
+			logging.Info("Server listening", slog.String("address", "http://"+server.Addr))
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errs <- fmt.Errorf("HTTP server %s: %w", server.Addr, err)
+			}
+		}()
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -389,15 +458,33 @@ func serve(server *http.Server, ftpServer *ftp.Server) error {
 		}
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		logging.Error("Graceful shutdown timed out, forcing close", slog.Any("error", err))
-		if err := server.Close(); err != nil {
-			logging.Error("Server force close error", slog.Any("error", err))
-		}
-	}
+	shutdownAll(servers, shutdownGrace)
 
 	logging.Info("Server stopped")
 	return runErr
+}
+
+// shutdownAll drains every server at once under one deadline, then force-closes
+// whatever is left. One at a time would keep the later listeners accepting
+// while the earlier ones drained, and a throttled download can outlast any
+// grace period, so the force-close is the normal end for those.
+func shutdownAll(servers []*http.Server, grace time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), grace)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for _, server := range servers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := server.Shutdown(ctx); err != nil {
+				logging.Error("Graceful shutdown timed out, forcing close",
+					slog.String("address", server.Addr), slog.Any("error", err))
+				if err := server.Close(); err != nil {
+					logging.Error("Server force close error", slog.Any("error", err))
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }

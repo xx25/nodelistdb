@@ -34,7 +34,7 @@ func TestServeReturnsOnListenFailure(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		defer close(closed) // stands in for run()'s defers
-		done <- serve(server, nil)
+		done <- serve(nil, server)
 	}()
 
 	select {

@@ -49,6 +49,15 @@ func (cs *CachedStorage) GetNodeChanges(ctx context.Context, zone, net, node int
 	})
 }
 
+// GetNodeTimeline with caching. The key is its own: a timeline must never be
+// assembled from a history entry and a changes entry cached at different times.
+func (cs *CachedStorage) GetNodeTimeline(ctx context.Context, zone, net, node int, domain string) (NodeTimeline, error) {
+	key := fmt.Sprintf("%s:node:timeline:%d:%d:%d:%s", cs.keyGen.Prefix, zone, net, node, domain)
+	return cachedFetch(cs, key, cs.config.NodeTTL, func() (NodeTimeline, error) {
+		return cs.Storage.SearchOps().GetNodeTimeline(ctx, zone, net, node, domain)
+	})
+}
+
 // GetUniqueSysops with caching
 func (cs *CachedStorage) GetUniqueSysops(ctx context.Context, nameFilter string, limit, offset int) ([]SysopInfo, error) {
 	return cachedFetch(cs, cs.keyGen.UniqueSysopsKey(nameFilter, limit, offset), cs.config.SearchTTL, func() ([]SysopInfo, error) {

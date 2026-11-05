@@ -39,6 +39,12 @@ type Config struct {
 	// TrustedProxies are the CIDRs whose forwarding headers are believed.
 	TrustedProxies []string
 
+	// SharedKey, when set, puts every caller in one bucket per class and reads
+	// no forwarding header at all. It is for a listener that only an anonymity
+	// network dials: Tor gives every visitor the same peer address, and a new
+	// I2P destination is free, so a per-caller limit there bounds nothing.
+	SharedKey string
+
 	MaxKeys int
 	Idle    time.Duration
 }
@@ -130,7 +136,7 @@ func New(cfg Config) (*Middleware, error) {
 // rateFor sorts a path into its class.
 func (m *Middleware) rateFor(path string) (string, Rate, bool) {
 	for _, p := range m.cfg.Exempt {
-		if strings.HasPrefix(path, p) {
+		if exemptMatch(path, p) {
 			return "exempt", Rate{}, false
 		}
 	}
@@ -144,6 +150,16 @@ func (m *Middleware) rateFor(path string) (string, Rate, bool) {
 	return "default", m.cfg.Default, true
 }
 
+// exemptMatch treats an entry ending in a slash as a directory and any other as
+// one exact path. A bare prefix let /robots.txt/anything through unmetered, and
+// that path reaches a real handler.
+func exemptMatch(path, entry string) bool {
+	if strings.HasSuffix(entry, "/") {
+		return strings.HasPrefix(path, entry)
+	}
+	return path == entry
+}
+
 // Wrap returns next guarded by the limiter.
 func (m *Middleware) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +169,10 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 			return
 		}
 
-		key := Key(m.resolver.ClientIP(r))
+		key := m.cfg.SharedKey
+		if key == "" {
+			key = Key(m.resolver.ClientIP(r))
+		}
 		// The bucket is per caller AND per class. Sharing one bucket across
 		// classes silently mixes the policies: a reader who spends their
 		// expensive-page burst would then be refused a download too, and the

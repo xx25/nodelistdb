@@ -247,6 +247,34 @@ func TestMiddlewareRejectsWith429AndRetryAfter(t *testing.T) {
 	}
 }
 
+// TestExemptionsAreExactUnlessDirectories: exemption by bare prefix let
+// /robots.txt/anything through unmetered, and that reaches a real handler.
+func TestExemptionsAreExactUnlessDirectories(t *testing.T) {
+	m, err := New(DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		path    string
+		limited bool
+	}{
+		{"/robots.txt", false},
+		{"/favicon.ico", false},
+		{"/api/health", false},
+		{"/static/style.css", false},
+		{"/api/modem/results/direct", false},
+		{"/robots.txt/anything", true},
+		{"/favicon.ico/anything", true},
+		{"/api/healthz", true},
+		{"/staticfile", true},
+	}
+	for _, tc := range cases {
+		if _, _, limited := m.rateFor(tc.path); limited != tc.limited {
+			t.Errorf("%s: limited = %v, want %v", tc.path, limited, tc.limited)
+		}
+	}
+}
+
 // TestExemptPathSurvivesFloodedNeighbour checks that exhausting the expensive
 // class does not take the site's assets down with it - a page that renders but
 // cannot load its stylesheet would look broken rather than throttled.

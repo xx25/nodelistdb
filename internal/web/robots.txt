@@ -1,0 +1,36 @@
+# NodelistDB. Node pages, browsing and the archive are open to indexing, and
+# everyone mirroring the archive is welcome to do so at a modest pace. The
+# reports below are expensive per page and worthless to an index.
+#
+# A crawler obeys only the most specific group that names it, and groups do not
+# inherit from "*" (RFC 9309), so the shared exclusions are repeated.
+
+# SEO and link-graph crawlers: the site gains nothing from them.
+User-agent: SemrushBot
+User-agent: AhrefsBot
+User-agent: MJ12bot
+User-agent: DotBot
+User-agent: PetalBot
+User-agent: Bytespider
+User-agent: DataForSeoBot
+Disallow: /
+
+# Dataset and AI crawlers: pages yes, the bulk archive no.
+User-agent: Reflectionbot
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: meta-externalagent
+User-agent: TokenFoundryBot
+Crawl-delay: 10
+Disallow: /download/
+Disallow: /reachability
+Disallow: /analytics
+Disallow: /api/
+Disallow: /search
+
+User-agent: *
+Crawl-delay: 10
+Disallow: /reachability
+Disallow: /analytics
+Disallow: /api/
+Disallow: /search

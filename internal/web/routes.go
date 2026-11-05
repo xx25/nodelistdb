@@ -98,6 +98,8 @@ func (s *Server) SetupRoutes(mux *http.ServeMux) {
 	handle("/reachability/test", varyByCookie(s.TestResultDetailHandler))
 	handle("/reachability/modem-test", varyByCookie(s.ModemTestDetailHandler))
 
+	mux.HandleFunc("/robots.txt", s.RobotsHandler)
+
 	// Serve static files
 	mux.HandleFunc("/static/", s.StaticHandler)
 }

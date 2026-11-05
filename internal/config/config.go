@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,6 +60,7 @@ type Config struct {
 	LinksFile         string            `yaml:"links_file"`         // Path to links.yaml for external FidoNet links
 	QueryBudget       QueryBudgetConfig `yaml:"query_budget,omitempty"`
 	RateLimit         RateLimitConfig   `yaml:"rate_limit,omitempty"`
+	AnonListeners     []AnonListener    `yaml:"anon_listeners,omitempty"`
 	ServerLogging     LoggingConfig     `yaml:"server_logging"`
 	ParserLogging     LoggingConfig     `yaml:"parser_logging"`
 	TestdaemonLogging LoggingConfig     `yaml:"testdaemon_logging"`
@@ -107,6 +109,92 @@ func (q QueryBudgetConfig) Durations() (def, analytics time.Duration, err error)
 		}
 	}
 	return def, analytics, nil
+}
+
+// Defaults for an anon_listeners entry. 256 KiB/s is a 22 GB/day ceiling and
+// still hands a person one nodelist in about a second; a sweep of the 21,000
+// file archive took two to ten GB an hour without it.
+const (
+	DefaultAnonDownloadBytesPerSec = 256 * 1024
+	DefaultAnonMaxDownloads        = 4
+	DefaultAnonExpensiveRPS        = 0.25
+	DefaultAnonExpensiveBurst      = 20
+)
+
+// AnonListener is an extra HTTP listener for one anonymity network, which the
+// local Tor or i2pd daemon dials instead of the main port.
+//
+// They need their own port because nothing else distinguishes them: both
+// arrive from loopback, the address the limiter trusts Caddy on, so on the main
+// port a Tor client can name its own limiter key with X-Forwarded-For. Here
+// forwarding headers are dropped, every caller on the listener shares one set
+// of buckets, and /download/ is held to a byte rate and a concurrency cap.
+type AnonListener struct {
+	Name                   string  `yaml:"name"`    // log label: tor, i2p
+	Address                string  `yaml:"address"` // loopback host:port
+	DownloadBytesPerSec    int64   `yaml:"download_bytes_per_sec,omitempty"`
+	MaxConcurrentDownloads int     `yaml:"max_concurrent_downloads,omitempty"`
+	ExpensiveRPS           float64 `yaml:"expensive_rps,omitempty"`
+	ExpensiveBurst         float64 `yaml:"expensive_burst,omitempty"`
+}
+
+// WithDefaults returns the entry with every unset limit filled in.
+func (a AnonListener) WithDefaults() AnonListener {
+	if a.DownloadBytesPerSec == 0 {
+		a.DownloadBytesPerSec = DefaultAnonDownloadBytesPerSec
+	}
+	if a.MaxConcurrentDownloads == 0 {
+		a.MaxConcurrentDownloads = DefaultAnonMaxDownloads
+	}
+	if a.ExpensiveRPS == 0 {
+		a.ExpensiveRPS = DefaultAnonExpensiveRPS
+	}
+	if a.ExpensiveBurst == 0 {
+		a.ExpensiveBurst = DefaultAnonExpensiveBurst
+	}
+	return a
+}
+
+var anonListenerName = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+// validateAnonListeners fails on anything that would quietly widen the
+// listeners: one bound off loopback would hand the capped-but-unauthenticated
+// surface to the internet with no Caddy in front of it.
+func validateAnonListeners(listeners []AnonListener) error {
+	names := make(map[string]bool, len(listeners))
+	addresses := make(map[string]bool, len(listeners))
+	for _, l := range listeners {
+		if !anonListenerName.MatchString(l.Name) {
+			return fmt.Errorf("invalid anon_listeners name %q: want lowercase letters, digits and dashes", l.Name)
+		}
+		if l.Name == "main" {
+			return fmt.Errorf("invalid anon_listeners name %q: reserved for the main listener", l.Name)
+		}
+		if names[l.Name] {
+			return fmt.Errorf("duplicate anon_listeners name %q", l.Name)
+		}
+		names[l.Name] = true
+
+		host, port, err := net.SplitHostPort(l.Address)
+		if err != nil {
+			return fmt.Errorf("invalid anon_listeners address %q: %w", l.Address, err)
+		}
+		if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+			return fmt.Errorf("invalid anon_listeners address %q: must be a loopback IP", l.Address)
+		}
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("invalid anon_listeners address %q: bad port", l.Address)
+		}
+		if addresses[l.Address] {
+			return fmt.Errorf("duplicate anon_listeners address %q", l.Address)
+		}
+		addresses[l.Address] = true
+
+		if l.DownloadBytesPerSec < 0 || l.MaxConcurrentDownloads < 0 || l.ExpensiveRPS < 0 || l.ExpensiveBurst < 0 {
+			return fmt.Errorf("invalid anon_listeners entry %q: limits cannot be negative", l.Name)
+		}
+	}
+	return nil
 }
 
 // RateLimitConfig throttles requests per client IP.
@@ -508,6 +596,10 @@ func (c *Config) validate() error {
 				}
 			}
 		}
+	}
+
+	if err := validateAnonListeners(c.AnonListeners); err != nil {
+		return err
 	}
 
 	// Validate logging configurations for all components

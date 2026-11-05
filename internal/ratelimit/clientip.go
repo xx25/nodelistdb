@@ -91,23 +91,33 @@ func (r *ClientIPResolver) ClientIP(req *http.Request) net.IP {
 
 	// Walk X-Forwarded-For right to left, skipping our own proxies. The first
 	// non-trusted hop is the furthest-out address we have any reason to
-	// believe; everything left of it is client-supplied.
+	// believe; everything left of it is client-supplied. Repeated header
+	// fields are one list in order (RFC 9110 5.3), so the walk spans them: a
+	// per-field walk would reach a forged first field before the proxy's own.
+	var hops []string
 	for _, hdr := range req.Header.Values("X-Forwarded-For") {
-		parts := strings.Split(hdr, ",")
-		for i := len(parts) - 1; i >= 0; i-- {
-			ip := net.ParseIP(strings.TrimSpace(parts[i]))
-			if ip == nil {
-				continue
-			}
-			if !r.trustedAddr(ip) {
-				return ip
-			}
+		hops = append(hops, strings.Split(hdr, ",")...)
+	}
+	for i := len(hops) - 1; i >= 0; i-- {
+		ip := net.ParseIP(strings.TrimSpace(hops[i]))
+		if ip == nil {
+			continue
+		}
+		if !r.trustedAddr(ip) {
+			return ip
 		}
 	}
 
-	// A trusted proxy that sends X-Real-IP and no usable X-Forwarded-For.
-	if ip := net.ParseIP(strings.TrimSpace(req.Header.Get("X-Real-IP"))); ip != nil {
-		return ip
+	// A trusted proxy that sends X-Real-IP and no X-Forwarded-For at all. When
+	// X-Forwarded-For is present the proxy has spoken, and a chain of only
+	// trusted hops means the caller is one of ours. Caddy never sets X-Real-IP
+	// and passes a client's through, so falling back here would let anyone
+	// behind nodelist.5001.ru (whose chain is just 127.0.0.1) name their own
+	// limiter key.
+	if len(hops) == 0 {
+		if ip := net.ParseIP(strings.TrimSpace(req.Header.Get("X-Real-IP"))); ip != nil {
+			return ip
+		}
 	}
 	return peer
 }

@@ -89,16 +89,16 @@ const ipv6Why = "rows with missing AllHostnames would be cached as complete"
 // TestGetNodeChangesChecksContextBeforeInventingRemoval covers the fourth site,
 // which needs a different shape: isCurrentlyActive returns a bare bool and
 // reads false on any error, so a cancelled request would append a fabricated
-// "removed" event with an invented date - and cache it. GetNodeChanges asks the
-// context directly instead.
+// "removed" event with an invented date - and cache it. computeNodeChanges asks
+// the context directly instead.
 func TestGetNodeChangesChecksContextBeforeInventingRemoval(t *testing.T) {
-	body := functionBody(t, "search_operations_changes.go", "GetNodeChanges")
+	body := functionBody(t, "search_operations_changes.go", "computeNodeChanges")
 	active := strings.Index(body, "isCurrentlyActive(")
 	if active < 0 {
-		t.Fatal("GetNodeChanges no longer calls isCurrentlyActive - move this guard with it")
+		t.Fatal("computeNodeChanges no longer calls isCurrentlyActive - move this guard with it")
 	}
 	if !strings.Contains(body[:active], "ctx.Err()") {
-		t.Error("GetNodeChanges reaches isCurrentlyActive without checking ctx.Err() first; " +
+		t.Error("computeNodeChanges reaches isCurrentlyActive without checking ctx.Err() first; " +
 			"a cancelled request would fabricate a \"removed\" event and cache it")
 	}
 }

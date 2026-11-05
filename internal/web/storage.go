@@ -20,14 +20,14 @@ import (
 // the grouping is the documentation: it says, in one file, that the web layer
 // reads nodelists, pointlists, test results and analytics, and writes nothing.
 //
-// The 22 it does not use are the API-only reports, the sysop and PSTN write
+// The 23 it does not use are the API-only reports, the sysop and PSTN write
 // paths, and the nodelist import methods cmd/parser drives.
 
 // NodeReader is the nodelist itself: nodes, their history, and the networks they appear in.
 type NodeReader interface {
 	GetNodeHistory(ctx context.Context, zone, net, node int, domain string) ([]database.Node, error)
 	GetNodeDomains(ctx context.Context, zone, net, node int) ([]string, error)
-	GetNodeChanges(ctx context.Context, zone, net, node int, domain string) ([]database.NodeChange, error)
+	GetNodeTimeline(ctx context.Context, zone, net, node int, domain string) (storage.NodeTimeline, error)
 	SearchNodesWithLifetime(ctx context.Context, filter database.NodeFilter) ([]storage.NodeSummary, error)
 	SearchNodesBySysop(ctx context.Context, sysopName string, limit int, domain string) ([]storage.NodeSummary, error)
 	GetBrowseZones(ctx context.Context, date time.Time, domain string) ([]storage.BrowseZone, error)

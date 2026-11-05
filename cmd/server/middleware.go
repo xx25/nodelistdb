@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -14,7 +13,34 @@ import (
 	"github.com/nodelistdb/internal/ratelimit"
 )
 
-// loggingMiddleware logs every request, API and web alike.
+// maxLoggedUserAgent bounds what one header can add to a log line.
+const maxLoggedUserAgent = 200
+
+// requestLog says how to describe requests arriving on one listener.
+type requestLog struct {
+	listener string
+	clientIP func(*http.Request) string
+}
+
+// mainRequestLog logs the address the limiter would charge, so a line in the
+// log and a 429 always agree on who the caller was. The peer goes in alongside
+// it: this log used to believe X-Real-IP from anyone, Caddy passes that header
+// through, and a request's real origin could not be recovered afterwards.
+func mainRequestLog(resolver *ratelimit.ClientIPResolver) requestLog {
+	return requestLog{listener: "main", clientIP: func(r *http.Request) string {
+		return resolver.ClientIP(r).String()
+	}}
+}
+
+// anonRequestLog logs the peer alone. An anonymity listener has no proxy in
+// front of it, so nothing a request claims about itself means anything.
+func anonRequestLog(name string) requestLog {
+	return requestLog{listener: name, clientIP: func(r *http.Request) string {
+		return r.RemoteAddr
+	}}
+}
+
+// middleware logs every request, API and web alike.
 //
 // It wraps the ResponseWriter with chi's WrapResponseWriter rather than a
 // local struct. The local one embedded http.ResponseWriter and overrode
@@ -22,7 +48,7 @@ import (
 // writer implements - Flusher, Hijacker, ReaderFrom - from everything
 // downstream of it. Nothing needs them today; the next handler that streams a
 // response would have found out at runtime.
-func loggingMiddleware(next http.Handler) http.Handler {
+func (l requestLog) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
@@ -35,40 +61,31 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			slog.Int("status", wrapped.Status()),
 			slog.Int("bytes", wrapped.BytesWritten()),
 			slog.Duration("duration", time.Since(start)),
-			slog.String("ip", clientIP(r)),
+			slog.String("ip", l.clientIP(r)),
+			slog.String("peer", r.RemoteAddr),
+			slog.String("listener", l.listener),
+			slog.String("user_agent", truncateUserAgent(r.UserAgent())),
 		)
 	})
 }
 
-// clientIP returns the address to log for this request.
-//
-// This is the server's single answer to "who is calling", and it is used for
-// log lines only. Every header it reads is client-supplied and trivially
-// forged; nothing here may be used for authorization or rate limiting without
-// first pinning which proxy is trusted. chi's middleware.RealIP used to run on
-// the API router as well, giving the two halves of the server different
-// answers, and it rewrote r.RemoteAddr in place so handlers could not tell the
-// forged value from the real one. It is gone; this reads headers and leaves
-// the request alone.
-func clientIP(r *http.Request) string {
-	// X-Real-IP is set by many reverse proxies, including Caddy by default.
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
+func truncateUserAgent(ua string) string {
+	if len(ua) > maxLoggedUserAgent {
+		return ua[:maxLoggedUserAgent]
 	}
+	return ua
+}
 
-	// X-Forwarded-For may carry a chain; the original client is first.
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if first, _, found := strings.Cut(xff, ","); found {
-			return strings.TrimSpace(first)
-		}
-		return strings.TrimSpace(xff)
-	}
-
-	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
-		return ip
-	}
-
-	return r.RemoteAddr
+// stripForwardingHeaders removes the headers a client could use to name itself.
+// The limiter on an anonymity listener already ignores them; dropping them here
+// keeps that true of anything downstream that ever reads one.
+func stripForwardingHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Del("X-Forwarded-For")
+		r.Header.Del("X-Real-IP")
+		r.Header.Del("CF-Connecting-IP")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // buildRateLimiter turns the config section into middleware, or nil when the
@@ -84,12 +101,50 @@ func buildRateLimiter(cfg config.RateLimitConfig) (*ratelimit.Middleware, error)
 		return nil, nil
 	}
 
+	rl, err := rateLimitPolicy(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	m, err := ratelimit.New(rl)
+	if err != nil {
+		return nil, err
+	}
+	logging.Info("Rate limiting enabled",
+		slog.Float64("expensive_rps", rl.Classes[0].Rate.Refill),
+		slog.Float64("expensive_burst", rl.Classes[0].Rate.Burst),
+		slog.Float64("default_rps", rl.Default.Refill),
+		slog.Int("max_keys", rl.MaxKeys),
+		slog.Any("trusted_proxies", trustedProxyNames(cfg.TrustedProxies)),
+	)
+	return m, nil
+}
+
+// buildAnonLimiter is the limiter for one anonymity listener. It is built even
+// when rate_limit.enabled is false: bounding this listener is the reason it
+// exists, and switching the public limiter off must not open it.
+func buildAnonLimiter(cfg config.RateLimitConfig, l config.AnonListener) (*ratelimit.Middleware, error) {
+	rl, err := rateLimitPolicy(cfg)
+	if err != nil {
+		return nil, err
+	}
+	rl.SharedKey = "anon:" + l.Name
+	for i := range rl.Classes {
+		if rl.Classes[i].Name == "expensive" {
+			rl.Classes[i].Rate = ratelimit.Rate{Refill: l.ExpensiveRPS, Burst: l.ExpensiveBurst}
+		}
+	}
+	return ratelimit.New(rl)
+}
+
+// rateLimitPolicy applies the config section to the measured defaults.
+func rateLimitPolicy(cfg config.RateLimitConfig) (ratelimit.Config, error) {
 	rl := ratelimit.DefaultConfig()
 	rl.TrustedProxies = cfg.TrustedProxies
 
 	idle, err := cfg.IdleDuration()
 	if err != nil {
-		return nil, err
+		return ratelimit.Config{}, err
 	}
 	rl.Idle = idle
 	if cfg.MaxKeys > 0 {
@@ -119,19 +174,7 @@ func buildRateLimiter(cfg config.RateLimitConfig) (*ratelimit.Middleware, error)
 			}
 		}
 	}
-
-	m, err := ratelimit.New(rl)
-	if err != nil {
-		return nil, err
-	}
-	logging.Info("Rate limiting enabled",
-		slog.Float64("expensive_rps", rl.Classes[0].Rate.Refill),
-		slog.Float64("expensive_burst", rl.Classes[0].Rate.Burst),
-		slog.Float64("default_rps", rl.Default.Refill),
-		slog.Int("max_keys", rl.MaxKeys),
-		slog.Any("trusted_proxies", trustedProxyNames(cfg.TrustedProxies)),
-	)
-	return m, nil
+	return rl, nil
 }
 
 // trustedProxyNames renders the trusted set for the startup log, naming the

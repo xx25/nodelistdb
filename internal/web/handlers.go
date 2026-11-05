@@ -116,8 +116,17 @@ func (s *Server) SetLinksLoader(loader *links.Loader) {
 	s.linksLoader = loader
 }
 
-// IndexHandler handles the root page by serving search
+// IndexHandler handles the root page by serving search.
+//
+// "/" is also the mux's catch-all, so every unknown path used to render the
+// search page with a 200: scanners probing /.env, 37,000 /favicon.ico requests
+// in 45 days, and, because /favicon.ico is exempt from the rate limiter, a way
+// to run searches with no limit at all.
 func (s *Server) IndexHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
 	s.SearchHandler(w, r)
 }
 

@@ -166,21 +166,15 @@ func (s *Server) NodeHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	// then the network(s) the address actually exists in
 	availableDomains, _ := s.storage.GetNodeDomains(r.Context(), zone, net, node)
 	domain := resolveEntityDomain(r, availableDomains)
-	history, err := s.storage.GetNodeHistory(r.Context(), zone, net, node, domain)
+	timeline, err := s.storage.GetNodeTimeline(r.Context(), zone, net, node, domain)
 	if err != nil {
 		httpStorageError(w, "Error retrieving node history", "Error retrieving node history", err)
 		return
 	}
+	history, changes := timeline.History, timeline.Changes
 
 	if len(history) == 0 {
 		http.Error(w, "Node not found", http.StatusNotFound)
-		return
-	}
-
-	// Get all node changes within the requested network
-	changes, err := s.storage.GetNodeChanges(r.Context(), zone, net, node, domain)
-	if err != nil {
-		httpStorageError(w, "Error retrieving node changes", "Error retrieving node changes", err)
 		return
 	}
 

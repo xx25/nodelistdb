@@ -13,16 +13,49 @@ import (
 // An empty domain matches all networks; gap detection then uses the union of
 // all networks' dates, so pass a concrete domain whenever it is known.
 func (so *SearchOperations) GetNodeChanges(ctx context.Context, zone, net, node int, domain string) ([]database.NodeChange, error) {
+	timeline, err := so.GetNodeTimeline(ctx, zone, net, node, domain)
+	if err != nil {
+		return nil, err
+	}
+	return timeline.Changes, nil
+}
+
+// NodeTimeline is a node's history and the changes derived from it, read once
+// and cached as one value.
+//
+// One value rather than two caches, because the two must agree. A node page
+// needs both, and computing changes from a separately cached history would pair
+// a history from before an import with an "is it still listed" check from after
+// it, reporting a node that is still there as removed. An import landing between
+// this read's own two queries can still do that; the window is the query's
+// length, once a day, and the entry expires with the node TTL.
+type NodeTimeline struct {
+	History []database.Node       `json:"history"`
+	Changes []database.NodeChange `json:"changes"`
+}
+
+// GetNodeTimeline reads a node's history once and derives its changes from that
+// same read. Asking for the two separately ran the history query twice per page.
+func (so *SearchOperations) GetNodeTimeline(ctx context.Context, zone, net, node int, domain string) (NodeTimeline, error) {
 	// Get all historical entries using node operations
 	history, err := so.nodeOps.GetNodeHistory(ctx, zone, net, node, domain)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get node history: %w", err)
+		return NodeTimeline{}, fmt.Errorf("failed to get node history: %w", err)
 	}
 
 	if len(history) == 0 {
-		return nil, nil
+		return NodeTimeline{}, nil
 	}
 
+	changes, err := so.computeNodeChanges(ctx, history, domain)
+	if err != nil {
+		return NodeTimeline{}, err
+	}
+	return NodeTimeline{History: history, Changes: changes}, nil
+}
+
+// computeNodeChanges derives the change list from a non-empty history.
+func (so *SearchOperations) computeNodeChanges(ctx context.Context, history []database.Node, domain string) ([]database.NodeChange, error) {
 	// Pre-load this network's nodelist dates for efficient gap checking
 	allDates, err := so.getAllNodelistDates(ctx, domain)
 	if err != nil {

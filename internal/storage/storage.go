@@ -224,6 +224,11 @@ func (s *Storage) GetNodeChanges(ctx context.Context, zone, net, node int, domai
 	return s.searchOperations.GetNodeChanges(ctx, zone, net, node, domain)
 }
 
+// GetNodeTimeline delegates to SearchOperations
+func (s *Storage) GetNodeTimeline(ctx context.Context, zone, net, node int, domain string) (NodeTimeline, error) {
+	return s.searchOperations.GetNodeTimeline(ctx, zone, net, node, domain)
+}
+
 func (s *Storage) GetUniqueSysops(ctx context.Context, nameFilter string, limit, offset int) ([]SysopInfo, error) {
 	return s.searchOperations.GetUniqueSysops(ctx, nameFilter, limit, offset)
 }
