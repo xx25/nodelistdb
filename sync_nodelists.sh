@@ -823,6 +823,37 @@ sync_extra_networks() {
 # POINTLIST SYNCHRONIZATION (FTS-5002 weeklies)
 #################################################################################
 
+# Year of a pointlist issue, read from its own header.
+# Args: file_path day_number (the filename's 3-digit extension)
+# Output: the 4-digit year; returns 1 when the header cannot be trusted.
+#
+# A file echo keeps an issue until a same-named one replaces it, and every run
+# walks everything the echo holds. filename_to_date dates a file into the
+# current year once today reaches its day number, so an issue still on the
+# server a year later would be imported again as a brand new one - a weekly
+# named NAME.DDD is only replaced when a later year publishes on that same day,
+# which takes years. The header says which year it is:
+#   ;A Pointlist of Region 46 for Friday, October 30, 2026 -- Day number 303 : 25114
+#   ;A Zone 2 Fidonet pointlist for Friday 30-Oct-2026 -- Day number 303 : 47874
+# It is believed only when its day number agrees with the filename's (a list
+# generator can carry a stale header: pnt46reg.229 of 2024 was headed "January
+# 19, 2024") and its year is not in the future.
+pointlist_header_year() {
+    local file="$1" day="$2" stamp
+    [[ "$day" =~ ^[0-9]{3}$ ]] || return 1
+
+    # LC_ALL=C: the rest of the line is CP437/CP866 and need not be valid UTF-8
+    stamp=$(LC_ALL=C sed -n '/^;A /{p;q;}' "$file" 2>/dev/null \
+        | LC_ALL=C grep -a -o -E '(19|20)[0-9]{2} -- Day number [0-9]{1,3}' | head -1)
+    [[ -n "$stamp" ]] || return 1
+
+    local header_year="${stamp%% *}" header_day="${stamp##* }"
+    (( 10#$header_day == 10#$day )) || return 1
+    (( header_year <= $(date +%Y) )) || return 1
+
+    echo "$header_year"
+}
+
 # Sync one pointlist series ("name|source|url_or_dir|filename_regex|charset[|network]")
 sync_extra_pointlist() {
     local spec="$1"
@@ -872,6 +903,15 @@ sync_extra_pointlist() {
             continue
         fi
         local year=$(echo "$file_date" | cut -d'-' -f1)
+
+        # The filename only carries the day, so the year above is a guess
+        # anchored on today. The header names the year outright; prefer it.
+        local header_year
+        if header_year=$(pointlist_header_year "$pointlist_file" "${plain_name##*.}") \
+                && [[ "$header_year" != "$year" ]]; then
+            log "Pointlist $plain_name: header says $header_year, filename suggested $year - using the header"
+            year="$header_year"
+        fi
 
         # The parser's pointlist_files gate makes re-imports no-ops
         log "Importing pointlist $(basename "$pointlist_file") (series $name, year $year)..."
