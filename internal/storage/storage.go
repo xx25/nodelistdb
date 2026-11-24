@@ -432,8 +432,8 @@ func (s *Storage) GetPSTNNodes(ctx context.Context, limit int, zone int, domain 
 	return s.analyticsOperations.GetPSTNNodes(ctx, limit, zone, domain)
 }
 
-func (s *Storage) MarkPSTNDead(ctx context.Context, zone, net, node int, reason, markedBy string) error {
-	return s.pstnDeadOperations.MarkDead(ctx, zone, net, node, reason, markedBy)
+func (s *Storage) MarkPSTNDead(ctx context.Context, mark PSTNDeadNode) error {
+	return s.pstnDeadOperations.MarkDead(ctx, mark)
 }
 
 func (s *Storage) UnmarkPSTNDead(ctx context.Context, zone, net, node int, markedBy string) error {

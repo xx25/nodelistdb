@@ -11,8 +11,9 @@ import (
 
 // CSVWriter writes test results to a CSV file
 type CSVWriter struct {
-	file   *os.File
-	writer *csv.Writer
+	file    *os.File
+	writer  *csv.Writer
+	columns int // columns per row: len(csvHeader), or fewer for a file with an older header
 }
 
 // TestRecord represents a single test result for CSV output
@@ -80,6 +81,10 @@ type TestRecord struct {
 	AstHangupCause  int    // SIP hangup cause code (e.g., 16=Normal, 17=Busy)
 	AstHangupSource string // Which side hung up
 	AstEarlyMedia   bool   // Whether early media was received before answer
+
+	// Failed-dial detail (from the modem's failure report)
+	VoiceAnswered bool   // A person answered: the number must never be dialled again
+	FailureDetail string // Modem's reason for the failed dial (e.g. "answer signal timeout")
 }
 
 // csvHeader is the current header format with modem_name column
@@ -135,7 +140,16 @@ var csvHeader = []string{
 	"ast_hangupcause",
 	"ast_hangupsource",
 	"ast_early_media",
+	// Failed-dial detail. New columns go at the END only: see csvLegacyColumns.
+	"voice_answered",
+	"failure_detail",
 }
+
+// csvLegacyColumns is the width of the header before voice_answered and
+// failure_detail were appended. A file started with that header is still
+// appended to, in its own layout: rows are cut to its width, so a long-running
+// results file does not have to be abandoned to upgrade the tool.
+var csvLegacyColumns = len(csvHeader) - 2
 
 // NewCSVWriter creates a new CSV writer for the given file path
 // If the file doesn't exist, it creates it with a header row
@@ -143,10 +157,12 @@ var csvHeader = []string{
 func NewCSVWriter(path string) (*CSVWriter, error) {
 	// Check if file exists and validate header
 	exists := false
+	columns := len(csvHeader)
 	if info, err := os.Stat(path); err == nil && info.Size() > 0 {
 		exists = true
 		// Check header compatibility
-		if err := checkCSVHeader(path); err != nil {
+		columns, err = checkCSVHeader(path)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -169,38 +185,46 @@ func NewCSVWriter(path string) (*CSVWriter, error) {
 	}
 
 	return &CSVWriter{
-		file:   file,
-		writer: writer,
+		file:    file,
+		writer:  writer,
+		columns: columns,
 	}, nil
 }
 
-// checkCSVHeader verifies the existing CSV file has a compatible header
-func checkCSVHeader(path string) error {
+// LegacyLayout reports whether the file has the older header, in which case
+// the voice_answered and failure_detail columns are not written to it.
+func (w *CSVWriter) LegacyLayout() bool {
+	return w.columns < len(csvHeader)
+}
+
+// checkCSVHeader verifies the existing CSV file has a compatible header and
+// returns its column count: the current width, or csvLegacyColumns.
+func checkCSVHeader(path string) (int, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("failed to open CSV file for header check: %w", err)
+		return 0, fmt.Errorf("failed to open CSV file for header check: %w", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	header, err := reader.Read()
 	if err != nil {
-		return fmt.Errorf("failed to read CSV header: %w", err)
+		return 0, fmt.Errorf("failed to read CSV header: %w", err)
 	}
 
 	// Check header length matches expected
-	if len(header) != len(csvHeader) {
-		return fmt.Errorf("CSV file %s has %d columns, expected %d. "+
+	if len(header) != len(csvHeader) && len(header) != csvLegacyColumns {
+		return 0, fmt.Errorf("CSV file %s has %d columns, expected %d. "+
 			"Use a new file or delete the existing one", path, len(header), len(csvHeader))
 	}
 
 	// Check if header has modem_name column in correct position
 	if header[3] != "modem_name" {
-		return fmt.Errorf("CSV file %s has incompatible header format (missing or misplaced modem_name column). "+
+		return 0, fmt.Errorf("CSV file %s has incompatible header format (missing or misplaced modem_name column). "+
 			"Use a new file or delete the existing one", path)
 	}
 
-	return nil
+	return len(header), nil
 }
 
 // Name returns the sink name for log messages.
@@ -267,9 +291,12 @@ func (w *CSVWriter) WriteRecord(rec *TestRecord) error {
 		fmt.Sprintf("%d", rec.AstHangupCause),
 		rec.AstHangupSource,
 		fmt.Sprintf("%t", rec.AstEarlyMedia),
+		// Failed-dial detail
+		fmt.Sprintf("%t", rec.VoiceAnswered),
+		rec.FailureDetail,
 	}
 
-	if err := w.writer.Write(row); err != nil {
+	if err := w.writer.Write(row[:w.columns]); err != nil {
 		return fmt.Errorf("failed to write CSV row: %w", err)
 	}
 	w.writer.Flush()

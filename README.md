@@ -216,9 +216,9 @@ rate limiting answers `429` with `Retry-After`, an over-budget query `503`.
 - Analytics endpoints take `?days=` (default 365) and `?domain=` (default all networks)
 
 **PSTN / modem testing:**
-- `GET /api/nodes/pstn` - Nodes with a dialable phone number
-- `GET /api/nodes/pstn/dead`, `GET /api/nodes/pstn/recent-success` - Dead marks and recently reached numbers
-- `POST /api/modem/results/direct`, `POST`/`DELETE /api/modem/pstn-dead` - Writes for the modem test caller (bearer API key; see "Modem-Test Result Submission" in CLAUDE.md)
+- `GET /api/nodes/pstn` - Nodes with a dialable phone number; marked ones carry `is_pstn_dead` and `pstn_dead_kind` (`dead`: no answer, `voice`: a person answers, do not call)
+- `GET /api/nodes/pstn/dead`, `GET /api/nodes/pstn/recent-success` - Dead and voice-line marks, and recently reached numbers
+- `POST /api/modem/results/direct`, `POST`/`DELETE /api/modem/pstn-dead` - Writes for the modem test caller (bearer API key; see "Modem-Test Result Submission" in CLAUDE.md). A mark takes `kind` (`dead` default, `voice`) and an optional `phone` that limits it to that number
 
 **Operations and documentation:**
 - `GET /api/health` - Health report

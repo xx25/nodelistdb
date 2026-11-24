@@ -746,9 +746,10 @@ func (ao *AnalyticsOperations) GetPSTNNodes(ctx context.Context, limit int, zone
 		if err == nil && len(deadSet) > 0 {
 			for i := range results {
 				key := [3]int{results[i].Zone, results[i].Net, results[i].Node}
-				if reason, ok := deadSet[key]; ok {
+				if mark, ok := deadSet[key]; ok && mark.AppliesTo(results[i].Phone) {
 					results[i].IsPSTNDead = true
-					results[i].PSTNDeadReason = reason
+					results[i].PSTNDeadReason = mark.Reason
+					results[i].PSTNDeadKind = mark.Kind
 				}
 			}
 		}

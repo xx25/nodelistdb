@@ -60,8 +60,8 @@ func (w *ModemWorker) runTestWithFailover(
 // runFailoverSequence executes tests with operator failover.
 // It tries operators in order (cached first if available) and caches the
 // operator that succeeds. A failure on one operator — including a busy
-// destination — moves on to the next; only a closed call window stops the
-// sequence early.
+// destination — moves on to the next; only a closed call window, a voice
+// answer or a number on the do-not-call list stops the sequence early.
 //
 // Parameters:
 //   - ctx: context for cancellation
@@ -171,6 +171,17 @@ func runFailoverSequence(
 		if lastResult.windowClosed {
 			return FailoverResult{
 				WindowClosed:   true,
+				LastOperator:   lastOperator,
+				LastResult:     lastResult,
+				TriedOperators: i + 1,
+			}
+		}
+
+		// A person answered, or the number is on the do-not-call list: the
+		// next operator would ring the same telephone. Stop here, and leave
+		// the operator cache alone; this says nothing about the operator.
+		if lastResult.voiceAnswered || lastResult.doNotCall {
+			return FailoverResult{
 				LastOperator:   lastOperator,
 				LastResult:     lastResult,
 				TriedOperators: i + 1,

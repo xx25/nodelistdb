@@ -130,10 +130,14 @@
                 <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">☎️ PSTN and Modem Testing</h2>
                 <div style="background: #f1f5f9; padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem;">
                     <code>GET /api/nodes/pstn</code> — every node with a dialable phone number in the latest nodelist.<br>
+                    Marked nodes carry <code>is_pstn_dead</code> and <code>pstn_dead_kind</code>:
+                    <code>dead</code> (the number does not answer) or <code>voice</code> (a person answers: voice line, do not call).<br>
                     <code>GET /api/nodes/pstn/dead</code>, <code>GET /api/nodes/pstn/recent-success?days=7</code> — numbers
-                    marked dead, and numbers a modem test reached recently.<br>
+                    marked dead or as a voice line, and numbers a modem test reached recently.<br>
                     <code>POST /api/modem/results/direct</code>, <code>POST</code>/<code>DELETE /api/modem/pstn-dead</code> —
                     writes for the modem test caller; bearer API key required (see the README for issuing one).
+                    A mark takes <code>kind</code> (<code>dead</code> by default, or <code>voice</code>) and an optional
+                    <code>phone</code> that limits it to that number.
                 </div>
             </div>
 

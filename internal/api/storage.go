@@ -84,7 +84,7 @@ type PSTNStore interface {
 	GetPSTNNodes(ctx context.Context, limit int, zone int, domain string) ([]storage.PSTNNode, error)
 	GetPSTNDeadNodes(ctx context.Context) ([]storage.PSTNDeadNode, error)
 	GetRecentModemSuccessPhones(ctx context.Context, days int) ([]string, error)
-	MarkPSTNDead(ctx context.Context, zone, net, node int, reason, markedBy string) error
+	MarkPSTNDead(ctx context.Context, mark storage.PSTNDeadNode) error
 	UnmarkPSTNDead(ctx context.Context, zone, net, node int, markedBy string) error
 }
 

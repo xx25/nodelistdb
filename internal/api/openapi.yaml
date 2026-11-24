@@ -270,8 +270,13 @@ paths:
       summary: Get PSTN Nodes
       description: |
         Every node in the latest nodelist with a usable phone number, for
-        modem testing. Nodes marked dead via /api/modem/pstn-dead are
-        excluded.
+        modem testing. Nodes marked via /api/modem/pstn-dead are still
+        listed, with is_pstn_dead set: a caller must skip them.
+        pstn_dead_kind says why: "dead" (the number does not answer) or
+        "voice" (a person answers: voice line, do not call). is_pstn_dead is
+        true for both, so a caller that knows only that flag skips both. A
+        mark made for a specific phone number applies only while the node
+        still lists that number.
       operationId: getPSTNNodes
       tags:
         - Nodes
@@ -315,13 +320,18 @@ paths:
   /api/nodes/pstn/dead:
     get:
       summary: List Dead PSTN Nodes
-      description: Nodes marked as not answering by a modem test caller.
+      description: |
+        Nodes a modem test caller has marked as not to be dialled, of both
+        kinds: "dead" (the number does not answer) and "voice" (a person
+        answers: voice line, do not call). Marks are listed as recorded;
+        one that carries a phone applies only while the node still lists
+        that number.
       operationId: listPSTNDeadNodes
       tags:
         - Nodes
       responses:
         '200':
-          description: Nodes currently marked dead
+          description: Nodes currently marked dead or as a voice line
           content:
             application/json:
               schema:
@@ -1639,8 +1649,11 @@ paths:
     post:
       summary: Mark a PSTN Node Dead
       description: |
-        Record that a node's phone number does not answer, so later callers
-        skip it. Authenticated; registered only when modem_api is enabled.
+        Record that a node's phone number must not be dialled, so later
+        callers skip it: kind "dead" (the default) for a number that does
+        not answer, kind "voice" for one a person answers (voice line, do
+        not call). A new mark replaces the node's previous one.
+        Authenticated; registered only when modem_api is enabled.
         A body whose Content-Length exceeds the configured size limit is
         refused with 413; a chunked body that grows past it fails decoding
         (400).
@@ -1665,9 +1678,23 @@ paths:
                   type: integer
                 reason:
                   type: string
+                kind:
+                  type: string
+                  enum: [dead, voice]
+                  default: dead
+                  description: |
+                    Why the number must not be dialled. Any other value is
+                    refused with 400.
+                phone:
+                  type: string
+                  description: |
+                    The number the mark is made for. Stored as digits only.
+                    When given, the mark applies only while the node's
+                    current phone number (digits only) equals it; when
+                    omitted, it applies whatever number the node lists.
       responses:
         '200':
-          description: Node marked dead
+          description: Node marked
           content:
             application/json:
               schema:
@@ -1683,7 +1710,7 @@ paths:
     delete:
       summary: Revive a PSTN Node
       description: |
-        Clear a node's dead mark so it is dialled again. Authenticated;
+        Clear a node's mark, of either kind, so it is dialled again. Authenticated;
         registered only when modem_api is enabled. A body whose
         Content-Length exceeds the configured size limit is refused with
         413; a chunked body that grows past it fails decoding (400).
@@ -2481,9 +2508,19 @@ components:
             type: string
         is_pstn_dead:
           type: boolean
+          description: |
+            The number must not be dialled. True for both mark kinds, so
+            callers that predate pstn_dead_kind skip voice lines as well.
         pstn_dead_reason:
           type: string
           description: Omitted when empty.
+        pstn_dead_kind:
+          type: string
+          enum: [dead, voice]
+          description: |
+            Why the number must not be dialled: "dead" (does not answer) or
+            "voice" (a person answers: voice line, do not call). Omitted
+            when the node is not marked.
     PSTNDeadNode:
       type: object
       properties:
@@ -2495,6 +2532,17 @@ components:
           type: integer
         reason:
           type: string
+        kind:
+          type: string
+          enum: [dead, voice]
+          description: |
+            "dead" (the number does not answer) or "voice" (a person
+            answers: voice line, do not call).
+        phone:
+          type: string
+          description: |
+            The number the mark was made for, digits only. Empty when the
+            mark applies whatever number the node lists.
         marked_by:
           type: string
         marked_at:
@@ -2617,6 +2665,16 @@ components:
         remote_sysop:
           type: string
           description: Omitted when empty.
+        voice_answered:
+          type: boolean
+          description: |
+            A person answered the call (the modem's failure report or a
+            VOICE result code said so). Omitted when false.
+        failure_detail:
+          type: string
+          description: |
+            The modem's reason for a failed dial, e.g. "answer signal
+            timeout". Omitted when empty.
     NodeTestResult:
       type: object
       properties:

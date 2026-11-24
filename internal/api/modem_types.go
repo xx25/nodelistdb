@@ -49,6 +49,10 @@ type ModemTestResultRequest struct {
 	// EMSI remote system details
 	RemoteLocation string `json:"remote_location,omitempty"`
 	RemoteSysop    string `json:"remote_sysop,omitempty"`
+
+	// Failed-dial detail from the modem's failure report
+	VoiceAnswered bool   `json:"voice_answered,omitempty"` // A person answered the call
+	FailureDetail string `json:"failure_detail,omitempty"` // Modem's reason for the failed dial
 }
 
 // LineStatsRequest contains parsed modem line statistics

@@ -2,6 +2,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -960,4 +962,113 @@ func TestConfig_HasMultipleOperators(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestModemConfig_GetVoiceAnswerPatterns(t *testing.T) {
+	var unset ModemConfig
+	if got := unset.GetVoiceAnswerPatterns(); len(got) != 1 || got[0] != "voice answered" {
+		t.Errorf("default patterns = %v, want [voice answered]", got)
+	}
+
+	custom := ModemConfig{VoiceAnswerPatterns: []string{"human", "voice"}}
+	if got := custom.GetVoiceAnswerPatterns(); len(got) != 2 || got[0] != "human" {
+		t.Errorf("configured patterns = %v, want [human voice]", got)
+	}
+}
+
+func TestConfig_FailureReportSettingsMerge(t *testing.T) {
+	cfg := &Config{
+		ModemDefaults: ModemConfig{
+			BaudRate:             115200,
+			FailureReportCommand: "ATI11",
+			VoiceAnswerPatterns:  []string{"voice answered"},
+		},
+		Modems: []ModemInstanceConfig{
+			{Name: "soft", ModemConfig: ModemConfig{Device: "/dev/ttyS0"}},
+			{Name: "hard", ModemConfig: ModemConfig{
+				Device:               "/dev/ttyS1",
+				FailureReportCommand: "ATI6",
+				VoiceAnswerPatterns:  []string{"voice detected"},
+			}},
+		},
+	}
+
+	modems := cfg.GetModemConfigs()
+	if len(modems) != 2 {
+		t.Fatalf("got %d modems, want 2", len(modems))
+	}
+	if modems[0].FailureReportCommand != "ATI11" || modems[0].GetVoiceAnswerPatterns()[0] != "voice answered" {
+		t.Errorf("modem without overrides = %q / %v, want the defaults", modems[0].FailureReportCommand, modems[0].VoiceAnswerPatterns)
+	}
+	if modems[1].FailureReportCommand != "ATI6" || modems[1].GetVoiceAnswerPatterns()[0] != "voice detected" {
+		t.Errorf("modem with overrides = %q / %v, want its own", modems[1].FailureReportCommand, modems[1].VoiceAnswerPatterns)
+	}
+}
+
+func TestLoadConfig_VoiceSettingsAndDoNotCallPath(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	t.Run("defaults", func(t *testing.T) {
+		cfg, err := LoadConfig(write("plain.yaml", "modem:\n  device: /dev/ttyS0\n"))
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg.Modem.FailureReportCommand != "" {
+			t.Errorf("failure_report_command default = %q, want empty", cfg.Modem.FailureReportCommand)
+		}
+		if got := cfg.Modem.GetVoiceAnswerPatterns(); len(got) != 1 || got[0] != "voice answered" {
+			t.Errorf("voice_answer_patterns default = %v", got)
+		}
+		// The default list lives next to the config file, wherever the tool
+		// is started from.
+		if want := filepath.Join(dir, "do-not-call.txt"); cfg.DoNotCallPath() != want {
+			t.Errorf("DoNotCallPath() = %q, want %q", cfg.DoNotCallPath(), want)
+		}
+	})
+
+	t.Run("configured", func(t *testing.T) {
+		cfg, err := LoadConfig(write("set.yaml", `modem:
+  device: /dev/ttyS0
+  failure_report_command: "ATI11"
+  voice_answer_patterns: ["voice answered", "human"]
+test:
+  do_not_call_file: "lists/dnc.txt"
+`))
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg.Modem.FailureReportCommand != "ATI11" {
+			t.Errorf("failure_report_command = %q, want ATI11", cfg.Modem.FailureReportCommand)
+		}
+		if got := cfg.Modem.GetVoiceAnswerPatterns(); len(got) != 2 || got[1] != "human" {
+			t.Errorf("voice_answer_patterns = %v", got)
+		}
+		if want := filepath.Join(dir, "lists", "dnc.txt"); cfg.DoNotCallPath() != want {
+			t.Errorf("DoNotCallPath() = %q, want %q", cfg.DoNotCallPath(), want)
+		}
+	})
+
+	t.Run("absolute path is kept", func(t *testing.T) {
+		cfg, err := LoadConfig(write("abs.yaml", "modem:\n  device: /dev/ttyS0\ntest:\n  do_not_call_file: /var/lib/modem-test/dnc.txt\n"))
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg.DoNotCallPath() != "/var/lib/modem-test/dnc.txt" {
+			t.Errorf("DoNotCallPath() = %q", cfg.DoNotCallPath())
+		}
+	})
+
+	t.Run("no config file: working directory", func(t *testing.T) {
+		if got := DefaultConfig().DoNotCallPath(); got != "do-not-call.txt" {
+			t.Errorf("DoNotCallPath() = %q, want do-not-call.txt", got)
+		}
+	})
 }

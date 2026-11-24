@@ -104,7 +104,7 @@ type Operations interface {
 	GetPioneersByRegion(ctx context.Context, zone, region, limit int, domain string) ([]PioneerNode, error)
 	GetPSTNCMNodes(ctx context.Context, limit int) ([]PSTNNode, error)
 	GetPSTNNodes(ctx context.Context, limit int, zone int, domain string) ([]PSTNNode, error)
-	MarkPSTNDead(ctx context.Context, zone, net, node int, reason, markedBy string) error
+	MarkPSTNDead(ctx context.Context, mark PSTNDeadNode) error
 	UnmarkPSTNDead(ctx context.Context, zone, net, node int, markedBy string) error
 	GetPSTNDeadNodes(ctx context.Context) ([]PSTNDeadNode, error)
 	GetFileRequestNodes(ctx context.Context, limit int, domain string) ([]FileRequestNode, error)

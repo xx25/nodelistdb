@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/nodelistdb/internal/storage"
 )
 
 // statusMessage is the body of a write that has nothing to return but "done".
@@ -18,9 +20,15 @@ type pstnDeadRequest struct {
 	Net    int    `json:"net"`
 	Node   int    `json:"node"`
 	Reason string `json:"reason"`
+	// Kind is "dead" (the default) or "voice"; marking only.
+	Kind string `json:"kind"`
+	// Phone is the number the mark is made for; the mark stops applying
+	// when the node lists another. Optional, marking only.
+	Phone string `json:"phone"`
 }
 
-// MarkPSTNDeadHandler marks a node's PSTN number as dead/disconnected.
+// MarkPSTNDeadHandler marks a node's PSTN number as not to be dialled:
+// dead/disconnected, or (kind "voice") answered by a person.
 // POST /api/modem/pstn-dead (authenticated)
 func (s *Server) MarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 	var req pstnDeadRequest
@@ -34,19 +42,44 @@ func (s *Server) MarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	callerID := GetCallerIDFromContext(r.Context())
-	if err := s.storage.MarkPSTNDead(r.Context(), req.Zone, req.Net, req.Node, req.Reason, callerID); err != nil {
+	// Testers that predate kinds send none and mean "dead". Anything else
+	// unknown is refused rather than stored: a mistyped "voice" silently
+	// filed as "dead" would lose the one distinction that matters.
+	kind := req.Kind
+	if kind == "" {
+		kind = storage.PSTNDeadKindDead
+	}
+	if !storage.ValidPSTNDeadKind(kind) {
+		WriteJSONError(w, fmt.Sprintf("kind must be %q or %q", storage.PSTNDeadKindDead, storage.PSTNDeadKindVoice), http.StatusBadRequest)
+		return
+	}
+
+	mark := storage.PSTNDeadNode{
+		Zone:     req.Zone,
+		Net:      req.Net,
+		Node:     req.Node,
+		Reason:   req.Reason,
+		Kind:     kind,
+		Phone:    storage.PhoneDigits(req.Phone),
+		MarkedBy: GetCallerIDFromContext(r.Context()),
+	}
+	if err := s.storage.MarkPSTNDead(r.Context(), mark); err != nil {
 		writeStorageErrorf(w, "failed to mark node dead", err)
 		return
 	}
 
+	message := fmt.Sprintf("Node %d:%d/%d marked as PSTN dead", req.Zone, req.Net, req.Node)
+	if kind == storage.PSTNDeadKindVoice {
+		message = fmt.Sprintf("Node %d:%d/%d marked as a voice line, do not call", req.Zone, req.Net, req.Node)
+	}
 	WriteJSONSuccess(w, statusMessage{
 		Status:  "ok",
-		Message: fmt.Sprintf("Node %d:%d/%d marked as PSTN dead", req.Zone, req.Net, req.Node),
+		Message: message,
 	})
 }
 
-// UnmarkPSTNDeadHandler revives a previously dead PSTN node.
+// UnmarkPSTNDeadHandler revives a previously marked PSTN node, whatever the
+// mark's kind.
 // DELETE /api/modem/pstn-dead (authenticated)
 func (s *Server) UnmarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 	var req pstnDeadRequest
@@ -72,7 +105,7 @@ func (s *Server) UnmarkPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListPSTNDeadHandler returns all currently dead PSTN nodes.
+// ListPSTNDeadHandler returns all currently marked PSTN nodes, of both kinds.
 // GET /api/nodes/pstn/dead (unauthenticated)
 func (s *Server) ListPSTNDeadHandler(w http.ResponseWriter, r *http.Request) {
 	nodes, err := s.storage.GetPSTNDeadNodes(r.Context())

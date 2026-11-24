@@ -130,6 +130,8 @@ func (h *ModemHandler) storeModemTestResultDirect(ctx context.Context, callerID 
 	input.ConnectString = result.ConnectString
 	input.RemoteLocation = result.RemoteLocation
 	input.RemoteSysop = result.RemoteSysop
+	input.VoiceAnswered = result.VoiceAnswered
+	input.FailureDetail = result.FailureDetail
 
 	// Map line stats if provided
 	if result.LineStats != nil {

@@ -159,6 +159,14 @@
                     <span class="detail-label">Error:</span>
                     <span class="detail-value"><div class="error-details">{{.TestResult.Error}}</div></span>
                     {{end}}
+                    {{if .TestResult.VoiceAnswered}}
+                    <span class="detail-label">Answered By:</span>
+                    <span class="detail-value"><span class="badge badge-danger">A person: voice line, do not call</span></span>
+                    {{end}}
+                    {{if .TestResult.FailureDetail}}
+                    <span class="detail-label">Failure Detail:</span>
+                    <span class="detail-value">{{.TestResult.FailureDetail}}</span>
+                    {{end}}
                 </div>
             </div>
 

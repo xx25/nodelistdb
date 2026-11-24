@@ -210,6 +210,7 @@ func (mq *ModemQueryOperations) GetDetailedModemTestResult(ctx context.Context, 
 			modem_cdr_term_reason, modem_cdr_term_category,
 			modem_ast_disposition, modem_ast_peer, modem_ast_duration, modem_ast_billsec,
 			modem_ast_hangup_cause, modem_ast_hangup_source, modem_ast_early_media,
+			modem_voice_answered, modem_failure_detail,
 			modem_caller_id, modem_used, modem_match_reason
 		FROM node_test_results
 		WHERE zone = ? AND net = ? AND node = ?
@@ -239,6 +240,7 @@ func (mq *ModemQueryOperations) GetDetailedModemTestResult(ctx context.Context, 
 		&d.CdrTermReason, &d.CdrTermCategory,
 		&d.AstDisposition, &d.AstPeer, &d.AstDuration, &d.AstBillsec,
 		&d.AstHangupCause, &d.AstHangupSource, &d.AstEarlyMedia,
+		&d.VoiceAnswered, &d.FailureDetail,
 		&d.CallerID, &d.ModemUsed, &d.MatchReason,
 	)
 	if err != nil {

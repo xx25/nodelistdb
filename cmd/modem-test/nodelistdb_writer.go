@@ -64,6 +64,10 @@ type nodelistDBResultRequest struct {
 	// EMSI remote details
 	RemoteLocation string `json:"remote_location,omitempty"`
 	RemoteSysop    string `json:"remote_sysop,omitempty"`
+
+	// Failed-dial detail
+	VoiceAnswered bool   `json:"voice_answered,omitempty"`
+	FailureDetail string `json:"failure_detail,omitempty"`
 }
 
 type lineStatsRequest struct {
@@ -229,6 +233,8 @@ func (w *NodelistDBWriter) convertRecord(rec *TestRecord) nodelistDBResultReques
 		EMSITimeMs:     uint32(rec.EMSITime.Milliseconds()),
 		RemoteLocation: rec.RemoteLocation,
 		RemoteSysop:    rec.RemoteSysop,
+		VoiceAnswered:  rec.VoiceAnswered,
+		FailureDetail:  rec.FailureDetail,
 	}
 
 	// Line stats

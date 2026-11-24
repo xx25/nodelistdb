@@ -97,6 +97,10 @@ type ModemTestResultInput struct {
 	AstHangupCause  uint8
 	AstHangupSource string
 	AstEarlyMedia   bool
+
+	// Failed-dial detail from the modem's failure report
+	VoiceAnswered bool   // A person answered the call
+	FailureDetail string // Modem's reason for the failed dial
 }
 
 // StoreModemTestResult stores a modem test result in the node_test_results table
@@ -140,6 +144,7 @@ func (m *ModemResultOperations) StoreModemTestResult(ctx context.Context, input 
 			modem_ast_disposition, modem_ast_peer,
 			modem_ast_duration, modem_ast_billsec,
 			modem_ast_hangup_cause, modem_ast_hangup_source, modem_ast_early_media,
+			modem_voice_answered, modem_failure_detail,
 			is_operational, hostname
 		) VALUES (
 			?, ?, ?, ?, ?, ?, ?,
@@ -165,6 +170,7 @@ func (m *ModemResultOperations) StoreModemTestResult(ctx context.Context, input 
 			?, ?,
 			?, ?,
 			?, ?, ?,
+			?, ?,
 			?, ?
 		)
 	`
@@ -230,6 +236,8 @@ func (m *ModemResultOperations) StoreModemTestResult(ctx context.Context, input 
 		input.AstHangupCause,
 		input.AstHangupSource,
 		input.AstEarlyMedia,
+		input.VoiceAnswered,
+		input.FailureDetail,
 		input.Success, // is_operational = success for modem tests
 		"modem",       // hostname indicator
 	)

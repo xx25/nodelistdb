@@ -43,7 +43,9 @@ var (
 	showVersion = flag.Bool("version", false, "Show version information and exit")
 	markDead    = flag.String("mark-dead", "", "Mark a node's PSTN number as dead (format: zone:net/node)")
 	unmarkDead  = flag.String("unmark-dead", "", "Unmark a node's PSTN number as dead (format: zone:net/node)")
-	deadReason  = flag.String("reason", "", "Reason for marking a node as PSTN dead")
+	deadReason  = flag.String("reason", "", "Reason for -mark-dead / -mark-voice")
+	markVoice   = flag.String("mark-voice", "", "Mark a node's PSTN number as a voice line, never to be called (format: zone:net/node)")
+	markPhone   = flag.String("mark-phone", "", "Phone number the -mark-voice mark is bound to (default: the node's current number)")
 )
 
 func main() {
@@ -80,8 +82,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s -prefix +7 -skip-days 14\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # Mark a node's phone as dead (requires nodelistdb config)\n")
 		fmt.Fprintf(os.Stderr, "  %s -mark-dead 2:5001/100 -reason \"number disconnected\"\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # Unmark a previously dead node\n")
+		fmt.Fprintf(os.Stderr, "  # Mark a node's phone as a voice line: a person answers, never call it\n")
+		fmt.Fprintf(os.Stderr, "  # (also adds the number to the local do-not-call list)\n")
+		fmt.Fprintf(os.Stderr, "  %s -mark-voice 2:5001/100 -reason \"answered by a person\"\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Clear a dead or voice mark on the server (the local do-not-call list is\n")
+		fmt.Fprintf(os.Stderr, "  # a plain file and is only ever edited by hand)\n")
 		fmt.Fprintf(os.Stderr, "  %s -unmark-dead 2:5001/100\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\nVoice answers:\n")
+		fmt.Fprintf(os.Stderr, "  With modem.failure_report_command set (e.g. ATI11), a failed dial is followed\n")
+		fmt.Fprintf(os.Stderr, "  by the modem's last-call report. If it shows that a person answered (see\n")
+		fmt.Fprintf(os.Stderr, "  modem.voice_answer_patterns), or the modem returns VOICE, the number is not\n")
+		fmt.Fprintf(os.Stderr, "  retried, is appended to test.do_not_call_file (default: do-not-call.txt next\n")
+		fmt.Fprintf(os.Stderr, "  to the config file) and is marked as a voice line on the NodelistDB server.\n")
+		fmt.Fprintf(os.Stderr, "  Numbers in that file are never dialled, in any mode.\n")
 	}
 
 	flag.Parse()
@@ -92,9 +105,17 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Handle mark-dead / unmark-dead (no modem needed, exits immediately)
-	if *markDead != "" || *unmarkDead != "" {
-		handlePSTNDeadCommand(*markDead, *unmarkDead, *deadReason, *configPath)
+	// Handle mark-dead / mark-voice / unmark-dead (no modem needed, exits immediately)
+	if *markDead != "" || *markVoice != "" || *unmarkDead != "" {
+		if *markDead != "" && *markVoice != "" {
+			fmt.Fprintf(os.Stderr, "ERROR: only one of -mark-dead, -mark-voice can be specified\n")
+			os.Exit(1)
+		}
+		markAddr, kind := *markDead, pstnMarkKindDead
+		if *markVoice != "" {
+			markAddr, kind = *markVoice, pstnMarkKindVoice
+		}
+		handlePSTNDeadCommand(markAddr, *unmarkDead, *deadReason, kind, *markPhone, *configPath)
 		return
 	}
 
@@ -413,6 +434,37 @@ func main() {
 		}
 	}
 
+	// Load the do-not-call list before anything can dial, and drop listed
+	// numbers from the run up front. This is only the tidy half: the dial
+	// paths check the list again before every attempt, which also covers
+	// numbers added while the run is in progress.
+	var guard *callGuard
+	if *batch || len(cfg.GetPhones()) > 0 {
+		dnc, err := LoadDoNotCallList(cfg.DoNotCallPath())
+		if err != nil {
+			fmt.Fprintf(log.GetOutput(), "ERROR: %v (refusing to dial without it)\n", err)
+			os.Exit(1)
+		}
+		log.Info("Do-not-call list: %s (%d number(s))", dnc.Path(), dnc.Len())
+		guard = &callGuard{list: dnc, apiURL: cfg.NodelistDB.URL, apiKey: cfg.NodelistDB.APIKey}
+
+		if len(filteredNodes) > 0 {
+			filteredNodes = dropDoNotCallNodes(filteredNodes, guard, log)
+			cfg.Test.Phones = UniquePhones(filteredNodes)
+			nodeLookup = BuildNodeLookupByPhone(filteredNodes)
+		} else {
+			cfg.Test.Phones = dropDoNotCallPhones(cfg.GetPhones(), guard, log)
+		}
+		// GetPhones falls back to the single test.phone when the list is
+		// empty; it has been filtered into Phones above (or does not apply
+		// to a node run), so it must not come back.
+		cfg.Test.Phone = ""
+		if len(cfg.GetPhones()) == 0 && !*interactive {
+			log.Info("Every number is on the do-not-call list, nothing to do")
+			return
+		}
+	}
+
 	// Update phones after mode handling
 	phones := cfg.GetPhones()
 
@@ -442,7 +494,7 @@ func main() {
 	// Check for multi-modem mode
 	if cfg.IsMultiModem() && (*batch || len(phones) > 0) {
 		log.Info("Multi-modem mode detected with %d modem(s)", len(cfg.GetModemConfigs()))
-		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, operatorCache, sinks, nodeLookup, filteredNodes)
+		runBatchModeMulti(cfg, log, configFile, cdrService, asteriskCDRService, operatorCache, sinks, guard, nodeLookup, filteredNodes)
 		return
 	}
 
@@ -512,7 +564,7 @@ func main() {
 	if *interactive {
 		runInteractiveMode(m, log)
 	} else if *batch || len(phones) > 0 {
-		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, sinks, nodeLookup, filteredNodes)
+		runBatchMode(m, cfg, log, configFile, cdrService, asteriskCDRService, sinks, guard, nodeLookup, filteredNodes)
 	} else {
 		// Default: show modem info
 		runInfoMode(m, log)
@@ -652,11 +704,13 @@ func persistResult(pw *persistenceWriters, testNum int, phone, nodeAddress, node
 			result.cdrData,
 			result.asteriskCDR,
 		)
+		rec.VoiceAnswered = result.voiceAnswered
+		rec.FailureDetail = result.failureDetail
 		pw.sinks.writeAll(rec, pw.log)
 	}
 }
 
-func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, sinks resultSinks, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
+func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, sinks resultSinks, guard *callGuard, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	testCount := len(phones)
 	if len(filteredNodes) > 0 {
@@ -689,6 +743,9 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		} else {
 			defer csvWriter.Close()
 			log.Info("Writing results to: %s", cfg.Test.CSVFile)
+			if csvWriter.LegacyLayout() {
+				log.Warn("CSV file has the older header: voice_answered and failure_detail are not written to it (start a new file to get them)")
+			}
 			sinks = append(sinks, csvWriter)
 		}
 	}
@@ -776,7 +833,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 		}
 
 		// Dial phone directly (no operator prefix)
-		result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, currentPhone, currentPhone, currentAvail)
+		result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, guard, i, currentPhone, currentPhone, currentAvail)
 
 		// Handle deferred nodes (call window closed)
 		if result.windowClosed {
@@ -789,6 +846,16 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				}
 			}
 			continue // Don't count, don't write records, don't pause
+		}
+
+		// Not dialled (do-not-call list): reported, but neither a failure
+		// nor a result to store.
+		if result.doNotCall {
+			results = append(results, result.message)
+			continue
+		}
+		if result.voiceAnswered {
+			guard.recordVoiceAnswer(log, currentPhone, currentNodeAddress, result.failureDetail)
 		}
 
 		results = append(results, result.message)
@@ -847,7 +914,7 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 				log.Info("Node: %s %s (sysop: %s)", job.nodeAddress, job.nodeSystemName, job.nodeSysop)
 			}
 
-			result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, i, currentPhone, currentPhone, job.nodeAvailability)
+			result := runSingleTest(ctx, m, cfg, log, cdrService, asteriskCDRService, guard, i, currentPhone, currentPhone, job.nodeAvailability)
 
 			if result.windowClosed {
 				if job.nodeTarget != nil {
@@ -858,6 +925,14 @@ func runBatchMode(m *modem.Modem, cfg *Config, log *TestLogger, configFile strin
 					}
 				}
 				continue
+			}
+
+			if result.doNotCall {
+				results = append(results, result.message)
+				continue
+			}
+			if result.voiceAnswered {
+				guard.recordVoiceAnswer(log, currentPhone, job.nodeAddress, result.failureDetail)
 			}
 
 			results = append(results, result.message)
@@ -915,9 +990,12 @@ type testResult struct {
 	cdrData       *CDRData         // VoIP quality metrics from AudioCodes CDR
 	asteriskCDR   *AsteriskCDRData // Call routing info from Asterisk CDR
 	windowClosed  bool             // true = stopped because call window closed, should retry later
+	voiceAnswered bool             // true = a person answered; the number must never be dialled again
+	failureDetail string           // why a failed dial failed, from the modem's failure report
+	doNotCall     bool             // true = not dialled: the number is on the do-not-call list
 }
 
-func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, testNum int, phoneNumber string, originalPhone string, nodeAvailability *timeavail.NodeAvailability) testResult {
+func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLogger, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, guard *callGuard, testNum int, phoneNumber string, originalPhone string, nodeAvailability *timeavail.NodeAvailability) testResult {
 	// Determine retry settings
 	retryCount := cfg.GetRetryCount()
 	pause := cfg.GetPause()
@@ -928,9 +1006,16 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 	var err error
 	retryAttempts := 0
 	var lastRetryReason string
+	var report failureReport // modem's account of the last failed dial
 
 	// Dial with retry on BUSY or CDR-detected failures
 	for {
+		// The do-not-call list is checked before every attempt, against the
+		// node's number (phoneNumber may carry a dial prefix).
+		if entry, blocked := guard.blocked(originalPhone); blocked {
+			return doNotCallResult(log, fmt.Sprintf("Test %d [%s]", testNum, phoneNumber), originalPhone, entry)
+		}
+
 		// Check for cancellation before retry wait
 		if retryAttempts > 0 {
 			log.Info("Retry %d/%d (%s), waiting %v...", retryAttempts, retryCount, lastRetryReason, retryDelay)
@@ -991,6 +1076,18 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 			return testResult{
 				success: false,
 				message: msg,
+			}
+		}
+
+		// Ask the modem why the dial failed before any retry decision: a
+		// person answering reads as a plain NO ANSWER in the dial result, and
+		// neither BUSY nor CDR retry logic may call that number again.
+		report = failureReport{}
+		if !result.Success {
+			report = collectFailureReport(m, &cfg.Modem, result.Error, log)
+			if report.voiceAnswered {
+				log.Error("*** VOICE ANSWERED: a person picked up at %s. Not retrying; this number must not be called again.", originalPhone)
+				break
 			}
 		}
 
@@ -1080,11 +1177,13 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 		if retryAttempts > 0 {
 			retryInfo = fmt.Sprintf(" [after %d retries]", retryAttempts)
 		}
-		msg := fmt.Sprintf("Test %d [%s]: DIAL FAILED - %s (%.1fs)%s", testNum, phoneNumber, result.Error, result.DialTime.Seconds(), retryInfo)
+		msg := fmt.Sprintf("Test %d [%s]: DIAL FAILED - %s (%.1fs)%s", testNum, phoneNumber, dialFailureText(result.Error, report), result.DialTime.Seconds(), retryInfo)
 		log.Fail("%s", msg)
 		return testResult{
-			success: false,
-			message: msg,
+			success:       false,
+			message:       msg,
+			voiceAnswered: report.voiceAnswered,
+			failureDetail: report.detail,
 		}
 	}
 

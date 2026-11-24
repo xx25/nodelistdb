@@ -274,6 +274,10 @@ CREATE TABLE IF NOT EXISTS nodelistdb.node_test_results
     `modem_ast_hangup_cause` UInt8 DEFAULT 0,
     `modem_ast_hangup_source` String DEFAULT '',
     `modem_ast_early_media` Bool DEFAULT false,
+
+    -- Failed-dial detail from the modem's failure report
+    `modem_voice_answered` Bool DEFAULT false,
+    `modem_failure_detail` String DEFAULT '',
     INDEX idx_date test_date TYPE minmax GRANULARITY 1,
     INDEX idx_zone_net (zone, net) TYPE minmax GRANULARITY 1,
     INDEX idx_operational is_operational TYPE minmax GRANULARITY 1,
@@ -401,6 +405,26 @@ CREATE TABLE IF NOT EXISTS nodelistdb.pointlist_files
 )
 ENGINE = ReplacingMergeTree(imported_at)
 ORDER BY (domain, list_source, pointlist_date)
+SETTINGS index_granularity = 8192;
+
+-- PSTN numbers modem testers must not dial (see schema/migrations/007 and 020).
+-- One current row per node; unmarking writes an is_active = false row.
+-- Readers use FINAL.
+CREATE TABLE IF NOT EXISTS nodelistdb.pstn_dead_nodes
+(
+    `zone` Int32,
+    `net` Int32,
+    `node` Int32,
+    `reason` String DEFAULT '',
+    `kind` LowCardinality(String) DEFAULT 'dead',  -- dead | voice (a person answers: do not call)
+    `phone` String DEFAULT '',                      -- Number the mark was made for, digits only; '' = any
+    `marked_by` String DEFAULT '',
+    `marked_at` DateTime DEFAULT now(),
+    `is_active` Bool DEFAULT true,
+    `updated_at` DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (zone, net, node)
 SETTINGS index_granularity = 8192;
 
 -- Domain WHOIS cache table

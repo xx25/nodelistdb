@@ -176,3 +176,92 @@ func TestSQLiteWriterEndToEnd(t *testing.T) {
 		t.Error("ast_early_media = false, want true")
 	}
 }
+
+// A results table created before voice_answered/failure_detail existed must
+// be brought up to date on open: CREATE TABLE IF NOT EXISTS leaves it alone,
+// and the insert names the new columns.
+func TestSQLiteWriterUpgradesOlderTable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping SQLite end-to-end test in short mode")
+	}
+
+	dbPath := filepath.Join(t.TempDir(), "results.db")
+
+	// The table as the previous version created it.
+	oldDDL := sqliteDialect.ddl
+	for _, col := range sqliteDialect.addedColumns {
+		start := strings.Index(oldDDL, "    "+col.name+" ")
+		if start < 0 {
+			t.Fatalf("column %s not found in the SQLite DDL", col.name)
+		}
+		end := start + strings.Index(oldDDL[start:], "\n") + 1
+		oldDDL = oldDDL[:start] + oldDDL[end:]
+	}
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(strings.ReplaceAll(oldDDL, "{table}", "modem_test_results")); err != nil {
+		t.Fatalf("create old table: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO modem_test_results (test_num, phone, success) VALUES (1, '79001234567', 0)`); err != nil {
+		t.Fatalf("insert old row: %v", err)
+	}
+	if _, err := db.Query(`SELECT voice_answered FROM modem_test_results`); err == nil {
+		t.Fatal("the simulated old table already has voice_answered")
+	}
+	db.Close()
+
+	w, err := NewSQLiteResultsWriter(SQLiteResultsConfig{Enabled: true, Path: dbPath})
+	if err != nil {
+		t.Fatalf("NewSQLiteResultsWriter() on an older table: %v", err)
+	}
+	rec := &TestRecord{
+		Timestamp:     time.Date(2026, 11, 23, 22, 15, 4, 0, time.UTC),
+		TestNum:       2,
+		Phone:         "74951234567",
+		VoiceAnswered: true,
+		FailureDetail: "voice answered",
+	}
+	if err := w.WriteRecord(rec); err != nil {
+		t.Fatalf("WriteRecord() error = %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Opening again must not try to add the columns a second time.
+	w, err = NewSQLiteResultsWriter(SQLiteResultsConfig{Enabled: true, Path: dbPath})
+	if err != nil {
+		t.Fatalf("reopening the upgraded table: %v", err)
+	}
+	w.Close()
+
+	db, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT test_num, voice_answered, failure_detail FROM modem_test_results ORDER BY test_num`)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	defer rows.Close()
+	type row struct {
+		testNum int
+		voice   bool
+		detail  string
+	}
+	var got []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.testNum, &r.voice, &r.detail); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, r)
+	}
+	want := []row{{1, false, ""}, {2, true, "voice answered"}}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("rows = %+v, want %+v", got, want)
+	}
+}

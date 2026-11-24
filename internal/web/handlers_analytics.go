@@ -1064,7 +1064,8 @@ type ModemNoAnswerDispositionCount struct {
 type ModemNoAnswerSummaryStats struct {
 	TotalCount        int
 	TotalAttempts     int
-	DeadCount         int
+	DeadCount         int // marked nodes of both kinds
+	VoiceCount        int // of those, voice lines (a person answers)
 	DispositionCounts []ModemNoAnswerDispositionCount
 	OperatorCounts    []ModemAccessibleOperatorCount
 	ZoneCounts        []ModemAccessibleZoneCount
@@ -1085,6 +1086,9 @@ func computeModemNoAnswerStats(nodes []storage.ModemNoAnswerNode) ModemNoAnswerS
 		stats.TotalAttempts += int(n.AttemptCount)
 		if n.IsPSTNDead {
 			stats.DeadCount++
+			if n.PSTNDeadKind == storage.PSTNDeadKindVoice {
+				stats.VoiceCount++
+			}
 		}
 
 		disp := n.ModemAstDisposition
@@ -1112,6 +1116,32 @@ func computeModemNoAnswerStats(nodes []storage.ModemNoAnswerNode) ModemNoAnswerS
 	return stats
 }
 
+// applyPSTNMarks flags the no-answer nodes that carry a dead or voice-line
+// mark. This report has the number that was dialled, not the node's current
+// one, so a mark made for another number is left off: it is about a phone
+// these attempts never rang.
+func applyPSTNMarks(nodes []storage.ModemNoAnswerNode, marks []storage.PSTNDeadNode) {
+	if len(marks) == 0 {
+		return
+	}
+	bySite := make(map[[3]int]storage.PSTNDeadNode, len(marks))
+	for _, m := range marks {
+		bySite[[3]int{m.Zone, m.Net, m.Node}] = m
+	}
+	for i := range nodes {
+		mark, ok := bySite[[3]int{nodes[i].Zone, nodes[i].Net, nodes[i].Node}]
+		if !ok {
+			continue
+		}
+		if dialed := nodes[i].ModemPhoneDialed; dialed != "" && !mark.AppliesTo(dialed) {
+			continue
+		}
+		nodes[i].IsPSTNDead = true
+		nodes[i].PSTNDeadReason = mark.Reason
+		nodes[i].PSTNDeadKind = mark.Kind
+	}
+}
+
 // ModemNoAnswerAnalyticsHandler shows nodes tested via modem that never answered
 func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Request) {
 	params := parseAnalyticsParams(r)
@@ -1129,18 +1159,8 @@ func (s *Server) ModemNoAnswerAnalyticsHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	// Enrich with PSTN dead status
-	if deadNodes, err := s.storage.GetPSTNDeadNodes(r.Context()); err == nil && len(deadNodes) > 0 {
-		deadSet := make(map[[3]int]string, len(deadNodes))
-		for _, d := range deadNodes {
-			deadSet[[3]int{d.Zone, d.Net, d.Node}] = d.Reason
-		}
-		for i := range nodes {
-			key := [3]int{nodes[i].Zone, nodes[i].Net, nodes[i].Node}
-			if reason, ok := deadSet[key]; ok {
-				nodes[i].IsPSTNDead = true
-				nodes[i].PSTNDeadReason = reason
-			}
-		}
+	if deadNodes, err := s.storage.GetPSTNDeadNodes(r.Context()); err == nil {
+		applyPSTNMarks(nodes, deadNodes)
 	}
 
 	stats := computeModemNoAnswerStats(nodes)

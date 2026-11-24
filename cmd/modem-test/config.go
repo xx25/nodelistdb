@@ -27,6 +27,10 @@ type Config struct {
 	MySQLResults    MySQLResultsConfig    `yaml:"mysql_results"`    // MySQL results storage (optional)
 	SQLiteResults   SQLiteResultsConfig   `yaml:"sqlite_results"`   // SQLite results storage (optional)
 	NodelistDB      NodelistDBConfig      `yaml:"nodelistdb"`       // NodelistDB API server (for -prefix mode)
+
+	// configDir is the directory of the file this config was loaded from
+	// ("" when running on defaults); relative data files resolve against it.
+	configDir string
 }
 
 // NodelistDBConfig contains API connection settings for fetching PSTN nodes
@@ -84,6 +88,28 @@ type ModemConfig struct {
 	// StatsPagination enables handling of paginated stats output (e.g., MT5634ZBA with ATI11)
 	// When true, sends space to continue when "Press any key" prompt is detected
 	StatsPagination bool `yaml:"stats_pagination"`
+
+	// FailureReportCommand is sent after a FAILED dial to ask the modem why
+	// (e.g. "ATI11" on the software modem, whose last-call report carries a
+	// "Disconnect: ... reason=..." line). Empty = no report is requested.
+	FailureReportCommand string `yaml:"failure_report_command"`
+
+	// VoiceAnswerPatterns are substrings of the failure report (matched
+	// case-insensitively) that mean a person answered the call. Such a number
+	// is never retried and goes on the do-not-call list.
+	// Default: ["voice answered"].
+	VoiceAnswerPatterns []string `yaml:"voice_answer_patterns"`
+}
+
+// GetVoiceAnswerPatterns returns the configured voice-answer patterns, or the
+// default when none are set. A getter rather than a DefaultConfig entry
+// because multi-modem configs are merged from modem_defaults, which does not
+// start from DefaultConfig.
+func (m *ModemConfig) GetVoiceAnswerPatterns() []string {
+	if len(m.VoiceAnswerPatterns) > 0 {
+		return m.VoiceAnswerPatterns
+	}
+	return defaultVoiceAnswerPatterns
 }
 
 // TestConfig contains test execution parameters
@@ -101,6 +127,11 @@ type TestConfig struct {
 	OperatorCache   OperatorCacheConfig    `yaml:"operator_cache"`   // Operator failover cache settings
 	CSVFile         string                 `yaml:"csv_file"`         // Path to CSV output file (optional)
 	Prefix          string                 `yaml:"prefix"`           // Phone prefix to fetch PSTN nodes from API (e.g., "+7")
+
+	// DoNotCallFile lists numbers that must never be dialled (a person
+	// answered). Default: do-not-call.txt next to the config file, or in the
+	// working directory when there is no config file.
+	DoNotCallFile string `yaml:"do_not_call_file"`
 }
 
 // OperatorConfig contains operator/carrier routing configuration
@@ -306,6 +337,7 @@ func LoadConfig(path string) (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
+	cfg.configDir = filepath.Dir(path)
 
 	return cfg, nil
 }
@@ -554,6 +586,12 @@ func (c *Config) mergeModemConfig(defaults, override ModemConfig) ModemConfig {
 	if override.StatsPagination {
 		result.StatsPagination = override.StatsPagination
 	}
+	if override.FailureReportCommand != "" {
+		result.FailureReportCommand = override.FailureReportCommand
+	}
+	if len(override.VoiceAnswerPatterns) > 0 {
+		result.VoiceAnswerPatterns = override.VoiceAnswerPatterns
+	}
 
 	return result
 }
@@ -595,6 +633,21 @@ func (c *Config) GetPhones() []string {
 		return parsePhoneList(c.Test.Phone)
 	}
 	return nil
+}
+
+// DoNotCallPath returns the do-not-call list file. A relative path (including
+// the default) is resolved against the config file's directory, so the list
+// stays with the config whatever directory the tool is started from.
+func (c *Config) DoNotCallPath() string {
+	path := c.Test.DoNotCallFile
+	if path == "" {
+		path = defaultDoNotCallFile
+	}
+	path = expandPath(path)
+	if !filepath.IsAbs(path) && c.configDir != "" {
+		path = filepath.Join(c.configDir, path)
+	}
+	return path
 }
 
 // GetPause returns the configured pause duration between calls, retries, and CDR lookups.

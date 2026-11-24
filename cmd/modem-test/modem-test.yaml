@@ -40,6 +40,22 @@ modem:
   # Profiles: "rockwell" (USR/Conexant), "zyxel", "raw" (no parsing)
   stats_profile: rockwell
 
+  # Failure report - sent after a FAILED dial to ask the modem why it failed.
+  # The reply is logged, and the text after "reason=" on its "Disconnect:" line
+  # is recorded as the failure detail (CSV/SQL failure_detail, API
+  # failure_detail). Empty (default) = no report is requested.
+  #   Software modem: ATI11 (last-call report)
+  # failure_report_command: "ATI11"
+
+  # Substrings of the failure report (case-insensitive) that mean a PERSON
+  # answered the call. The modem result code VOICE always counts as well.
+  # Such a call is never retried, the number is appended to
+  # test.do_not_call_file and the node is marked as a voice line on the
+  # NodelistDB server (when nodelistdb.url and api_key are set).
+  # Default: ["voice answered"]
+  # voice_answer_patterns:
+  #   - "voice answered"
+
   # BUSY retry settings - keep retrying same number/operator on BUSY
   # busy_retry_count: 20    # Number of retries on BUSY (0 = disabled, default)
   # busy_retry_delay: 5s    # Delay between BUSY retries (default: 5s)
@@ -81,6 +97,18 @@ test:
   # Matching: longest prefix wins. No match = use global operators above.
 
   # csv_file: "modem-test-results.csv"  # Optional: output results to CSV file
+
+  # Do-not-call list: numbers a person answered. No number in this file is
+  # ever dialled, in any mode (-phone, -node, -prefix, -all, retries, operator
+  # failover); voice-answered numbers are appended to it automatically.
+  # Relative paths are resolved against this config file's directory (the
+  # working directory when running without a config file).
+  # Format: '#' comments; one number per line, tab-separated:
+  #   phone (digits)<TAB>node address (may be empty)<TAB>RFC3339 time<TAB>reason
+  # A line with just a phone number is enough when adding one by hand.
+  # Numbers are compared as digits only, against the node's number (without
+  # any operator prefix).
+  # do_not_call_file: "do-not-call.txt"   # default
 
 emsi:
   our_address: "2:5001/5001.5001"   # required: announced to every mailer we call

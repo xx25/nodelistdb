@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"strings"
 	"time"
 )
 
@@ -144,18 +145,56 @@ type PSTNNode struct {
 	MaxSpeed        uint32    `json:"max_speed"`        // Maximum baud rate
 	Flags           []string  `json:"flags"`            // Node flags
 	ModemFlags      []string  `json:"modem_flags"`      // Modem capability flags (V34, V42B, etc.)
-	IsPSTNDead      bool      `json:"is_pstn_dead"`
+	IsPSTNDead      bool      `json:"is_pstn_dead"`     // True for every mark kind: callers that only know this flag still skip a voice line
 	PSTNDeadReason  string    `json:"pstn_dead_reason,omitempty"`
+	PSTNDeadKind    string    `json:"pstn_dead_kind,omitempty"` // "dead" or "voice" when IsPSTNDead
 }
 
-// PSTNDeadNode represents a node marked as having a dead/disconnected PSTN phone number
+// PSTN mark kinds. Both keep modem testers away from a number; they differ in
+// why, and a voice line is the one that must never be called by mistake.
+const (
+	PSTNDeadKindDead  = "dead"  // number does not answer / is disconnected
+	PSTNDeadKindVoice = "voice" // a person answers: voice line, do not call
+)
+
+// ValidPSTNDeadKind reports whether kind is one a mark may carry.
+func ValidPSTNDeadKind(kind string) bool {
+	return kind == PSTNDeadKindDead || kind == PSTNDeadKindVoice
+}
+
+// PSTNDeadNode represents a node whose PSTN phone number must not be dialled:
+// it is dead/disconnected, or a person answers it.
 type PSTNDeadNode struct {
-	Zone     int       `json:"zone"`
-	Net      int       `json:"net"`
-	Node     int       `json:"node"`
-	Reason   string    `json:"reason"`
+	Zone   int    `json:"zone"`
+	Net    int    `json:"net"`
+	Node   int    `json:"node"`
+	Reason string `json:"reason"`
+	Kind   string `json:"kind"` // PSTNDeadKindDead or PSTNDeadKindVoice
+	// Phone is the number the mark was made for, digits only. Empty means
+	// the mark is about the node whatever number it lists.
+	Phone    string    `json:"phone"`
 	MarkedBy string    `json:"marked_by"`
 	MarkedAt time.Time `json:"marked_at"`
+}
+
+// AppliesTo reports whether the mark covers a node that currently lists
+// phone. A mark made for one number lapses when the node publishes another:
+// the new number has not been tried, and the person at the old one is no
+// longer reachable through this node.
+func (d PSTNDeadNode) AppliesTo(phone string) bool {
+	return d.Phone == "" || d.Phone == PhoneDigits(phone)
+}
+
+// PhoneDigits reduces a phone number to its digits, the form in which marks
+// store and compare numbers ("+7-495-123-45-67" and "74951234567" are equal).
+func PhoneDigits(phone string) string {
+	var b strings.Builder
+	for _, ch := range phone {
+		if ch >= '0' && ch <= '9' {
+			b.WriteRune(ch)
+		}
+	}
+	return b.String()
 }
 
 // OnThisDayNode represents a node that was first added on this day in a previous year
@@ -230,6 +269,7 @@ type ModemNoAnswerNode struct {
 	AttemptCount        uint32    `json:"attempt_count"`
 	IsPSTNDead          bool      `json:"is_pstn_dead"`
 	PSTNDeadReason      string    `json:"pstn_dead_reason,omitempty"`
+	PSTNDeadKind        string    `json:"pstn_dead_kind,omitempty"`
 }
 
 // ModemTestDetail represents detailed modem test data for a single test result
@@ -260,6 +300,10 @@ type ModemTestDetail struct {
 	RemoteLocation string   `json:"modem_remote_location"`
 	RemoteSysop    string   `json:"modem_remote_sysop"`
 	Error          string   `json:"modem_error"`
+
+	// Failed-dial detail from the modem's failure report
+	VoiceAnswered bool   `json:"modem_voice_answered"` // A person answered the call
+	FailureDetail string `json:"modem_failure_detail"`
 
 	// Operator routing
 	OperatorName   string `json:"modem_operator_name"`

@@ -33,6 +33,11 @@ modem_defaults:
   post_disconnect_delay: 2s
   stats_profile: rockwell
 
+  # Failure report after a FAILED dial, and what in it means a person
+  # answered (see modem-test.yaml). Both can be overridden per modem.
+  # failure_report_command: "ATI11"
+  # voice_answer_patterns: ["voice answered"]
+
 # Multiple modems - each runs in its own goroutine
 modems:
   - name: "USR Sportster"
@@ -66,6 +71,8 @@ test:
     - "918"
     - "919"
   csv_file: "multi-modem-results.csv"
+  # Numbers a person answered; never dialled by any modem (see modem-test.yaml)
+  # do_not_call_file: "do-not-call.txt"
 
 emsi:
   our_address: "2:5001/5001"

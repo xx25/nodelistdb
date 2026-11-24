@@ -61,6 +61,7 @@ type ModemWorker struct {
 	results            chan<- WorkerResult
 	log                *TestLogger
 	wg                 *sync.WaitGroup
+	guard              *callGuard // Do-not-call gate and voice-answer recorder (nil = none)
 }
 
 // phoneJob represents a phone number to dial with its test number and operator info.
@@ -350,6 +351,12 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				resultOperatorPrefix = job.operatorPrefix
 			}
 
+			// Record a voice answer while the phone lock is still held, so no
+			// other worker can dial the number before it is on the list.
+			if result.voiceAnswered {
+				w.guard.recordVoiceAnswer(w.log, job.phone, job.nodeAddress, result.failureDetail)
+			}
+
 			// Release phone lock
 			w.coordinator.ReleasePhone(job.phone)
 
@@ -375,8 +382,9 @@ func (w *ModemWorker) Run(ctx context.Context) {
 				return
 			}
 
-			// Apply inter-test delay before picking up next job (skip if queue is empty)
-			if w.interDelay > 0 && len(w.phoneQueue) > 0 {
+			// Apply inter-test delay before picking up next job (skip if queue is
+			// empty, or nothing was dialled: there is no call to space out)
+			if w.interDelay > 0 && len(w.phoneQueue) > 0 && !result.doNotCall {
 				w.log.Info("Waiting %v before next test...", w.interDelay)
 				select {
 				case <-time.After(w.interDelay):
@@ -411,9 +419,18 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 	var lastAsteriskCDR *AsteriskCDRData
 	var lastCDRData *CDRData
 	var lastCallTime time.Time // Time of last dial attempt for CDR lookup
+	var report failureReport   // Modem's account of the last failed dial
 
 	// Dial with retry on BUSY or CDR-detected failures
 	for {
+		// The do-not-call list is checked before every attempt, against the
+		// node's number (phoneNumber carries the operator prefix). This is
+		// the one place every multi-modem dial passes through: retries and
+		// each operator of a failover sequence included.
+		if entry, blocked := w.guard.blocked(originalPhone); blocked {
+			return doNotCallResult(w.log, fmt.Sprintf("Test %d [%s] %s", testNum, w.name, phoneNumber), originalPhone, entry)
+		}
+
 		// Reset CDR data at start of each attempt to avoid stale data from previous attempts
 		lastAsteriskCDR = nil
 		lastCDRData = nil
@@ -479,6 +496,18 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 			return testResult{
 				success: false,
 				message: msg,
+			}
+		}
+
+		// Ask the modem why the dial failed before any retry decision: a
+		// person answering reads as a plain NO ANSWER in the dial result, and
+		// neither BUSY nor CDR retry logic may call that number again.
+		report = failureReport{}
+		if !result.Success {
+			report = collectFailureReport(m, &cfg.ModemConfig, result.Error, w.log)
+			if report.voiceAnswered {
+				w.log.Error("*** VOICE ANSWERED: a person picked up at %s. Not retrying; this number must not be called again.", originalPhone)
+				break
 			}
 		}
 
@@ -578,8 +607,9 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 		if retryAttempts > 0 {
 			retryInfo = fmt.Sprintf(" [after %d retries]", retryAttempts)
 		}
-		msg := fmt.Sprintf("Test %d [%s] %s: DIAL FAILED - %s (%.1fs)%s", testNum, w.name, phoneNumber, result.Error, result.DialTime.Seconds(), retryInfo)
-		w.log.Fail("DIAL FAILED - %s (%.1fs)%s", result.Error, result.DialTime.Seconds(), retryInfo)
+		failure := dialFailureText(result.Error, report)
+		msg := fmt.Sprintf("Test %d [%s] %s: DIAL FAILED - %s (%.1fs)%s", testNum, w.name, phoneNumber, failure, result.DialTime.Seconds(), retryInfo)
+		w.log.Fail("DIAL FAILED - %s (%.1fs)%s", failure, result.DialTime.Seconds(), retryInfo)
 
 		// Ensure CDR lookup for failed dials (may have been skipped if shouldRetry was set).
 		// Not lookupAsteriskCDR/lookupAudioCodesCDR: a failed dial legitimately
@@ -625,11 +655,13 @@ func (w *ModemWorker) runTest(ctx context.Context, testNum int, phoneNumber stri
 		}
 
 		return testResult{
-			success:     false,
-			message:     msg,
-			dialTime:    result.DialTime,
-			cdrData:     lastCDRData,
-			asteriskCDR: lastAsteriskCDR,
+			success:       false,
+			message:       msg,
+			dialTime:      result.DialTime,
+			cdrData:       lastCDRData,
+			asteriskCDR:   lastAsteriskCDR,
+			voiceAnswered: report.voiceAnswered,
+			failureDetail: report.detail,
 		}
 	}
 
@@ -884,6 +916,13 @@ func NewModemPool(
 	}
 
 	return p, nil
+}
+
+// SetCallGuard gives every worker the do-not-call gate. Call before Start.
+func (p *ModemPool) SetCallGuard(guard *callGuard) {
+	for _, w := range p.workers {
+		w.guard = guard
+	}
 }
 
 // Start launches all worker goroutines.

@@ -14,7 +14,7 @@ import (
 )
 
 // runBatchModeMulti orchestrates batch testing with multiple modems.
-func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, operatorCache *OperatorCache, sinks resultSinks, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
+func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrService *CDRService, asteriskCDRService *AsteriskCDRService, operatorCache *OperatorCache, sinks resultSinks, guard *callGuard, nodeLookup map[string]*NodeTarget, filteredNodes []NodeTarget) {
 	phones := cfg.GetPhones()
 	operators := cfg.GetOperators()
 	pause := cfg.GetPause()
@@ -38,6 +38,7 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		log.Error("Failed to create modem pool: %v", err)
 		os.Exit(1)
 	}
+	pool.SetCallGuard(guard)
 
 	// Setup signal handler for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -93,6 +94,9 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 		} else {
 			defer csvWriter.Close()
 			log.Info("Writing results to: %s", cfg.Test.CSVFile)
+			if csvWriter.LegacyLayout() {
+				log.Warn("CSV file has the older header: voice_answered and failure_detail are not written to it (start a new file to get them)")
+			}
 			sinks = append(sinks, csvWriter)
 		}
 	}
@@ -147,6 +151,19 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 					deferredMu.Unlock()
 				}
 				// Don't count deferred results as success/failure
+				statsMu.Unlock()
+				completedCount.Add(1)
+				select {
+				case completionSignal <- struct{}{}:
+				default:
+				}
+				continue
+			}
+
+			// Not dialled (do-not-call list): reported, but neither a
+			// failure nor a result to store.
+			if result.Result.doNotCall {
+				results = append(results, result.Result.message)
 				statsMu.Unlock()
 				completedCount.Add(1)
 				select {
@@ -230,6 +247,8 @@ func runBatchModeMulti(cfg *Config, log *TestLogger, configFile string, cdrServi
 					asteriskCDR,
 				)
 				rec.ModemName = result.WorkerName
+				rec.VoiceAnswered = result.Result.voiceAnswered
+				rec.FailureDetail = result.Result.failureDetail
 				sinks.writeAll(rec, log)
 			}
 

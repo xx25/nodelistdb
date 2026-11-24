@@ -725,3 +725,58 @@ func TestRunFailoverSequence_RetryCallbackCarriesOperator(t *testing.T) {
 		t.Errorf("second retry attribution = %s/%s, want Secondary/2#", retries[1].opName, retries[1].opPrefix)
 	}
 }
+
+func TestRunFailoverSequence_VoiceAnswerStopsSequence(t *testing.T) {
+	// A person answered through the first operator. The next operator would
+	// ring the same telephone: nothing more may be dialled.
+	runner := newMockCallRunner(testResult{voiceAnswered: true, failureDetail: "voice answered", message: "voice"})
+	cache := newMockOperatorCache()
+	var intermediate int
+
+	result := runFailoverSequence(
+		context.Background(),
+		phoneJob{phone: "79001234567", testNum: 1},
+		testOperators, cache, discardLogger(), runner.run, nil,
+		func(testResult, string, string) { intermediate++ },
+	)
+
+	if len(runner.getCalls()) != 1 {
+		t.Errorf("expected 1 call, got %d", len(runner.getCalls()))
+	}
+	if !result.LastResult.voiceAnswered || result.LastResult.failureDetail != "voice answered" {
+		t.Errorf("voice answer not carried in the final result: %+v", result.LastResult)
+	}
+	if result.Success || result.AllOperatorsFail || result.TriedOperators != 1 {
+		t.Errorf("unexpected failover outcome: %+v", result)
+	}
+	if result.LastOperator == nil || result.LastOperator.Name != testOperators[0].Name {
+		t.Errorf("LastOperator = %+v, want the operator that placed the call", result.LastOperator)
+	}
+	// The voice result is the final one; emitting it as intermediate too
+	// would store it twice.
+	if intermediate != 0 {
+		t.Errorf("voice result emitted %d times as an intermediate result", intermediate)
+	}
+	// It says nothing about the operator: the cache stays as it was.
+	if len(cache.setCalls) != 0 || len(cache.deleteCalls) != 0 {
+		t.Errorf("operator cache touched: %d sets, %d deletes", len(cache.setCalls), len(cache.deleteCalls))
+	}
+}
+
+func TestRunFailoverSequence_DoNotCallStopsSequence(t *testing.T) {
+	// The call runner refused the number (do-not-call list). Trying the
+	// other operators would only repeat the refusal, operator by operator.
+	runner := newMockCallRunner(testResult{doNotCall: true, message: "skipped"})
+
+	result := runFailover(context.Background(), "79001234567", testOperators, newMockOperatorCache(), runner)
+
+	if len(runner.getCalls()) != 1 {
+		t.Errorf("expected 1 call, got %d", len(runner.getCalls()))
+	}
+	if !result.LastResult.doNotCall {
+		t.Error("doNotCall not carried in the final result")
+	}
+	if result.AllOperatorsFail {
+		t.Error("a skipped number reported as all operators failing")
+	}
+}

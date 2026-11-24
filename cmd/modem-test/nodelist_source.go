@@ -59,6 +59,7 @@ type apiNode struct {
 	ModemFlags      []string `json:"modem_flags"`
 	MaxSpeed        uint32   `json:"max_speed"`
 	IsPSTNDead      bool     `json:"is_pstn_dead"`
+	PSTNDeadKind    string   `json:"pstn_dead_kind"` // "dead" or "voice"; empty from older servers
 }
 
 // FetchPSTNNodes fetches PSTN nodes from the NodelistDB API.
@@ -89,10 +90,13 @@ func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration, log *TestLogg
 	}
 
 	nodes := make([]NodeTarget, 0, len(apiResp.Nodes))
-	deadSkipped := 0
+	deadSkipped, voiceSkipped := 0, 0
 	for _, n := range apiResp.Nodes {
 		if n.IsPSTNDead {
 			deadSkipped++
+			if n.PSTNDeadKind == pstnMarkKindVoice {
+				voiceSkipped++
+			}
 			continue
 		}
 
@@ -121,7 +125,7 @@ func FetchPSTNNodesWithCount(apiURL string, timeout time.Duration, log *TestLogg
 	}
 
 	if deadSkipped > 0 {
-		log.Info("Skipped %d PSTN-dead nodes", deadSkipped)
+		log.Info("Skipped %d PSTN-dead nodes (%d of them voice lines, do not call)", deadSkipped, voiceSkipped)
 	}
 
 	// Return len(apiResp.Nodes) as the "fetched from API" count so callers can
@@ -497,9 +501,57 @@ func ScheduleNodes(ctx context.Context, nodes []NodeTarget, operatorsForPhone fu
 	return jobs
 }
 
-// handlePSTNDeadCommand handles the -mark-dead and -unmark-dead CLI commands.
-// Loads config for API URL/key, calls the API, and exits.
-func handlePSTNDeadCommand(markAddr, unmarkAddr, reason, configPath string) {
+// PSTN mark kinds understood by POST /api/modem/pstn-dead.
+const (
+	pstnMarkKindDead  = "dead"  // number does not answer / is disconnected
+	pstnMarkKindVoice = "voice" // a person answers: never call
+)
+
+// pstnMarkRequest is the body of POST/DELETE /api/modem/pstn-dead.
+type pstnMarkRequest struct {
+	Zone   int    `json:"zone"`
+	Net    int    `json:"net"`
+	Node   int    `json:"node"`
+	Reason string `json:"reason,omitempty"`
+	Kind   string `json:"kind,omitempty"`
+	// Phone binds the mark to one number (digits only): the server stops
+	// applying it once the node lists a different one.
+	Phone string `json:"phone,omitempty"`
+}
+
+// sendPSTNMark sets (POST) or clears (DELETE) a node's PSTN mark on the server.
+func sendPSTNMark(ctx context.Context, baseURL, apiKey, method string, mark pstnMarkRequest) error {
+	body, err := json.Marshal(mark)
+	if err != nil {
+		return fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	apiURL := strings.TrimRight(baseURL, "/") + "/api/modem/pstn-dead"
+	req, err := http.NewRequestWithContext(ctx, method, apiURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return nil
+}
+
+// handlePSTNDeadCommand handles the -mark-dead, -mark-voice and -unmark-dead
+// CLI commands. Loads config for API URL/key, calls the API, and exits.
+// kind and phone apply to marking only; unmarking clears either kind.
+func handlePSTNDeadCommand(markAddr, unmarkAddr, reason, kind, phone, configPath string) {
 	// Load config to get API credentials
 	var cfg *Config
 	var err error
@@ -531,11 +583,9 @@ func handlePSTNDeadCommand(markAddr, unmarkAddr, reason, configPath string) {
 	// Determine operation
 	addr := markAddr
 	method := "POST"
-	action := "Marking"
 	if addr == "" {
 		addr = unmarkAddr
 		method = "DELETE"
-		action = "Unmarking"
 	}
 
 	zone, net, node, err := ParseNodeAddress(addr)
@@ -543,49 +593,61 @@ func handlePSTNDeadCommand(markAddr, unmarkAddr, reason, configPath string) {
 		fmt.Fprintf(os.Stderr, "ERROR: Invalid node address %q: %v\n", addr, err)
 		os.Exit(1)
 	}
+	mark := pstnMarkRequest{Zone: zone, Net: net, Node: node}
 
-	// Build request body
-	reqBody := struct {
-		Zone   int    `json:"zone"`
-		Net    int    `json:"net"`
-		Node   int    `json:"node"`
-		Reason string `json:"reason,omitempty"`
-	}{
-		Zone:   zone,
-		Net:    net,
-		Node:   node,
-		Reason: reason,
+	if method == "DELETE" {
+		if err := sendPSTNMark(context.Background(), cfg.NodelistDB.URL, cfg.NodelistDB.APIKey, method, mark); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "Unmarking node %d:%d/%d as PSTN dead: OK\n", zone, net, node)
+		fmt.Fprintf(os.Stderr, "Note: the local do-not-call list (%s) is not changed; edit it by hand if the number may be dialled again\n", cfg.DoNotCallPath())
+		return
 	}
-	body, err := json.Marshal(reqBody)
+
+	mark.Reason = reason
+	mark.Kind = kind
+	if kind == pstnMarkKindVoice {
+		// A voice mark is about a telephone number, not a node address: bind
+		// it to the number so it lapses when the node lists a new one.
+		mark.Phone = phoneDigits(phone)
+		if mark.Phone == "" {
+			target, err := FetchNodeByAddress(cfg.NodelistDB.URL, zone, net, node, 30*time.Second)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "WARNING: could not look up the node's phone (%v); the mark will apply to any number it lists. Use -mark-phone to bind it.\n", err)
+			} else {
+				mark.Phone = phoneDigits(target.Phone)
+			}
+		}
+	}
+
+	if err := sendPSTNMark(context.Background(), cfg.NodelistDB.URL, cfg.NodelistDB.APIKey, method, mark); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(1)
+	}
+
+	if kind != pstnMarkKindVoice {
+		fmt.Fprintf(os.Stderr, "Marking node %d:%d/%d as PSTN dead: OK\n", zone, net, node)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Marking node %d:%d/%d as a voice line (phone %q): OK\n", zone, net, node, mark.Phone)
+
+	// The server mark only keeps a number out of API-driven runs; the local
+	// list is what stops -phone and -node from dialling it.
+	if mark.Phone == "" {
+		return
+	}
+	listReason := reason
+	if listReason == "" {
+		listReason = "marked as a voice line by hand"
+	}
+	list, err := LoadDoNotCallList(cfg.DoNotCallPath())
+	if err == nil {
+		_, err = list.Add(mark.Phone, fmt.Sprintf("%d:%d/%d", zone, net, node), listReason, time.Now())
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: Failed to encode request: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR: the number was NOT added to the local do-not-call list: %v\n", err)
 		os.Exit(1)
 	}
-
-	// Make API call
-	apiURL := strings.TrimRight(cfg.NodelistDB.URL, "/") + "/api/modem/pstn-dead"
-	req, err := http.NewRequestWithContext(context.Background(), method, apiURL, bytes.NewReader(body))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: Failed to create request: %v\n", err)
-		os.Exit(1)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.NodelistDB.APIKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: API request failed: %v\n", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "ERROR: API returned status %d: %s\n", resp.StatusCode, string(respBody))
-		os.Exit(1)
-	}
-
-	fmt.Fprintf(os.Stderr, "%s node %d:%d/%d as PSTN dead: OK\n", action, zone, net, node)
+	fmt.Fprintf(os.Stderr, "Do-not-call list %s now holds %s\n", cfg.DoNotCallPath(), mark.Phone)
 }

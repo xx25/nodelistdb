@@ -49,6 +49,7 @@ var resultColumns = []string{
 	"cdr_local_mos", "cdr_remote_mos", "cdr_local_r_factor", "cdr_remote_r_factor", "cdr_term_reason", "cdr_term_category",
 	"ast_disposition", "ast_peer", "ast_duration", "ast_billsec",
 	"ast_hangupcause", "ast_hangupsource", "ast_early_media",
+	"voice_answered", "failure_detail",
 }
 
 // recordArgs flattens a TestRecord into insert values, in resultColumns order.
@@ -103,6 +104,8 @@ func recordArgs(rec *TestRecord) []any {
 		rec.AstHangupCause,
 		rec.AstHangupSource,
 		rec.AstEarlyMedia,
+		rec.VoiceAnswered,
+		rec.FailureDetail,
 	}
 }
 
@@ -114,6 +117,16 @@ type sqlDialect struct {
 	ddl         string // CREATE TABLE (+ indexes) template
 	numbered    bool   // true = $1..$N placeholders (PostgreSQL), false = ?
 	configureDB func(db *sql.DB)
+	// addedColumns are the columns that joined the table after its first
+	// release, with their type for ALTER TABLE. CREATE TABLE IF NOT EXISTS
+	// leaves an existing table untouched, so these are added to it on open.
+	addedColumns []sqlColumn
+}
+
+// sqlColumn is a column name with its dialect-specific definition.
+type sqlColumn struct {
+	name       string
+	definition string
 }
 
 // sharedPoolConfig is the connection pool setup the client/server databases
@@ -129,6 +142,10 @@ var postgresDialect = sqlDialect{
 	driver:      "postgres",
 	numbered:    true,
 	configureDB: sharedPoolConfig,
+	addedColumns: []sqlColumn{
+		{"voice_answered", "BOOLEAN NOT NULL DEFAULT FALSE"},
+		{"failure_detail", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	},
 	ddl: `
 CREATE TABLE IF NOT EXISTS {table} (
     id                      BIGSERIAL PRIMARY KEY,
@@ -192,6 +209,10 @@ CREATE TABLE IF NOT EXISTS {table} (
     ast_hangupsource        VARCHAR(80) NOT NULL DEFAULT '',
     ast_early_media         BOOLEAN NOT NULL DEFAULT FALSE,
 
+    -- Failed-dial detail
+    voice_answered          BOOLEAN NOT NULL DEFAULT FALSE,
+    failure_detail          VARCHAR(255) NOT NULL DEFAULT '',
+
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -208,6 +229,10 @@ var mysqlDialect = sqlDialect{
 	driver:      "mysql",
 	numbered:    false,
 	configureDB: sharedPoolConfig,
+	addedColumns: []sqlColumn{
+		{"voice_answered", "TINYINT(1) NOT NULL DEFAULT 0"},
+		{"failure_detail", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	},
 	ddl: `
 CREATE TABLE IF NOT EXISTS {table} (
     id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -271,6 +296,10 @@ CREATE TABLE IF NOT EXISTS {table} (
     ast_hangupsource        VARCHAR(80) NOT NULL DEFAULT '',
     ast_early_media         TINYINT(1) NOT NULL DEFAULT 0,
 
+    -- Failed-dial detail
+    voice_answered          TINYINT(1) NOT NULL DEFAULT 0,
+    failure_detail          VARCHAR(255) NOT NULL DEFAULT '',
+
     created_at              DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     INDEX idx_timestamp (timestamp),
@@ -286,6 +315,10 @@ var sqliteDialect = sqlDialect{
 	name:     "SQLite",
 	driver:   "sqlite3",
 	numbered: false,
+	addedColumns: []sqlColumn{
+		{"voice_answered", "INTEGER NOT NULL DEFAULT 0"},
+		{"failure_detail", "TEXT NOT NULL DEFAULT ''"},
+	},
 	configureDB: func(db *sql.DB) {
 		// SQLite works best with a single connection for writes
 		db.SetMaxOpenConns(1)
@@ -352,6 +385,10 @@ CREATE TABLE IF NOT EXISTS {table} (
     ast_hangupcause         INTEGER NOT NULL DEFAULT 0,
     ast_hangupsource        TEXT NOT NULL DEFAULT '',
     ast_early_media         INTEGER NOT NULL DEFAULT 0,
+
+    -- Failed-dial detail
+    voice_answered          INTEGER NOT NULL DEFAULT 0,
+    failure_detail          TEXT NOT NULL DEFAULT '',
 
     created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
 );
@@ -434,6 +471,11 @@ func newSQLResultsWriter(dialect sqlDialect, dsn, tableName string) (*SQLResults
 		return nil, fmt.Errorf("failed to create results table: %w", err)
 	}
 
+	if err := w.addMissingColumns(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	// Prepare insert statement
 	stmt, err := db.Prepare(w.insertQuery())
 	if err != nil {
@@ -443,6 +485,24 @@ func newSQLResultsWriter(dialect sqlDialect, dsn, tableName string) (*SQLResults
 	w.stmt = stmt
 
 	return w, nil
+}
+
+// addMissingColumns brings a table created by an older version up to the
+// current column list. Each column is probed with a SELECT that returns no
+// rows rather than through the catalog, which differs for every dialect.
+func (w *SQLResultsWriter) addMissingColumns(ctx context.Context) error {
+	for _, col := range w.dialect.addedColumns {
+		rows, err := w.db.QueryContext(ctx, fmt.Sprintf("SELECT %s FROM %s WHERE 1 = 0", col.name, w.tableName))
+		if err == nil {
+			rows.Close()
+			continue
+		}
+		alter := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", w.tableName, col.name, col.definition)
+		if _, err := w.db.ExecContext(ctx, alter); err != nil {
+			return fmt.Errorf("failed to add column %s to results table: %w", col.name, err)
+		}
+	}
+	return nil
 }
 
 // insertQuery builds the INSERT statement from the shared column list.
