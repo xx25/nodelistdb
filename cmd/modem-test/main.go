@@ -1058,24 +1058,15 @@ func runSingleTest(ctx context.Context, m *modem.Modem, cfg *Config, log *TestLo
 			msg := fmt.Sprintf("Test %d [%s]: DIAL ERROR - %v", testNum, phoneNumber, err)
 			log.Fail("%s", msg)
 
-			// Try to recover - first with software reset
-			log.Info("Attempting modem reset...")
-			if resetErr := m.Reset(); resetErr != nil {
-				log.Warn("Software reset failed: %v", resetErr)
-				// Try USB reset as last resort
-				if m.IsUSBDevice() {
-					log.Info("Attempting USB reset...")
-					if usbErr := m.USBReset(); usbErr != nil {
-						log.Error("USB reset failed: %v", usbErr)
-					} else {
-						log.OK("USB reset successful")
-					}
-				}
+			// A dial error is a fault of our own modem, not a result for this
+			// node: bring the modem back and dial again instead of recording
+			// a failure the node did not have.
+			if recoverModem(ctx, m, log.Info) {
+				continue
 			}
-
 			return testResult{
-				success: false,
-				message: msg,
+				windowClosed: true,
+				message:      msg,
 			}
 		}
 
